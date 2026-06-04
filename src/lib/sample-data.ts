@@ -49,7 +49,7 @@ export const samplePacket: Packet = {
           description:
             "A larger community with a resort-style feel. They have a dedicated memory care wing called 'The Terrace' that's separate from assisted living, which provides a calm environment. Excellent activities program with daily music therapy.",
           photos: [
-            "https://images.unsplash.com/photo-1586105251261-72a756497a31?w=800&q=80",
+            "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=800&q=80",
           ],
           details: [
             { label: "Care Level", value: "Memory Care (The Terrace)" },
@@ -82,7 +82,7 @@ export const samplePacket: Packet = {
           description:
             "A smaller, home-like community specializing exclusively in memory care. Only 24 residents, so the staff really knows everyone by name. Their outdoor garden program is therapeutic and structured — perfect for your mom.",
           photos: [
-            "https://images.unsplash.com/photo-1559526324-593bc073d938?w=800&q=80",
+            "https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?w=800&q=80",
           ],
           details: [
             { label: "Care Level", value: "Memory Care Only" },
