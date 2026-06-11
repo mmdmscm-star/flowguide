@@ -18,6 +18,7 @@ export interface ItemLink {
 export interface Item {
   id: string;
   title: string;
+  address?: string;
   description?: string;
   notes?: string;
   photos?: string[];
@@ -45,6 +46,7 @@ export interface Packet {
   title: string;
   clientName?: string;
   personalNote?: string;
+  mapUrl?: string;
   sections: Section[];
   professional: ProfessionalContact;
 }
