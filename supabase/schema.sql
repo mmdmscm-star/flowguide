@@ -61,6 +61,9 @@ create table public.packets (
   title text not null default '',
   client_name text not null default '',
   personal_note text not null default '',
+  packet_type text not null default 'general',
+  map_url text not null default '',
+  raw_input text not null default '',
   status text not null default 'draft' check (status in ('draft', 'published')),
   viewed boolean not null default false,
   published_at timestamptz,
@@ -93,6 +96,7 @@ create table public.items (
   id uuid primary key default gen_random_uuid(),
   section_id uuid not null references public.sections(id) on delete cascade,
   title text not null default '',
+  address text not null default '',
   description text not null default '',
   notes text not null default '',
   sort_order integer not null default 0,
@@ -108,7 +112,7 @@ create index idx_items_section_id on public.items(section_id);
 create table public.item_photos (
   id uuid primary key default gen_random_uuid(),
   item_id uuid not null references public.items(id) on delete cascade,
-  storage_path text not null,
+  storage_path text not null default '',
   url text not null,
   sort_order integer not null default 0,
   created_at timestamptz not null default now()
