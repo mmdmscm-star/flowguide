@@ -39,6 +39,7 @@ export interface ProfessionalContact {
   email?: string;
   phone?: string;
   businessName?: string;
+  logoUrl?: string;
 }
 
 export interface Packet {

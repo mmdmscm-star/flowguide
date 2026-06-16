@@ -47,6 +47,7 @@ create table public.professional_profiles (
   email text not null default '',
   phone text not null default '',
   business_name text not null default '',
+  logo_url text not null default '',
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );

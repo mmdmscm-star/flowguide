@@ -56,6 +56,7 @@ interface EditorProfile {
   email: string;
   phone: string;
   businessName: string;
+  logoUrl: string;
 }
 
 interface PacketData {
@@ -82,7 +83,7 @@ export default function PacketEditorPage() {
   const [packet, setPacket] = useState<PacketData | null>(null);
   const [sections, setSections] = useState<EditorSection[]>([]);
   const [items, setItems] = useState<EditorItem[]>([]);
-  const [profile, setProfile] = useState<EditorProfile>({ name: "", email: "", phone: "", businessName: "" });
+  const [profile, setProfile] = useState<EditorProfile>({ name: "", email: "", phone: "", businessName: "", logoUrl: "" });
   const [loading, setLoading] = useState(true);
   const [saveStatus, setSaveStatus] = useState<"saved" | "saving" | "error">("saved");
   const [publishError, setPublishError] = useState("");
@@ -152,6 +153,7 @@ export default function PacketEditorPage() {
         email: data.profile.email || "",
         phone: data.profile.phone || "",
         businessName: data.profile.business_name || "",
+        logoUrl: data.profile.logo_url || "",
       });
     }
 
@@ -739,6 +741,24 @@ export default function PacketEditorPage() {
             placeholder="Phone"
             className="px-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:ring-2 focus:ring-accent"
           />
+        </div>
+        <div className="mt-3">
+          <div className="flex items-center gap-3">
+            {profile.logoUrl && (
+              <img
+                src={profile.logoUrl}
+                alt="Logo"
+                className="h-10 w-auto max-w-[120px] object-contain rounded"
+              />
+            )}
+            <input
+              type="url"
+              value={profile.logoUrl}
+              onChange={(e) => updateProfile("logoUrl", e.target.value)}
+              placeholder="Logo URL (optional)"
+              className="flex-1 px-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:ring-2 focus:ring-accent"
+            />
+          </div>
         </div>
       </div>
 

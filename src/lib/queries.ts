@@ -131,6 +131,7 @@ function buildPacket(
       email: profile?.email || undefined,
       phone: profile?.phone || undefined,
       businessName: profile?.business_name || undefined,
+      logoUrl: profile?.logo_url || undefined,
     },
   };
 }
@@ -254,6 +255,7 @@ function buildPacketWithId(packet: any, profile: any, sections: Section[]): Pack
       email: profile?.email || undefined,
       phone: profile?.phone || undefined,
       businessName: profile?.business_name || undefined,
+      logoUrl: profile?.logo_url || undefined,
     },
   };
 }
