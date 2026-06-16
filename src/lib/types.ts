@@ -40,6 +40,7 @@ export interface ProfessionalContact {
   phone?: string;
   businessName?: string;
   logoUrl?: string;
+  websiteUrl?: string;
 }
 
 export interface Packet {

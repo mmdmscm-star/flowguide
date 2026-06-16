@@ -57,6 +57,7 @@ interface EditorProfile {
   phone: string;
   businessName: string;
   logoUrl: string;
+  websiteUrl: string;
 }
 
 interface PacketData {
@@ -83,7 +84,7 @@ export default function PacketEditorPage() {
   const [packet, setPacket] = useState<PacketData | null>(null);
   const [sections, setSections] = useState<EditorSection[]>([]);
   const [items, setItems] = useState<EditorItem[]>([]);
-  const [profile, setProfile] = useState<EditorProfile>({ name: "", email: "", phone: "", businessName: "", logoUrl: "" });
+  const [profile, setProfile] = useState<EditorProfile>({ name: "", email: "", phone: "", businessName: "", logoUrl: "", websiteUrl: "" });
   const [loading, setLoading] = useState(true);
   const [saveStatus, setSaveStatus] = useState<"saved" | "saving" | "error">("saved");
   const [publishError, setPublishError] = useState("");
@@ -154,6 +155,7 @@ export default function PacketEditorPage() {
         phone: data.profile.phone || "",
         businessName: data.profile.business_name || "",
         logoUrl: data.profile.logo_url || "",
+        websiteUrl: data.profile.website_url || "",
       });
     }
 
@@ -759,6 +761,13 @@ export default function PacketEditorPage() {
               className="flex-1 px-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:ring-2 focus:ring-accent"
             />
           </div>
+          <input
+            type="url"
+            value={profile.websiteUrl}
+            onChange={(e) => updateProfile("websiteUrl", e.target.value)}
+            placeholder="Website URL (optional)"
+            className="mt-2 w-full px-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:ring-2 focus:ring-accent"
+          />
         </div>
       </div>
 
