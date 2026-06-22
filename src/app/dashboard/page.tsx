@@ -61,6 +61,14 @@ export default function DashboardPage() {
     loadPackets();
   }
 
+  async function duplicatePacket(id: string) {
+    const res = await fetch(`/api/packets/${id}/duplicate`, { method: "POST" });
+    const data = await res.json();
+    if (data.packet) {
+      router.push(`/edit/${data.packet.id}`);
+    }
+  }
+
   async function copyLink(slug: string, id: string) {
     const url = `${window.location.origin}/p/${slug}`;
     await navigator.clipboard.writeText(url);
@@ -203,6 +211,12 @@ export default function DashboardPage() {
                       {copiedId === packet.id ? "Copied!" : "Copy Link"}
                     </button>
                   )}
+                  <button
+                    onClick={() => duplicatePacket(packet.id)}
+                    className="px-3 py-1.5 text-xs font-medium text-muted hover:text-accent hover:bg-blue-50 rounded-lg transition-colors"
+                  >
+                    Duplicate
+                  </button>
                   <button
                     onClick={() => deletePacket(packet.id, packet.title)}
                     className="px-3 py-1.5 text-xs font-medium text-red-500 hover:bg-red-50 rounded-lg transition-colors"
