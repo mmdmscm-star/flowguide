@@ -90,6 +90,9 @@ export default function PacketEditorPage() {
   const [publishError, setPublishError] = useState("");
   const [showPublishModal, setShowPublishModal] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
+  const [showAppendModal, setShowAppendModal] = useState(false);
+  const [appendText, setAppendText] = useState("");
+  const [appendLoading, setAppendLoading] = useState(false);
 
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -525,6 +528,31 @@ export default function PacketEditorPage() {
     setTimeout(() => setCopiedLink(false), 2000);
   }
 
+  async function handleAppend() {
+    if (!appendText.trim() || appendText.trim().length < 10) return;
+    setAppendLoading(true);
+    try {
+      const res = await fetch(`/api/packets/${packetId}/append`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rawText: appendText }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || "Failed to add items.");
+        return;
+      }
+      setAppendText("");
+      setShowAppendModal(false);
+      setShowAiBanner(true);
+      await loadPacket();
+    } catch {
+      alert("Something went wrong. Please try again.");
+    } finally {
+      setAppendLoading(false);
+    }
+  }
+
   // ============================================================
   // Render
   // ============================================================
@@ -697,12 +725,55 @@ export default function PacketEditorPage() {
         );
       })}
 
-      <button
-        onClick={addSection}
-        className="w-full py-3 border-2 border-dashed border-border rounded-xl text-sm font-medium text-muted hover:text-accent hover:border-accent transition-colors mb-8"
-      >
-        + Add Section
-      </button>
+      <div className="flex gap-3 mb-8">
+        <button
+          onClick={addSection}
+          className="flex-1 py-3 border-2 border-dashed border-border rounded-xl text-sm font-medium text-muted hover:text-accent hover:border-accent transition-colors"
+        >
+          + Add Section
+        </button>
+        <button
+          onClick={() => setShowAppendModal(true)}
+          className="flex-1 py-3 border-2 border-dashed border-accent/30 rounded-xl text-sm font-medium text-accent hover:bg-accent hover:text-white transition-colors"
+        >
+          + Add with AI
+        </button>
+      </div>
+
+      {/* Add with AI modal */}
+      {showAppendModal && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-5">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-auto p-6">
+            <h2 className="text-lg font-bold text-foreground mb-1">Add with AI</h2>
+            <p className="text-sm text-muted mb-4">
+              Paste new information below. AI will structure it and add it to this packet without changing existing content.
+            </p>
+            <textarea
+              value={appendText}
+              onChange={(e) => setAppendText(e.target.value)}
+              placeholder="Paste new recommendations, community info, or any raw data..."
+              className="w-full h-48 px-4 py-3 rounded-xl border border-border text-sm focus:outline-none focus:ring-2 focus:ring-accent resize-none"
+              autoFocus
+            />
+            <div className="flex justify-end gap-3 mt-4">
+              <button
+                onClick={() => { setShowAppendModal(false); setAppendText(""); }}
+                className="px-4 py-2 text-sm font-medium text-muted hover:text-foreground transition-colors"
+                disabled={appendLoading}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleAppend}
+                disabled={appendLoading || appendText.trim().length < 10}
+                className="px-6 py-2 rounded-lg bg-accent hover:bg-accent-hover text-white text-sm font-medium transition-colors disabled:opacity-50"
+              >
+                {appendLoading ? "Organizing..." : "Organize with AI"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Original input (collapsible, read-only) */}
       {packet.rawInput && (
