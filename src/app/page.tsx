@@ -7,25 +7,26 @@ export default function Home() {
       <p className="text-base text-muted max-w-sm mb-8">
         Living client packets for professionals.
       </p>
-      <Link
-        href="/p/demo"
-        className="inline-flex items-center gap-2 text-sm font-medium text-white bg-accent hover:bg-accent-hover px-6 py-3 rounded-lg transition-colors"
-      >
-        View Demo Packet
-        <svg
-          className="w-4 h-4"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
+      <div className="flex flex-col gap-3 items-center">
+        <Link
+          href="/new"
+          className="inline-flex items-center gap-2 text-sm font-medium text-white bg-accent hover:bg-accent-hover px-6 py-3 rounded-lg transition-colors"
         >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M9 5l7 7-7 7"
-          />
-        </svg>
-      </Link>
+          Create Packet
+        </Link>
+        <Link
+          href="/dashboard"
+          className="text-sm font-medium text-accent hover:text-accent-hover transition-colors"
+        >
+          Dashboard
+        </Link>
+        <Link
+          href="/p/demo"
+          className="text-sm text-muted hover:text-foreground transition-colors mt-2"
+        >
+          View Demo Packet
+        </Link>
+      </div>
     </main>
   );
 }
