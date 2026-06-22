@@ -51,7 +51,7 @@ export async function POST(request: Request) {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        from: "FlowGuide <noreply@flowguide.com>",
+        from: process.env.RESEND_FROM_EMAIL || "FlowGuide <onboarding@resend.dev>",
         to: normalizedEmail,
         subject: "Sign in to FlowGuide",
         html: `
