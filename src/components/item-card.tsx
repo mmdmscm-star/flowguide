@@ -142,6 +142,15 @@ function linkStyles(type: LinkType): string {
   }
 }
 
+function extractYouTubeId(url: string): string | null {
+  try {
+    const u = new URL(url);
+    if (u.hostname.includes("youtu.be")) return u.pathname.slice(1).split("/")[0] || null;
+    if (u.hostname.includes("youtube.com") && u.searchParams.has("v")) return u.searchParams.get("v");
+  } catch { /* not a valid URL */ }
+  return null;
+}
+
 function mapsUrl(address: string): string {
   return `https://www.google.com/maps/search/${encodeURIComponent(address)}`;
 }
@@ -206,25 +215,61 @@ export function ItemCard({ item }: { item: Item }) {
           </div>
         )}
 
-        {item.links && item.links.length > 0 && (
-          <div className="flex flex-wrap gap-2 mb-4">
-            {item.links.map((link, i) => {
-              const type = detectLinkType(link.url);
-              return (
-                <a
-                  key={i}
-                  href={link.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className={`inline-flex items-center gap-1.5 text-sm font-medium px-3 py-1.5 rounded-lg border transition-colors ${linkStyles(type)}`}
-                >
-                  <LinkIcon type={type} />
-                  {smartLabel(link)}
-                </a>
-              );
-            })}
-          </div>
-        )}
+        {item.links && item.links.length > 0 && (() => {
+          const youtubeLinks = item.links.filter(l => extractYouTubeId(l.url));
+          const otherLinks = item.links.filter(l => !extractYouTubeId(l.url));
+          return (
+            <>
+              {youtubeLinks.map((link, i) => {
+                const videoId = extractYouTubeId(link.url)!;
+                return (
+                  <a
+                    key={`yt-${i}`}
+                    href={link.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="block relative mb-4 rounded-lg overflow-hidden group"
+                  >
+                    <img
+                      src={`https://img.youtube.com/vi/${videoId}/hqdefault.jpg`}
+                      alt={smartLabel(link)}
+                      className="w-full aspect-video object-cover"
+                    />
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/20 group-hover:bg-black/30 transition-colors">
+                      <div className="w-14 h-14 rounded-full bg-red-600 flex items-center justify-center shadow-lg">
+                        <svg className="w-6 h-6 text-white ml-0.5" fill="currentColor" viewBox="0 0 24 24">
+                          <path d="M8 5v14l11-7z" />
+                        </svg>
+                      </div>
+                    </div>
+                    <div className="absolute bottom-2 left-2 bg-black/70 text-white text-xs px-2 py-1 rounded">
+                      {smartLabel(link)}
+                    </div>
+                  </a>
+                );
+              })}
+              {otherLinks.length > 0 && (
+                <div className="flex flex-wrap gap-2 mb-4">
+                  {otherLinks.map((link, i) => {
+                    const type = detectLinkType(link.url);
+                    return (
+                      <a
+                        key={i}
+                        href={link.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className={`inline-flex items-center gap-1.5 text-sm font-medium px-3 py-1.5 rounded-lg border transition-colors ${linkStyles(type)}`}
+                      >
+                        <LinkIcon type={type} />
+                        {smartLabel(link)}
+                      </a>
+                    );
+                  })}
+                </div>
+              )}
+            </>
+          );
+        })()}
 
         {item.contact && (
           <div className="border-t border-border pt-3 mt-1">
