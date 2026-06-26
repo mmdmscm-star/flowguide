@@ -147,6 +147,8 @@ function extractYouTubeId(url: string): string | null {
     const u = new URL(url);
     if (u.hostname.includes("youtu.be")) return u.pathname.slice(1).split("/")[0] || null;
     if (u.hostname.includes("youtube.com") && u.searchParams.has("v")) return u.searchParams.get("v");
+    const shortsMatch = u.hostname.includes("youtube.com") && u.pathname.match(/^\/shorts\/([a-zA-Z0-9_-]+)/);
+    if (shortsMatch) return shortsMatch[1];
   } catch { /* not a valid URL */ }
   return null;
 }
