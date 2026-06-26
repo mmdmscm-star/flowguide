@@ -11,7 +11,7 @@ export async function POST(request: Request, context: Context) {
 
   const { id } = await context.params;
   const body = await request.json();
-  const { action } = body; // "publish" or "unpublish"
+  const { action, skipProfileCheck } = body;
   const supabase = createServerClient();
 
   if (action === "publish") {
@@ -66,25 +66,27 @@ export async function POST(request: Request, context: Context) {
       }
     }
 
-    // Check professional profile
-    const { data: profile } = await supabase
-      .from("professional_profiles")
-      .select("name, email, phone")
-      .eq("user_id", session.userId)
-      .single();
+    // Check professional profile (skippable for non-business packets)
+    if (!skipProfileCheck) {
+      const { data: profile } = await supabase
+        .from("professional_profiles")
+        .select("name, email, phone")
+        .eq("user_id", session.userId)
+        .single();
 
-    if (!profile?.name?.trim()) {
-      return NextResponse.json(
-        { error: "Add your name in the professional contact section" },
-        { status: 400 }
-      );
-    }
+      if (!profile?.name?.trim()) {
+        return NextResponse.json(
+          { error: "no_profile", message: "No professional contact information" },
+          { status: 422 }
+        );
+      }
 
-    if (!profile.email?.trim() && !profile.phone?.trim()) {
-      return NextResponse.json(
-        { error: "Add at least an email or phone in your professional contact" },
-        { status: 400 }
-      );
+      if (!profile.email?.trim() && !profile.phone?.trim()) {
+        return NextResponse.json(
+          { error: "no_contact", message: "No email or phone in professional contact" },
+          { status: 422 }
+        );
+      }
     }
 
     const { error } = await supabase

@@ -492,18 +492,26 @@ export default function PacketEditorPage() {
   // ============================================================
   // Publish
   // ============================================================
-  async function handlePublish() {
+  async function publishPacket(skipProfileCheck: boolean) {
     setPublishError("");
     const res = await fetch(`/api/packets/${packetId}/publish`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "publish" }),
+      body: JSON.stringify({ action: "publish", skipProfileCheck }),
     });
     const data = await res.json();
     if (!res.ok) {
-      const errMsg = data.error || "Could not publish";
+      if (res.status === 422 && (data.error === "no_profile" || data.error === "no_contact")) {
+        const proceed = confirm(
+          "This packet does not include professional contact information. You can still publish it, but the contact footer will not appear."
+        );
+        if (proceed) {
+          publishPacket(true);
+        }
+        return;
+      }
+      const errMsg = data.message || data.error || "Could not publish";
       setPublishError(errMsg);
-      // Scroll to top so user sees the error
       window.scrollTo({ top: 0, behavior: "smooth" });
       return;
     }
@@ -870,7 +878,7 @@ export default function PacketEditorPage() {
             )}
             {packet.status === "draft" && (
               <button
-                onClick={handlePublish}
+                onClick={() => publishPacket(false)}
                 className="px-6 py-2 rounded-lg bg-accent hover:bg-accent-hover text-white text-sm font-medium transition-colors"
               >
                 Publish

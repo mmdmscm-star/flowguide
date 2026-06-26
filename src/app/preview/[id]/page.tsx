@@ -74,7 +74,9 @@ export default async function PreviewPage({ params }: Props) {
         <SectionGroup key={section.id} section={section} />
       ))}
 
-      <ProfessionalFooter professional={packet.professional} />
+      {packet.professional.name && (
+        <ProfessionalFooter professional={packet.professional} />
+      )}
 
       <p className="text-center text-xs text-muted/40 mt-4">
         Powered by FlowGuide
