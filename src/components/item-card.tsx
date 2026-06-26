@@ -166,7 +166,7 @@ export function ItemCard({ item }: { item: Item }) {
         <PhotoGallery photos={item.photos} />
       )}
 
-      <div className="p-5">
+      <div className="p-5 min-w-0">
         <h3 className="text-base font-semibold text-foreground mb-1">
           {item.title}
         </h3>
@@ -183,7 +183,7 @@ export function ItemCard({ item }: { item: Item }) {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
             </svg>
-            <span className="group-hover:underline">{item.address}</span>
+            <span className="group-hover:underline min-w-0 break-words">{item.address}</span>
           </a>
         )}
 
@@ -202,8 +202,8 @@ export function ItemCard({ item }: { item: Item }) {
                   i !== item.details!.length - 1 ? "border-b border-border" : ""
                 }`}
               >
-                <span className="text-muted font-medium">{detail.label}</span>
-                <span className="text-foreground text-right ml-4">{detail.value}</span>
+                <span className="text-muted font-medium flex-shrink-0">{detail.label}</span>
+                <span className="text-foreground text-right ml-4 min-w-0 break-words">{detail.value}</span>
               </div>
             ))}
           </div>

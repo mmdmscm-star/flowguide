@@ -77,7 +77,7 @@ export default async function PacketPage({ params }: Props) {
   }
 
   return (
-    <main className="max-w-lg mx-auto pb-12">
+    <main className="max-w-lg mx-auto pb-12 overflow-x-hidden">
       <PacketHeader
         title={packet.title}
         clientName={packet.clientName}

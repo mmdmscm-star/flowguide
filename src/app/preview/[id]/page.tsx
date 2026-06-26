@@ -32,7 +32,7 @@ export default async function PreviewPage({ params }: Props) {
   }
 
   return (
-    <main className="max-w-lg mx-auto pb-12">
+    <main className="max-w-lg mx-auto pb-12 overflow-x-hidden">
       {/* Preview banner */}
       <div className="bg-amber-50 border-b border-amber-200 px-5 py-3 text-center">
         <p className="text-sm text-amber-800 font-medium">
