@@ -190,6 +190,8 @@ export async function POST(request: Request, context: Context) {
   }
 
   let structured: StructuredPacket;
+  let aiData: any = null;
+  let content: string | null = null;
   try {
     const aiRes = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
@@ -204,36 +206,32 @@ export async function POST(request: Request, context: Context) {
           { role: "user", content: rawText.trim().slice(0, 15000) },
         ],
         temperature: 0.3,
-        max_tokens: 4000,
+        max_tokens: 8000,
       }),
     });
 
     if (!aiRes.ok) {
       const errText = await aiRes.text();
-      console.error("OpenRouter error:", errText);
+      console.error("[structure] OpenRouter HTTP error:", aiRes.status, errText);
       return NextResponse.json({ error: "AI service error. Please try again." }, { status: 502 });
     }
 
-    const aiData = await aiRes.json();
-    const content = aiData.choices?.[0]?.message?.content;
+    aiData = await aiRes.json();
+    content = aiData.choices?.[0]?.message?.content;
     if (!content) {
+      console.error("[structure] No content in AI response. finish_reason:", aiData?.choices?.[0]?.finish_reason);
       return NextResponse.json({ error: "No response from AI. Please try again." }, { status: 502 });
     }
 
     // Parse the JSON — strip markdown code fences if present
     const cleaned = content.replace(/^```json?\s*\n?/i, "").replace(/\n?```\s*$/i, "").trim();
     structured = JSON.parse(cleaned);
-
-    // Debug: log what the AI returned for photos
-    for (const section of structured.sections) {
-      for (const item of section.items) {
-        if (item.photos && item.photos.length > 0) {
-          console.log(`[AI output] "${item.title}" photos:`, item.photos);
-        }
-      }
-    }
   } catch (e) {
-    console.error("AI parsing error:", e);
+    const errMsg = e instanceof Error ? e.message : String(e);
+    console.error("[structure] AI parse failure:", errMsg);
+    console.error("[structure] finish_reason:", aiData?.choices?.[0]?.finish_reason);
+    console.error("[structure] raw content (first 500 chars):", content?.slice(0, 500));
+    console.error("[structure] raw content (last 200 chars):", content?.slice(-200));
     return NextResponse.json({ error: "AI returned invalid data. Please try again." }, { status: 502 });
   }
 

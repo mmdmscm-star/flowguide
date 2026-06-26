@@ -169,6 +169,8 @@ export async function POST(request: Request, context: Context) {
   }
 
   let structured: { sections: StructuredSection[] };
+  let aiData: any = null;
+  let content: string | null = null;
   try {
     const aiRes = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
@@ -183,26 +185,31 @@ export async function POST(request: Request, context: Context) {
           { role: "user", content: rawText.trim().slice(0, 15000) },
         ],
         temperature: 0.3,
-        max_tokens: 4000,
+        max_tokens: 8000,
       }),
     });
 
     if (!aiRes.ok) {
       const errText = await aiRes.text();
-      console.error("OpenRouter error:", errText);
+      console.error("[append] OpenRouter HTTP error:", aiRes.status, errText);
       return NextResponse.json({ error: "AI service error. Please try again." }, { status: 502 });
     }
 
-    const aiData = await aiRes.json();
-    const content = aiData.choices?.[0]?.message?.content;
+    aiData = await aiRes.json();
+    content = aiData.choices?.[0]?.message?.content;
     if (!content) {
+      console.error("[append] No content in AI response. finish_reason:", aiData?.choices?.[0]?.finish_reason);
       return NextResponse.json({ error: "No response from AI. Please try again." }, { status: 502 });
     }
 
     const cleaned = content.replace(/^```json?\s*\n?/i, "").replace(/\n?```\s*$/i, "").trim();
     structured = JSON.parse(cleaned);
   } catch (e) {
-    console.error("AI parsing error:", e);
+    const errMsg = e instanceof Error ? e.message : String(e);
+    console.error("[append] AI parse failure:", errMsg);
+    console.error("[append] finish_reason:", aiData?.choices?.[0]?.finish_reason);
+    console.error("[append] raw content (first 500 chars):", content?.slice(0, 500));
+    console.error("[append] raw content (last 200 chars):", content?.slice(-200));
     return NextResponse.json({ error: "AI returned invalid data. Please try again." }, { status: 502 });
   }
 
