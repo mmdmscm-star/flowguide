@@ -66,14 +66,14 @@ export async function POST(request: Request, context: Context) {
       }
     }
 
-    // Check professional profile (skippable for non-business packets)
-    if (!skipProfileCheck) {
-      const { data: profile } = await supabase
-        .from("professional_profiles")
-        .select("name, email, phone")
-        .eq("user_id", session.userId)
-        .single();
+    // Fetch professional profile for validation and snapshot
+    const { data: profile } = await supabase
+      .from("professional_profiles")
+      .select("name, email, phone, business_name, logo_url, website_url")
+      .eq("user_id", session.userId)
+      .single();
 
+    if (!skipProfileCheck) {
       if (!profile?.name?.trim()) {
         return NextResponse.json(
           { error: "no_profile", message: "No professional contact information" },
@@ -89,9 +89,23 @@ export async function POST(request: Request, context: Context) {
       }
     }
 
+    // Snapshot: empty object if skipped (no branding), full profile otherwise
+    const professionalSnapshot = skipProfileCheck ? {} : {
+      name: profile?.name || "",
+      email: profile?.email || "",
+      phone: profile?.phone || "",
+      businessName: profile?.business_name || "",
+      logoUrl: profile?.logo_url || "",
+      websiteUrl: profile?.website_url || "",
+    };
+
     const { error } = await supabase
       .from("packets")
-      .update({ status: "published", published_at: new Date().toISOString() })
+      .update({
+        status: "published",
+        published_at: new Date().toISOString(),
+        professional_snapshot: professionalSnapshot,
+      })
       .eq("id", id)
       .eq("user_id", session.userId);
 

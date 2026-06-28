@@ -19,12 +19,30 @@ export async function getPublishedPacket(slug: string): Promise<Packet | null> {
 
   if (packetError || !packet) return null;
 
-  // Fetch professional profile
-  const { data: profile } = await supabase
-    .from("professional_profiles")
-    .select("*")
-    .eq("user_id", packet.user_id)
-    .single();
+  // Use snapshotted profile when present, fall back to live profile for
+  // packets published before the snapshot feature (snapshot is null)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let profile: any = null;
+  const snapshot = packet.professional_snapshot;
+  if (snapshot && typeof snapshot === "object" && Object.keys(snapshot).length > 0) {
+    profile = {
+      name: snapshot.name || "",
+      email: snapshot.email || "",
+      phone: snapshot.phone || "",
+      business_name: snapshot.businessName || "",
+      logo_url: snapshot.logoUrl || "",
+      website_url: snapshot.websiteUrl || "",
+    };
+  } else if (snapshot === null) {
+    // No snapshot — legacy packet, fall back to live profile
+    const { data: liveProfile } = await supabase
+      .from("professional_profiles")
+      .select("*")
+      .eq("user_id", packet.user_id)
+      .single();
+    profile = liveProfile;
+  }
+  // If snapshot is {} (empty object), packet was published without branding — profile stays null
 
   // Fetch sections ordered by sort_order
   const { data: sections } = await supabase
