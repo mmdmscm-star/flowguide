@@ -174,7 +174,7 @@ export async function markPacketViewed(slug: string): Promise<void> {
 export async function getPacketForEditor(
   packetId: string,
   userId: string
-): Promise<Packet | null> {
+): Promise<(Packet & { id: string; status: string }) | null> {
   const supabase = createServerClient();
 
   const { data: packet, error } = await supabase

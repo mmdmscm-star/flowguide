@@ -5,6 +5,7 @@ import { PacketHeader } from "@/components/packet-header";
 import { PersonalNote } from "@/components/personal-note";
 import { SectionGroup } from "@/components/section-group";
 import { ProfessionalFooter } from "@/components/professional-footer";
+import { PreviewActions } from "@/components/preview-actions";
 
 type Props = {
   params: Promise<{ id: string }>;
@@ -34,17 +35,11 @@ export default async function PreviewPage({ params }: Props) {
   return (
     <main className="max-w-lg mx-auto pb-12 overflow-x-hidden">
       {/* Preview banner */}
-      <div className="bg-amber-50 border-b border-amber-200 px-5 py-3 text-center">
-        <p className="text-sm text-amber-800 font-medium">
-          Preview — this is how your client will see it
-        </p>
-        <a
-          href={`/edit/${id}`}
-          className="text-xs text-amber-600 hover:text-amber-800 underline"
-        >
-          ← Back to editor
-        </a>
-      </div>
+      <PreviewActions
+        packetId={id}
+        slug={packet.slug}
+        initialStatus={packet.status}
+      />
 
       <PacketHeader
         title={packet.title}
