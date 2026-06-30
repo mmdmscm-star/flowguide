@@ -167,7 +167,13 @@ export default function DashboardPage() {
             >
               <div className="flex items-start justify-between gap-3">
                 <button
-                  onClick={() => router.push(`/edit/${packet.id}`)}
+                  onClick={() =>
+                    router.push(
+                      packet.status === "published"
+                        ? `/p/${packet.slug}`
+                        : `/edit/${packet.id}`
+                    )
+                  }
                   className="text-left flex-1 min-w-0"
                 >
                   <h3 className="font-semibold text-foreground truncate">
@@ -204,12 +210,20 @@ export default function DashboardPage() {
                 </button>
                 <div className="flex items-center gap-1 flex-shrink-0">
                   {packet.status === "published" && (
-                    <button
-                      onClick={() => copyLink(packet.slug, packet.id)}
-                      className="px-3 py-1.5 text-xs font-medium text-accent hover:bg-blue-50 rounded-lg transition-colors"
-                    >
-                      {copiedId === packet.id ? "Copied!" : "Copy Link"}
-                    </button>
+                    <>
+                      <button
+                        onClick={() => router.push(`/edit/${packet.id}`)}
+                        className="px-3 py-1.5 text-xs font-medium text-muted hover:text-accent hover:bg-blue-50 rounded-lg transition-colors"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => copyLink(packet.slug, packet.id)}
+                        className="px-3 py-1.5 text-xs font-medium text-accent hover:bg-blue-50 rounded-lg transition-colors"
+                      >
+                        {copiedId === packet.id ? "Copied!" : "Copy Link"}
+                      </button>
+                    </>
                   )}
                   <button
                     onClick={() => duplicatePacket(packet.id)}
