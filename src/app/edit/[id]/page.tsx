@@ -2,6 +2,23 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useRouter, useParams, useSearchParams } from "next/navigation";
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  KeyboardSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+  useSortable,
+  arrayMove,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 
 // ============================================================
 // Types for editor state
@@ -95,6 +112,11 @@ export default function PacketEditorPage() {
   const [appendLoading, setAppendLoading] = useState(false);
 
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
 
   // ============================================================
   // Load packet data
@@ -490,6 +512,42 @@ export default function PacketEditorPage() {
   }
 
   // ============================================================
+  // Reorder items within a section (drag and drop)
+  // ============================================================
+  function handleItemDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const activeItem = items.find((i) => i.id === active.id);
+    if (!activeItem) return;
+
+    const sectionItems = items
+      .filter((i) => i.sectionId === activeItem.sectionId)
+      .sort((a, b) => a.sortOrder - b.sortOrder);
+    const oldIndex = sectionItems.findIndex((i) => i.id === active.id);
+    const newIndex = sectionItems.findIndex((i) => i.id === over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
+
+    const orderedIds = arrayMove(sectionItems, oldIndex, newIndex).map((i) => i.id);
+    const orderMap = new Map(orderedIds.map((id, index) => [id, index]));
+    setItems((prev) =>
+      prev.map((i) => (orderMap.has(i.id) ? { ...i, sortOrder: orderMap.get(i.id)! } : i))
+    );
+
+    setSaveStatus("saving");
+    fetch("/api/reorder", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: "items", orderedIds }),
+    })
+      .then((r) => {
+        if (!r.ok) throw new Error();
+        setSaveStatus("saved");
+      })
+      .catch(() => setSaveStatus("error"));
+  }
+
+  // ============================================================
   // Publish
   // ============================================================
   async function publishPacket(skipProfileCheck: boolean) {
@@ -701,27 +759,38 @@ export default function PacketEditorPage() {
             </div>
 
             {/* Items */}
-            <div className="space-y-3">
-              {sectionItems.map((item) => (
-                <ItemEditor
-                  key={item.id}
-                  item={item}
-                  onUpdateField={updateItem}
-                  onDelete={deleteItem}
-                  onAddDetail={addDetail}
-                  onUpdateDetail={updateDetail}
-                  onRemoveDetail={removeDetail}
-                  onAddLink={addLink}
-                  onUpdateLink={updateLink}
-                  onRemoveLink={removeLink}
-                  onToggleContact={toggleItemContact}
-                  onUpdateContact={updateItemContact}
-                  onAddPhoto={addPhoto}
-                  onUpdatePhoto={updatePhoto}
-                  onRemovePhoto={removePhoto}
-                />
-              ))}
-            </div>
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleItemDragEnd}
+            >
+              <SortableContext
+                items={sectionItems.map((i) => i.id)}
+                strategy={verticalListSortingStrategy}
+              >
+                <div className="space-y-3">
+                  {sectionItems.map((item) => (
+                    <ItemEditor
+                      key={item.id}
+                      item={item}
+                      onUpdateField={updateItem}
+                      onDelete={deleteItem}
+                      onAddDetail={addDetail}
+                      onUpdateDetail={updateDetail}
+                      onRemoveDetail={removeDetail}
+                      onAddLink={addLink}
+                      onUpdateLink={updateLink}
+                      onRemoveLink={removeLink}
+                      onToggleContact={toggleItemContact}
+                      onUpdateContact={updateItemContact}
+                      onAddPhoto={addPhoto}
+                      onUpdatePhoto={updatePhoto}
+                      onRemovePhoto={removePhoto}
+                    />
+                  ))}
+                </div>
+              </SortableContext>
+            </DndContext>
 
             <button
               onClick={() => addItem(section.id)}
@@ -958,9 +1027,34 @@ function ItemEditor({
     !!(item.address || item.description || item.notes || item.details.length || item.links.length || item.photos.length || item.contact)
   );
 
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: item.id,
+  });
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
   return (
-    <div className="border border-border rounded-lg p-3 bg-white">
+    <div ref={setNodeRef} style={style} className="border border-border rounded-lg p-3 bg-white">
       <div className="flex items-start justify-between gap-2">
+        <button
+          type="button"
+          {...attributes}
+          {...listeners}
+          aria-label="Drag to reorder"
+          className="text-gray-400 hover:text-gray-700 cursor-grab active:cursor-grabbing flex-shrink-0 touch-none -ml-1 p-1"
+        >
+          <svg className="w-4 h-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+            <circle cx="7" cy="4" r="1.5" />
+            <circle cx="13" cy="4" r="1.5" />
+            <circle cx="7" cy="10" r="1.5" />
+            <circle cx="13" cy="10" r="1.5" />
+            <circle cx="7" cy="16" r="1.5" />
+            <circle cx="13" cy="16" r="1.5" />
+          </svg>
+        </button>
         <input
           type="text"
           value={item.title}
