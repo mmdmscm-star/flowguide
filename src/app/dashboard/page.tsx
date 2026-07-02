@@ -20,6 +20,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [userEmail, setUserEmail] = useState("");
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [duplicatingId, setDuplicatingId] = useState<string | null>(null);
   const [showNewMenu, setShowNewMenu] = useState(false);
 
   const loadPackets = useCallback(async () => {
@@ -62,10 +63,21 @@ export default function DashboardPage() {
   }
 
   async function duplicatePacket(id: string) {
-    const res = await fetch(`/api/packets/${id}/duplicate`, { method: "POST" });
-    const data = await res.json();
-    if (data.packet) {
+    if (duplicatingId) return;
+    setDuplicatingId(id);
+    try {
+      const res = await fetch(`/api/packets/${id}/duplicate`, { method: "POST" });
+      if (!res.ok) {
+        const body = await res.text().catch(() => "");
+        throw new Error(body || `Duplicate failed (${res.status})`);
+      }
+      const data = await res.json();
+      if (!data.packet?.id) throw new Error("Duplicate failed: no packet returned.");
+      // Navigate to the editor for the new draft copy (component unmounts on success)
       router.push(`/edit/${data.packet.id}`);
+    } catch (err) {
+      setDuplicatingId(null);
+      alert(err instanceof Error ? err.message : "Could not duplicate this packet. Please try again.");
     }
   }
 
@@ -227,9 +239,10 @@ export default function DashboardPage() {
                   )}
                   <button
                     onClick={() => duplicatePacket(packet.id)}
-                    className="px-3 py-1.5 text-xs font-medium text-muted hover:text-accent hover:bg-blue-50 rounded-lg transition-colors"
+                    disabled={duplicatingId === packet.id}
+                    className="px-3 py-1.5 text-xs font-medium text-muted hover:text-accent hover:bg-blue-50 rounded-lg transition-colors disabled:opacity-50"
                   >
-                    Duplicate
+                    {duplicatingId === packet.id ? "Duplicating…" : "Duplicate"}
                   </button>
                   <button
                     onClick={() => deletePacket(packet.id, packet.title)}
