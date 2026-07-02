@@ -7,9 +7,11 @@ export function ProfessionalFooter({
 }) {
   return (
     <footer className="mx-5 mb-8 mt-4 rounded-xl bg-surface border border-border p-5">
-      <p className="text-xs font-medium uppercase tracking-widest text-muted mb-2">
-        Your Advisor
-      </p>
+      {professional.footerLabel && (
+        <p className="text-xs font-medium uppercase tracking-widest text-muted mb-2">
+          {professional.footerLabel}
+        </p>
+      )}
       <div className="flex items-center gap-4">
         {professional.headshotUrl && (
           <img

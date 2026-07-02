@@ -186,5 +186,6 @@ export const samplePacket: Packet = {
     businessName: "Riverside Senior Placement Services",
     phone: "(951) 555-0100",
     email: "linda@riversideplacement.example.com",
+    footerLabel: "Your Advisor",
   },
 };

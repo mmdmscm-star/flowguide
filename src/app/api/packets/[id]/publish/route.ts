@@ -69,7 +69,7 @@ export async function POST(request: Request, context: Context) {
     // Fetch professional profile for validation and snapshot
     const { data: profile } = await supabase
       .from("professional_profiles")
-      .select("name, email, phone, business_name, logo_url, headshot_url, website_url, links")
+      .select("name, email, phone, business_name, logo_url, headshot_url, footer_label, website_url, links")
       .eq("user_id", session.userId)
       .single();
 
@@ -97,6 +97,7 @@ export async function POST(request: Request, context: Context) {
       businessName: profile?.business_name || "",
       logoUrl: profile?.logo_url || "",
       headshotUrl: profile?.headshot_url || "",
+      footerLabel: profile?.footer_label ?? "Your Advisor",
       websiteUrl: profile?.website_url || "",
       links: profile?.links || [],
     };

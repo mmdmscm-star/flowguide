@@ -75,6 +75,7 @@ interface EditorProfile {
   businessName: string;
   logoUrl: string;
   headshotUrl: string;
+  footerLabel: string;
   websiteUrl: string;
   links: { label: string; url: string }[];
 }
@@ -103,7 +104,7 @@ export default function PacketEditorPage() {
   const [packet, setPacket] = useState<PacketData | null>(null);
   const [sections, setSections] = useState<EditorSection[]>([]);
   const [items, setItems] = useState<EditorItem[]>([]);
-  const [profile, setProfile] = useState<EditorProfile>({ name: "", email: "", phone: "", businessName: "", logoUrl: "", headshotUrl: "", websiteUrl: "", links: [] });
+  const [profile, setProfile] = useState<EditorProfile>({ name: "", email: "", phone: "", businessName: "", logoUrl: "", headshotUrl: "", footerLabel: "Your Advisor", websiteUrl: "", links: [] });
   const [loading, setLoading] = useState(true);
   const [saveStatus, setSaveStatus] = useState<"saved" | "saving" | "error">("saved");
   const [publishError, setPublishError] = useState("");
@@ -183,6 +184,7 @@ export default function PacketEditorPage() {
         businessName: data.profile.business_name || "",
         logoUrl: data.profile.logo_url || "",
         headshotUrl: data.profile.headshot_url || "",
+        footerLabel: data.profile.footer_label ?? "Your Advisor",
         websiteUrl: data.profile.website_url || "",
         links: Array.isArray(data.profile.links) ? data.profile.links : [],
       });
@@ -1007,6 +1009,18 @@ export default function PacketEditorPage() {
             placeholder="Phone"
             className="px-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:ring-2 focus:ring-accent"
           />
+        </div>
+        <div className="mt-3">
+          <input
+            type="text"
+            value={profile.footerLabel}
+            onChange={(e) => updateProfile("footerLabel", e.target.value)}
+            placeholder="Footer label (e.g. Your Advisor)"
+            className="w-full px-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:ring-2 focus:ring-accent"
+          />
+          <p className="mt-1 text-xs text-muted">
+            Shown above your name on the packet. Leave blank to hide it.
+          </p>
         </div>
         <div className="mt-3">
           <div className="flex items-center gap-3">
