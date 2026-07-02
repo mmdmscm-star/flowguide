@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useRef, type ReactNode } from "react";
 import { useRouter, useParams, useSearchParams } from "next/navigation";
 import {
   DndContext,
@@ -575,6 +575,37 @@ export default function PacketEditorPage() {
   }
 
   // ============================================================
+  // Reorder sections within a packet (drag and drop)
+  // ============================================================
+  function handleSectionDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const ordered = [...sections].sort((a, b) => a.sortOrder - b.sortOrder);
+    const oldIndex = ordered.findIndex((s) => s.id === active.id);
+    const newIndex = ordered.findIndex((s) => s.id === over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
+
+    const orderedIds = arrayMove(ordered, oldIndex, newIndex).map((s) => s.id);
+    const orderMap = new Map(orderedIds.map((id, index) => [id, index]));
+    setSections((prev) =>
+      prev.map((s) => (orderMap.has(s.id) ? { ...s, sortOrder: orderMap.get(s.id)! } : s))
+    );
+
+    setSaveStatus("saving");
+    fetch("/api/reorder", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: "sections", orderedIds }),
+    })
+      .then((r) => {
+        if (!r.ok) throw new Error();
+        setSaveStatus("saved");
+      })
+      .catch(() => setSaveStatus("error"));
+  }
+
+  // ============================================================
   // Publish
   // ============================================================
   async function publishPacket(skipProfileCheck: boolean) {
@@ -752,15 +783,42 @@ export default function PacketEditorPage() {
       </div>
 
       {/* Sections */}
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragEnd={handleSectionDragEnd}
+      >
+        <SortableContext
+          items={sortedSections.map((s) => s.id)}
+          strategy={verticalListSortingStrategy}
+        >
       {sortedSections.map((section) => {
         const sectionItems = items
           .filter((i) => i.sectionId === section.id)
           .sort((a, b) => a.sortOrder - b.sortOrder);
 
         return (
-          <div key={section.id} className="mb-8 border border-border rounded-xl p-4">
+          <SortableSection key={section.id} id={section.id}>
+            {(handle) => (
+              <>
             {/* Section header */}
             <div className="flex items-start justify-between gap-2 mb-3">
+              <button
+                type="button"
+                {...handle.attributes}
+                {...handle.listeners}
+                aria-label="Drag to reorder section"
+                className="text-gray-400 hover:text-gray-700 cursor-grab active:cursor-grabbing flex-shrink-0 touch-none -ml-1 mt-1 p-1"
+              >
+                <svg className="w-4 h-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                  <circle cx="7" cy="4" r="1.5" />
+                  <circle cx="13" cy="4" r="1.5" />
+                  <circle cx="7" cy="10" r="1.5" />
+                  <circle cx="13" cy="10" r="1.5" />
+                  <circle cx="7" cy="16" r="1.5" />
+                  <circle cx="13" cy="16" r="1.5" />
+                </svg>
+              </button>
               <div className="flex-1">
                 <input
                   type="text"
@@ -825,9 +883,13 @@ export default function PacketEditorPage() {
             >
               + Add Item
             </button>
-          </div>
+              </>
+            )}
+          </SortableSection>
         );
       })}
+        </SortableContext>
+      </DndContext>
 
       <div className="flex gap-3 mb-8">
         <button
@@ -1073,6 +1135,36 @@ export default function PacketEditorPage() {
         </div>
       )}
     </main>
+  );
+}
+
+// ============================================================
+// Sortable Section wrapper (drag handle provided to children)
+// ============================================================
+type SectionHandleProps = {
+  attributes: ReturnType<typeof useSortable>["attributes"];
+  listeners: ReturnType<typeof useSortable>["listeners"];
+};
+
+function SortableSection({
+  id,
+  children,
+}: {
+  id: string;
+  children: (handle: SectionHandleProps) => ReactNode;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id,
+  });
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+  return (
+    <div ref={setNodeRef} style={style} className="mb-8 border border-border rounded-xl p-4">
+      {children({ attributes, listeners })}
+    </div>
   );
 }
 
