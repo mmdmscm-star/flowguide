@@ -334,6 +334,31 @@ export default function PacketEditorPage() {
     }
   }
 
+  function moveItemToSection(itemId: string, targetSectionId: string) {
+    const item = items.find((i) => i.id === itemId);
+    if (!item || item.sectionId === targetSectionId) return;
+
+    const targetItems = items.filter((i) => i.sectionId === targetSectionId);
+    const newOrder = targetItems.reduce((max, i) => Math.max(max, i.sortOrder), -1) + 1;
+    setItems((prev) =>
+      prev.map((i) =>
+        i.id === itemId ? { ...i, sectionId: targetSectionId, sortOrder: newOrder } : i
+      )
+    );
+
+    setSaveStatus("saving");
+    fetch("/api/items", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: itemId, sectionId: targetSectionId }),
+    })
+      .then((r) => {
+        if (!r.ok) throw new Error();
+        setSaveStatus("saved");
+      })
+      .catch(() => setSaveStatus("error"));
+  }
+
   function updateItem(itemId: string, field: string, value: string) {
     setItems((prev) => prev.map((i) => (i.id === itemId ? { ...i, [field]: value } : i)));
     debouncedSave(() =>
@@ -858,6 +883,8 @@ export default function PacketEditorPage() {
                     <ItemEditor
                       key={item.id}
                       item={item}
+                      sections={sections}
+                      onMove={moveItemToSection}
                       onUpdateField={updateItem}
                       onDelete={deleteItem}
                       onAddDetail={addDetail}
@@ -1173,6 +1200,8 @@ function SortableSection({
 // ============================================================
 function ItemEditor({
   item,
+  sections,
+  onMove,
   onUpdateField,
   onDelete,
   onAddDetail,
@@ -1188,6 +1217,8 @@ function ItemEditor({
   onRemovePhoto,
 }: {
   item: EditorItem;
+  sections: { id: string; title: string }[];
+  onMove: (itemId: string, targetSectionId: string) => void;
   onUpdateField: (id: string, field: string, value: string) => void;
   onDelete: (id: string) => void;
   onAddDetail: (itemId: string) => void;
@@ -1215,6 +1246,8 @@ function ItemEditor({
     opacity: isDragging ? 0.5 : 1,
   };
 
+  const otherSections = sections.filter((s) => s.id !== item.sectionId);
+
   return (
     <div ref={setNodeRef} style={style} className="border border-border rounded-lg p-3 bg-white">
       <div className="flex items-start justify-between gap-2">
@@ -1241,7 +1274,24 @@ function ItemEditor({
           placeholder="Item title"
           className="flex-1 font-medium text-sm text-foreground bg-transparent border-none outline-none placeholder:text-gray-300"
         />
-        <div className="flex gap-1 flex-shrink-0">
+        <div className="flex items-center gap-1 flex-shrink-0">
+          {otherSections.length > 0 && (
+            <select
+              value=""
+              onChange={(e) => {
+                if (e.target.value) onMove(item.id, e.target.value);
+              }}
+              aria-label="Move to section"
+              className="text-xs text-muted border border-border rounded px-1 py-0.5 bg-white max-w-[8rem] focus:outline-none focus:ring-2 focus:ring-accent"
+            >
+              <option value="">Move to…</option>
+              {otherSections.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.title || "Untitled section"}
+                </option>
+              ))}
+            </select>
+          )}
           <button
             onClick={() => setExpanded(!expanded)}
             className="text-xs text-muted hover:text-foreground px-1"

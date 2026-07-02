@@ -80,7 +80,7 @@ export async function PATCH(request: Request) {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await request.json();
-  const { id, title, description, notes, address, sortOrder, links, details, contact, photos } = body;
+  const { id, title, description, notes, address, sortOrder, sectionId, links, details, contact, photos } = body;
 
   const supabase = createServerClient();
   const item = await verifyItemOwnership(supabase, id, session.userId);
@@ -93,6 +93,35 @@ export async function PATCH(request: Request) {
   if (notes !== undefined) updates.notes = notes;
   if (address !== undefined) updates.address = address;
   if (sortOrder !== undefined) updates.sort_order = sortOrder;
+
+  // Move item to a different section (must belong to the same packet/owner)
+  if (sectionId !== undefined && sectionId !== item.section_id) {
+    const { data: currentSection } = await supabase
+      .from("sections")
+      .select("packet_id")
+      .eq("id", item.section_id)
+      .single();
+    const { data: targetSection } = await supabase
+      .from("sections")
+      .select("id, packet_id")
+      .eq("id", sectionId)
+      .single();
+    if (!currentSection || !targetSection || currentSection.packet_id !== targetSection.packet_id) {
+      return NextResponse.json({ error: "Invalid target section" }, { status: 403 });
+    }
+
+    // Append to the end of the target section
+    const { data: siblings } = await supabase
+      .from("items")
+      .select("sort_order")
+      .eq("section_id", sectionId)
+      .order("sort_order", { ascending: false })
+      .limit(1);
+    const nextOrder = siblings && siblings.length > 0 ? siblings[0].sort_order + 1 : 0;
+
+    updates.section_id = sectionId;
+    updates.sort_order = nextOrder;
+  }
 
   if (Object.keys(updates).length > 0) {
     const { error } = await supabase.from("items").update(updates).eq("id", id);
