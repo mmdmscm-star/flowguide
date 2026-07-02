@@ -80,3 +80,64 @@ UI, no stored image bytes, no per-channel duplication.
 
 Full analysis is in the conversation that produced this item (2026-06-30):
 the 10-question evaluation of the Street View Static API.
+
+---
+
+## Details Model — Vertical-Fit Watch
+
+**Status:** Keep as-is. Watching for real-world friction across verticals.
+
+### The observation
+
+Item **Details** are stored and edited as a simple **label / value** pair
+(`item_details(label, value, sort_order)`), rendered as a two-column list. It
+works extremely well for senior living (pricing, care levels, room types). The
+open question is whether that label/value editing model stays natural as real
+packets get built in other verticals (farmers markets, travel, real estate,
+financial planning, etc.).
+
+### Decision (2026-07-02): leave it alone
+
+No change to the **data model, editor, or renderer**. Checked all three: there is
+**no senior-specific coupling** anywhere — the model is a generic key/value pair,
+the renderer is a plain two-column list, and the editor copy is neutral ("Details"
+/ "Label" / "Value"). The senior-living flavor lives in the *example data entered*,
+not in the architecture.
+
+This is the inverse of a build-gate: the default is **do nothing**. label/value is
+about the most vertical-agnostic structure possible, the schema is additively
+extensible (richer details can be added later with no migration today), and
+pre-building flexibility with no observed friction would violate our
+evidence-first principle. label/value "working extremely well" is the strongest
+reason to leave it untouched.
+
+### Revisit trigger (what friction actually looks like)
+
+Revisit **only** on **repeated friction across multiple real packet types, in ≥2
+verticals** — a pattern, not one awkward packet. Specific signals to watch for
+while building real packets:
+
+- **Retyping the same labels on every item** in a vertical (e.g. every real-estate
+  item = Beds / Baths / Sqft / Price). Most likely signal — points to wanting
+  per-vertical *label templates/presets*, which would be an **additive layer on
+  top of** the current model, not a redesign of it.
+- **Cramming a non-scalar into `value`** — a date range, a list, a link, a
+  paragraph. If professionals fight the single-line value field, the model is
+  straining.
+- **Leaving Details empty and putting that info in Description instead**,
+  repeatedly, in a given vertical — a sign key/value doesn't match that vertical's
+  mental model.
+
+### If the trigger fires
+
+Prefer the **smallest additive** response, in keeping with the architecture:
+per-vertical label templates/presets layered over the existing `item_details`
+table — not multiple editors, not a per-vertical schema, not a redesign of the
+label/value model. Re-evaluate only with the accumulated evidence in hand.
+
+### Reference
+
+Working principle adopted 2026-07-02 after reviewing the Details data model,
+renderer ([item-card.tsx](../src/components/item-card.tsx)), and editor. Relates to
+the "real-world use is the primary driver" section of
+[product-direction.md](product-direction.md).
