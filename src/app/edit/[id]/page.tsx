@@ -1247,9 +1247,9 @@ function ItemEditor({
   onUpdatePhoto: (itemId: string, photoId: string, url: string) => void;
   onRemovePhoto: (itemId: string, photoId: string) => void;
 }) {
-  const [expanded, setExpanded] = useState(
-    !!(item.address || item.description || item.notes || item.details.length || item.links.length || item.photos.length || item.contact)
-  );
+  // Open expanded by default so the full canonical editor is visible immediately
+  // (including for new/empty manual items). The collapse control still works.
+  const [expanded, setExpanded] = useState(true);
 
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: item.id,
