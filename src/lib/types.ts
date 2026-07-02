@@ -45,6 +45,7 @@ export interface ProfessionalContact {
   phone?: string;
   businessName?: string;
   logoUrl?: string;
+  headshotUrl?: string;
   websiteUrl?: string;
   links?: ProfessionalLink[];
 }

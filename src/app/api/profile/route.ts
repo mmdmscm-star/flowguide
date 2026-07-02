@@ -8,7 +8,7 @@ export async function PATCH(request: Request) {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await request.json();
-  const { name, email, phone, businessName, logoUrl, websiteUrl, links } = body;
+  const { name, email, phone, businessName, logoUrl, headshotUrl, websiteUrl, links } = body;
 
   const supabase = createServerClient();
 
@@ -18,6 +18,7 @@ export async function PATCH(request: Request) {
   if (phone !== undefined) updates.phone = phone;
   if (businessName !== undefined) updates.business_name = businessName;
   if (logoUrl !== undefined) updates.logo_url = logoUrl;
+  if (headshotUrl !== undefined) updates.headshot_url = headshotUrl;
   if (websiteUrl !== undefined) updates.website_url = websiteUrl;
   if (Array.isArray(links)) {
     updates.links = links

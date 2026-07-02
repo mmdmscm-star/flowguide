@@ -31,6 +31,7 @@ export async function getPublishedPacket(slug: string): Promise<Packet | null> {
       phone: snapshot.phone || "",
       business_name: snapshot.businessName || "",
       logo_url: snapshot.logoUrl || "",
+      headshot_url: snapshot.headshotUrl || "",
       website_url: snapshot.websiteUrl || "",
       links: snapshot.links || [],
     };
@@ -151,6 +152,7 @@ function buildPacket(
       phone: profile?.phone || undefined,
       businessName: profile?.business_name || undefined,
       logoUrl: profile?.logo_url || undefined,
+      headshotUrl: profile?.headshot_url || undefined,
       websiteUrl: profile?.website_url || undefined,
       links: profile?.links || undefined,
     },
@@ -277,6 +279,7 @@ function buildPacketWithId(packet: any, profile: any, sections: Section[]): Pack
       phone: profile?.phone || undefined,
       businessName: profile?.business_name || undefined,
       logoUrl: profile?.logo_url || undefined,
+      headshotUrl: profile?.headshot_url || undefined,
       websiteUrl: profile?.website_url || undefined,
       links: profile?.links || undefined,
     },

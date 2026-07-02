@@ -74,6 +74,7 @@ interface EditorProfile {
   phone: string;
   businessName: string;
   logoUrl: string;
+  headshotUrl: string;
   websiteUrl: string;
   links: { label: string; url: string }[];
 }
@@ -102,7 +103,7 @@ export default function PacketEditorPage() {
   const [packet, setPacket] = useState<PacketData | null>(null);
   const [sections, setSections] = useState<EditorSection[]>([]);
   const [items, setItems] = useState<EditorItem[]>([]);
-  const [profile, setProfile] = useState<EditorProfile>({ name: "", email: "", phone: "", businessName: "", logoUrl: "", websiteUrl: "", links: [] });
+  const [profile, setProfile] = useState<EditorProfile>({ name: "", email: "", phone: "", businessName: "", logoUrl: "", headshotUrl: "", websiteUrl: "", links: [] });
   const [loading, setLoading] = useState(true);
   const [saveStatus, setSaveStatus] = useState<"saved" | "saving" | "error">("saved");
   const [publishError, setPublishError] = useState("");
@@ -181,6 +182,7 @@ export default function PacketEditorPage() {
         phone: data.profile.phone || "",
         businessName: data.profile.business_name || "",
         logoUrl: data.profile.logo_url || "",
+        headshotUrl: data.profile.headshot_url || "",
         websiteUrl: data.profile.website_url || "",
         links: Array.isArray(data.profile.links) ? data.profile.links : [],
       });
@@ -931,6 +933,22 @@ export default function PacketEditorPage() {
               value={profile.logoUrl}
               onChange={(e) => updateProfile("logoUrl", e.target.value)}
               placeholder="Logo URL (optional)"
+              className="flex-1 px-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:ring-2 focus:ring-accent"
+            />
+          </div>
+          <div className="mt-2 flex items-center gap-3">
+            {profile.headshotUrl && (
+              <img
+                src={profile.headshotUrl}
+                alt="Headshot"
+                className="w-10 h-10 rounded-full object-cover flex-shrink-0 border border-border"
+              />
+            )}
+            <input
+              type="url"
+              value={profile.headshotUrl}
+              onChange={(e) => updateProfile("headshotUrl", e.target.value)}
+              placeholder="Headshot photo URL (optional)"
               className="flex-1 px-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:ring-2 focus:ring-accent"
             />
           </div>

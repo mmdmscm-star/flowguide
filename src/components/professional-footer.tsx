@@ -10,14 +10,26 @@ export function ProfessionalFooter({
       <p className="text-xs font-medium uppercase tracking-widest text-muted mb-2">
         Your Advisor
       </p>
-      <p className="text-base font-semibold text-foreground">
-        {professional.name}
-      </p>
-      {professional.businessName && (
-        <p className="text-sm text-muted mt-0.5">
-          {professional.businessName}
-        </p>
-      )}
+      <div className="flex items-center gap-4">
+        {professional.headshotUrl && (
+          <img
+            src={professional.headshotUrl}
+            alt={professional.name}
+            loading="lazy"
+            className="w-14 h-14 rounded-full object-cover flex-shrink-0 border border-border"
+          />
+        )}
+        <div className="min-w-0">
+          <p className="text-base font-semibold text-foreground">
+            {professional.name}
+          </p>
+          {professional.businessName && (
+            <p className="text-sm text-muted mt-0.5">
+              {professional.businessName}
+            </p>
+          )}
+        </div>
+      </div>
       <div className="flex flex-wrap gap-2 mt-3">
         {professional.phone && (
           <a
