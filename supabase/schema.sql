@@ -49,6 +49,7 @@ create table public.professional_profiles (
   business_name text not null default '',
   logo_url text not null default '',
   website_url text not null default '',
+  links jsonb not null default '[]'::jsonb,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );

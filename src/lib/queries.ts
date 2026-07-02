@@ -32,6 +32,7 @@ export async function getPublishedPacket(slug: string): Promise<Packet | null> {
       business_name: snapshot.businessName || "",
       logo_url: snapshot.logoUrl || "",
       website_url: snapshot.websiteUrl || "",
+      links: snapshot.links || [],
     };
   } else if (snapshot === null) {
     // No snapshot — legacy packet, fall back to live profile
@@ -151,6 +152,7 @@ function buildPacket(
       businessName: profile?.business_name || undefined,
       logoUrl: profile?.logo_url || undefined,
       websiteUrl: profile?.website_url || undefined,
+      links: profile?.links || undefined,
     },
   };
 }
@@ -276,6 +278,7 @@ function buildPacketWithId(packet: any, profile: any, sections: Section[]): Pack
       businessName: profile?.business_name || undefined,
       logoUrl: profile?.logo_url || undefined,
       websiteUrl: profile?.website_url || undefined,
+      links: profile?.links || undefined,
     },
   };
 }

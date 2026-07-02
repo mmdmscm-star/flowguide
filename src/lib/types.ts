@@ -34,6 +34,11 @@ export interface Section {
   items: Item[];
 }
 
+export interface ProfessionalLink {
+  label: string;
+  url: string;
+}
+
 export interface ProfessionalContact {
   name: string;
   email?: string;
@@ -41,6 +46,7 @@ export interface ProfessionalContact {
   businessName?: string;
   logoUrl?: string;
   websiteUrl?: string;
+  links?: ProfessionalLink[];
 }
 
 export interface Packet {

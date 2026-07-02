@@ -75,6 +75,7 @@ interface EditorProfile {
   businessName: string;
   logoUrl: string;
   websiteUrl: string;
+  links: { label: string; url: string }[];
 }
 
 interface PacketData {
@@ -101,7 +102,7 @@ export default function PacketEditorPage() {
   const [packet, setPacket] = useState<PacketData | null>(null);
   const [sections, setSections] = useState<EditorSection[]>([]);
   const [items, setItems] = useState<EditorItem[]>([]);
-  const [profile, setProfile] = useState<EditorProfile>({ name: "", email: "", phone: "", businessName: "", logoUrl: "", websiteUrl: "" });
+  const [profile, setProfile] = useState<EditorProfile>({ name: "", email: "", phone: "", businessName: "", logoUrl: "", websiteUrl: "", links: [] });
   const [loading, setLoading] = useState(true);
   const [saveStatus, setSaveStatus] = useState<"saved" | "saving" | "error">("saved");
   const [publishError, setPublishError] = useState("");
@@ -181,6 +182,7 @@ export default function PacketEditorPage() {
         businessName: data.profile.business_name || "",
         logoUrl: data.profile.logo_url || "",
         websiteUrl: data.profile.website_url || "",
+        links: Array.isArray(data.profile.links) ? data.profile.links : [],
       });
     }
 
@@ -231,6 +233,29 @@ export default function PacketEditorPage() {
         body: JSON.stringify({ [field]: value }),
       }).then((r) => { if (!r.ok) throw new Error(); })
     );
+  }
+
+  function saveProfileLinks(links: { label: string; url: string }[]) {
+    setProfile((prev) => ({ ...prev, links }));
+    debouncedSave(() =>
+      fetch("/api/profile", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ links }),
+      }).then((r) => { if (!r.ok) throw new Error(); })
+    );
+  }
+
+  function addProfileLink() {
+    saveProfileLinks([...profile.links, { label: "", url: "" }]);
+  }
+
+  function updateProfileLink(index: number, field: "label" | "url", value: string) {
+    saveProfileLinks(profile.links.map((l, i) => (i === index ? { ...l, [field]: value } : l)));
+  }
+
+  function removeProfileLink(index: number) {
+    saveProfileLinks(profile.links.filter((_, i) => i !== index));
   }
 
   // ============================================================
@@ -916,6 +941,50 @@ export default function PacketEditorPage() {
             placeholder="Website URL (optional)"
             className="mt-2 w-full px-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:ring-2 focus:ring-accent"
           />
+        </div>
+
+        {/* Links (optional) — e.g. Facebook, LinkedIn, Calendly */}
+        <div className="mt-4">
+          <label className="block text-xs font-medium uppercase tracking-widest text-muted mb-2">
+            Links (optional)
+          </label>
+          {profile.links.length > 0 && (
+            <div className="space-y-2 mb-2">
+              {profile.links.map((link, index) => (
+                <div key={index} className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={link.label}
+                    onChange={(e) => updateProfileLink(index, "label", e.target.value)}
+                    placeholder="Label (e.g. Facebook)"
+                    className="w-36 flex-shrink-0 px-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:ring-2 focus:ring-accent"
+                  />
+                  <input
+                    type="url"
+                    value={link.url}
+                    onChange={(e) => updateProfileLink(index, "url", e.target.value)}
+                    placeholder="https://..."
+                    className="flex-1 min-w-0 px-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:ring-2 focus:ring-accent"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeProfileLink(index)}
+                    aria-label="Remove link"
+                    className="text-muted hover:text-red-600 px-1 flex-shrink-0"
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={addProfileLink}
+            className="text-sm text-accent hover:text-accent-hover font-medium"
+          >
+            + Add link
+          </button>
         </div>
       </div>
 
