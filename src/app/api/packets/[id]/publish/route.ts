@@ -38,13 +38,13 @@ export async function POST(request: Request, context: Context) {
       return NextResponse.json({ error: "Add at least one section" }, { status: 400 });
     }
 
-    const untitledSection = sections.find((s) => !s.title?.trim());
-    if (untitledSection) {
-      return NextResponse.json({ error: "All sections need titles" }, { status: 400 });
-    }
-
+    // Section titles are optional — a section can be a simple grouping container.
     // Check each section has at least one item with a title
     for (const section of sections) {
+      const hasTitle = !!section.title?.trim();
+      const sectionRef = hasTitle ? `Section "${section.title}"` : "A section";
+      const sectionRefIn = hasTitle ? `"${section.title}"` : "this section";
+
       const { data: items } = await supabase
         .from("items")
         .select("id, title")
@@ -52,7 +52,7 @@ export async function POST(request: Request, context: Context) {
 
       if (!items || items.length === 0) {
         return NextResponse.json(
-          { error: `Section "${section.title}" needs at least one item` },
+          { error: `${sectionRef} needs at least one item` },
           { status: 400 }
         );
       }
@@ -60,7 +60,7 @@ export async function POST(request: Request, context: Context) {
       const untitledItem = items.find((i) => !i.title?.trim());
       if (untitledItem) {
         return NextResponse.json(
-          { error: `All items in "${section.title}" need titles` },
+          { error: `All items in ${sectionRefIn} need titles` },
           { status: 400 }
         );
       }
