@@ -127,6 +127,29 @@ When evaluating a future feature, check it against these:
 - **Is the delivery method a send-time choice?** Delivery method should be
   selected when communicating, not baked into the packet.
 
+## Real-world use is the primary driver
+
+The best improvements come from **actually using FlowGuide with real clients**,
+not from brainstorming features in the abstract. When a real workflow reveals
+friction, that observation is the strongest signal we have — stronger than any
+idea that sounds good on paper.
+
+This is a demonstrated pattern, not an aspiration. A single session of real use
+surfaced, in order of need: publish-from-preview, item reorder, section reorder,
+move-item-to-section, the advisor headshot, and professional links. None came
+from a feature brainstorm; each came from hitting a real limitation while
+preparing or sending a real packet.
+
+Practical implications for future work:
+
+- **Treat observed friction as the top of the backlog.** "I was using it and X
+  got in the way" outranks "wouldn't it be cool if."
+- **Be skeptical of ideas with no usage behind them.** They aren't forbidden, but
+  they carry a validation gate (see [roadmap.md](roadmap.md)) — build only once
+  real use, or a deliberate real-world check, justifies it.
+- **Keep the loop tight.** Ship small, use it for real, let the next friction
+  point tell you what's next. Don't build ahead of evidence.
+
 ## What this document is not
 
 - Not a decision to build the email, PDF, or any other renderer now.
