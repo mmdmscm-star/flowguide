@@ -787,7 +787,7 @@ export default function PacketEditorPage() {
           type="text"
           value={packet.clientName}
           onChange={(e) => updatePacketField("clientName", e.target.value)}
-          placeholder="Client name (optional)"
+          placeholder="Prepared for (optional)"
           className="w-full mt-1 text-sm text-muted bg-transparent border-none outline-none placeholder:text-gray-300"
         />
       </div>
@@ -795,12 +795,12 @@ export default function PacketEditorPage() {
       {/* Personal note */}
       <div className="mb-8">
         <label className="block text-xs font-medium uppercase tracking-widest text-muted mb-2">
-          Personal Note
+          Note
         </label>
         <textarea
           value={packet.personalNote}
           onChange={(e) => updatePacketField("personalNote", e.target.value)}
-          placeholder="Add a personal note for your client..."
+          placeholder="Add a welcome, some context, or instructions…"
           rows={4}
           className="w-full px-3.5 py-3 rounded-lg border border-border bg-white text-sm text-foreground resize-y focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent placeholder:text-gray-300"
         />
