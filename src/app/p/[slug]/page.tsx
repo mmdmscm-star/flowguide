@@ -39,11 +39,14 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     ? packet.personalNote.slice(0, 150) + "..."
     : `A packet prepared for you by ${packet.professional.name}`;
 
+  // Titles may contain intentional line breaks; collapse them for metadata.
+  const metaTitle = packet.title.replace(/\s*\n\s*/g, " ");
+
   return {
-    title: `${packet.title} — FlowGuide`,
+    title: `${metaTitle} — FlowGuide`,
     description,
     openGraph: {
-      title: packet.title,
+      title: metaTitle,
       description,
       type: "website",
     },

@@ -23,7 +23,7 @@ export function PacketHeader({
           {professional.businessName}
         </p>
       )}
-      <h1 className="text-2xl font-bold leading-tight text-foreground">
+      <h1 className="text-2xl font-bold leading-tight text-foreground whitespace-pre-line">
         {title}
       </h1>
       {clientName && (

@@ -115,11 +115,21 @@ export default function PacketEditorPage() {
   const [appendLoading, setAppendLoading] = useState(false);
 
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const titleRef = useRef<HTMLTextAreaElement>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
+
+  // Auto-size the multi-line title field to fit its content (on load and edit)
+  useEffect(() => {
+    const el = titleRef.current;
+    if (el) {
+      el.style.height = "auto";
+      el.style.height = `${el.scrollHeight}px`;
+    }
+  }, [packet?.title]);
 
   // ============================================================
   // Load packet data
@@ -765,12 +775,13 @@ export default function PacketEditorPage() {
 
       {/* Packet title & client name */}
       <div className="mb-6">
-        <input
-          type="text"
+        <textarea
+          ref={titleRef}
           value={packet.title}
           onChange={(e) => updatePacketField("title", e.target.value)}
           placeholder="Packet title"
-          className="w-full text-2xl font-bold text-foreground bg-transparent border-none outline-none placeholder:text-gray-300"
+          rows={1}
+          className="w-full text-2xl font-bold text-foreground bg-transparent border-none outline-none resize-none overflow-hidden placeholder:text-gray-300"
         />
         <input
           type="text"
