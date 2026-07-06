@@ -69,7 +69,13 @@ scar behind it.
 valued: not the generation, but the clarity and trust the client felt. AI earns
 its place by getting a professional to a great packet faster — and it fails the
 moment it becomes a separate, magical mode that competes with the professional's
-own judgment.
+own judgment. Seen from a distance, AI is simply *one input among many* — one way
+information enters a packet, alongside manual creation and, someday, imports from
+other structured sources. It is an accelerator precisely because it is *not*
+special: every input converges into the same packet and the same editor, then
+gets out of the way. The input side of the architecture — including why an import
+must seed the packet once and never stay synced to its source — is spelled out in
+[product-direction.md](product-direction.md).
 
 **One packet.** The packet is the single source of truth. The instant content
 lives in two places that can drift, we've created a bug that no feature can

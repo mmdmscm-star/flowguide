@@ -53,6 +53,68 @@ shortcuts all violate it:
   the architecture is wrong. Content lives in the packet; presentation lives in
   the renderer.
 
+## Core principle: many inputs, one packet
+
+The renderer principle above describes how the packet *leaves* FlowGuide: one
+packet, shown many ways. The mirror image is how information *enters* it: **many
+sources, one packet.**
+
+**FlowGuide should not care where information comes from.** The source is not the
+point — the packet is. Whatever the origin, information converges into the same
+canonical packet, the same editor, and the same renderers. This is the deeper
+thing FlowGuide does: **it transforms information into communication.** Inputs
+bring raw information in; the packet and its renderers turn it into something a
+client actually receives.
+
+```
+   AI          Manual        CSV         Website       (future
+   generation  creation      import      import         inputs)
+        └───────────┴────────────┼────────────┴─────────────┘
+                                 ▼
+                     ┌─────────────────────────┐
+                     │   Packet (canonical)     │
+                     │   one model, one editor  │
+                     └─────────────────────────┘
+```
+
+An **input** is an adapter that produces a first draft of the canonical packet.
+Like renderers, inputs touch the packet without becoming a second source of
+truth — but from the other side: a renderer *reads* the current packet; an input
+*writes* the first version of it, once. AI generation, manual creation, and
+imports from structured sources are all just inputs; the list will grow, but the
+rule does not depend on it. (Those examples are illustrative — not a request to
+build any importer.)
+
+### Why this matters
+
+Naming the input side prevents the same class of mistakes the renderer principle
+guards against — this time at the source:
+
+- **Inputs seed once; they do not stay connected.** This is the load-bearing
+  rule. A renderer re-reads the packet every time it presents it. An input does
+  the opposite: its job ends the moment it has created the first draft. After
+  that, the packet belongs to the professional — it grows, changes, and evolves
+  independently of wherever it came from. We never create live synchronization
+  back to an imported source, because that would reintroduce the exact bug the
+  architecture exists to prevent: a second source of truth. **An import is a
+  seed, not a live binding.**
+- **A packet is source-agnostic once it exists.** There is no "AI packet," "CSV
+  packet," or "website packet." There are only FlowGuide packets. Origin must
+  not affect how a packet is edited, stored, rendered, or shared. A packet
+  carries no memory of where it came from, and no behavior depends on it.
+- **Every input converges on the one editor.** No source earns a privileged mode
+  or a separate review screen. Whatever the origin, the professional reviews and
+  shapes the result in the same canonical editor the manual path uses. (This is
+  the input-side reading of "one editor.")
+- **AI is one input among many.** Framing it this way is deliberate. It keeps
+  "AI is an accelerator, not the product" (see [north-star.md](north-star.md))
+  structurally true: AI earns its place by producing a good first draft faster,
+  exactly as any other input would.
+
+This is a framing principle, not a decision to build any importer. Which inputs
+are worth building, and when, is driven by real use — the same discipline that
+governs renderers.
+
 ## Renderer roadmap (illustrative, not committed)
 
 Listed roughly by how primary each is today. Order is not a build sequence —
@@ -126,6 +188,9 @@ When evaluating a future feature, check it against these:
   assume a single channel.
 - **Is the delivery method a send-time choice?** Delivery method should be
   selected when communicating, not baked into the packet.
+- **Does an input seed or sync?** An import should create a first draft and then
+  disconnect. Anything that keeps a packet live-bound to an external source
+  reintroduces a second source of truth.
 
 ## Real-world use is the primary driver
 
