@@ -81,11 +81,21 @@ export async function PATCH(request: Request, context: Context) {
     clientName: "client_name",
     personalNote: "personal_note",
     mapUrl: "map_url",
+    identityMode: "identity_mode",
   };
 
-  const updates: Record<string, string> = {};
+  const updates: Record<string, unknown> = {};
   for (const [key, col] of Object.entries(allowed)) {
     if (key in body) updates[col] = body[key];
+  }
+
+  // Packet-level identity override (jsonb). null clears it.
+  if ("customIdentity" in body) {
+    updates["custom_identity"] = body.customIdentity;
+  }
+
+  if ("identityMode" in body && !["default", "none", "custom"].includes(body.identityMode)) {
+    return NextResponse.json({ error: "Invalid identity_mode" }, { status: 400 });
   }
 
   if (Object.keys(updates).length === 0) {

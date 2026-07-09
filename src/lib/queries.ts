@@ -1,5 +1,54 @@
 import { createPublicClient, createServerClient } from "./supabase";
-import type { Packet, Section, Item, ItemDetail, ItemLink, ItemContact } from "./types";
+import type { Packet, Section, Item, ItemDetail, ItemLink, ItemContact, ProfessionalContact } from "./types";
+
+// ============================================================
+// Resolve which identity a packet presents in the editor/preview,
+// honoring the packet's identity_mode:
+//   'default' -> the live account profile (current behavior)
+//   'none'    -> no identity (empty; the footer/logo simply don't render)
+//   'custom'  -> the packet-specific identity stored on the packet
+// Published views do NOT use this — they read the frozen snapshot, into which
+// publish has already baked the resolved identity.
+// ============================================================
+function resolveProfessional(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  packet: any,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  profile: any
+): ProfessionalContact {
+  const mode = packet.identity_mode || "default";
+
+  if (mode === "none") {
+    return { name: "" };
+  }
+
+  if (mode === "custom") {
+    const c = packet.custom_identity || {};
+    return {
+      name: c.name || "",
+      email: c.email || undefined,
+      phone: c.phone || undefined,
+      businessName: c.businessName || undefined,
+      logoUrl: c.logoUrl || undefined,
+      headshotUrl: c.headshotUrl || undefined,
+      footerLabel: c.footerLabel || undefined,
+      websiteUrl: c.websiteUrl || undefined,
+      links: Array.isArray(c.links) && c.links.length > 0 ? c.links : undefined,
+    };
+  }
+
+  return {
+    name: profile?.name || "",
+    email: profile?.email || undefined,
+    phone: profile?.phone || undefined,
+    businessName: profile?.business_name || undefined,
+    logoUrl: profile?.logo_url || undefined,
+    headshotUrl: profile?.headshot_url || undefined,
+    footerLabel: profile?.footer_label ?? "Your Advisor",
+    websiteUrl: profile?.website_url || undefined,
+    links: profile?.links || undefined,
+  };
+}
 
 // ============================================================
 // SERVER: Fetch a published packet by slug (recipient view)
@@ -275,16 +324,6 @@ function buildPacketWithId(packet: any, profile: any, sections: Section[]): Pack
     mapUrl: packet.map_url || undefined,
     status: packet.status,
     sections,
-    professional: {
-      name: profile?.name || "",
-      email: profile?.email || undefined,
-      phone: profile?.phone || undefined,
-      businessName: profile?.business_name || undefined,
-      logoUrl: profile?.logo_url || undefined,
-      headshotUrl: profile?.headshot_url || undefined,
-      footerLabel: profile?.footer_label ?? "Your Advisor",
-      websiteUrl: profile?.website_url || undefined,
-      links: profile?.links || undefined,
-    },
+    professional: resolveProfessional(packet, profile),
   };
 }

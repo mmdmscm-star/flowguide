@@ -18,7 +18,7 @@ export async function POST(request: Request, context: Context) {
     // Validate the packet has required content
     const { data: packet } = await supabase
       .from("packets")
-      .select("id, title")
+      .select("id, title, identity_mode, custom_identity")
       .eq("id", id)
       .eq("user_id", session.userId)
       .single();
@@ -66,41 +66,71 @@ export async function POST(request: Request, context: Context) {
       }
     }
 
-    // Fetch professional profile for validation and snapshot
-    const { data: profile } = await supabase
-      .from("professional_profiles")
-      .select("name, email, phone, business_name, logo_url, headshot_url, footer_label, website_url, links")
-      .eq("user_id", session.userId)
-      .single();
+    // Resolve which identity this packet presents, honoring its identity_mode.
+    // 'default' snapshots the account profile (existing behavior), 'none' shows
+    // no branding, 'custom' snapshots the packet-specific identity. Whatever we
+    // resolve is frozen into professional_snapshot, so the recipient render path
+    // stays a single source: it always reads the snapshot.
+    const mode: string = packet.identity_mode || "default";
 
-    if (!skipProfileCheck) {
-      if (!profile?.name?.trim()) {
+    let professionalSnapshot: Record<string, unknown>;
+    let contact: { name?: string; email?: string; phone?: string } | null = null;
+
+    if (mode === "none") {
+      professionalSnapshot = {};
+    } else if (mode === "custom") {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const c = (packet.custom_identity || {}) as Record<string, any>;
+      professionalSnapshot = {
+        name: c.name || "",
+        email: c.email || "",
+        phone: c.phone || "",
+        businessName: c.businessName || "",
+        logoUrl: c.logoUrl || "",
+        headshotUrl: c.headshotUrl || "",
+        footerLabel: c.footerLabel || "",
+        websiteUrl: c.websiteUrl || "",
+        links: Array.isArray(c.links) ? c.links : [],
+      };
+      contact = { name: c.name, email: c.email, phone: c.phone };
+    } else {
+      const { data: profile } = await supabase
+        .from("professional_profiles")
+        .select("name, email, phone, business_name, logo_url, headshot_url, footer_label, website_url, links")
+        .eq("user_id", session.userId)
+        .single();
+      // Preserve existing behavior: skipping the check publishes with no branding.
+      professionalSnapshot = skipProfileCheck ? {} : {
+        name: profile?.name || "",
+        email: profile?.email || "",
+        phone: profile?.phone || "",
+        businessName: profile?.business_name || "",
+        logoUrl: profile?.logo_url || "",
+        headshotUrl: profile?.headshot_url || "",
+        footerLabel: profile?.footer_label ?? "Your Advisor",
+        websiteUrl: profile?.website_url || "",
+        links: profile?.links || [],
+      };
+      contact = { name: profile?.name, email: profile?.email, phone: profile?.phone };
+    }
+
+    // Validate contact info unless the user chose to skip (or the packet
+    // intentionally has no identity). Applies to whichever identity is presented.
+    if (!skipProfileCheck && contact) {
+      if (!contact.name?.trim()) {
         return NextResponse.json(
           { error: "no_profile", message: "No professional contact information" },
           { status: 422 }
         );
       }
 
-      if (!profile.email?.trim() && !profile.phone?.trim()) {
+      if (!contact.email?.trim() && !contact.phone?.trim()) {
         return NextResponse.json(
           { error: "no_contact", message: "No email or phone in professional contact" },
           { status: 422 }
         );
       }
     }
-
-    // Snapshot: empty object if skipped (no branding), full profile otherwise
-    const professionalSnapshot = skipProfileCheck ? {} : {
-      name: profile?.name || "",
-      email: profile?.email || "",
-      phone: profile?.phone || "",
-      businessName: profile?.business_name || "",
-      logoUrl: profile?.logo_url || "",
-      headshotUrl: profile?.headshot_url || "",
-      footerLabel: profile?.footer_label ?? "Your Advisor",
-      websiteUrl: profile?.website_url || "",
-      links: profile?.links || [],
-    };
 
     const { error } = await supabase
       .from("packets")

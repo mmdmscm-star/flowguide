@@ -80,6 +80,22 @@ interface EditorProfile {
   links: { label: string; url: string }[];
 }
 
+// A blank custom identity — a full peer of the account profile, but packet-owned.
+// Starts empty (including a blank footer label, so no eyebrow shows by default).
+const EMPTY_IDENTITY: EditorProfile = {
+  name: "",
+  email: "",
+  phone: "",
+  businessName: "",
+  logoUrl: "",
+  headshotUrl: "",
+  footerLabel: "",
+  websiteUrl: "",
+  links: [],
+};
+
+type IdentityMode = "default" | "none" | "custom";
+
 interface PacketData {
   id: string;
   slug: string;
@@ -89,6 +105,8 @@ interface PacketData {
   mapUrl: string;
   rawInput: string;
   status: string;
+  identityMode: IdentityMode;
+  customIdentity: EditorProfile | null;
 }
 
 // ============================================================
@@ -151,6 +169,20 @@ export default function PacketEditorPage() {
       mapUrl: p.map_url || "",
       rawInput: p.raw_input || "",
       status: p.status,
+      identityMode: (p.identity_mode as IdentityMode) || "default",
+      customIdentity: p.custom_identity
+        ? {
+            name: p.custom_identity.name || "",
+            email: p.custom_identity.email || "",
+            phone: p.custom_identity.phone || "",
+            businessName: p.custom_identity.businessName || "",
+            logoUrl: p.custom_identity.logoUrl || "",
+            headshotUrl: p.custom_identity.headshotUrl || "",
+            footerLabel: p.custom_identity.footerLabel || "",
+            websiteUrl: p.custom_identity.websiteUrl || "",
+            links: Array.isArray(p.custom_identity.links) ? p.custom_identity.links : [],
+          }
+        : null,
     });
 
     setSections(
@@ -233,6 +265,75 @@ export default function PacketEditorPage() {
         body: JSON.stringify({ [field]: value }),
       }).then((r) => { if (!r.ok) throw new Error(); })
     );
+  }
+
+  // Immediate (non-debounced) save for discrete packet changes like identity
+  // mode — a shared debounce timer could otherwise drop it behind a later edit.
+  async function savePacketFields(fields: Record<string, unknown>) {
+    setSaveStatus("saving");
+    try {
+      const r = await fetch(`/api/packets/${packetId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(fields),
+      });
+      if (!r.ok) throw new Error();
+      setSaveStatus("saved");
+    } catch {
+      setSaveStatus("error");
+    }
+  }
+
+  // ============================================================
+  // Packet identity (default / none / custom)
+  // ============================================================
+  function setIdentityMode(mode: IdentityMode) {
+    // Seed a blank custom identity the first time custom is chosen, so its
+    // fields render. Blank by design — it never copies the default profile.
+    const seedCustom = mode === "custom" && !packet?.customIdentity;
+    setPacket((prev) =>
+      prev ? { ...prev, identityMode: mode, customIdentity: seedCustom ? { ...EMPTY_IDENTITY } : prev.customIdentity } : prev
+    );
+    const fields: Record<string, unknown> = { identityMode: mode };
+    if (seedCustom) fields.customIdentity = { ...EMPTY_IDENTITY };
+    savePacketFields(fields);
+  }
+
+  // Custom identity is stored as one packet-owned blob; save the whole object.
+  // Saves to the PACKET, never to /api/profile — the default profile is untouched.
+  function patchCustomIdentity(next: EditorProfile) {
+    setPacket((prev) => (prev ? { ...prev, customIdentity: next } : prev));
+    debouncedSave(() =>
+      fetch(`/api/packets/${packetId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ customIdentity: next }),
+      }).then((r) => { if (!r.ok) throw new Error(); })
+    );
+  }
+
+  type CustomScalarField =
+    | "name" | "email" | "phone" | "businessName"
+    | "logoUrl" | "headshotUrl" | "footerLabel" | "websiteUrl";
+
+  function updateCustomField(field: CustomScalarField, value: string) {
+    const base = packet?.customIdentity ?? { ...EMPTY_IDENTITY };
+    patchCustomIdentity({ ...base, [field]: value });
+  }
+
+  function addCustomLink() {
+    const base = packet?.customIdentity ?? { ...EMPTY_IDENTITY };
+    patchCustomIdentity({ ...base, links: [...base.links, { label: "", url: "" }] });
+  }
+
+  function updateCustomLink(index: number, field: "label" | "url", value: string) {
+    const base = packet?.customIdentity ?? { ...EMPTY_IDENTITY };
+    patchCustomIdentity({ ...base, links: base.links.map((l, i) => (i === index ? { ...l, [field]: value } : l)) });
+  }
+
+  function removeCustomLink(index: number) {
+    const base = packet?.customIdentity ?? { ...EMPTY_IDENTITY };
+    patchCustomIdentity({ ...base, links: base.links.filter((_, i) => i !== index) });
   }
 
   // ============================================================
@@ -986,138 +1087,313 @@ export default function PacketEditorPage() {
         <OriginalInput text={packet.rawInput} />
       )}
 
-      {/* Professional contact */}
-      <div className="mb-8 border border-border rounded-xl p-4">
-        <label className="block text-xs font-medium uppercase tracking-widest text-muted mb-3">
-          Your Contact Information
-        </label>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <input
-            type="text"
-            value={profile.name}
-            onChange={(e) => updateProfile("name", e.target.value)}
-            placeholder="Your name"
-            className="px-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:ring-2 focus:ring-accent"
-          />
-          <input
-            type="text"
-            value={profile.businessName}
-            onChange={(e) => updateProfile("businessName", e.target.value)}
-            placeholder="Business name (optional)"
-            className="px-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:ring-2 focus:ring-accent"
-          />
-          <input
-            type="email"
-            value={profile.email}
-            onChange={(e) => updateProfile("email", e.target.value)}
-            placeholder="Email"
-            className="px-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:ring-2 focus:ring-accent"
-          />
-          <input
-            type="tel"
-            value={profile.phone}
-            onChange={(e) => updateProfile("phone", e.target.value)}
-            placeholder="Phone"
-            className="px-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:ring-2 focus:ring-accent"
-          />
-        </div>
-        <div className="mt-3">
-          <input
-            type="text"
-            value={profile.footerLabel}
-            onChange={(e) => updateProfile("footerLabel", e.target.value)}
-            placeholder="Footer label (e.g. Your Advisor)"
-            className="w-full px-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:ring-2 focus:ring-accent"
-          />
-          <p className="mt-1 text-xs text-muted">
-            Shown above your name on the packet. Leave blank to hide it.
+      {/* Selected sender's details — rendered just above the Sender chooser so
+          the chooser stays pinned at the very bottom. Nothing shows for "No sender". */}
+      {packet.identityMode === "default" && (
+        <div className="mb-8 border border-border rounded-xl p-4">
+          <label className="block text-xs font-medium uppercase tracking-widest text-muted mb-1">
+            Your Default Profile
+          </label>
+          <p className="text-xs text-muted mb-3">
+            Editing these updates your profile on <strong>every</strong> packet set to “My default profile.”
           </p>
-        </div>
-        <div className="mt-3">
-          <div className="flex items-center gap-3">
-            {profile.logoUrl && (
-              <img
-                src={profile.logoUrl}
-                alt="Logo"
-                className="h-10 w-auto max-w-[120px] object-contain rounded"
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <input
+              type="text"
+              value={profile.name}
+              onChange={(e) => updateProfile("name", e.target.value)}
+              placeholder="Your name"
+              className="px-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:ring-2 focus:ring-accent"
+            />
+            <input
+              type="text"
+              value={profile.businessName}
+              onChange={(e) => updateProfile("businessName", e.target.value)}
+              placeholder="Business name (optional)"
+              className="px-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:ring-2 focus:ring-accent"
+            />
+            <input
+              type="email"
+              value={profile.email}
+              onChange={(e) => updateProfile("email", e.target.value)}
+              placeholder="Email"
+              className="px-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:ring-2 focus:ring-accent"
+            />
+            <input
+              type="tel"
+              value={profile.phone}
+              onChange={(e) => updateProfile("phone", e.target.value)}
+              placeholder="Phone"
+              className="px-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:ring-2 focus:ring-accent"
+            />
+          </div>
+          <div className="mt-3">
+            <input
+              type="text"
+              value={profile.footerLabel}
+              onChange={(e) => updateProfile("footerLabel", e.target.value)}
+              placeholder="Footer label (e.g. Your Advisor)"
+              className="w-full px-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:ring-2 focus:ring-accent"
+            />
+            <p className="mt-1 text-xs text-muted">
+              Shown above your name on the packet. Leave blank to hide it.
+            </p>
+          </div>
+          <div className="mt-3">
+            <div className="flex items-center gap-3">
+              {profile.logoUrl && (
+                <img
+                  src={profile.logoUrl}
+                  alt="Logo"
+                  className="h-10 w-auto max-w-[120px] object-contain rounded"
+                />
+              )}
+              <input
+                type="url"
+                value={profile.logoUrl}
+                onChange={(e) => updateProfile("logoUrl", e.target.value)}
+                placeholder="Logo URL (optional)"
+                className="flex-1 px-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:ring-2 focus:ring-accent"
               />
+            </div>
+            <div className="mt-2 flex items-center gap-3">
+              {profile.headshotUrl && (
+                <img
+                  src={profile.headshotUrl}
+                  alt="Headshot"
+                  className="w-10 h-10 rounded-full object-cover flex-shrink-0 border border-border"
+                />
+              )}
+              <input
+                type="url"
+                value={profile.headshotUrl}
+                onChange={(e) => updateProfile("headshotUrl", e.target.value)}
+                placeholder="Headshot photo URL (optional)"
+                className="flex-1 px-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:ring-2 focus:ring-accent"
+              />
+            </div>
+            <input
+              type="url"
+              value={profile.websiteUrl}
+              onChange={(e) => updateProfile("websiteUrl", e.target.value)}
+              placeholder="Website URL (optional)"
+              className="mt-2 w-full px-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:ring-2 focus:ring-accent"
+            />
+          </div>
+
+          {/* Links (optional) — e.g. Facebook, LinkedIn, Calendly */}
+          <div className="mt-4">
+            <label className="block text-xs font-medium uppercase tracking-widest text-muted mb-2">
+              Links (optional)
+            </label>
+            {profile.links.length > 0 && (
+              <div className="space-y-2 mb-2">
+                {profile.links.map((link, index) => (
+                  <div key={index} className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={link.label}
+                      onChange={(e) => updateProfileLink(index, "label", e.target.value)}
+                      placeholder="Label (e.g. Facebook)"
+                      className="w-36 flex-shrink-0 px-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:ring-2 focus:ring-accent"
+                    />
+                    <input
+                      type="url"
+                      value={link.url}
+                      onChange={(e) => updateProfileLink(index, "url", e.target.value)}
+                      placeholder="https://..."
+                      className="flex-1 min-w-0 px-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:ring-2 focus:ring-accent"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeProfileLink(index)}
+                      aria-label="Remove link"
+                      className="text-muted hover:text-red-600 px-1 flex-shrink-0"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <button
+              type="button"
+              onClick={addProfileLink}
+              className="text-sm text-accent hover:text-accent-hover font-medium"
+            >
+              + Add link
+            </button>
+          </div>
+        </div>
+      )}
+
+      {packet.identityMode === "custom" && (
+        <div className="mb-8 border border-border rounded-xl p-4">
+          <label className="block text-xs font-medium uppercase tracking-widest text-muted mb-1">
+            Custom Organization
+          </label>
+          <p className="text-xs text-muted mb-3">
+            These details apply to this packet only. Editing them does <strong>not</strong> change your default profile.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <input
+              type="text"
+              value={packet.customIdentity?.name || ""}
+              onChange={(e) => updateCustomField("name", e.target.value)}
+              placeholder="Name"
+              className="px-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:ring-2 focus:ring-accent"
+            />
+            <input
+              type="text"
+              value={packet.customIdentity?.businessName || ""}
+              onChange={(e) => updateCustomField("businessName", e.target.value)}
+              placeholder="Business name (optional)"
+              className="px-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:ring-2 focus:ring-accent"
+            />
+            <input
+              type="email"
+              value={packet.customIdentity?.email || ""}
+              onChange={(e) => updateCustomField("email", e.target.value)}
+              placeholder="Email"
+              className="px-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:ring-2 focus:ring-accent"
+            />
+            <input
+              type="tel"
+              value={packet.customIdentity?.phone || ""}
+              onChange={(e) => updateCustomField("phone", e.target.value)}
+              placeholder="Phone"
+              className="px-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:ring-2 focus:ring-accent"
+            />
+          </div>
+          <div className="mt-3">
+            <input
+              type="text"
+              value={packet.customIdentity?.footerLabel || ""}
+              onChange={(e) => updateCustomField("footerLabel", e.target.value)}
+              placeholder="Footer label (optional)"
+              className="w-full px-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:ring-2 focus:ring-accent"
+            />
+            <p className="mt-1 text-xs text-muted">Shown above the name on the packet. Leave blank to hide it.</p>
+          </div>
+          <div className="mt-3 flex items-center gap-3">
+            {packet.customIdentity?.logoUrl && (
+              <img src={packet.customIdentity.logoUrl} alt="Logo" className="h-10 w-auto max-w-[120px] object-contain rounded" />
             )}
             <input
               type="url"
-              value={profile.logoUrl}
-              onChange={(e) => updateProfile("logoUrl", e.target.value)}
+              value={packet.customIdentity?.logoUrl || ""}
+              onChange={(e) => updateCustomField("logoUrl", e.target.value)}
               placeholder="Logo URL (optional)"
               className="flex-1 px-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:ring-2 focus:ring-accent"
             />
           </div>
           <div className="mt-2 flex items-center gap-3">
-            {profile.headshotUrl && (
-              <img
-                src={profile.headshotUrl}
-                alt="Headshot"
-                className="w-10 h-10 rounded-full object-cover flex-shrink-0 border border-border"
-              />
+            {packet.customIdentity?.headshotUrl && (
+              <img src={packet.customIdentity.headshotUrl} alt="Headshot" className="w-10 h-10 rounded-full object-cover flex-shrink-0 border border-border" />
             )}
             <input
               type="url"
-              value={profile.headshotUrl}
-              onChange={(e) => updateProfile("headshotUrl", e.target.value)}
+              value={packet.customIdentity?.headshotUrl || ""}
+              onChange={(e) => updateCustomField("headshotUrl", e.target.value)}
               placeholder="Headshot photo URL (optional)"
               className="flex-1 px-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:ring-2 focus:ring-accent"
             />
           </div>
           <input
             type="url"
-            value={profile.websiteUrl}
-            onChange={(e) => updateProfile("websiteUrl", e.target.value)}
+            value={packet.customIdentity?.websiteUrl || ""}
+            onChange={(e) => updateCustomField("websiteUrl", e.target.value)}
             placeholder="Website URL (optional)"
             className="mt-2 w-full px-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:ring-2 focus:ring-accent"
           />
+
+          <div className="mt-4">
+            <label className="block text-xs font-medium uppercase tracking-widest text-muted mb-2">
+              Links (optional)
+            </label>
+            {(packet.customIdentity?.links.length ?? 0) > 0 && (
+              <div className="space-y-2 mb-2">
+                {packet.customIdentity!.links.map((link, index) => (
+                  <div key={index} className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={link.label}
+                      onChange={(e) => updateCustomLink(index, "label", e.target.value)}
+                      placeholder="Label (e.g. Facebook)"
+                      className="w-36 flex-shrink-0 px-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:ring-2 focus:ring-accent"
+                    />
+                    <input
+                      type="url"
+                      value={link.url}
+                      onChange={(e) => updateCustomLink(index, "url", e.target.value)}
+                      placeholder="https://..."
+                      className="flex-1 min-w-0 px-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:ring-2 focus:ring-accent"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeCustomLink(index)}
+                      aria-label="Remove link"
+                      className="text-muted hover:text-red-600 px-1 flex-shrink-0"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <button
+              type="button"
+              onClick={addCustomLink}
+              className="text-sm text-accent hover:text-accent-hover font-medium"
+            >
+              + Add link
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Sender chooser — pinned at the very bottom, where the signature sits.
+          The selected sender's details (if any) render just above this block. */}
+      <div className="mb-8 border border-border rounded-xl p-4">
+        <label className="block text-xs font-medium uppercase tracking-widest text-muted mb-1">
+          Sender
+        </label>
+        <p className="text-xs text-muted mb-3">
+          Who is this packet from? Applies to this packet only.
+        </p>
+        <div className="space-y-2">
+          {([
+            { value: "default", title: "My default profile", desc: "Show your saved default contact information on this packet." },
+            { value: "none", title: "No sender", desc: "No sender shown — no name, logo, or contact footer." },
+            { value: "custom", title: "Custom organization", desc: "Enter a name, logo, and contact info just for this packet." },
+          ] as { value: IdentityMode; title: string; desc: string }[]).map((opt) => (
+            <label
+              key={opt.value}
+              className={`flex items-start gap-3 rounded-lg border border-border p-3 cursor-pointer transition-colors ${
+                packet.identityMode === opt.value ? "ring-2 ring-accent" : "hover:border-muted"
+              }`}
+            >
+              <input
+                type="radio"
+                name="identityMode"
+                value={opt.value}
+                checked={packet.identityMode === opt.value}
+                onChange={() => setIdentityMode(opt.value)}
+                className="mt-0.5"
+              />
+              <span>
+                <span className="block text-sm font-medium text-foreground">{opt.title}</span>
+                <span className="block text-xs text-muted">{opt.desc}</span>
+              </span>
+            </label>
+          ))}
         </div>
 
-        {/* Links (optional) — e.g. Facebook, LinkedIn, Calendly */}
-        <div className="mt-4">
-          <label className="block text-xs font-medium uppercase tracking-widest text-muted mb-2">
-            Links (optional)
-          </label>
-          {profile.links.length > 0 && (
-            <div className="space-y-2 mb-2">
-              {profile.links.map((link, index) => (
-                <div key={index} className="flex items-center gap-2">
-                  <input
-                    type="text"
-                    value={link.label}
-                    onChange={(e) => updateProfileLink(index, "label", e.target.value)}
-                    placeholder="Label (e.g. Facebook)"
-                    className="w-36 flex-shrink-0 px-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:ring-2 focus:ring-accent"
-                  />
-                  <input
-                    type="url"
-                    value={link.url}
-                    onChange={(e) => updateProfileLink(index, "url", e.target.value)}
-                    placeholder="https://..."
-                    className="flex-1 min-w-0 px-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:ring-2 focus:ring-accent"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => removeProfileLink(index)}
-                    aria-label="Remove link"
-                    className="text-muted hover:text-red-600 px-1 flex-shrink-0"
-                  >
-                    ×
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-          <button
-            type="button"
-            onClick={addProfileLink}
-            className="text-sm text-accent hover:text-accent-hover font-medium"
-          >
-            + Add link
-          </button>
-        </div>
+        {packet.identityMode === "none" && (
+          <p className="mt-4 text-xs text-muted">
+            No sender will appear on this packet — no name, logo, or contact footer.
+          </p>
+        )}
       </div>
 
       {/* Action bar */}

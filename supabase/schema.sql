@@ -72,6 +72,8 @@ create table public.packets (
   status text not null default 'draft' check (status in ('draft', 'published')),
   viewed boolean not null default false,
   professional_snapshot jsonb,
+  identity_mode text not null default 'default' check (identity_mode in ('default', 'none', 'custom')),
+  custom_identity jsonb,
   published_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()

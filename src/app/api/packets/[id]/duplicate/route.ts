@@ -36,6 +36,10 @@ export async function POST(_request: Request, context: Context) {
       raw_input: "",
       status: "draft",
       viewed: false,
+      // Carry the packet's identity choice to the copy. The snapshot is not
+      // copied — a duplicate is a fresh draft that re-snapshots at publish.
+      identity_mode: original.identity_mode || "default",
+      custom_identity: original.custom_identity ?? null,
     })
     .select()
     .single();
