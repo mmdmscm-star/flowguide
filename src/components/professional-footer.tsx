@@ -36,7 +36,7 @@ export function ProfessionalFooter({
         {professional.phone && (
           <a
             href={`tel:${professional.phone}`}
-            className="inline-flex items-center gap-1.5 text-sm font-medium text-white bg-accent hover:bg-accent-hover px-4 py-2 rounded-lg transition-colors"
+            className="inline-flex items-center gap-1.5 text-base font-medium text-white bg-accent hover:bg-accent-hover px-4 py-2 rounded-lg transition-colors"
           >
             <svg
               className="w-4 h-4"
@@ -57,7 +57,7 @@ export function ProfessionalFooter({
         {professional.phone && (
           <a
             href={`sms:${professional.phone}`}
-            className="inline-flex items-center gap-1.5 text-sm font-medium text-accent bg-blue-50 hover:bg-blue-100 border border-blue-100 px-4 py-2 rounded-lg transition-colors"
+            className="inline-flex items-center gap-1.5 text-base font-medium text-accent bg-blue-50 hover:bg-blue-100 border border-blue-100 px-4 py-2 rounded-lg transition-colors"
           >
             <svg
               className="w-4 h-4"
@@ -78,7 +78,7 @@ export function ProfessionalFooter({
         {professional.email && (
           <a
             href={`mailto:${professional.email}`}
-            className="inline-flex items-center gap-1.5 text-sm font-medium text-accent bg-blue-50 hover:bg-blue-100 border border-blue-100 px-4 py-2 rounded-lg transition-colors"
+            className="inline-flex items-center gap-1.5 text-base font-medium text-accent bg-blue-50 hover:bg-blue-100 border border-blue-100 px-4 py-2 rounded-lg transition-colors"
           >
             <svg
               className="w-4 h-4"
@@ -101,7 +101,7 @@ export function ProfessionalFooter({
             href={professional.websiteUrl.startsWith("http") ? professional.websiteUrl : `https://${professional.websiteUrl}`}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 text-sm font-medium text-accent bg-blue-50 hover:bg-blue-100 border border-blue-100 px-4 py-2 rounded-lg transition-colors"
+            className="inline-flex items-center gap-1.5 text-base font-medium text-accent bg-blue-50 hover:bg-blue-100 border border-blue-100 px-4 py-2 rounded-lg transition-colors"
           >
             <svg
               className="w-4 h-4"
@@ -127,7 +127,7 @@ export function ProfessionalFooter({
               href={link.url.startsWith("http") ? link.url : `https://${link.url}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 text-sm font-medium text-accent bg-blue-50 hover:bg-blue-100 border border-blue-100 px-4 py-2 rounded-lg transition-colors"
+              className="inline-flex items-center gap-1.5 text-base font-medium text-accent bg-blue-50 hover:bg-blue-100 border border-blue-100 px-4 py-2 rounded-lg transition-colors"
             >
               <svg
                 className="w-4 h-4"

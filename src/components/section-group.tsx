@@ -7,10 +7,10 @@ export function SectionGroup({ section }: { section: Section }) {
       {(section.title || section.description) && (
         <div className="px-5 mb-4">
           {section.title && (
-            <h2 className="text-lg font-bold text-foreground">{section.title}</h2>
+            <h2 className="text-xl font-bold text-foreground">{section.title}</h2>
           )}
           {section.description && (
-            <p className="mt-1 text-sm text-muted leading-relaxed">
+            <p className="mt-1 text-base text-gray-600 leading-relaxed">
               {section.description}
             </p>
           )}
