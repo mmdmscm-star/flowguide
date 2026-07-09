@@ -141,3 +141,56 @@ Working principle adopted 2026-07-02 after reviewing the Details data model,
 renderer ([item-card.tsx](../src/components/item-card.tsx)), and editor. Relates to
 the "real-world use is the primary driver" section of
 [product-direction.md](product-direction.md).
+
+---
+
+## Recipient Text-Size Control (A / A+ / A++)
+
+**Status:** Deferred. Watching whether the larger default is enough.
+
+### The idea
+
+Let a **recipient** adjust the packet's text size (e.g. A / A+ / A++) for their
+own reading comfort — most relevant to older clients. This is distinct from the
+default type scale, which we already raised for everyone. It's about giving the
+*reader* control, not changing the baseline again.
+
+### Why it's deferred
+
+We just lifted the default recipient reading tier (16px body, 18px item titles,
+20px section titles, higher-contrast labels). That may be enough on its own.
+Adding a control before we know would be pre-building flexibility with no observed
+friction — against our evidence-first principle.
+
+### Validation gate (before any code)
+
+Build only if, at the new larger default, a **real recipient still struggles with
+size** — a concrete signal, not a hunch:
+
+- a client says the text is hard to read, or
+- you watch someone pinch-zoom, hold the phone close, or ask you to make it
+  bigger while reading a real packet.
+
+One such observation is the trigger. Until then, leave it.
+
+### Shape if the gate passes
+
+A **render-only** control: a small A / A+ / A++ toggle that scales the packet's
+**root font-size**, so every element scales proportionally off the existing
+`rem`-based sizes. Persist the choice in the browser (`localStorage`) so it sticks
+across visits.
+
+- **Presentation only** — it never touches the canonical packet; it's a preference
+  on the *renderer*, exactly as "one packet, multiple renderers" intends.
+- No packet data, no server state, no per-recipient records.
+- Placed unobtrusively (e.g. a corner of the packet) so it aids reading without
+  cluttering it.
+
+### Reference
+
+Grew out of a real send to an elderly client (2026-07-09): the packet was hard to
+read even with reading glasses, and the recipient had no way to enlarge it. The
+first response was to fix the default scale (shipped); this control is the
+deferred follow-on. Relates to the recipient typography lift and the
+"one packet, multiple renderers" principle in
+[product-direction.md](product-direction.md).
