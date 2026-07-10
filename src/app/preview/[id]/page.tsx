@@ -33,7 +33,7 @@ export default async function PreviewPage({ params }: Props) {
   }
 
   return (
-    <main className="max-w-lg mx-auto pb-12 overflow-x-hidden">
+    <main className="w-full max-w-lg mx-auto pb-12 overflow-x-hidden break-words">
       {/* Preview banner */}
       <PreviewActions
         packetId={id}
