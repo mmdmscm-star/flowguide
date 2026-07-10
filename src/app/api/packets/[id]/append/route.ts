@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase";
+import { callStructuringModel, insertStructuredSections, MAX_INPUT_CHARS } from "@/lib/ai-structure";
+
+// Give a large single-pass structuring call more headroom than the 30s default.
+export const maxDuration = 60;
 
 type Context = { params: Promise<{ id: string }> };
 
@@ -135,6 +139,19 @@ export async function POST(request: Request, context: Context) {
     return NextResponse.json({ error: "Please paste more text to organize." }, { status: 400 });
   }
 
+  const trimmed = rawText.trim();
+
+  // Fail closed on oversize input — never silently truncate.
+  if (trimmed.length > MAX_INPUT_CHARS) {
+    return NextResponse.json(
+      {
+        error: "input_too_large",
+        message: `This is too large to add in one pass (${trimmed.length.toLocaleString()} characters; limit ${MAX_INPUT_CHARS.toLocaleString()}). Add it in smaller parts instead.`,
+      },
+      { status: 413 }
+    );
+  }
+
   const supabase = createServerClient();
 
   const { data: packet } = await supabase
@@ -168,154 +185,48 @@ export async function POST(request: Request, context: Context) {
     return NextResponse.json({ error: "AI service not configured" }, { status: 500 });
   }
 
-  let structured: { sections: StructuredSection[] };
-  let aiData: any = null;
-  let content: string | null = null;
-  try {
-    const aiRes = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "anthropic/claude-sonnet-4",
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: rawText.trim().slice(0, 15000) },
-        ],
-        temperature: 0.3,
-        max_tokens: 8000,
-      }),
-    });
+  const result = await callStructuringModel({
+    systemPrompt,
+    rawText: trimmed,
+    apiKey,
+    tag: "append",
+  });
+  if (!result.ok) {
+    return NextResponse.json(
+      { error: result.error, message: result.message },
+      { status: result.status }
+    );
+  }
 
-    if (!aiRes.ok) {
-      const errText = await aiRes.text();
-      console.error("[append] OpenRouter HTTP error:", aiRes.status, errText);
-      return NextResponse.json({ error: "AI service error. Please try again." }, { status: 502 });
-    }
-
-    aiData = await aiRes.json();
-    content = aiData.choices?.[0]?.message?.content;
-    if (!content) {
-      console.error("[append] No content in AI response. finish_reason:", aiData?.choices?.[0]?.finish_reason);
-      return NextResponse.json({ error: "No response from AI. Please try again." }, { status: 502 });
-    }
-
-    const cleaned = content.replace(/^```json?\s*\n?/i, "").replace(/\n?```\s*$/i, "").trim();
-    structured = JSON.parse(cleaned);
-  } catch (e) {
-    const errMsg = e instanceof Error ? e.message : String(e);
-    console.error("[append] AI parse failure:", errMsg);
-    console.error("[append] finish_reason:", aiData?.choices?.[0]?.finish_reason);
-    console.error("[append] raw content (first 500 chars):", content?.slice(0, 500));
-    console.error("[append] raw content (last 200 chars):", content?.slice(-200));
+  const structured = result.data as { sections: StructuredSection[] };
+  if (!structured || !Array.isArray(structured.sections)) {
+    console.error("[append] AI response missing sections array");
     return NextResponse.json({ error: "AI returned invalid data. Please try again." }, { status: 502 });
   }
 
-  // Hydrate: insert-only, never modify existing content
+  // ============================================================
+  // Hydrate — insert-only and all-or-nothing. insertStructuredSections rolls
+  // back the sections it created (and their descendants) if anything fails, so
+  // a failed "Add with AI" never leaves a half-appended batch. Existing content
+  // is never touched. Raw input is appended only after the new items land, so
+  // the source record stays consistent with what was actually saved.
+  // ============================================================
   try {
-    // Append new raw input with timestamp delimiter
+    await insertStructuredSections(supabase, id, structured.sections, sectionOffset);
+
     const timestamp = new Date().toLocaleString("en-US", {
       month: "short", day: "numeric", year: "numeric",
       hour: "numeric", minute: "2-digit",
     });
     const delimiter = `\n\n--- Added ${timestamp} ---\n\n`;
-    const updatedRawInput = (packet.raw_input || "") + delimiter + rawText.trim();
+    const updatedRawInput = (packet.raw_input || "") + delimiter + trimmed;
 
     await supabase
       .from("packets")
       .update({ raw_input: updatedRawInput })
       .eq("id", id);
-
-    // Create new sections and items (appended after existing)
-    for (let si = 0; si < structured.sections.length; si++) {
-      const section = structured.sections[si];
-
-      const { data: newSection } = await supabase
-        .from("sections")
-        .insert({
-          packet_id: id,
-          title: section.title || `Section ${sectionOffset + si + 1}`,
-          description: section.description || "",
-          sort_order: sectionOffset + si,
-        })
-        .select()
-        .single();
-
-      if (!newSection) continue;
-
-      for (let ii = 0; ii < section.items.length; ii++) {
-        const item = section.items[ii];
-
-        const { data: newItem } = await supabase
-          .from("items")
-          .insert({
-            section_id: newSection.id,
-            title: item.title || `Item ${ii + 1}`,
-            address: item.address || "",
-            description: item.description || "",
-            notes: item.notes || "",
-            sort_order: ii,
-          })
-          .select()
-          .single();
-
-        if (!newItem) continue;
-
-        if (item.details && item.details.length > 0) {
-          await supabase.from("item_details").insert(
-            item.details.map((d, di) => ({
-              item_id: newItem.id,
-              label: d.label,
-              value: d.value,
-              sort_order: di,
-            }))
-          );
-        }
-
-        if (item.links && item.links.length > 0) {
-          const validLinks = item.links.filter((l) => l.url && l.url.startsWith("http"));
-          if (validLinks.length > 0) {
-            await supabase.from("item_links").insert(
-              validLinks.map((l, li) => ({
-                item_id: newItem.id,
-                url: l.url,
-                label: l.label || "",
-                sort_order: li,
-              }))
-            );
-          }
-        }
-
-        if (item.photos && item.photos.length > 0) {
-          const validPhotos = item.photos.filter((url) => url && url.startsWith("http"));
-          if (validPhotos.length > 0) {
-            const { error: photoErr } = await supabase.from("item_photos").insert(
-              validPhotos.map((url, pi) => ({
-                item_id: newItem.id,
-                url,
-                storage_path: "",
-                sort_order: pi,
-              }))
-            );
-            if (photoErr) console.error(`[append] Photo insert error for "${item.title}":`, photoErr);
-          }
-        }
-
-        if (item.contact && (item.contact.name || item.contact.phone || item.contact.email || item.contact.website)) {
-          await supabase.from("item_contacts").insert({
-            item_id: newItem.id,
-            name: item.contact.name || "",
-            phone: item.contact.phone || "",
-            email: item.contact.email || "",
-            website: item.contact.website || "",
-          });
-        }
-      }
-    }
   } catch (e) {
-    console.error("Append hydrate error:", e);
+    console.error("[append] Hydrate error:", e);
     return NextResponse.json({ error: "Failed to save new items." }, { status: 500 });
   }
 

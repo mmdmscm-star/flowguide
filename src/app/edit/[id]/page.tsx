@@ -801,7 +801,7 @@ export default function PacketEditorPage() {
       });
       const data = await res.json();
       if (!res.ok) {
-        alert(data.error || "Failed to add items.");
+        alert(data.message || data.error || "Failed to add items.");
         return;
       }
       setAppendText("");

@@ -44,7 +44,7 @@ export default function NewPacketPage() {
 
       if (!structureRes.ok) {
         const data = await structureRes.json();
-        setError(data.error || "AI structuring failed. Try again.");
+        setError(data.message || data.error || "AI structuring failed. Try again.");
         setProcessing(false);
         return;
       }
