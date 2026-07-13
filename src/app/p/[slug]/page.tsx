@@ -7,6 +7,11 @@ import { SectionGroup } from "@/components/section-group";
 import { ProfessionalFooter } from "@/components/professional-footer";
 import type { Packet } from "@/lib/types";
 
+// Render on every request — never serve a cached copy. This is what makes
+// unpublish/delete take effect immediately: there is no stored HTML that could
+// keep showing an unpublished packet after status flips to draft.
+export const dynamic = "force-dynamic";
+
 type Props = {
   params: Promise<{ slug: string }>;
 };
@@ -27,31 +32,18 @@ async function resolvePacket(slug: string): Promise<Packet | null> {
   return null;
 }
 
-export async function generateMetadata({ params }: Props): Promise<Metadata> {
-  const { slug } = await params;
-  const packet = await resolvePacket(slug);
-
-  if (!packet) {
-    return { title: "Packet Not Found — FlowGuide" };
-  }
-
-  const description = packet.personalNote
-    ? packet.personalNote.slice(0, 150) + "..."
-    : `A packet prepared for you by ${packet.professional.name}`;
-
-  // Titles may contain intentional line breaks; collapse them for metadata.
-  const metaTitle = packet.title.replace(/\s*\n\s*/g, " ");
-
-  return {
-    title: `${metaTitle} — FlowGuide`,
-    description,
-    openGraph: {
-      title: metaTitle,
-      description,
-      type: "website",
-    },
-  };
-}
+// Recipient packet pages are private-by-link and may contain a client's name and
+// a personal note. Metadata is therefore ENTIRELY generic — no packet or client
+// content ever reaches page titles, descriptions, or OpenGraph tags (which are
+// exactly what search crawlers and link-unfurl bots ingest). `robots: noindex`
+// tells any crawler that does reach the URL not to index it. This is a static
+// export (not a per-packet generateMetadata) so it can never leak content and
+// avoids a duplicate packet fetch on every render.
+export const metadata: Metadata = {
+  title: "FlowGuide",
+  description: "A packet prepared for you.",
+  robots: { index: false, follow: false },
+};
 
 function NotFound() {
   return (

@@ -82,12 +82,57 @@ export async function callStructuringModel(opts: {
         ],
         temperature: 0.3,
         max_tokens: MAX_OUTPUT_TOKENS,
+        // Enforce privacy routing at the request level, not only via account
+        // settings. Route this packet's data ONLY to a provider endpoint that
+        // both refuses to log/train on it (data_collection: "deny") and honors
+        // zero data retention (zdr). If no endpoint for STRUCTURE_MODEL
+        // qualifies, OpenRouter returns an error instead of silently falling
+        // back to a non-compliant provider — we detect and surface that below.
+        provider: {
+          data_collection: "deny",
+          zdr: true,
+        },
       }),
     });
 
     if (!aiRes.ok) {
       const errText = await aiRes.text();
       console.error(`[${tag}] OpenRouter HTTP error:`, aiRes.status, errText);
+
+      // Detect the case where NO provider endpoint satisfies our privacy routing
+      // (data_collection: "deny" + zdr). OpenRouter has no dedicated
+      // machine-readable error *type* for this, but its error body is a stable
+      // shape — {"error":{"code":<int>,"message":<str>,"metadata":{…}}} — where
+      // `code` mirrors the HTTP status. Its whole "no usable / no allowed
+      // endpoint" routing family returns 404 (a bad model id is 400, rate limit
+      // 429, etc). Because THIS request pins only the privacy constraints (no
+      // provider `only`), a 404 here means no endpoint met the data policy. So
+      // we prefer the structured `error.code`, and keep a string scan as a
+      // defensive fallback if the body isn't the documented JSON shape.
+      let structuredCode: number | null = null;
+      try {
+        const parsed = JSON.parse(errText);
+        if (typeof parsed?.error?.code === "number") structuredCode = parsed.error.code;
+      } catch {
+        // Non-JSON error body — fall through to the string-based fallback.
+      }
+      const lower = errText.toLowerCase();
+      const noEligibleEndpoint =
+        structuredCode === 404 ||
+        aiRes.status === 404 ||
+        lower.includes("no endpoints") ||
+        lower.includes("no allowed providers") ||
+        lower.includes("data policy");
+      if (noEligibleEndpoint) {
+        return {
+          ok: false,
+          status: 503,
+          error: "no_private_endpoint",
+          message:
+            "Organizing is unavailable right now: no AI provider currently meets FlowGuide’s privacy requirements (no logging, zero data retention) for this model. Your text was not organized, and nothing was sent to a non-compliant provider.",
+        };
+      }
+
       return { ok: false, status: 502, error: "AI service error. Please try again." };
     }
 
@@ -120,10 +165,12 @@ export async function callStructuringModel(opts: {
     return { ok: true, data: JSON.parse(cleaned) };
   } catch (e) {
     const errMsg = e instanceof Error ? e.message : String(e);
+    // Log only non-content diagnostics. The model output is derived from the
+    // professional's (and their client's) private source text, so it must never
+    // be written to the function logs — even truncated. finish_reason and the
+    // error message are safe; the raw content is not.
     console.error(`[${tag}] AI parse failure:`, errMsg);
     console.error(`[${tag}] finish_reason:`, aiData?.choices?.[0]?.finish_reason);
-    console.error(`[${tag}] raw content (first 500 chars):`, content?.slice(0, 500));
-    console.error(`[${tag}] raw content (last 200 chars):`, content?.slice(-200));
     return { ok: false, status: 502, error: "AI returned invalid data. Please try again." };
   }
 }

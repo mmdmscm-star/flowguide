@@ -85,7 +85,8 @@ export default function DashboardPage() {
     const url = `${window.location.origin}/p/${slug}`;
     await navigator.clipboard.writeText(url);
     setCopiedId(id);
-    setTimeout(() => setCopiedId(null), 2000);
+    // Long enough to read the sharing warning shown below the packet's actions.
+    setTimeout(() => setCopiedId(null), 6000);
   }
 
   async function handleLogout() {
@@ -231,6 +232,7 @@ export default function DashboardPage() {
                       </button>
                       <button
                         onClick={() => copyLink(packet.slug, packet.id)}
+                        title="Anyone with this link can open the packet — no sign-in required."
                         className="px-3 py-1.5 text-xs font-medium text-accent hover:bg-blue-50 rounded-lg transition-colors"
                       >
                         {copiedId === packet.id ? "Copied!" : "Copy Link"}
@@ -252,6 +254,12 @@ export default function DashboardPage() {
                   </button>
                 </div>
               </div>
+              {copiedId === packet.id && (
+                <p className="mt-3 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                  Link copied. Anyone with this link can view and forward the
+                  packet. No sign-in is required.
+                </p>
+              )}
             </div>
           ))}
         </div>

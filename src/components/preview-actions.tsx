@@ -52,8 +52,12 @@ export function PreviewActions({ packetId, slug, initialStatus }: Props) {
   if (status === "published") {
     return (
       <div className="bg-green-50 border-b border-green-200 px-5 py-3 text-center">
-        <p className="text-sm text-green-800 font-medium mb-2">
+        <p className="text-sm text-green-800 font-medium mb-1">
           Published — your client can now see this packet
+        </p>
+        <p className="text-xs text-green-700 mb-2">
+          Anyone with this link can open the packet — no sign-in required. Share
+          it only with people you want to see it.
         </p>
         <div className="flex items-center justify-center gap-3">
           <button
