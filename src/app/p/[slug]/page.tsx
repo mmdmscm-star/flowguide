@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { notFound } from "next/navigation";
 import { samplePacket } from "@/lib/sample-data";
 import { getPublishedPacket, markPacketViewed } from "@/lib/queries";
 import { PacketHeader } from "@/components/packet-header";
@@ -45,26 +46,15 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-function NotFound() {
-  return (
-    <div className="flex flex-col items-center justify-center min-h-screen px-5 text-center">
-      <div className="text-5xl mb-4">📄</div>
-      <h1 className="text-xl font-bold text-foreground mb-2">
-        Packet not found
-      </h1>
-      <p className="text-sm text-muted max-w-xs">
-        This link doesn&apos;t match any packet. Check the URL and try again.
-      </p>
-      <p className="mt-8 text-xs text-muted/60">FlowGuide</p>
-    </div>
-  );
-}
-
 export default async function PacketPage({ params }: Props) {
   const { slug } = await params;
   const packet = await resolvePacket(slug);
 
-  if (!packet) return <NotFound />;
+  // A missing OR unpublished packet must return a real HTTP 404 — not a 200 with
+  // a "not found" body. notFound() renders the not-found.tsx boundary with a 404
+  // status. Because the page is force-dynamic, an unpublished packet 404s on the
+  // very next request (getPublishedPacket filters status='published').
+  if (!packet) notFound();
 
   // Track that this packet was opened (fire and forget)
   if (slug !== "demo" && isSupabaseConfigured) {
