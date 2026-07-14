@@ -131,6 +131,9 @@ export default function PacketEditorPage() {
   const [showAppendModal, setShowAppendModal] = useState(false);
   const [appendText, setAppendText] = useState("");
   const [appendLoading, setAppendLoading] = useState(false);
+  // When set, the AI modal is in "add items to THIS existing section" mode
+  // (Operation 1). When null, it is "add new sections" mode (Operation 2).
+  const [appendTargetSection, setAppendTargetSection] = useState<{ id: string; title: string } | null>(null);
 
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const titleRef = useRef<HTMLTextAreaElement>(null);
@@ -794,7 +797,12 @@ export default function PacketEditorPage() {
     if (!appendText.trim() || appendText.trim().length < 10) return;
     setAppendLoading(true);
     try {
-      const res = await fetch(`/api/packets/${packetId}/append`, {
+      // Operation 1: add items into the preselected existing section.
+      // Operation 2 (no target): create new section(s).
+      const url = appendTargetSection
+        ? `/api/packets/${packetId}/sections/${appendTargetSection.id}/append`
+        : `/api/packets/${packetId}/append`;
+      const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ rawText: appendText }),
@@ -806,6 +814,7 @@ export default function PacketEditorPage() {
       }
       setAppendText("");
       setShowAppendModal(false);
+      setAppendTargetSection(null);
       setShowAiBanner(true);
       await loadPacket();
     } catch {
@@ -1018,12 +1027,24 @@ export default function PacketEditorPage() {
               </SortableContext>
             </DndContext>
 
-            <button
-              onClick={() => addItem(section.id)}
-              className="mt-3 text-sm text-accent hover:text-accent-hover font-medium"
-            >
-              + Add Item
-            </button>
+            <div className="mt-3 flex items-center gap-4">
+              <button
+                onClick={() => addItem(section.id)}
+                className="text-sm text-accent hover:text-accent-hover font-medium"
+              >
+                + Add Item
+              </button>
+              <button
+                onClick={() => {
+                  setAppendTargetSection({ id: section.id, title: section.title });
+                  setAppendText("");
+                  setShowAppendModal(true);
+                }}
+                className="text-sm text-accent hover:text-accent-hover font-medium"
+              >
+                + Add items with AI
+              </button>
+            </div>
               </>
             )}
           </SortableSection>
@@ -1040,10 +1061,14 @@ export default function PacketEditorPage() {
           + Add Section
         </button>
         <button
-          onClick={() => setShowAppendModal(true)}
+          onClick={() => {
+            setAppendTargetSection(null);
+            setAppendText("");
+            setShowAppendModal(true);
+          }}
           className="flex-1 py-3 border-2 border-dashed border-accent/30 rounded-xl text-sm font-medium text-accent hover:bg-accent hover:text-white transition-colors"
         >
-          + Add with AI
+          + Add new sections with AI
         </button>
       </div>
 
@@ -1051,9 +1076,21 @@ export default function PacketEditorPage() {
       {showAppendModal && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-5">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-auto p-6">
-            <h2 className="text-lg font-bold text-foreground mb-1">Add with AI</h2>
+            <h2 className="text-lg font-bold text-foreground mb-1">
+              {appendTargetSection ? "Add items with AI" : "Add new sections with AI"}
+            </h2>
             <p className="text-sm text-muted mb-4">
-              Paste new information below. AI will structure it and add it to this packet without changing existing content.
+              {appendTargetSection ? (
+                <>
+                  Paste new information below. AI will structure it into items and add them to{" "}
+                  <span className="font-medium text-foreground">
+                    {appendTargetSection.title?.trim() || "this section"}
+                  </span>
+                  {" "}— it won&apos;t create new sections or change existing content.
+                </>
+              ) : (
+                "Paste new information below. AI will organize it into one or more new sections and add them to this packet without changing existing content."
+              )}
             </p>
             <textarea
               value={appendText}
@@ -1064,7 +1101,7 @@ export default function PacketEditorPage() {
             />
             <div className="flex justify-end gap-3 mt-4">
               <button
-                onClick={() => { setShowAppendModal(false); setAppendText(""); }}
+                onClick={() => { setShowAppendModal(false); setAppendText(""); setAppendTargetSection(null); }}
                 className="px-4 py-2 text-sm font-medium text-muted hover:text-foreground transition-colors"
                 disabled={appendLoading}
               >

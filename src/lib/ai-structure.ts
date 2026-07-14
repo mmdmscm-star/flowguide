@@ -292,3 +292,29 @@ export async function insertStructuredSections(
     throw e;
   }
 }
+
+// ============================================================
+// Append items into an EXISTING section as one unit — "Add items with AI".
+//
+// One RPC call to insert_items_into_section (migration 0006). The function
+// validates the section belongs to the packet, determines the next sort_order
+// inside the transaction (locking the section row so concurrent adds can't
+// collide), inserts every item + child records, and appends the source text to
+// the packet's raw_input — all committed together or not at all. The route does
+// NOT compute a sort offset; ordering is owned by the transaction.
+// ============================================================
+export async function insertItemsIntoSection(
+  supabase: ReturnType<typeof createServerClient>,
+  packetId: string,
+  sectionId: string,
+  items: unknown[],
+  rawAppend: string
+): Promise<void> {
+  const { error } = await supabase.rpc("insert_items_into_section", {
+    p_packet_id: packetId,
+    p_section_id: sectionId,
+    p_items: items,
+    p_raw_append: rawAppend,
+  });
+  if (error) throw error;
+}
