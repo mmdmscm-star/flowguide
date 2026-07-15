@@ -811,28 +811,62 @@ create constraint trigger trg_packet_mode_update
   execute function public.enforce_packet_mode_transition();
 
 -- ------------------------------------------------------------
--- 11. Temporary (until R1C): block-mode packets must remain draft. Prevents
---     publishing a block packet before the block renderer and block-publish
---     validation ship. Legacy publishing is unaffected. R1C will drop this.
+-- 11. Block-publish consistency gate (R1C-B). A block-mode packet may transition
+--     INTO 'published' only when its block composition is valid and consistent:
+--     assert_packet_block_consistency passes, there is at least one item block,
+--     and every referenced item has a nonblank title. Replaces the temporary
+--     R1A draft-only rule. Legacy publishing is unaffected (gated on
+--     composition_mode='blocks'). See migration 0008 for full design notes.
 -- ------------------------------------------------------------
-create or replace function public.enforce_block_mode_draft_only()
+create or replace function public.enforce_block_publish_consistency()
 returns trigger
 language plpgsql
 security definer
 set search_path = ''
 as $$
+declare
+  v_item_blocks int;
 begin
-  -- WHEN clause guarantees new.composition_mode='blocks' and new.status<>'draft'
-  raise exception 'block-mode packets must remain draft until the block renderer ships (status=%)', new.status;
+  -- WHEN clause guarantees: new.composition_mode='blocks', new.status='published',
+  -- and this UPDATE is the transition INTO published.
+
+  -- (a) bijection + dense positions
+  perform public.assert_packet_block_consistency(new.id);
+
+  -- (b) at least one item block
+  select count(*) into v_item_blocks
+    from public.packet_blocks
+    where packet_id = new.id and block_type = 'item';
+  if v_item_blocks = 0 then
+    raise exception 'block publish: packet % has no item blocks; add at least one item before publishing', new.id;
+  end if;
+
+  -- (c) every referenced item has a nonblank title
+  if exists (
+    select 1
+    from public.packet_blocks b
+    join public.items i on i.id = b.item_id
+    where b.packet_id = new.id
+      and b.block_type = 'item'
+      and btrim(coalesce(i.title, '')) = ''
+  ) then
+    raise exception 'block publish: packet % has an item block whose item has a blank title', new.id;
+  end if;
+
+  return null;
 end;
 $$;
 
-create constraint trigger trg_block_mode_draft_only
-  after insert or update on public.packets
+create constraint trigger trg_block_publish_consistency
+  after update on public.packets
   not deferrable
   for each row
-  when (new.composition_mode = 'blocks' and new.status <> 'draft')
-  execute function public.enforce_block_mode_draft_only();
+  when (
+    new.composition_mode = 'blocks'
+    and new.status = 'published'
+    and old.status is distinct from 'published'
+  )
+  execute function public.enforce_block_publish_consistency();
 
 -- ------------------------------------------------------------
 -- 12. convert_packet_to_blocks — legacy -> blocks, concurrency-safe & atomic.
@@ -941,7 +975,7 @@ revoke all on function public.assert_block_item_ownership() from public, anon, a
 revoke all on function public.freeze_sections_in_block_mode() from public, anon, authenticated, service_role;
 revoke all on function public.freeze_items_in_block_mode() from public, anon, authenticated, service_role;
 revoke all on function public.enforce_packet_mode_transition() from public, anon, authenticated, service_role;
-revoke all on function public.enforce_block_mode_draft_only() from public, anon, authenticated, service_role;
+revoke all on function public.enforce_block_publish_consistency() from public, anon, authenticated, service_role;
 revoke all on function public.assert_packet_block_consistency(uuid) from public, anon, authenticated, service_role;
 revoke all on function public.convert_packet_to_blocks(uuid) from public, anon, authenticated, service_role;
 revoke all on function public.revert_packet_to_legacy(uuid) from public, anon, authenticated, service_role;
