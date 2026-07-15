@@ -312,3 +312,232 @@ create trigger update_items_updated_at
 create trigger update_professional_profiles_updated_at
   before update on public.professional_profiles
   for each row execute function public.update_updated_at();
+
+-- ============================================================
+-- AI STRUCTURING — TRANSACTIONAL INSERT
+-- Inserts an AI-structured payload (sections -> items -> details/links/
+-- photos/contacts) in one transaction; any failure rolls back everything.
+-- Called via RPC by the structure/append routes with the service-role key.
+-- Mirrors migrations/0005_insert_structured_sections.sql.
+-- ============================================================
+create or replace function public.insert_structured_sections(
+  p_packet_id uuid,
+  p_sections jsonb,
+  p_sort_offset int
+) returns void
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+declare
+  s jsonb;
+  it jsonb;
+  d jsonb;
+  l jsonb;
+  ph text;
+  c jsonb;
+  si int := 0;
+  ii int;
+  di int;
+  li int;
+  pi int;
+  new_section_id uuid;
+  new_item_id uuid;
+begin
+  for s in select value from jsonb_array_elements(coalesce(p_sections, '[]'::jsonb))
+  loop
+    insert into public.sections (packet_id, title, description, sort_order)
+    values (
+      p_packet_id,
+      coalesce(nullif(s->>'title', ''), 'Section ' || (p_sort_offset + si + 1)),
+      coalesce(s->>'description', ''),
+      p_sort_offset + si
+    )
+    returning id into new_section_id;
+
+    ii := 0;
+    for it in select value from jsonb_array_elements(coalesce(s->'items', '[]'::jsonb))
+    loop
+      insert into public.items (section_id, title, address, description, notes, sort_order)
+      values (
+        new_section_id,
+        coalesce(nullif(it->>'title', ''), 'Item ' || (ii + 1)),
+        coalesce(it->>'address', ''),
+        coalesce(it->>'description', ''),
+        coalesce(it->>'notes', ''),
+        ii
+      )
+      returning id into new_item_id;
+
+      di := 0;
+      for d in select value from jsonb_array_elements(coalesce(it->'details', '[]'::jsonb))
+      loop
+        insert into public.item_details (item_id, label, value, sort_order)
+        values (new_item_id, coalesce(d->>'label', ''), coalesce(d->>'value', ''), di);
+        di := di + 1;
+      end loop;
+
+      li := 0;
+      for l in select value from jsonb_array_elements(coalesce(it->'links', '[]'::jsonb))
+      loop
+        if coalesce(l->>'url', '') like 'http%' then
+          insert into public.item_links (item_id, url, label, sort_order)
+          values (new_item_id, l->>'url', coalesce(l->>'label', ''), li);
+          li := li + 1;
+        end if;
+      end loop;
+
+      pi := 0;
+      for ph in select value from jsonb_array_elements_text(coalesce(it->'photos', '[]'::jsonb))
+      loop
+        if ph like 'http%' then
+          insert into public.item_photos (item_id, url, storage_path, sort_order)
+          values (new_item_id, ph, '', pi);
+          pi := pi + 1;
+        end if;
+      end loop;
+
+      c := it->'contact';
+      if c is not null and jsonb_typeof(c) = 'object' and (
+        coalesce(c->>'name', '') <> '' or
+        coalesce(c->>'phone', '') <> '' or
+        coalesce(c->>'email', '') <> '' or
+        coalesce(c->>'website', '') <> ''
+      ) then
+        insert into public.item_contacts (item_id, name, phone, email, website)
+        values (
+          new_item_id,
+          coalesce(c->>'name', ''),
+          coalesce(c->>'phone', ''),
+          coalesce(c->>'email', ''),
+          coalesce(c->>'website', '')
+        );
+      end if;
+
+      ii := ii + 1;
+    end loop;
+
+    si := si + 1;
+  end loop;
+end;
+$$;
+
+revoke execute on function public.insert_structured_sections(uuid, jsonb, int) from public;
+grant execute on function public.insert_structured_sections(uuid, jsonb, int) to service_role;
+
+-- ============================================================
+-- ADD ITEMS TO AN EXISTING SECTION — TRANSACTIONAL APPEND
+-- Backs the per-section "Add items with AI" operation (migration 0006).
+-- Validates the section belongs to the packet, determines sort_order inside the
+-- transaction (locking the section row against concurrent adds), inserts items
+-- + child rows, and appends the source text to raw_input — all or nothing.
+-- ============================================================
+create or replace function public.insert_items_into_section(
+  p_packet_id uuid,
+  p_section_id uuid,
+  p_items jsonb,
+  p_raw_append text
+) returns void
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+declare
+  v_packet_id uuid;
+  v_base int;
+  it jsonb;
+  d jsonb;
+  l jsonb;
+  ph text;
+  c jsonb;
+  ii int := 0;
+  di int;
+  li int;
+  pi int;
+  new_item_id uuid;
+begin
+  select packet_id into v_packet_id
+    from public.sections
+    where id = p_section_id
+    for update;
+
+  if v_packet_id is null then
+    raise exception 'section % not found', p_section_id;
+  end if;
+  if v_packet_id <> p_packet_id then
+    raise exception 'section % does not belong to packet %', p_section_id, p_packet_id;
+  end if;
+
+  select coalesce(max(sort_order), -1) + 1 into v_base
+    from public.items
+    where section_id = p_section_id;
+
+  for it in select value from jsonb_array_elements(coalesce(p_items, '[]'::jsonb))
+  loop
+    insert into public.items (section_id, title, address, description, notes, sort_order)
+    values (
+      p_section_id,
+      coalesce(nullif(it->>'title', ''), 'Item ' || (ii + 1)),
+      coalesce(it->>'address', ''),
+      coalesce(it->>'description', ''),
+      coalesce(it->>'notes', ''),
+      v_base + ii
+    )
+    returning id into new_item_id;
+
+    di := 0;
+    for d in select value from jsonb_array_elements(coalesce(it->'details', '[]'::jsonb))
+    loop
+      insert into public.item_details (item_id, label, value, sort_order)
+      values (new_item_id, coalesce(d->>'label', ''), coalesce(d->>'value', ''), di);
+      di := di + 1;
+    end loop;
+
+    li := 0;
+    for l in select value from jsonb_array_elements(coalesce(it->'links', '[]'::jsonb))
+    loop
+      if coalesce(l->>'url', '') like 'http%' then
+        insert into public.item_links (item_id, url, label, sort_order)
+        values (new_item_id, l->>'url', coalesce(l->>'label', ''), li);
+        li := li + 1;
+      end if;
+    end loop;
+
+    pi := 0;
+    for ph in select value from jsonb_array_elements_text(coalesce(it->'photos', '[]'::jsonb))
+    loop
+      if ph like 'http%' then
+        insert into public.item_photos (item_id, url, storage_path, sort_order)
+        values (new_item_id, ph, '', pi);
+        pi := pi + 1;
+      end if;
+    end loop;
+
+    c := it->'contact';
+    if c is not null and jsonb_typeof(c) = 'object' and (
+      coalesce(c->>'name', '') <> '' or
+      coalesce(c->>'phone', '') <> '' or
+      coalesce(c->>'email', '') <> '' or
+      coalesce(c->>'website', '') <> ''
+    ) then
+      insert into public.item_contacts (item_id, name, phone, email, website)
+      values (
+        new_item_id,
+        coalesce(c->>'name', ''),
+        coalesce(c->>'phone', ''),
+        coalesce(c->>'email', ''),
+        coalesce(c->>'website', '')
+      );
+    end if;
+
+    ii := ii + 1;
+  end loop;
+
+  update public.packets
+    set raw_input = coalesce(raw_input, '') || p_raw_append
+    where id = p_packet_id;
+end;
+$$;
+
+revoke execute on function public.insert_items_into_section(uuid, uuid, jsonb, text) from public;
+grant execute on function public.insert_items_into_section(uuid, uuid, jsonb, text) to service_role;

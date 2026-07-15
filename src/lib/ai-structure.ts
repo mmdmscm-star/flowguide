@@ -9,7 +9,9 @@ import { createServerClient } from "./supabase";
 // used to hide, so the two routes can never drift apart:
 //
 //   1. callStructuringModel — refuses truncated output (fail closed).
-//   2. insertStructuredSections — all-or-nothing DB write (rolls back on error).
+//   2. insertStructuredSections — all-or-nothing DB write (a single Postgres
+//      transaction via the insert_structured_sections function; see
+//      supabase/migrations/0005_insert_structured_sections.sql).
 // ============================================================
 
 export const STRUCTURE_MODEL = "anthropic/claude-sonnet-4";
@@ -178,14 +180,15 @@ export async function callStructuringModel(opts: {
 // ============================================================
 // Insert sections/items (+ details/links/photos/contacts) as one unit.
 //
-// Supabase's JS client can't wrap multiple statements in a real transaction
-// without a stored procedure, so this uses a compensating cleanup: it tracks
-// every section it creates and, on ANY error, deletes them — the FK cascade
-// removes their items/details/links/photos/contacts — before re-throwing. The
-// caller sees a thrown error and no partial structure survives.
+// One RPC round-trip to the insert_structured_sections Postgres function
+// (migration 0005), which inserts the entire structure inside a single real
+// transaction: any failure rolls everything back server-side, so no partial
+// structure can survive — with no cleanup window. This also replaces the
+// previous row-by-row hydration (roughly four round-trips per item, seconds of
+// pure network time on a large packet) with one call.
 //
-// Unlike the previous implementation, a failed insert THROWS rather than being
-// silently skipped, so a dropped section/item can never pass unnoticed.
+// Field semantics (fallback titles, http-only links/photos, skip-empty
+// contact) are implemented inside the SQL function and unchanged.
 // ============================================================
 export async function insertStructuredSections(
   supabase: ReturnType<typeof createServerClient>,
@@ -193,104 +196,12 @@ export async function insertStructuredSections(
   sections: StructuredSection[],
   sortOffset: number
 ): Promise<void> {
-  const createdSectionIds: string[] = [];
-
-  try {
-    for (let si = 0; si < sections.length; si++) {
-      const section = sections[si];
-
-      const { data: newSection, error: sErr } = await supabase
-        .from("sections")
-        .insert({
-          packet_id: packetId,
-          title: section.title || `Section ${sortOffset + si + 1}`,
-          description: section.description || "",
-          sort_order: sortOffset + si,
-        })
-        .select()
-        .single();
-
-      if (sErr || !newSection) throw sErr || new Error("Section insert returned no row");
-      createdSectionIds.push(newSection.id);
-
-      const items = section.items || [];
-      for (let ii = 0; ii < items.length; ii++) {
-        const item = items[ii];
-
-        const { data: newItem, error: iErr } = await supabase
-          .from("items")
-          .insert({
-            section_id: newSection.id,
-            title: item.title || `Item ${ii + 1}`,
-            address: item.address || "",
-            description: item.description || "",
-            notes: item.notes || "",
-            sort_order: ii,
-          })
-          .select()
-          .single();
-
-        if (iErr || !newItem) throw iErr || new Error("Item insert returned no row");
-
-        if (item.details && item.details.length > 0) {
-          const { error } = await supabase.from("item_details").insert(
-            item.details.map((d, di) => ({
-              item_id: newItem.id,
-              label: d.label,
-              value: d.value,
-              sort_order: di,
-            }))
-          );
-          if (error) throw error;
-        }
-
-        const validLinks = (item.links || []).filter((l) => l.url && l.url.startsWith("http"));
-        if (validLinks.length > 0) {
-          const { error } = await supabase.from("item_links").insert(
-            validLinks.map((l, li) => ({
-              item_id: newItem.id,
-              url: l.url,
-              label: l.label || "",
-              sort_order: li,
-            }))
-          );
-          if (error) throw error;
-        }
-
-        const validPhotos = (item.photos || []).filter((url) => url && url.startsWith("http"));
-        if (validPhotos.length > 0) {
-          const { error } = await supabase.from("item_photos").insert(
-            validPhotos.map((url, pi) => ({
-              item_id: newItem.id,
-              url,
-              storage_path: "",
-              sort_order: pi,
-            }))
-          );
-          if (error) throw error;
-        }
-
-        const c = item.contact;
-        if (c && (c.name || c.phone || c.email || c.website)) {
-          const { error } = await supabase.from("item_contacts").insert({
-            item_id: newItem.id,
-            name: c.name || "",
-            phone: c.phone || "",
-            email: c.email || "",
-            website: c.website || "",
-          });
-          if (error) throw error;
-        }
-      }
-    }
-  } catch (e) {
-    // All-or-nothing: remove everything this call created so no partial
-    // structure survives the failure. Descendants cascade from sections.
-    if (createdSectionIds.length > 0) {
-      await supabase.from("sections").delete().in("id", createdSectionIds);
-    }
-    throw e;
-  }
+  const { error } = await supabase.rpc("insert_structured_sections", {
+    p_packet_id: packetId,
+    p_sections: sections,
+    p_sort_offset: sortOffset,
+  });
+  if (error) throw error;
 }
 
 // ============================================================

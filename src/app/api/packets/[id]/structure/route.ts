@@ -122,7 +122,13 @@ Respond with ONLY valid JSON matching this exact schema (no markdown, no explana
       ]
     }
   ]
-}`;
+}
+
+COMPACT OUTPUT RULES — keep the response small:
+- Omit any field whose value would be null, an empty string, or an empty array
+- Omit "contact" entirely when none of its fields have real values
+- Always include "title", "sections", every section's "items", and every item's "title"
+- Never drop or shorten actual records to save space — compactness applies to formatting only, never to content`;
 
 // ============================================================
 // Types

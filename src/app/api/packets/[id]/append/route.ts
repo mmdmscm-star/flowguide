@@ -6,6 +6,10 @@ import { callStructuringModel, insertStructuredSections, MAX_INPUT_CHARS } from 
 // Give a large single-pass structuring call more headroom than the 30s default.
 export const maxDuration = 60;
 
+// Operation 2: "Add new sections with AI" — an explicit user choice to create
+// one or more NEW sections from pasted text. To add items into an EXISTING
+// section (Operation 1), see sections/[sectionId]/append, which places items by
+// stable section id and never creates sections.
 type Context = { params: Promise<{ id: string }> };
 
 const BASE_PROMPT = `You organize raw text into structured recommendation items. The output will be APPENDED to an existing packet, so only structure the NEW input provided — do not reference or repeat any existing content.
@@ -103,7 +107,13 @@ Respond with ONLY valid JSON matching this exact schema (no markdown, no explana
       ]
     }
   ]
-}`;
+}
+
+COMPACT OUTPUT RULES — keep the response small:
+- Omit any field whose value would be null, an empty string, or an empty array
+- Omit "contact" entirely when none of its fields have real values
+- Always include "sections", every section's "items", and every item's "title"
+- Never drop or shorten actual records to save space — compactness applies to formatting only, never to content`;
 
 interface StructuredItem {
   title: string;
