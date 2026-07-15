@@ -63,8 +63,8 @@ const chevron = (dir: "up" | "down") => (
 function BlockControls({
   attributes, listeners, isFirst, isLast, onUp, onDown,
 }: {
-  attributes: Record<string, unknown>;
-  listeners: Record<string, unknown> | undefined;
+  attributes: ReturnType<typeof useSortable>["attributes"];
+  listeners: ReturnType<typeof useSortable>["listeners"];
   isFirst: boolean;
   isLast: boolean;
   onUp: () => void;
