@@ -20,17 +20,28 @@ import type { Item, Section } from "@/lib/types";
 import { ItemCard } from "@/components/item-card";
 
 // ============================================================
-// Phase-0.1 ordered-block composition prototype (disposable, in-memory only).
+// Phase-0.2 ordered-block composition prototype (disposable, in-memory only).
 //
 // A packet's sections+items are flattened into ONE ordered list of blocks:
-//   heading | subheading | item | item | heading | item ...
+//   heading | subheading | label | item | item | ...
 // Headings are visual only — they do NOT own the items after them. Deleting a
-// heading removes just that heading; items stay exactly where they are. Two
-// heading roles give visual hierarchy (major Heading vs Subheading/Label).
+// heading removes just that heading; items stay exactly where they are.
+//
+// THREE heading roles give visual hierarchy:
+//   Heading    — large, bold, sentence case (major packet division)
+//   Subheading — medium, semibold, dark neutral, sentence case (no uppercase/accent)
+//   Label      — small, compact uppercase accent (metadata / sequence marker)
+//
 // All state is local React state; nothing is ever written back.
 // ============================================================
 
-type HeadingRole = "heading" | "subheading";
+type HeadingRole = "heading" | "subheading" | "label";
+const ROLES: { role: HeadingRole; name: string }[] = [
+  { role: "heading", name: "Heading" },
+  { role: "subheading", name: "Subheading" },
+  { role: "label", name: "Label" },
+];
+
 type Block =
   | { blockId: string; kind: "heading"; role: HeadingRole; title: string; subtext: string }
   | { blockId: string; kind: "item"; item: Item };
@@ -43,6 +54,18 @@ function deriveBlocks(sections: Section[]): Block[] {
     for (const it of s.items) out.push({ blockId: `i-${it.id}`, kind: "item", item: it });
   }
   return out;
+}
+
+// Per-role styling for the COMPOSE editor block.
+function composeStyle(role: HeadingRole) {
+  switch (role) {
+    case "heading":
+      return { indent: "", box: "rounded-xl border-2 border-accent/40 bg-accent/5 px-3 py-2.5", input: "text-lg font-bold text-foreground", placeholder: "Heading", subtext: true };
+    case "subheading":
+      return { indent: "pl-6", box: "rounded-lg border border-border bg-white px-3 py-2", input: "text-base font-semibold text-foreground", placeholder: "Subheading", subtext: true };
+    case "label":
+      return { indent: "pl-10", box: "rounded-lg border border-dashed border-accent/40 bg-white px-3 py-1.5", input: "text-xs font-semibold uppercase tracking-wide text-accent", placeholder: "Label", subtext: false };
+  }
 }
 
 const dragDots = (
@@ -58,8 +81,6 @@ const chevron = (dir: "up" | "down") => (
   </svg>
 );
 
-// Left gutter: move up / drag handle / move down. Up is disabled on the first
-// block, down on the last.
 function BlockControls({
   attributes, listeners, isFirst, isLast, onUp, onDown,
 }: {
@@ -72,31 +93,16 @@ function BlockControls({
 }) {
   return (
     <div className="flex flex-col items-center gap-0.5 pt-1.5 flex-shrink-0">
-      <button
-        type="button"
-        onClick={onUp}
-        disabled={isFirst}
-        aria-label="Move up"
-        className="text-gray-400 hover:text-accent disabled:opacity-20 disabled:hover:text-gray-400 p-0.5"
-      >
+      <button type="button" onClick={onUp} disabled={isFirst} aria-label="Move up"
+        className="text-gray-400 hover:text-accent disabled:opacity-20 disabled:hover:text-gray-400 p-0.5">
         {chevron("up")}
       </button>
-      <button
-        type="button"
-        {...attributes}
-        {...listeners}
-        aria-label="Drag to reorder"
-        className="text-gray-400 hover:text-gray-700 cursor-grab active:cursor-grabbing touch-none p-0.5"
-      >
+      <button type="button" {...attributes} {...listeners} aria-label="Drag to reorder"
+        className="text-gray-400 hover:text-gray-700 cursor-grab active:cursor-grabbing touch-none p-0.5">
         {dragDots}
       </button>
-      <button
-        type="button"
-        onClick={onDown}
-        disabled={isLast}
-        aria-label="Move down"
-        className="text-gray-400 hover:text-accent disabled:opacity-20 disabled:hover:text-gray-400 p-0.5"
-      >
+      <button type="button" onClick={onDown} disabled={isLast} aria-label="Move down"
+        className="text-gray-400 hover:text-accent disabled:opacity-20 disabled:hover:text-gray-400 p-0.5">
         {chevron("down")}
       </button>
     </div>
@@ -117,104 +123,88 @@ function SortableBlock({
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: block.blockId });
   const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 };
-  const isSub = block.kind === "heading" && block.role === "subheading";
+  const s = block.kind === "heading" ? composeStyle(block.role) : null;
 
   return (
-    <div ref={setNodeRef} style={style} className={`flex items-start gap-2 ${isSub ? "pl-6" : ""}`}>
+    <div ref={setNodeRef} style={style} className={`flex items-start gap-2 ${s ? s.indent : ""}`}>
       <BlockControls attributes={attributes} listeners={listeners} isFirst={isFirst} isLast={isLast} onUp={onUp} onDown={onDown} />
 
       <div className="flex-1 min-w-0">
-        {block.kind === "heading" ? (
-          <div className={isSub
-            ? "rounded-lg border border-accent/30 bg-white px-3 py-2"
-            : "rounded-xl border-2 border-accent/40 bg-accent/5 px-3 py-2.5"}
-          >
+        {block.kind === "heading" && s ? (
+          <div className={s.box}>
             <div className="flex items-center justify-between gap-2 mb-1.5">
-              {/* Role toggle: Heading | Subheading */}
+              {/* Role selector: Heading | Subheading | Label */}
               <div className="inline-flex rounded-md border border-border overflow-hidden text-[11px] font-semibold">
-                <button
-                  type="button"
-                  onClick={() => onSetRole(block.blockId, "heading")}
-                  className={`px-2 py-0.5 ${!isSub ? "bg-accent text-white" : "text-muted hover:text-foreground"}`}
-                >
-                  Heading
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onSetRole(block.blockId, "subheading")}
-                  className={`px-2 py-0.5 ${isSub ? "bg-accent text-white" : "text-muted hover:text-foreground"}`}
-                >
-                  Subheading
-                </button>
+                {ROLES.map(({ role, name }) => (
+                  <button key={role} type="button" onClick={() => onSetRole(block.blockId, role)}
+                    className={`px-2 py-0.5 ${block.role === role ? "bg-accent text-white" : "text-muted hover:text-foreground"}`}>
+                    {name}
+                  </button>
+                ))}
               </div>
-              <button
-                type="button"
-                onClick={() => onDeleteHeading(block.blockId)}
-                className="text-[11px] font-medium text-red-500 hover:text-red-700"
-              >
+              <button type="button" onClick={() => onDeleteHeading(block.blockId)}
+                className="text-[11px] font-medium text-red-500 hover:text-red-700">
                 Delete
               </button>
             </div>
             <input
               value={block.title}
               onChange={(e) => onEditHeading(block.blockId, "title", e.target.value)}
-              placeholder={isSub ? "Subheading or label" : "Heading title"}
-              className={isSub
-                ? "w-full bg-transparent text-sm font-semibold uppercase tracking-wide text-foreground/80 focus:outline-none placeholder:text-gray-300 placeholder:normal-case placeholder:font-normal"
-                : "w-full bg-transparent text-lg font-bold text-foreground focus:outline-none placeholder:text-gray-300"}
+              placeholder={s.placeholder}
+              className={`w-full bg-transparent focus:outline-none placeholder:text-gray-300 placeholder:normal-case placeholder:font-normal placeholder:tracking-normal ${s.input}`}
             />
-            <input
-              value={block.subtext}
-              onChange={(e) => onEditHeading(block.blockId, "subtext", e.target.value)}
-              placeholder="Optional subtext"
-              className="w-full bg-transparent text-sm text-gray-600 focus:outline-none placeholder:text-gray-300"
-            />
+            {s.subtext && (
+              <input
+                value={block.subtext}
+                onChange={(e) => onEditHeading(block.blockId, "subtext", e.target.value)}
+                placeholder="Optional subtext"
+                className="w-full bg-transparent text-sm text-gray-600 focus:outline-none placeholder:text-gray-300"
+              />
+            )}
           </div>
-        ) : (
+        ) : block.kind === "item" ? (
           <ItemCard item={block.item} />
-        )}
+        ) : null}
       </div>
     </div>
   );
 }
 
-// Clearly-visible insert control shown in every gap.
 function AddHeadingBar({ onClick }: { onClick: () => void }) {
   return (
-    <button
-      onClick={onClick}
-      className="w-full my-2 py-1.5 rounded-lg border border-dashed border-accent/50 text-accent text-xs font-semibold hover:bg-accent hover:text-white hover:border-accent transition-colors"
-    >
+    <button onClick={onClick}
+      className="w-full my-2 py-1.5 rounded-lg border border-dashed border-accent/50 text-accent text-xs font-semibold hover:bg-accent hover:text-white hover:border-accent transition-colors">
       + Add heading
     </button>
   );
 }
 
-// Recipient-style preview: renders blocks in order, distinguishing a major
-// Heading from a Subheading/Label, with each heading introducing the items that
-// follow it until the next heading.
+// Recipient-style preview: renders blocks in order, distinguishing the three
+// heading roles, with each heading introducing the items that follow it.
 function RecipientPreview({ blocks }: { blocks: Block[] }) {
   if (blocks.length === 0) return <p className="text-center text-sm text-muted py-8">Nothing to preview.</p>;
   return (
     <div className="py-2">
       {blocks.map((b) => {
         if (b.kind === "item") {
+          return <div key={b.blockId} className="px-5 mb-4"><ItemCard item={b.item} /></div>;
+        }
+        if (b.role === "label") {
           return (
-            <div key={b.blockId} className="px-5 mb-4">
-              <ItemCard item={b.item} />
+            <div key={b.blockId} className="px-5 mt-4 mb-2">
+              {b.title && <p className="text-xs font-semibold uppercase tracking-widest text-accent">{b.title}</p>}
             </div>
           );
         }
         if (b.role === "subheading") {
           return (
-            <div key={b.blockId} className="px-5 mt-5 mb-3">
-              {b.title && (
-                <p className="text-xs font-semibold uppercase tracking-widest text-accent">{b.title}</p>
-              )}
-              {b.subtext && <p className="mt-0.5 text-sm text-gray-500">{b.subtext}</p>}
+            <div key={b.blockId} className="px-5 mt-5 mb-2.5">
+              {b.title && <h3 className="text-base font-semibold text-foreground">{b.title}</h3>}
+              {b.subtext && <p className="mt-0.5 text-sm text-gray-500 leading-relaxed">{b.subtext}</p>}
             </div>
           );
         }
+        // heading
         return (
           <div key={b.blockId} className="px-5 mt-7 mb-4 first:mt-2">
             {b.title && <h2 className="text-xl font-bold text-foreground">{b.title}</h2>}
@@ -254,15 +244,11 @@ export function BlockPrototype({ packetTitle, sections }: { packetTitle: string;
   }
 
   function editHeading(blockId: string, field: "title" | "subtext", value: string) {
-    setBlocks((prev) =>
-      prev.map((b) => (b.blockId === blockId && b.kind === "heading" ? { ...b, [field]: value } : b))
-    );
+    setBlocks((prev) => prev.map((b) => (b.blockId === blockId && b.kind === "heading" ? { ...b, [field]: value } : b)));
   }
 
   function setRole(blockId: string, role: HeadingRole) {
-    setBlocks((prev) =>
-      prev.map((b) => (b.blockId === blockId && b.kind === "heading" ? { ...b, role } : b))
-    );
+    setBlocks((prev) => prev.map((b) => (b.blockId === blockId && b.kind === "heading" ? { ...b, role } : b)));
   }
 
   function deleteHeading(blockId: string) {
@@ -305,23 +291,17 @@ export function BlockPrototype({ packetTitle, sections }: { packetTitle: string;
 
         <div className="flex items-center gap-2 mb-5">
           <div className="inline-flex rounded-lg border border-border overflow-hidden">
-            <button
-              onClick={() => setView("compose")}
-              className={`px-3 py-1.5 text-sm font-medium ${view === "compose" ? "bg-accent text-white" : "text-muted hover:text-foreground"}`}
-            >
+            <button onClick={() => setView("compose")}
+              className={`px-3 py-1.5 text-sm font-medium ${view === "compose" ? "bg-accent text-white" : "text-muted hover:text-foreground"}`}>
               Compose
             </button>
-            <button
-              onClick={() => setView("preview")}
-              className={`px-3 py-1.5 text-sm font-medium ${view === "preview" ? "bg-accent text-white" : "text-muted hover:text-foreground"}`}
-            >
+            <button onClick={() => setView("preview")}
+              className={`px-3 py-1.5 text-sm font-medium ${view === "preview" ? "bg-accent text-white" : "text-muted hover:text-foreground"}`}>
               Recipient preview
             </button>
           </div>
-          <button
-            onClick={reset}
-            className="ml-auto px-3 py-1.5 text-sm font-medium text-muted hover:text-foreground border border-border rounded-lg"
-          >
+          <button onClick={reset}
+            className="ml-auto px-3 py-1.5 text-sm font-medium text-muted hover:text-foreground border border-border rounded-lg">
             Reset order
           </button>
         </div>
