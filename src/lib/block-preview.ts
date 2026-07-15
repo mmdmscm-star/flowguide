@@ -1,17 +1,14 @@
 import { createServerClient } from "./supabase";
-import { resolveProfessional } from "./queries";
-import type { Item, ProfessionalContact } from "./types";
+import { resolveProfessional, assembleItemsByIds } from "./queries";
+import type { PacketBlock, ProfessionalContact } from "./types";
 
 // ============================================================
-// R1B-A read-only block-preview reader (isolated; does NOT touch the production
-// packet queries). Reads packet_blocks for a block-mode packet OWNED by the
-// caller and assembles the referenced item content live from the item tables —
-// content is never duplicated into blocks.
+// R1B read-only block-preview reader (owner-scoped; isolated from the published
+// packet path). Reads packet_blocks for a block-mode packet OWNED by the caller
+// and assembles the referenced item content live from the item tables — content
+// is never duplicated into blocks. It shares the canonical PacketBlock shape and
+// item assembler with the production renderer so preview and production match.
 // ============================================================
-
-export type PreviewBlock =
-  | { id: string; position: number; kind: "heading" | "subheading" | "label"; text: string; subtext?: string }
-  | { id: string; position: number; kind: "item"; item: Item };
 
 export type BlockPreview =
   | { status: "not_found" }
@@ -21,7 +18,7 @@ export type BlockPreview =
       title: string;
       clientName?: string;
       professional: ProfessionalContact;
-      blocks: PreviewBlock[];
+      blocks: PacketBlock[];
     };
 
 export async function getPacketBlockPreview(packetId: string, userId: string): Promise<BlockPreview> {
@@ -60,18 +57,17 @@ export async function getPacketBlockPreview(packetId: string, userId: string): P
     return { status: "blocks", title: packet.title, clientName, professional, blocks: [] };
 
   const itemIds = rows.filter((r) => r.block_type === "item" && r.item_id).map((r) => r.item_id as string);
-  const itemsById = await assembleItems(supabase, itemIds);
+  const itemsById = await assembleItemsByIds(supabase, itemIds);
 
-  const blocks: PreviewBlock[] = [];
+  const blocks: PacketBlock[] = [];
   for (const r of rows) {
     if (r.block_type === "item") {
       const item = itemsById[r.item_id as string];
-      if (item) blocks.push({ id: r.id, position: r.position, kind: "item", item });
+      if (item) blocks.push({ id: r.id, kind: "item", item });
       // (a missing item would be an inconsistency the DB guards against; skip defensively)
     } else {
       blocks.push({
         id: r.id,
-        position: r.position,
         kind: r.block_type as "heading" | "subheading" | "label",
         text: r.heading_text || "",
         subtext: r.heading_subtext || undefined,
@@ -79,45 +75,4 @@ export async function getPacketBlockPreview(packetId: string, userId: string): P
     }
   }
   return { status: "blocks", title: packet.title, clientName, professional, blocks };
-}
-
-// Live-assemble item content for the referenced item ids (no duplication into blocks).
-async function assembleItems(
-  supabase: ReturnType<typeof createServerClient>,
-  itemIds: string[]
-): Promise<Record<string, Item>> {
-  if (itemIds.length === 0) return {};
-  const [itemsRes, photosRes, linksRes, detailsRes, contactsRes] = await Promise.all([
-    supabase.from("items").select("*").in("id", itemIds),
-    supabase.from("item_photos").select("*").in("item_id", itemIds).order("sort_order"),
-    supabase.from("item_links").select("*").in("item_id", itemIds).order("sort_order"),
-    supabase.from("item_details").select("*").in("item_id", itemIds).order("sort_order"),
-    supabase.from("item_contacts").select("*").in("item_id", itemIds),
-  ]);
-  const photos = photosRes.data || [];
-  const links = linksRes.data || [];
-  const details = detailsRes.data || [];
-  const contacts = contactsRes.data || [];
-
-  const map: Record<string, Item> = {};
-  for (const it of itemsRes.data || []) {
-    const itemPhotos = photos.filter((p) => p.item_id === it.id).map((p) => p.url);
-    const itemLinks = links.filter((l) => l.item_id === it.id).map((l) => ({ url: l.url, label: l.label || undefined }));
-    const itemDetails = details.filter((d) => d.item_id === it.id).map((d) => ({ label: d.label, value: d.value }));
-    const c = contacts.find((x) => x.item_id === it.id);
-    map[it.id] = {
-      id: it.id,
-      title: it.title,
-      address: it.address || undefined,
-      description: it.description || undefined,
-      notes: it.notes || undefined,
-      photos: itemPhotos.length > 0 ? itemPhotos : undefined,
-      links: itemLinks.length > 0 ? itemLinks : undefined,
-      details: itemDetails.length > 0 ? itemDetails : undefined,
-      contact: c
-        ? { name: c.name || undefined, phone: c.phone || undefined, email: c.email || undefined, website: c.website || undefined }
-        : undefined,
-    };
-  }
-  return map;
 }

@@ -5,6 +5,7 @@ import { getPublishedPacket, markPacketViewed } from "@/lib/queries";
 import { PacketHeader } from "@/components/packet-header";
 import { PersonalNote } from "@/components/personal-note";
 import { SectionGroup } from "@/components/section-group";
+import { PacketBlockBody } from "@/components/packet-block-body";
 import { ProfessionalFooter } from "@/components/professional-footer";
 import type { Packet } from "@/lib/types";
 
@@ -88,9 +89,16 @@ export default async function PacketPage({ params }: Props) {
         </div>
       )}
 
-      {packet.sections.map((section) => (
-        <SectionGroup key={section.id} section={section} />
-      ))}
+      {/* Body renderer selected by composition mode. Legacy packets render the
+          exact section/item path (unchanged); block packets render the ordered
+          block body. Both present the same packet shell, header, and footer. */}
+      {packet.compositionMode === "blocks" ? (
+        <PacketBlockBody blocks={packet.blocks ?? []} />
+      ) : (
+        packet.sections.map((section) => (
+          <SectionGroup key={section.id} section={section} />
+        ))
+      )}
 
       {packet.professional.name && (
         <ProfessionalFooter professional={packet.professional} />

@@ -51,12 +51,25 @@ export interface ProfessionalContact {
   links?: ProfessionalLink[];
 }
 
+// A single block in a block-mode packet's ordered body. Headings/subheadings/
+// labels carry text; item blocks reference assembled item content. This is the
+// canonical shape shared by the production recipient renderer and the hidden
+// persisted-block preview, so the two never drift.
+export type PacketBlock =
+  | { id: string; kind: "heading" | "subheading" | "label"; text: string; subtext?: string }
+  | { id: string; kind: "item"; item: Item };
+
 export interface Packet {
   slug: string;
   title: string;
   clientName?: string;
   personalNote?: string;
   mapUrl?: string;
+  // Legacy packets carry `sections`; block packets carry an ordered `blocks`
+  // body. `compositionMode` selects which the renderer reads. Defaults to
+  // "legacy" so every existing code path and packet behaves exactly as before.
+  compositionMode?: "legacy" | "blocks";
   sections: Section[];
+  blocks?: PacketBlock[];
   professional: ProfessionalContact;
 }

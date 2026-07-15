@@ -18,7 +18,7 @@ export async function POST(request: Request, context: Context) {
     // Validate the packet has required content
     const { data: packet } = await supabase
       .from("packets")
-      .select("id, title, identity_mode, custom_identity")
+      .select("id, title, identity_mode, custom_identity, composition_mode")
       .eq("id", id)
       .eq("user_id", session.userId)
       .single();
@@ -28,41 +28,90 @@ export async function POST(request: Request, context: Context) {
       return NextResponse.json({ error: "Packet needs a title" }, { status: 400 });
     }
 
-    // Check for at least one section with a title
-    const { data: sections } = await supabase
-      .from("sections")
-      .select("id, title")
-      .eq("packet_id", id);
+    // Content validation branches on composition mode. Legacy packets keep the
+    // exact section-based validation; block packets validate their ordered block
+    // body instead. Headings/subheadings/labels are optional in a block packet —
+    // only Item blocks carry required content.
+    if (packet.composition_mode === "blocks") {
+      const { data: blocks } = await supabase
+        .from("packet_blocks")
+        .select("id, block_type, item_id")
+        .eq("packet_id", id);
 
-    if (!sections || sections.length === 0) {
-      return NextResponse.json({ error: "Add at least one section" }, { status: 400 });
-    }
-
-    // Section titles are optional — a section can be a simple grouping container.
-    // Check each section has at least one item with a title
-    for (const section of sections) {
-      const hasTitle = !!section.title?.trim();
-      const sectionRef = hasTitle ? `Section "${section.title}"` : "A section";
-      const sectionRefIn = hasTitle ? `"${section.title}"` : "this section";
-
-      const { data: items } = await supabase
-        .from("items")
-        .select("id, title")
-        .eq("section_id", section.id);
-
-      if (!items || items.length === 0) {
+      const itemBlocks = (blocks || []).filter((b) => b.block_type === "item");
+      if (itemBlocks.length === 0) {
         return NextResponse.json(
-          { error: `${sectionRef} needs at least one item` },
+          { error: "Add at least one item" },
           { status: 400 }
         );
       }
 
-      const untitledItem = items.find((i) => !i.title?.trim());
-      if (untitledItem) {
+      // Every item block must reference an existing item with a title.
+      const itemIds = itemBlocks.map((b) => b.item_id).filter(Boolean) as string[];
+      const { data: items } = await supabase
+        .from("items")
+        .select("id, title")
+        .in("id", itemIds);
+
+      const itemsById = new Map((items || []).map((i) => [i.id, i]));
+      for (const b of itemBlocks) {
+        const item = b.item_id ? itemsById.get(b.item_id) : undefined;
+        if (!item || !item.title?.trim()) {
+          return NextResponse.json(
+            { error: "All items need titles" },
+            { status: 400 }
+          );
+        }
+      }
+
+      // Enforce the block/item bijection + dense positions before publishing.
+      const { error: consistencyError } = await supabase.rpc(
+        "assert_packet_block_consistency",
+        { p_packet_id: id }
+      );
+      if (consistencyError) {
         return NextResponse.json(
-          { error: `All items in ${sectionRefIn} need titles` },
+          { error: "Block composition is inconsistent; cannot publish" },
           { status: 400 }
         );
+      }
+    } else {
+      // Check for at least one section with a title
+      const { data: sections } = await supabase
+        .from("sections")
+        .select("id, title")
+        .eq("packet_id", id);
+
+      if (!sections || sections.length === 0) {
+        return NextResponse.json({ error: "Add at least one section" }, { status: 400 });
+      }
+
+      // Section titles are optional — a section can be a simple grouping container.
+      // Check each section has at least one item with a title
+      for (const section of sections) {
+        const hasTitle = !!section.title?.trim();
+        const sectionRef = hasTitle ? `Section "${section.title}"` : "A section";
+        const sectionRefIn = hasTitle ? `"${section.title}"` : "this section";
+
+        const { data: items } = await supabase
+          .from("items")
+          .select("id, title")
+          .eq("section_id", section.id);
+
+        if (!items || items.length === 0) {
+          return NextResponse.json(
+            { error: `${sectionRef} needs at least one item` },
+            { status: 400 }
+          );
+        }
+
+        const untitledItem = items.find((i) => !i.title?.trim());
+        if (untitledItem) {
+          return NextResponse.json(
+            { error: `All items in ${sectionRefIn} need titles` },
+            { status: 400 }
+          );
+        }
       }
     }
 

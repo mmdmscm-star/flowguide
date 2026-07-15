@@ -1,5 +1,5 @@
 import { createPublicClient, createServerClient } from "./supabase";
-import type { Packet, Section, Item, ItemDetail, ItemLink, ItemContact, ProfessionalContact } from "./types";
+import type { Packet, PacketBlock, Section, Item, ItemDetail, ItemLink, ItemContact, ProfessionalContact } from "./types";
 
 // ============================================================
 // Resolve which identity a packet presents in the editor/preview,
@@ -96,6 +96,16 @@ export async function getPublishedPacket(slug: string): Promise<Packet | null> {
   }
   // If snapshot is {} (empty object), packet was published without branding — profile stays null
 
+  // Branch on composition mode. Block-mode packets present an ordered block body
+  // (packet_blocks) instead of sections; legacy packets continue through the
+  // exact section/item assembly below, unchanged. The packet shell and the
+  // resolved professional identity (from the frozen snapshot) are shared by both.
+  // (A block packet cannot actually be published yet — the draft-only DB trigger
+  // blocks it — but the production read path understands one if it exists.)
+  if (packet.composition_mode === "blocks") {
+    return buildBlockPacket(supabase, packet, profile);
+  }
+
   // Fetch sections ordered by sort_order
   const { data: sections } = await supabase
     .from("sections")
@@ -182,6 +192,26 @@ export async function getPublishedPacket(slug: string): Promise<Packet | null> {
   return buildPacket(packet, profile, assembledSections);
 }
 
+// Map a snapshot/profile row (snake_case) to the ProfessionalContact shape the
+// renderers consume. Shared by the legacy and block published paths so identity
+// resolves identically regardless of composition mode.
+function professionalFromProfileRow(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  profile: any
+): ProfessionalContact {
+  return {
+    name: profile?.name || "",
+    email: profile?.email || undefined,
+    phone: profile?.phone || undefined,
+    businessName: profile?.business_name || undefined,
+    logoUrl: profile?.logo_url || undefined,
+    headshotUrl: profile?.headshot_url || undefined,
+    footerLabel: profile?.footer_label ?? "Your Advisor",
+    websiteUrl: profile?.website_url || undefined,
+    links: profile?.links || undefined,
+  };
+}
+
 function buildPacket(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   packet: any,
@@ -195,19 +225,109 @@ function buildPacket(
     clientName: packet.client_name || undefined,
     personalNote: packet.personal_note || undefined,
     mapUrl: packet.map_url || undefined,
+    compositionMode: "legacy",
     sections,
-    professional: {
-      name: profile?.name || "",
-      email: profile?.email || undefined,
-      phone: profile?.phone || undefined,
-      businessName: profile?.business_name || undefined,
-      logoUrl: profile?.logo_url || undefined,
-      headshotUrl: profile?.headshot_url || undefined,
-      footerLabel: profile?.footer_label ?? "Your Advisor",
-      websiteUrl: profile?.website_url || undefined,
-      links: profile?.links || undefined,
-    },
+    professional: professionalFromProfileRow(profile),
   };
+}
+
+// Build a published block-mode packet: read packet_blocks STRICTLY by position,
+// assemble the referenced item content, and reuse the same packet shell and
+// resolved professional identity as the legacy path. `sections` is empty; the
+// ordered `blocks` body is what the renderer reads.
+async function buildBlockPacket(
+  supabase: ReturnType<typeof createServerClient>,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  packet: any,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  profile: any
+): Promise<Packet> {
+  const { data: rows } = await supabase
+    .from("packet_blocks")
+    .select("id, position, block_type, item_id, heading_text, heading_subtext")
+    .eq("packet_id", packet.id)
+    .order("position");
+
+  const blockRows = rows || [];
+  const itemIds = blockRows
+    .filter((r) => r.block_type === "item" && r.item_id)
+    .map((r) => r.item_id as string);
+  const itemsById = await assembleItemsByIds(supabase, itemIds);
+
+  const blocks: PacketBlock[] = [];
+  for (const r of blockRows) {
+    if (r.block_type === "item") {
+      const item = itemsById[r.item_id as string];
+      // A missing item would be a DB-guarded inconsistency; skip defensively.
+      if (item) blocks.push({ id: r.id, kind: "item", item });
+    } else {
+      blocks.push({
+        id: r.id,
+        kind: r.block_type as "heading" | "subheading" | "label",
+        text: r.heading_text || "",
+        subtext: r.heading_subtext || undefined,
+      });
+    }
+  }
+
+  return {
+    slug: packet.slug,
+    title: packet.title,
+    clientName: packet.client_name || undefined,
+    personalNote: packet.personal_note || undefined,
+    mapUrl: packet.map_url || undefined,
+    compositionMode: "blocks",
+    sections: [],
+    blocks,
+    professional: professionalFromProfileRow(profile),
+  };
+}
+
+// Assemble full Item content (photos/links/details/contact) for a set of item
+// ids, matching the legacy published assembly exactly. Shared by the block
+// published path and the persisted-block preview so item rendering never drifts.
+export async function assembleItemsByIds(
+  supabase: ReturnType<typeof createServerClient>,
+  itemIds: string[]
+): Promise<Record<string, Item>> {
+  if (itemIds.length === 0) return {};
+  const [itemsRes, photosRes, linksRes, detailsRes, contactsRes] = await Promise.all([
+    supabase.from("items").select("*").in("id", itemIds),
+    supabase.from("item_photos").select("*").in("item_id", itemIds).order("sort_order"),
+    supabase.from("item_links").select("*").in("item_id", itemIds).order("sort_order"),
+    supabase.from("item_details").select("*").in("item_id", itemIds).order("sort_order"),
+    supabase.from("item_contacts").select("*").in("item_id", itemIds),
+  ]);
+  const photos = photosRes.data || [];
+  const links = linksRes.data || [];
+  const details = detailsRes.data || [];
+  const contacts = contactsRes.data || [];
+
+  const map: Record<string, Item> = {};
+  for (const it of itemsRes.data || []) {
+    const itemPhotos = photos.filter((p) => p.item_id === it.id).map((p) => p.url);
+    const itemLinks: ItemLink[] = links
+      .filter((l) => l.item_id === it.id)
+      .map((l) => ({ url: l.url, label: l.label || undefined }));
+    const itemDetails: ItemDetail[] = details
+      .filter((d) => d.item_id === it.id)
+      .map((d) => ({ label: d.label, value: d.value }));
+    const c = contacts.find((x) => x.item_id === it.id);
+    map[it.id] = {
+      id: it.id,
+      title: it.title,
+      address: it.address || undefined,
+      description: it.description || undefined,
+      notes: it.notes || undefined,
+      photos: itemPhotos.length > 0 ? itemPhotos : undefined,
+      links: itemLinks.length > 0 ? itemLinks : undefined,
+      details: itemDetails.length > 0 ? itemDetails : undefined,
+      contact: c
+        ? { name: c.name || undefined, phone: c.phone || undefined, email: c.email || undefined, website: c.website || undefined }
+        : undefined,
+    };
+  }
+  return map;
 }
 
 // ============================================================
