@@ -1,5 +1,6 @@
 import { createServerClient } from "./supabase";
-import type { Item } from "./types";
+import { resolveProfessional } from "./queries";
+import type { Item, ProfessionalContact } from "./types";
 
 // ============================================================
 // R1B-A read-only block-preview reader (isolated; does NOT touch the production
@@ -15,20 +16,39 @@ export type PreviewBlock =
 export type BlockPreview =
   | { status: "not_found" }
   | { status: "legacy" }
-  | { status: "blocks"; title: string; blocks: PreviewBlock[] };
+  | {
+      status: "blocks";
+      title: string;
+      clientName?: string;
+      professional: ProfessionalContact;
+      blocks: PreviewBlock[];
+    };
 
 export async function getPacketBlockPreview(packetId: string, userId: string): Promise<BlockPreview> {
   const supabase = createServerClient();
 
-  // Ownership: only a packet owned by the signed-in professional.
+  // Ownership: only a packet owned by the signed-in professional. Also pull the
+  // packet-level identity selections so the preview can render the same header
+  // (branding/logo) and footer (advisor signature) the recipient view resolves.
   const { data: packet, error } = await supabase
     .from("packets")
-    .select("id, title, composition_mode")
+    .select("id, title, client_name, composition_mode, identity_mode, custom_identity")
     .eq("id", packetId)
     .eq("user_id", userId)
     .single();
   if (error || !packet) return { status: "not_found" };
   if (packet.composition_mode !== "blocks") return { status: "legacy" };
+
+  // Resolve the packet-level professional identity exactly as the editor/preview
+  // does — honoring identity_mode (default -> live profile, custom -> packet
+  // identity, none -> empty). Blocks own only the ordered body, never identity.
+  const { data: profile } = await supabase
+    .from("professional_profiles")
+    .select("*")
+    .eq("user_id", userId)
+    .single();
+  const professional = resolveProfessional(packet, profile);
+  const clientName = packet.client_name || undefined;
 
   // Blocks strictly by position.
   const { data: rows } = await supabase
@@ -36,7 +56,8 @@ export async function getPacketBlockPreview(packetId: string, userId: string): P
     .select("id, position, block_type, item_id, heading_text, heading_subtext")
     .eq("packet_id", packetId)
     .order("position");
-  if (!rows || rows.length === 0) return { status: "blocks", title: packet.title, blocks: [] };
+  if (!rows || rows.length === 0)
+    return { status: "blocks", title: packet.title, clientName, professional, blocks: [] };
 
   const itemIds = rows.filter((r) => r.block_type === "item" && r.item_id).map((r) => r.item_id as string);
   const itemsById = await assembleItems(supabase, itemIds);
@@ -57,7 +78,7 @@ export async function getPacketBlockPreview(packetId: string, userId: string): P
       });
     }
   }
-  return { status: "blocks", title: packet.title, blocks };
+  return { status: "blocks", title: packet.title, clientName, professional, blocks };
 }
 
 // Live-assemble item content for the referenced item ids (no duplication into blocks).

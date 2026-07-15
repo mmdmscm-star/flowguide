@@ -10,7 +10,7 @@ import type { Packet, Section, Item, ItemDetail, ItemLink, ItemContact, Professi
 // Published views do NOT use this — they read the frozen snapshot, into which
 // publish has already baked the resolved identity.
 // ============================================================
-function resolveProfessional(
+export function resolveProfessional(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   packet: any,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

@@ -3,6 +3,8 @@ import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth";
 import { getPacketBlockPreview, type PreviewBlock } from "@/lib/block-preview";
 import { ItemCard } from "@/components/item-card";
+import { PacketHeader } from "@/components/packet-header";
+import { ProfessionalFooter } from "@/components/professional-footer";
 
 // R1B-A: hidden, authenticated, READ-ONLY persisted-block preview. It reads
 // packet_blocks for a block-mode packet owned by the signed-in professional and
@@ -62,9 +64,9 @@ export default async function PersistedBlockPreviewPage({ params }: Props) {
         Persisted-block preview — read only
       </div>
 
-      <div className="max-w-lg mx-auto px-5 pb-24">
+      <div className="max-w-lg mx-auto pb-24">
         {preview.status === "not_found" && (
-          <div className="py-16 text-center">
+          <div className="py-16 text-center px-5">
             <div className="text-4xl mb-3">🔒</div>
             <h1 className="text-xl font-bold text-foreground mb-2">Packet not found</h1>
             <p className="text-sm text-muted max-w-xs mx-auto">
@@ -74,7 +76,7 @@ export default async function PersistedBlockPreviewPage({ params }: Props) {
         )}
 
         {preview.status === "legacy" && (
-          <div className="py-16 text-center">
+          <div className="py-16 text-center px-5">
             <div className="text-4xl mb-3">🧩</div>
             <h1 className="text-xl font-bold text-foreground mb-2">This packet has not been converted</h1>
             <p className="text-sm text-muted max-w-sm mx-auto">
@@ -87,15 +89,17 @@ export default async function PersistedBlockPreviewPage({ params }: Props) {
 
         {preview.status === "blocks" && (
           <>
-            <header className="pt-6 pb-4">
-              <p className="text-xs uppercase tracking-widest text-muted mb-1">Persisted block composition</p>
-              <h1 className="text-2xl font-bold text-foreground leading-tight whitespace-pre-line">
-                {preview.title || "Untitled Packet"}
-              </h1>
-              <p className="mt-2 text-xs text-muted">
-                {preview.blocks.length} block{preview.blocks.length === 1 ? "" : "s"} · read from packet_blocks by position
-              </p>
-            </header>
+            {/* Packet-level header (branding/logo) — reused from the recipient
+                renderer. Identity comes from the packet's identity selections,
+                not from packet_blocks. */}
+            <PacketHeader
+              title={preview.title || "Untitled Packet"}
+              clientName={preview.clientName}
+              professional={preview.professional}
+            />
+            <p className="px-5 -mt-3 mb-2 text-xs text-muted">
+              {preview.blocks.length} block{preview.blocks.length === 1 ? "" : "s"} · body read from packet_blocks by position
+            </p>
             <div className="py-2">
               {preview.blocks.length === 0 ? (
                 <p className="text-center text-sm text-muted py-8">This block packet has no blocks.</p>
@@ -103,6 +107,11 @@ export default async function PersistedBlockPreviewPage({ params }: Props) {
                 preview.blocks.map((b) => renderBlock(b))
               )}
             </div>
+            {/* Packet-level footer (advisor signature) — reused from the
+                recipient renderer, gated the same way. */}
+            {preview.professional.name && (
+              <ProfessionalFooter professional={preview.professional} />
+            )}
           </>
         )}
       </div>
