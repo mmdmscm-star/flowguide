@@ -1,65 +1,42 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase";
-import { applyItemContentUpdate } from "@/lib/item-content";
 
 type Context = { params: Promise<{ id: string; itemId: string }> };
 
-// PATCH /api/packets/:id/items/:itemId — edit item CONTENT from the block editor.
+// PATCH /api/packets/:id/items/:itemId — atomic item-content save from the block
+// editor. All verification AND the whole content replacement happen inside ONE
+// SECURITY DEFINER RPC (a single transaction), so a failure during any child
+// write rolls back everything and the item's content is preserved exactly.
 //
-// Every mutation verifies, in order:
-//   1. the authenticated user owns the packet;
-//   2. the packet is draft;
-//   3. the packet is in block mode;
-//   4. the item belongs to THAT exact packet (item -> section -> packet_id = id).
-//
-// Content only (title/description/notes/address + details/links/photos/contact,
-// via the shared helper). It never changes block order, inserts/deletes item
-// blocks, moves the item to another packet/section, or alters headings.
+// The RPC verifies, under a packet-row lock: the server-passed owner id matches
+// packets.user_id; the packet is draft; the packet is in block mode; and the
+// item belongs to THAT exact packet. It updates only core content fields and
+// replaces details/links/photos/contact — never section_id, item/block order,
+// or block membership.
 export async function PATCH(request: Request, context: Context) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id, itemId } = await context.params;
-  const supabase = createServerClient();
-
-  // 1. ownership + 2. draft + 3. block mode
-  const { data: packet } = await supabase
-    .from("packets")
-    .select("id, status, composition_mode")
-    .eq("id", id)
-    .eq("user_id", session.userId)
-    .single();
-  if (!packet) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  if (packet.status !== "draft") {
-    return NextResponse.json({ error: "Packet is not draft" }, { status: 400 });
-  }
-  if (packet.composition_mode !== "blocks") {
-    return NextResponse.json({ error: "Packet is not in block mode" }, { status: 400 });
-  }
-
-  // 4. the item belongs to THIS packet
-  const { data: item } = await supabase
-    .from("items")
-    .select("id, section_id")
-    .eq("id", itemId)
-    .single();
-  if (!item) return NextResponse.json({ error: "Item not found" }, { status: 404 });
-  const { data: section } = await supabase
-    .from("sections")
-    .select("packet_id")
-    .eq("id", item.section_id)
-    .single();
-  if (!section || section.packet_id !== id) {
-    return NextResponse.json({ error: "Item does not belong to this packet" }, { status: 404 });
-  }
-
   const body = await request.json();
   const { title, description, notes, address, links, details, photos, contact } = body;
-  const { error } = await applyItemContentUpdate(supabase, itemId, {
-    title, description, notes, address, links, details, photos, contact,
+
+  const supabase = createServerClient();
+  const { error } = await supabase.rpc("update_block_item_content", {
+    p_packet_id: id,
+    p_item_id: itemId,
+    p_owner_id: session.userId,
+    p_title: typeof title === "string" ? title : "",
+    p_description: typeof description === "string" ? description : "",
+    p_notes: typeof notes === "string" ? notes : "",
+    p_address: typeof address === "string" ? address : "",
+    p_details: Array.isArray(details) ? details : [],
+    p_links: Array.isArray(links) ? links : [],
+    p_photos: Array.isArray(photos) ? photos : [],
+    p_contact: contact ?? null,
   });
-  if (error) return NextResponse.json({ error }, { status: 500 });
+  if (error) return NextResponse.json({ error: error.message }, { status: 400 });
 
   return NextResponse.json({ ok: true });
 }
