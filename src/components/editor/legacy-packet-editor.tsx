@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef, type ReactNode } from "react";
 import { useRouter, useParams, useSearchParams } from "next/navigation";
+import { CompositionModeControl } from "@/components/editor/composition-mode-control";
 import {
   DndContext,
   closestCenter,
@@ -862,6 +863,24 @@ export function LegacyPacketEditor() {
           </span>
         </div>
       </div>
+
+      {/* Reverted-from-blocks success notice */}
+      {searchParams.get("reverted") === "1" && (
+        <div className="mb-4 p-3 rounded-lg bg-green-50 border border-green-200 text-sm text-green-800">
+          Reverted to the legacy section editor. Item content was preserved; block-only headings and ordering were discarded.
+        </div>
+      )}
+
+      {/* Deliberate conversion control — only for owned DRAFT legacy packets. */}
+      {packet.status === "draft" && (
+        <div className="mb-4 flex items-center justify-between gap-3 p-3 rounded-lg border border-border bg-surface">
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-foreground">Composition: sections</p>
+            <p className="text-xs text-muted">Switch to the flat block editor to freely order headings and items.</p>
+          </div>
+          <CompositionModeControl packetId={packetId} direction="convert" />
+        </div>
+      )}
 
       {/* Publish error */}
       {publishError && (

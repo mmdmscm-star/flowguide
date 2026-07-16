@@ -21,6 +21,7 @@ import type { Item, PacketBlock } from "@/lib/types";
 import type { ItemContentPayload } from "@/lib/item-content";
 import { ItemCard } from "@/components/item-card";
 import { BlockItemEditor } from "@/components/editor/block-item-editor";
+import { CompositionModeControl } from "@/components/editor/composition-mode-control";
 import { SerialMutations, type MutationResult } from "@/lib/serial-mutation";
 
 // ============================================================
@@ -198,12 +199,13 @@ async function errorFrom(res: Response): Promise<string> {
 }
 
 export function BlockPacketEditor({
-  packetId, title, status, initialBlocks,
+  packetId, title, status, initialBlocks, justConverted,
 }: {
   packetId: string;
   title: string;
   status: string;
   initialBlocks: PacketBlock[];
+  justConverted?: boolean;
 }) {
   const router = useRouter();
   const readOnly = status !== "draft";
@@ -366,9 +368,26 @@ export function BlockPacketEditor({
           </p>
         </header>
 
+        {justConverted && (
+          <div className="mb-4 p-3 rounded-lg bg-green-50 border border-green-200 text-sm text-green-800">
+            Converted to the block editor. Item content was preserved; each section became a heading block.
+          </div>
+        )}
+
         {readOnly && (
           <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
             This packet is <strong>{status}</strong>. Unpublish it to edit its composition.
+          </div>
+        )}
+
+        {/* Deliberate reversion control — only for owned DRAFT block packets. */}
+        {!readOnly && (
+          <div className="mb-4 flex items-center justify-between gap-3 p-3 rounded-lg border border-border bg-white">
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-foreground">Composition: blocks</p>
+              <p className="text-xs text-muted">Return to the legacy section editor. Block-only headings and order are discarded.</p>
+            </div>
+            <CompositionModeControl packetId={packetId} direction="revert" />
           </div>
         )}
 

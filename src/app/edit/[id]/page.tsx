@@ -12,13 +12,17 @@ import { BlockPacketEditor } from "@/components/editor/block-packet-editor";
 // data exactly as before.
 export const dynamic = "force-dynamic";
 
-type Props = { params: Promise<{ id: string }> };
+type Props = {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+};
 
-export default async function EditPacketPage({ params }: Props) {
+export default async function EditPacketPage({ params, searchParams }: Props) {
   const session = await getSession();
   if (!session) redirect("/login");
 
   const { id } = await params;
+  const sp = await searchParams;
   const data = await getBlockEditorData(id, session.userId);
   if (!data.found) redirect("/dashboard");
 
@@ -29,6 +33,7 @@ export default async function EditPacketPage({ params }: Props) {
         title={data.title}
         status={data.status}
         initialBlocks={data.blocks}
+        justConverted={sp.converted === "1"}
       />
     );
   }
