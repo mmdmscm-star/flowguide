@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase";
+import { applyItemContentUpdate } from "@/lib/item-content";
 
 // Helper: verify item ownership through section -> packet -> user chain
 async function verifyItemOwnership(
@@ -86,13 +87,10 @@ export async function PATCH(request: Request) {
   const item = await verifyItemOwnership(supabase, id, session.userId);
   if (!item) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  // Update item fields
-  const updates: Record<string, unknown> = {};
-  if (title !== undefined) updates.title = title;
-  if (description !== undefined) updates.description = description;
-  if (notes !== undefined) updates.notes = notes;
-  if (address !== undefined) updates.address = address;
-  if (sortOrder !== undefined) updates.sort_order = sortOrder;
+  // Section move / sort_order is legacy-only; item CONTENT is persisted through
+  // the shared helper (same code path the block editor uses).
+  const moveUpdates: Record<string, unknown> = {};
+  if (sortOrder !== undefined) moveUpdates.sort_order = sortOrder;
 
   // Move item to a different section (must belong to the same packet/owner)
   if (sectionId !== undefined && sectionId !== item.section_id) {
@@ -119,73 +117,19 @@ export async function PATCH(request: Request) {
       .limit(1);
     const nextOrder = siblings && siblings.length > 0 ? siblings[0].sort_order + 1 : 0;
 
-    updates.section_id = sectionId;
-    updates.sort_order = nextOrder;
+    moveUpdates.section_id = sectionId;
+    moveUpdates.sort_order = nextOrder;
   }
 
-  if (Object.keys(updates).length > 0) {
-    const { error } = await supabase.from("items").update(updates).eq("id", id);
+  if (Object.keys(moveUpdates).length > 0) {
+    const { error } = await supabase.from("items").update(moveUpdates).eq("id", id);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  // Replace links if provided
-  if (links !== undefined) {
-    await supabase.from("item_links").delete().eq("item_id", id);
-    if (links.length > 0) {
-      const linkRows = links.map((l: { url: string; label?: string }, i: number) => ({
-        item_id: id,
-        url: l.url,
-        label: l.label || "",
-        sort_order: i,
-      }));
-      await supabase.from("item_links").insert(linkRows);
-    }
-  }
-
-  // Replace details if provided
-  if (details !== undefined) {
-    await supabase.from("item_details").delete().eq("item_id", id);
-    if (details.length > 0) {
-      const detailRows = details.map((d: { label: string; value: string }, i: number) => ({
-        item_id: id,
-        label: d.label,
-        value: d.value,
-        sort_order: i,
-      }));
-      await supabase.from("item_details").insert(detailRows);
-    }
-  }
-
-  // Replace photos if provided
-  if (photos !== undefined) {
-    await supabase.from("item_photos").delete().eq("item_id", id);
-    if (photos.length > 0) {
-      const photoRows = photos
-        .filter((p: { url: string }) => p.url && p.url.startsWith("http"))
-        .map((p: { url: string }, i: number) => ({
-          item_id: id,
-          url: p.url,
-          sort_order: i,
-        }));
-      if (photoRows.length > 0) {
-        await supabase.from("item_photos").insert(photoRows);
-      }
-    }
-  }
-
-  // Replace contact if provided
-  if (contact !== undefined) {
-    await supabase.from("item_contacts").delete().eq("item_id", id);
-    if (contact && (contact.name || contact.phone || contact.email || contact.website)) {
-      await supabase.from("item_contacts").insert({
-        item_id: id,
-        name: contact.name || "",
-        phone: contact.phone || "",
-        email: contact.email || "",
-        website: contact.website || "",
-      });
-    }
-  }
+  const { error: contentError } = await applyItemContentUpdate(supabase, id, {
+    title, description, notes, address, links, details, photos, contact,
+  });
+  if (contentError) return NextResponse.json({ error: contentError }, { status: 500 });
 
   return NextResponse.json({ ok: true });
 }

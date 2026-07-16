@@ -18,7 +18,9 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import type { Item, PacketBlock } from "@/lib/types";
+import type { ItemContentPayload } from "@/lib/item-content";
 import { ItemCard } from "@/components/item-card";
+import { BlockItemEditor } from "@/components/editor/block-item-editor";
 import { SerialMutations, type MutationResult } from "@/lib/serial-mutation";
 
 // ============================================================
@@ -115,7 +117,7 @@ function BlockControls({
 }
 
 function SortableBlock({
-  block, isFirst, isLast, disabled, onEdit, onSaveHeading, onDelete, onUp, onDown,
+  block, isFirst, isLast, disabled, onEdit, onSaveHeading, onDelete, onEditItem, onUp, onDown,
 }: {
   block: EditorBlock;
   isFirst: boolean;
@@ -124,6 +126,7 @@ function SortableBlock({
   onEdit: (id: string, field: "text" | "subtext", value: string) => void;
   onSaveHeading: (id: string) => void;
   onDelete: (id: string) => void;
+  onEditItem: (id: string) => void;
   onUp: () => void;
   onDown: () => void;
 }) {
@@ -164,7 +167,13 @@ function SortableBlock({
             )}
           </div>
         ) : block.kind === "item" ? (
-          <ItemCard item={block.item} />
+          <div className="relative">
+            <button type="button" onClick={() => onEditItem(block.id)} disabled={disabled}
+              className="absolute top-2 right-2 z-10 text-xs font-medium text-white bg-accent/90 hover:bg-accent px-2.5 py-1 rounded-lg shadow-sm disabled:opacity-40">
+              Edit item
+            </button>
+            <ItemCard item={block.item} />
+          </div>
         ) : null}
       </div>
     </div>
@@ -201,6 +210,8 @@ export function BlockPacketEditor({
   const [blocks, setBlocks] = useState<EditorBlock[]>(() => toEditorBlocks(initialBlocks));
   const [saving, setSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
+  // The block whose item content is being edited in the modal (null = closed).
+  const [editingBlockId, setEditingBlockId] = useState<string | null>(null);
 
   // Single-flight runner. It owns the persisted baseline (rollback target). Only
   // one mutation runs at a time; while one is pending every editing control is
@@ -304,6 +315,27 @@ export function BlockPacketEditor({
     reflect(r, err);
   }
 
+  // Persist item CONTENT (from the modal) through the SAME single-flight runner,
+  // so it serializes with reorders and rolls back on failure. Order/ids/headings
+  // are never touched — only the one item block's item content changes.
+  async function saveItemContent(blockId: string, payload: ItemContentPayload, updatedItem: Item): Promise<MutationResult> {
+    const next = blocks.map((b) => (b.id === blockId && b.kind === "item" ? { ...b, item: updatedItem } : b));
+    let err = "";
+    const r = await runner.run(next, async () => {
+      const res = await fetch(`/api/packets/${packetId}/items/${updatedItem.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) { err = await errorFrom(res); throw new Error(err); }
+    });
+    reflect(r, err);
+    return r;
+  }
+
+  const editingBlock = editingBlockId ? blocks.find((b) => b.id === editingBlockId) : null;
+  const editingItem = editingBlock && editingBlock.kind === "item" ? editingBlock.item : null;
+
   const headingCount = blocks.filter((b) => b.kind !== "item").length;
   const itemCount = blocks.filter((b) => b.kind === "item").length;
 
@@ -353,6 +385,7 @@ export function BlockPacketEditor({
                   onEdit={editHeadingLocal}
                   onSaveHeading={saveHeading}
                   onDelete={deleteBlock}
+                  onEditItem={setEditingBlockId}
                   onUp={() => moveByOne(i, -1)}
                   onDown={() => moveByOne(i, 1)}
                 />
@@ -366,6 +399,15 @@ export function BlockPacketEditor({
           <p className="text-center text-sm text-muted py-8">This packet has no blocks yet.</p>
         )}
       </div>
+
+      {editingItem && (
+        <BlockItemEditor
+          item={editingItem}
+          busy={saving}
+          onSave={(payload, updatedItem) => saveItemContent(editingBlockId as string, payload, updatedItem)}
+          onClose={() => setEditingBlockId(null)}
+        />
+      )}
     </div>
   );
 }
