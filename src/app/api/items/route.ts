@@ -126,9 +126,16 @@ export async function PATCH(request: Request) {
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  const { error: contentError } = await applyItemContentUpdate(supabase, id, {
-    title, description, notes, address, links, details, photos, contacts,
-  });
+  // Item CONTENT is persisted through the shared atomic RPC (the same writer the
+  // block editor uses). requireMode "legacy" rejects a block-mode packet reaching
+  // this legacy endpoint; the RPC derives the packet from the item and enforces
+  // owner + draft. Only the fields present in this request are written — the
+  // legacy editor autosaves one field group at a time — and each request is atomic.
+  const { error: contentError } = await applyItemContentUpdate(
+    supabase,
+    { itemId: id, ownerId: session.userId, requireMode: "legacy" },
+    { title, description, notes, address, links, details, photos, contacts }
+  );
   if (contentError) return NextResponse.json({ error: contentError }, { status: 500 });
 
   return NextResponse.json({ ok: true });

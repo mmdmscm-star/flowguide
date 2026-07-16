@@ -1,12 +1,22 @@
 import type { createServerClient } from "./supabase";
 
 // ============================================================
-// Shared item-CONTENT persistence (title/description/notes/address plus the
-// details/links/photos/contact child tables). Extracted verbatim from the legacy
-// /api/items PATCH so the legacy editor and the block editor persist item content
-// through ONE code path. This helper touches ONLY content — never section_id,
-// sort_order, packet membership, or any composition/ordering. Callers are
-// responsible for authorization.
+// Shared item-CONTENT persistence — the SINGLE implementation for BOTH editors.
+//
+// title/description/notes/address plus the details/links/photos/contacts child
+// tables are written by ONE atomic RPC (update_item_content, migration 0011),
+// so a save is all-or-nothing: any failure (e.g. a malformed contacts array)
+// rolls back the entire request and leaves the item + its contacts exactly as
+// they were. This replaces the previous multi-call helper, which issued
+// independent PostgREST writes (items.update; then delete+insert per child) that
+// could partially apply — most dangerously wiping a contact list when the
+// contacts delete committed but its insert failed.
+//
+// PRESENCE-AWARE: an omitted field is passed as null and left UNCHANGED by the
+// RPC, so the legacy editor's per-field autosaves touch only what they send
+// while the block editor's full save replaces everything — one code path, both
+// atomic. This helper performs NO authorization itself; the RPC verifies owner /
+// draft / mode / item-belongs-to-packet under a packet-row lock.
 // ============================================================
 
 export interface ItemContentPayload {
@@ -20,74 +30,38 @@ export interface ItemContentPayload {
   contacts?: { name?: string; role?: string; phone?: string; email?: string; website?: string }[];
 }
 
+export interface ItemContentContext {
+  itemId: string;
+  ownerId: string;
+  // Optional packet cross-check (block route passes the URL packet id). When
+  // null the RPC derives the packet from the item and skips the cross-check.
+  packetId?: string | null;
+  // Optional composition-mode guard: "blocks" for the block editor, "legacy"
+  // for the legacy editor. null skips the mode check.
+  requireMode?: "legacy" | "blocks" | null;
+}
+
 export async function applyItemContentUpdate(
   supabase: ReturnType<typeof createServerClient>,
-  itemId: string,
+  ctx: ItemContentContext,
   payload: ItemContentPayload
 ): Promise<{ error?: string }> {
-  const { title, description, notes, address, links, details, photos, contacts } = payload;
-
-  // Core item fields (content only).
-  const updates: Record<string, unknown> = {};
-  if (title !== undefined) updates.title = title;
-  if (description !== undefined) updates.description = description;
-  if (notes !== undefined) updates.notes = notes;
-  if (address !== undefined) updates.address = address;
-  if (Object.keys(updates).length > 0) {
-    const { error } = await supabase.from("items").update(updates).eq("id", itemId);
-    if (error) return { error: error.message };
-  }
-
-  // Replace links if provided.
-  if (links !== undefined) {
-    await supabase.from("item_links").delete().eq("item_id", itemId);
-    if (links.length > 0) {
-      const linkRows = links.map((l, i) => ({ item_id: itemId, url: l.url, label: l.label || "", sort_order: i }));
-      await supabase.from("item_links").insert(linkRows);
-    }
-  }
-
-  // Replace details if provided.
-  if (details !== undefined) {
-    await supabase.from("item_details").delete().eq("item_id", itemId);
-    if (details.length > 0) {
-      const detailRows = details.map((d, i) => ({ item_id: itemId, label: d.label, value: d.value, sort_order: i }));
-      await supabase.from("item_details").insert(detailRows);
-    }
-  }
-
-  // Replace photos if provided (only http(s) URLs are stored, mirroring legacy).
-  if (photos !== undefined) {
-    await supabase.from("item_photos").delete().eq("item_id", itemId);
-    if (photos.length > 0) {
-      const photoRows = photos
-        .filter((p) => p.url && p.url.startsWith("http"))
-        .map((p, i) => ({ item_id: itemId, url: p.url, sort_order: i }));
-      if (photoRows.length > 0) {
-        await supabase.from("item_photos").insert(photoRows);
-      }
-    }
-  }
-
-  // Replace contacts if provided — an ordered list; blank rows are dropped so no
-  // meaningless empty contact is written. Order is preserved via sort_order.
-  if (contacts !== undefined) {
-    await supabase.from("item_contacts").delete().eq("item_id", itemId);
-    const rows = contacts
-      .filter((c) => c.name || c.phone || c.email || c.website)
-      .map((c, i) => ({
-        item_id: itemId,
-        name: c.name || "",
-        role: c.role || "",
-        phone: c.phone || "",
-        email: c.email || "",
-        website: c.website || "",
-        sort_order: i,
-      }));
-    if (rows.length > 0) {
-      await supabase.from("item_contacts").insert(rows);
-    }
-  }
-
+  const { error } = await supabase.rpc("update_item_content", {
+    p_item_id: ctx.itemId,
+    p_owner_id: ctx.ownerId,
+    p_packet_id: ctx.packetId ?? null,
+    p_require_mode: ctx.requireMode ?? null,
+    // Core fields: undefined -> null -> leave unchanged. "" is a real value.
+    p_title: payload.title ?? null,
+    p_description: payload.description ?? null,
+    p_notes: payload.notes ?? null,
+    p_address: payload.address ?? null,
+    // Children: undefined -> null -> untouched; an array (even []) REPLACES.
+    p_details: payload.details ?? null,
+    p_links: payload.links ?? null,
+    p_photos: payload.photos ?? null,
+    p_contacts: payload.contacts ?? null,
+  });
+  if (error) return { error: error.message };
   return {};
 }
