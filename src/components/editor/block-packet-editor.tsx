@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   DndContext,
@@ -19,6 +19,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import type { Item, PacketBlock } from "@/lib/types";
 import { ItemCard } from "@/components/item-card";
+import { SerialMutations, type MutationResult } from "@/lib/serial-mutation";
 
 // ============================================================
 // R2-A persistent block-composition editor.
@@ -29,8 +30,12 @@ import { ItemCard } from "@/components/item-card";
 //   * add / edit / delete HEADING-LIKE blocks (heading, subheading, label);
 //   * item blocks reorder but are never deleted or edited here; item content is
 //     never touched.
-// Every mutation is optimistic with rollback: a failed save reverts the editor
-// to the last persisted state and surfaces the error.
+//
+// Mutation integrity: every persistence op runs through a SINGLE-FLIGHT runner
+// (SerialMutations) and all editing controls are disabled while one is pending,
+// so requests never overlap. Each op is optimistic with rollback — a failed save
+// reverts the editor to the last persisted state and surfaces the error, and a
+// late failure can never clobber a newer successful mutation (there is none).
 //
 // Ports the validated Phase-0.2 prototype styling/behavior into production.
 // ============================================================
@@ -110,53 +115,51 @@ function BlockControls({
 }
 
 function SortableBlock({
-  block, isFirst, isLast, readOnly, onEdit, onSaveHeading, onDelete, onUp, onDown,
+  block, isFirst, isLast, disabled, onEdit, onSaveHeading, onDelete, onUp, onDown,
 }: {
   block: EditorBlock;
   isFirst: boolean;
   isLast: boolean;
-  readOnly: boolean;
+  disabled: boolean;
   onEdit: (id: string, field: "text" | "subtext", value: string) => void;
   onSaveHeading: (id: string) => void;
   onDelete: (id: string) => void;
   onUp: () => void;
   onDown: () => void;
 }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: block.id, disabled: readOnly });
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: block.id, disabled });
   const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 };
   const s = block.kind !== "item" ? composeStyle(block.kind) : null;
 
   return (
     <div ref={setNodeRef} style={style} className={`flex items-start gap-2 ${s ? s.indent : ""}`}>
-      <BlockControls attributes={attributes} listeners={listeners} isFirst={isFirst} isLast={isLast} disabled={readOnly} onUp={onUp} onDown={onDown} />
+      <BlockControls attributes={attributes} listeners={listeners} isFirst={isFirst} isLast={isLast} disabled={disabled} onUp={onUp} onDown={onDown} />
       <div className="flex-1 min-w-0">
         {block.kind !== "item" && s ? (
           <div className={s.box}>
             <div className="flex items-center justify-between gap-2 mb-1.5">
               <span className="text-[11px] font-semibold uppercase tracking-wide text-muted">{s.placeholder}</span>
-              {!readOnly && (
-                <button type="button" onClick={() => onDelete(block.id)}
-                  className="text-[11px] font-medium text-red-500 hover:text-red-700">
-                  Delete
-                </button>
-              )}
+              <button type="button" onClick={() => onDelete(block.id)} disabled={disabled}
+                className="text-[11px] font-medium text-red-500 hover:text-red-700 disabled:opacity-30">
+                Delete
+              </button>
             </div>
             <input
               value={block.text}
-              disabled={readOnly}
+              disabled={disabled}
               onChange={(e) => onEdit(block.id, "text", e.target.value)}
               onBlur={() => onSaveHeading(block.id)}
               placeholder={s.placeholder}
-              className={`w-full bg-transparent focus:outline-none placeholder:text-gray-300 placeholder:normal-case placeholder:font-normal placeholder:tracking-normal ${s.input}`}
+              className={`w-full bg-transparent focus:outline-none placeholder:text-gray-300 placeholder:normal-case placeholder:font-normal placeholder:tracking-normal disabled:opacity-60 ${s.input}`}
             />
             {s.subtext && (
               <input
                 value={block.subtext}
-                disabled={readOnly}
+                disabled={disabled}
                 onChange={(e) => onEdit(block.id, "subtext", e.target.value)}
                 onBlur={() => onSaveHeading(block.id)}
                 placeholder="Optional subtext"
-                className="w-full bg-transparent text-sm text-gray-600 focus:outline-none placeholder:text-gray-300"
+                className="w-full bg-transparent text-sm text-gray-600 focus:outline-none placeholder:text-gray-300 disabled:opacity-60"
               />
             )}
           </div>
@@ -168,17 +171,21 @@ function SortableBlock({
   );
 }
 
-function AddBlockBar({ onAdd }: { onAdd: (role: HeadingKind, defaultText: string) => void }) {
+function AddBlockBar({ disabled, onAdd }: { disabled: boolean; onAdd: (role: HeadingKind, defaultText: string) => void }) {
   return (
     <div className="flex items-center justify-center gap-1.5 my-2">
       {HEADING_ROLES.map(({ role, name, defaultText }) => (
-        <button key={role} type="button" onClick={() => onAdd(role, defaultText)}
-          className="px-2.5 py-1 rounded-lg border border-dashed border-accent/50 text-accent text-[11px] font-semibold hover:bg-accent hover:text-white hover:border-accent transition-colors">
+        <button key={role} type="button" disabled={disabled} onClick={() => onAdd(role, defaultText)}
+          className="px-2.5 py-1 rounded-lg border border-dashed border-accent/50 text-accent text-[11px] font-semibold hover:bg-accent hover:text-white hover:border-accent transition-colors disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-accent">
           + {name}
         </button>
       ))}
     </div>
   );
+}
+
+async function errorFrom(res: Response): Promise<string> {
+  return (await res.json().catch(() => ({}))).error || "Save failed";
 }
 
 export function BlockPacketEditor({
@@ -192,43 +199,41 @@ export function BlockPacketEditor({
   const router = useRouter();
   const readOnly = status !== "draft";
   const [blocks, setBlocks] = useState<EditorBlock[]>(() => toEditorBlocks(initialBlocks));
-  // Last persisted state — the rollback target for a failed save.
-  const savedRef = useRef<EditorBlock[]>(toEditorBlocks(initialBlocks));
-  // Mirror of the current blocks for async callbacks (blur/click handlers read
-  // the latest list without stale closures). Synced after each render.
-  const blocksRef = useRef<EditorBlock[]>(blocks);
-  useEffect(() => { blocksRef.current = blocks; }, [blocks]);
-  const [saveStatus, setSaveStatus] = useState<"saved" | "saving" | "error">("saved");
+  const [saving, setSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
 
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
+  // Single-flight runner. It owns the persisted baseline (rollback target). Only
+  // one mutation runs at a time; while one is pending every editing control is
+  // disabled, so requests never overlap.
+  const [runner] = useState(
+    () => new SerialMutations<EditorBlock[]>(toEditorBlocks(initialBlocks), setBlocks, setSaving)
+  );
 
-  // Persist a full reordering (drag or up/down). Optimistic with rollback.
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
+  const disabled = readOnly || saving;
+
+  function reflect(result: MutationResult, err: string) {
+    if (result === "ok") setErrorMsg("");
+    else if (result === "failed") setErrorMsg(err || "Save failed");
+    // "rejected" — another mutation was in flight; ignore (controls were disabled)
+  }
+
   async function persistReorder(next: EditorBlock[]) {
-    const prev = savedRef.current;
-    setBlocks(next);
-    setSaveStatus("saving");
-    try {
+    let err = "";
+    const r = await runner.run(next, async () => {
       const res = await fetch(`/api/packets/${packetId}/blocks/reorder`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ blockIds: next.map((b) => b.id) }),
       });
-      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || "Save failed");
-      savedRef.current = next;
-      setSaveStatus("saved");
-      setErrorMsg("");
-    } catch (e) {
-      setBlocks(prev);
-      savedRef.current = prev;
-      setSaveStatus("error");
-      setErrorMsg(e instanceof Error ? e.message : "Save failed");
-    }
+      if (!res.ok) { err = await errorFrom(res); throw new Error(err); }
+    });
+    reflect(r, err);
   }
 
   function onDragEnd(e: DragEndEvent) {
     const { active, over } = e;
-    if (readOnly || !over || active.id === over.id) return;
+    if (disabled || !over || active.id === over.id) return;
     const from = blocks.findIndex((b) => b.id === active.id);
     const to = blocks.findIndex((b) => b.id === over.id);
     if (from === -1 || to === -1) return;
@@ -237,7 +242,7 @@ export function BlockPacketEditor({
 
   function moveByOne(index: number, delta: number) {
     const to = index + delta;
-    if (readOnly || to < 0 || to >= blocks.length) return;
+    if (disabled || to < 0 || to >= blocks.length) return;
     persistReorder(arrayMove(blocks, index, to));
   }
 
@@ -247,89 +252,66 @@ export function BlockPacketEditor({
   }
 
   async function saveHeading(id: string) {
-    const block = blocksRef.current.find((b) => b.id === id);
+    const block = blocks.find((b) => b.id === id);
     if (!block || block.kind === "item") return;
-    // Skip if unchanged vs last persisted.
-    const persisted = savedRef.current.find((b) => b.id === id);
+    const persisted = runner.getSaved().find((b) => b.id === id);
     if (persisted && persisted.kind !== "item" && persisted.text === block.text && persisted.subtext === block.subtext) return;
     if (!block.text.trim()) {
-      // heading text must be non-blank — revert this field to last persisted
-      setBlocks(savedRef.current);
-      setSaveStatus("error");
+      // heading text must be non-blank — revert to last persisted
+      setBlocks(runner.getSaved());
       setErrorMsg("Heading text can't be empty — reverted.");
       return;
     }
-    setSaveStatus("saving");
-    try {
+    const next = blocks;
+    let err = "";
+    const r = await runner.run(next, async () => {
       const res = await fetch(`/api/packets/${packetId}/blocks/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text: block.text, subtext: block.subtext }),
       });
-      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || "Save failed");
-      savedRef.current = blocksRef.current;
-      setSaveStatus("saved");
-      setErrorMsg("");
-    } catch (e) {
-      setBlocks(savedRef.current);
-      setSaveStatus("error");
-      setErrorMsg(e instanceof Error ? e.message : "Save failed");
-    }
+      if (!res.ok) { err = await errorFrom(res); throw new Error(err); }
+    });
+    reflect(r, err);
   }
 
   async function addBlock(index: number, role: HeadingKind, defaultText: string) {
-    if (readOnly) return;
-    setSaveStatus("saving");
-    try {
+    if (disabled) return;
+    let err = "";
+    const r = await runner.run(null, async (prev) => {
       const res = await fetch(`/api/packets/${packetId}/blocks`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ position: index, blockType: role, text: defaultText, subtext: "" }),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error || "Save failed");
-      const next = [...blocksRef.current];
+      if (!res.ok) { err = data.error || "Save failed"; throw new Error(err); }
+      const next = [...prev];
       next.splice(index, 0, { id: data.id, kind: role, text: defaultText, subtext: "" });
-      setBlocks(next);
-      savedRef.current = next;
-      setSaveStatus("saved");
-      setErrorMsg("");
-    } catch (e) {
-      // Nothing was added locally, so no rollback needed.
-      setSaveStatus("error");
-      setErrorMsg(e instanceof Error ? e.message : "Save failed");
-    }
+      return next;
+    });
+    reflect(r, err);
   }
 
   async function deleteBlock(id: string) {
-    if (readOnly) return;
-    const prev = savedRef.current;
-    const next = blocksRef.current.filter((b) => b.id !== id);
-    setBlocks(next);
-    setSaveStatus("saving");
-    try {
+    if (disabled) return;
+    const next = blocks.filter((b) => b.id !== id);
+    let err = "";
+    const r = await runner.run(next, async () => {
       const res = await fetch(`/api/packets/${packetId}/blocks/${id}`, { method: "DELETE" });
-      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || "Save failed");
-      savedRef.current = next;
-      setSaveStatus("saved");
-      setErrorMsg("");
-    } catch (e) {
-      setBlocks(prev);
-      savedRef.current = prev;
-      setSaveStatus("error");
-      setErrorMsg(e instanceof Error ? e.message : "Save failed");
-    }
+      if (!res.ok) { err = await errorFrom(res); throw new Error(err); }
+    });
+    reflect(r, err);
   }
 
   const headingCount = blocks.filter((b) => b.kind !== "item").length;
   const itemCount = blocks.filter((b) => b.kind === "item").length;
 
-  const statusPill =
-    saveStatus === "saving"
-      ? { text: "Saving…", cls: "bg-amber-100 text-amber-800" }
-      : saveStatus === "error"
-        ? { text: "Save failed — reverted", cls: "bg-red-100 text-red-700" }
-        : { text: "All changes saved", cls: "bg-gray-100 text-gray-500" };
+  const statusPill = saving
+    ? { text: "Saving…", cls: "bg-amber-100 text-amber-800" }
+    : errorMsg
+      ? { text: "Save failed — reverted", cls: "bg-red-100 text-red-700" }
+      : { text: "All changes saved", cls: "bg-gray-100 text-gray-500" };
 
   return (
     <div className="min-h-screen bg-background">
@@ -338,7 +320,7 @@ export function BlockPacketEditor({
           <button onClick={() => router.push("/dashboard")} className="text-sm text-muted hover:text-foreground">← Dashboard</button>
           <span className={`ml-auto text-xs font-medium px-2 py-1 rounded-full ${statusPill.cls}`}>{statusPill.text}</span>
         </div>
-        {saveStatus === "error" && errorMsg && (
+        {!saving && errorMsg && (
           <div className="max-w-lg mx-auto px-5 pb-2 text-xs text-red-600">{errorMsg}</div>
         )}
       </div>
@@ -358,7 +340,7 @@ export function BlockPacketEditor({
           </div>
         )}
 
-        {!readOnly && <AddBlockBar onAdd={(role, dt) => addBlock(0, role, dt)} />}
+        {!readOnly && <AddBlockBar disabled={disabled} onAdd={(role, dt) => addBlock(0, role, dt)} />}
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
           <SortableContext items={blocks.map((b) => b.id)} strategy={verticalListSortingStrategy}>
             {blocks.map((block, i) => (
@@ -367,14 +349,14 @@ export function BlockPacketEditor({
                   block={block}
                   isFirst={i === 0}
                   isLast={i === blocks.length - 1}
-                  readOnly={readOnly}
+                  disabled={disabled}
                   onEdit={editHeadingLocal}
                   onSaveHeading={saveHeading}
                   onDelete={deleteBlock}
                   onUp={() => moveByOne(i, -1)}
                   onDown={() => moveByOne(i, 1)}
                 />
-                {!readOnly && <AddBlockBar onAdd={(role, dt) => addBlock(i + 1, role, dt)} />}
+                {!readOnly && <AddBlockBar disabled={disabled} onAdd={(role, dt) => addBlock(i + 1, role, dt)} />}
               </div>
             ))}
           </SortableContext>

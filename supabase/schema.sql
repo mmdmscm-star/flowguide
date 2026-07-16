@@ -1086,81 +1086,79 @@ begin
 end;
 $$;
 
-create or replace function public.update_heading_block(p_block_id uuid, p_text text, p_subtext text)
+create or replace function public.update_heading_block(p_packet_id uuid, p_block_id uuid, p_text text, p_subtext text)
 returns void
 language plpgsql
 security definer
 set search_path = ''
 as $$
 declare
-  v_packet uuid;
-  v_type text;
   v_status text;
   v_mode text;
+  v_type text;
   v_sub text;
 begin
-  select packet_id into v_packet from public.packet_blocks where id = p_block_id;
-  if v_packet is null then raise exception 'edit block: block % not found', p_block_id; end if;
-
+  -- Lock the URL packet and require draft + block mode.
   select status, composition_mode into v_status, v_mode
-    from public.packets where id = v_packet for update;
-  if v_status <> 'draft' then raise exception 'edit block: packet % is not draft (status=%)', v_packet, v_status; end if;
-  if v_mode <> 'blocks' then raise exception 'edit block: packet % is not in block mode (mode=%)', v_packet, v_mode; end if;
+    from public.packets where id = p_packet_id for update;
+  if v_status is null then raise exception 'edit block: packet % not found', p_packet_id; end if;
+  if v_status <> 'draft' then raise exception 'edit block: packet % is not draft (status=%)', p_packet_id, v_status; end if;
+  if v_mode <> 'blocks' then raise exception 'edit block: packet % is not in block mode (mode=%)', p_packet_id, v_mode; end if;
 
-  -- re-read the block type under the packet lock
-  select block_type into v_type from public.packet_blocks where id = p_block_id;
-  if v_type is null then raise exception 'edit block: block % not found', p_block_id; end if;
+  -- Bind the block to THIS packet under the lock.
+  select block_type into v_type
+    from public.packet_blocks where id = p_block_id and packet_id = p_packet_id;
+  if v_type is null then raise exception 'edit block: block % does not belong to packet %', p_block_id, p_packet_id; end if;
   if v_type = 'item' then raise exception 'edit block: block % is an item block and cannot be edited here', p_block_id; end if;
   if btrim(coalesce(p_text, '')) = '' then raise exception 'edit block: heading text must be non-blank'; end if;
 
   v_sub := case when v_type = 'label' then null else nullif(btrim(coalesce(p_subtext, '')), '') end;
   update public.packet_blocks
     set heading_text = btrim(p_text), heading_subtext = v_sub
-    where id = p_block_id;
+    where id = p_block_id and packet_id = p_packet_id;
 
-  perform public.assert_packet_block_consistency(v_packet);
+  perform public.assert_packet_block_consistency(p_packet_id);
 end;
 $$;
 
-create or replace function public.delete_heading_block(p_block_id uuid)
+create or replace function public.delete_heading_block(p_packet_id uuid, p_block_id uuid)
 returns void
 language plpgsql
 security definer
 set search_path = ''
 as $$
 declare
-  v_packet uuid;
-  v_type text;
-  v_pos int;
   v_status text;
   v_mode text;
+  v_type text;
+  v_pos int;
 begin
-  select packet_id into v_packet from public.packet_blocks where id = p_block_id;
-  if v_packet is null then raise exception 'delete block: block % not found', p_block_id; end if;
-
   select status, composition_mode into v_status, v_mode
-    from public.packets where id = v_packet for update;
-  if v_status <> 'draft' then raise exception 'delete block: packet % is not draft (status=%)', v_packet, v_status; end if;
-  if v_mode <> 'blocks' then raise exception 'delete block: packet % is not in block mode (mode=%)', v_packet, v_mode; end if;
+    from public.packets where id = p_packet_id for update;
+  if v_status is null then raise exception 'delete block: packet % not found', p_packet_id; end if;
+  if v_status <> 'draft' then raise exception 'delete block: packet % is not draft (status=%)', p_packet_id, v_status; end if;
+  if v_mode <> 'blocks' then raise exception 'delete block: packet % is not in block mode (mode=%)', p_packet_id, v_mode; end if;
 
-  select block_type, position into v_type, v_pos from public.packet_blocks where id = p_block_id;
-  if v_type is null then raise exception 'delete block: block % not found', p_block_id; end if;
+  -- Bind the block to THIS packet under the lock.
+  select block_type, position into v_type, v_pos
+    from public.packet_blocks where id = p_block_id and packet_id = p_packet_id;
+  if v_type is null then raise exception 'delete block: block % does not belong to packet %', p_block_id, p_packet_id; end if;
   if v_type = 'item' then raise exception 'delete block: block % is an item block and cannot be deleted here', p_block_id; end if;
 
-  delete from public.packet_blocks where id = p_block_id;
+  delete from public.packet_blocks where id = p_block_id and packet_id = p_packet_id;
   update public.packet_blocks set position = position - 1
-    where packet_id = v_packet and position > v_pos;
+    where packet_id = p_packet_id and position > v_pos;
 
-  perform public.assert_packet_block_consistency(v_packet);
+  perform public.assert_packet_block_consistency(p_packet_id);
 end;
 $$;
 
 revoke all on function public.reorder_packet_blocks(uuid, uuid[]) from public, anon, authenticated, service_role;
 revoke all on function public.add_heading_block(uuid, int, text, text, text) from public, anon, authenticated, service_role;
-revoke all on function public.update_heading_block(uuid, text, text) from public, anon, authenticated, service_role;
-revoke all on function public.delete_heading_block(uuid) from public, anon, authenticated, service_role;
+revoke all on function public.update_heading_block(uuid, uuid, text, text) from public, anon, authenticated, service_role;
+revoke all on function public.delete_heading_block(uuid, uuid) from public, anon, authenticated, service_role;
 
 grant execute on function public.reorder_packet_blocks(uuid, uuid[]) to service_role;
 grant execute on function public.add_heading_block(uuid, int, text, text, text) to service_role;
-grant execute on function public.update_heading_block(uuid, text, text) to service_role;
-grant execute on function public.delete_heading_block(uuid) to service_role;
+grant execute on function public.update_heading_block(uuid, uuid, text, text) to service_role;
+grant execute on function public.delete_heading_block(uuid, uuid) to service_role;
