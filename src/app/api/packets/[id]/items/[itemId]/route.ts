@@ -20,7 +20,7 @@ export async function PATCH(request: Request, context: Context) {
 
   const { id, itemId } = await context.params;
   const body = await request.json();
-  const { title, description, notes, address, links, details, photos, contact } = body;
+  const { title, description, notes, address, links, details, photos, contacts } = body;
 
   const supabase = createServerClient();
   const { error } = await supabase.rpc("update_block_item_content", {
@@ -34,7 +34,7 @@ export async function PATCH(request: Request, context: Context) {
     p_details: Array.isArray(details) ? details : [],
     p_links: Array.isArray(links) ? links : [],
     p_photos: Array.isArray(photos) ? photos : [],
-    p_contact: contact ?? null,
+    p_contacts: Array.isArray(contacts) ? contacts : [],
   });
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
 

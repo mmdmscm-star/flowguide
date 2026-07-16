@@ -37,11 +37,13 @@ export const samplePacket: Packet = {
               label: "Community Website",
             },
           ],
-          contact: {
-            name: "Maria Santos, Community Director",
-            phone: "(951) 555-0142",
-            email: "msantos@sunrise.example.com",
-          },
+          contacts: [
+            {
+              name: "Maria Santos, Community Director",
+              phone: "(951) 555-0142",
+              email: "msantos@sunrise.example.com",
+            },
+          ],
         },
         {
           id: "i2",
@@ -70,11 +72,13 @@ export const samplePacket: Packet = {
               label: "The Terrace Memory Care",
             },
           ],
-          contact: {
-            name: "David Chen, Admissions",
-            phone: "(951) 555-0287",
-            email: "dchen@oakmont.example.com",
-          },
+          contacts: [
+            {
+              name: "David Chen, Admissions",
+              phone: "(951) 555-0287",
+              email: "dchen@oakmont.example.com",
+            },
+          ],
         },
         {
           id: "i3",
@@ -99,10 +103,12 @@ export const samplePacket: Packet = {
               label: "Community Website",
             },
           ],
-          contact: {
-            name: "Patricia Nguyen, Owner/Director",
-            phone: "(951) 555-0319",
-          },
+          contacts: [
+            {
+              name: "Patricia Nguyen, Owner/Director",
+              phone: "(951) 555-0319",
+            },
+          ],
         },
       ],
     },
@@ -125,10 +131,12 @@ export const samplePacket: Packet = {
           ],
           notes:
             "Good value option. Less intimate than Garden Villas but more amenities. They frequently run move-in specials.",
-          contact: {
-            name: "Admissions Office",
-            phone: "(951) 555-0445",
-          },
+          contacts: [
+            {
+              name: "Admissions Office",
+              phone: "(951) 555-0445",
+            },
+          ],
         },
         {
           id: "i5",
@@ -141,11 +149,13 @@ export const samplePacket: Packet = {
             { label: "Move-in Availability", value: "Available now" },
             { label: "Distance from You", value: "22 minutes" },
           ],
-          contact: {
-            name: "Jennifer Walsh, Community Relations",
-            phone: "(951) 555-0518",
-            email: "jwalsh@pacifica.example.com",
-          },
+          contacts: [
+            {
+              name: "Jennifer Walsh, Community Relations",
+              phone: "(951) 555-0518",
+              email: "jwalsh@pacifica.example.com",
+            },
+          ],
         },
       ],
     },

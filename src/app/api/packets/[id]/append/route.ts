@@ -20,7 +20,7 @@ Given raw input from a professional, extract and organize:
   - details: key-value pairs (e.g. "Price" → "$2,500/mo", "Hours" → "9am-5pm")
   - links: URLs with labels (see URL classification rules below)
   - photos: image URLs only (see URL classification rules below)
-  - contact: name, phone, email, or website for a person/business related to this item
+  - contacts: an ORDERED array of the people/businesses associated with this item. An item may legitimately have SEVERAL people (co-owners, an agent and a coordinator, a doctor and an office manager). Add EVERY person the source lists as a SEPARATE contact entry, in order. NEVER merge two people into one contact, and NEVER assign one person's phone/email/website to another. Each: { name, role (ONLY if stated), phone, email, website (ONLY that specific person's own site) }. A community/business website is an item-level link, NOT a person's website.
 
 TABULAR DATA: The input may be pasted from a spreadsheet or CSV. If you detect tab-separated or comma-separated rows with a header row, treat each row as an item. Use column headers to map values to the correct fields.
 
@@ -37,7 +37,7 @@ General rules:
 - Do not invent information that is not in the input
 - If something is ambiguous or doesn't fit a structured field, put it in notes
 - Extract full street addresses into the "address" field (not into details)
-- Extract phone numbers, emails, and websites into contact fields
+- Extract phone numbers, emails, and websites into contacts, keeping each person's own fields with that person. If two people are listed for the same item, output TWO contacts — never drop the second.
 - Keep titles concise (under 60 characters)
 - Always provide a label for every link`;
 
@@ -93,12 +93,15 @@ Respond with ONLY valid JSON matching this exact schema (no markdown, no explana
           "details": [{ "label": "string", "value": "string" }],
           "links": [{ "url": "string", "label": "string or null" }],
           "photos": ["string"],
-          "contact": {
-            "name": "string or null",
-            "phone": "string or null",
-            "email": "string or null",
-            "website": "string or null"
-          }
+          "contacts": [
+            {
+              "name": "string or null",
+              "role": "string or null (ONLY if the source states it, e.g. Co-owner)",
+              "phone": "string or null",
+              "email": "string or null",
+              "website": "string or null (ONLY a site belonging to this person)"
+            }
+          ]
         }
       ]
     }
@@ -113,12 +116,13 @@ interface StructuredItem {
   details?: { label: string; value: string }[];
   links?: { url: string; label?: string | null }[];
   photos?: string[];
-  contact?: {
+  contacts?: {
     name?: string | null;
+    role?: string | null;
     phone?: string | null;
     email?: string | null;
     website?: string | null;
-  } | null;
+  }[] | null;
 }
 
 interface StructuredSection {

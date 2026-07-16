@@ -1,4 +1,4 @@
-import { createServerClient } from "./supabase";
+import type { createServerClient } from "./supabase";
 
 // ============================================================
 // Shared AI-structuring integrity layer.
@@ -28,12 +28,16 @@ export interface StructuredItem {
   details?: { label: string; value: string }[];
   links?: { url: string; label?: string | null }[];
   photos?: string[];
-  contact?: {
+  // An item may legitimately have MULTIPLE associated people (co-owners, an agent
+  // and coordinator, a doctor and office manager, …). Every supplied person must
+  // be preserved in order; never merge two people or drop extras.
+  contacts?: {
     name?: string | null;
+    role?: string | null;
     phone?: string | null;
     email?: string | null;
     website?: string | null;
-  } | null;
+  }[] | null;
 }
 
 export interface StructuredSection {
@@ -270,15 +274,20 @@ export async function insertStructuredSections(
           if (error) throw error;
         }
 
-        const c = item.contact;
-        if (c && (c.name || c.phone || c.email || c.website)) {
-          const { error } = await supabase.from("item_contacts").insert({
+        // Preserve EVERY supplied person, in order. Never silently drop extras.
+        const contactRows = (item.contacts || [])
+          .filter((c) => c && (c.name || c.phone || c.email || c.website))
+          .map((c, ci) => ({
             item_id: newItem.id,
             name: c.name || "",
+            role: c.role || "",
             phone: c.phone || "",
             email: c.email || "",
             website: c.website || "",
-          });
+            sort_order: ci,
+          }));
+        if (contactRows.length > 0) {
+          const { error } = await supabase.from("item_contacts").insert(contactRows);
           if (error) throw error;
         }
       }

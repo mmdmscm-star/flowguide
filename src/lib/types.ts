@@ -1,5 +1,6 @@
 export interface ItemContact {
   name?: string;
+  role?: string;
   phone?: string;
   email?: string;
   website?: string;
@@ -24,7 +25,7 @@ export interface Item {
   photos?: string[];
   details?: ItemDetail[];
   links?: ItemLink[];
-  contact?: ItemContact;
+  contacts?: ItemContact[];
 }
 
 export interface Section {

@@ -17,7 +17,7 @@ export interface ItemContentPayload {
   links?: { url: string; label?: string }[];
   details?: { label: string; value: string }[];
   photos?: { url: string }[];
-  contact?: { name?: string; phone?: string; email?: string; website?: string } | null;
+  contacts?: { name?: string; role?: string; phone?: string; email?: string; website?: string }[];
 }
 
 export async function applyItemContentUpdate(
@@ -25,7 +25,7 @@ export async function applyItemContentUpdate(
   itemId: string,
   payload: ItemContentPayload
 ): Promise<{ error?: string }> {
-  const { title, description, notes, address, links, details, photos, contact } = payload;
+  const { title, description, notes, address, links, details, photos, contacts } = payload;
 
   // Core item fields (content only).
   const updates: Record<string, unknown> = {};
@@ -69,17 +69,23 @@ export async function applyItemContentUpdate(
     }
   }
 
-  // Replace contact if provided.
-  if (contact !== undefined) {
+  // Replace contacts if provided — an ordered list; blank rows are dropped so no
+  // meaningless empty contact is written. Order is preserved via sort_order.
+  if (contacts !== undefined) {
     await supabase.from("item_contacts").delete().eq("item_id", itemId);
-    if (contact && (contact.name || contact.phone || contact.email || contact.website)) {
-      await supabase.from("item_contacts").insert({
+    const rows = contacts
+      .filter((c) => c.name || c.phone || c.email || c.website)
+      .map((c, i) => ({
         item_id: itemId,
-        name: contact.name || "",
-        phone: contact.phone || "",
-        email: contact.email || "",
-        website: contact.website || "",
-      });
+        name: c.name || "",
+        role: c.role || "",
+        phone: c.phone || "",
+        email: c.email || "",
+        website: c.website || "",
+        sort_order: i,
+      }));
+    if (rows.length > 0) {
+      await supabase.from("item_contacts").insert(rows);
     }
   }
 

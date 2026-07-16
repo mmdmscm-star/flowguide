@@ -139,7 +139,7 @@ export async function getPublishedPacket(slug: string): Promise<Packet | null> {
     supabase.from("item_photos").select("*").in("item_id", itemIds).order("sort_order"),
     supabase.from("item_links").select("*").in("item_id", itemIds).order("sort_order"),
     supabase.from("item_details").select("*").in("item_id", itemIds).order("sort_order"),
-    supabase.from("item_contacts").select("*").in("item_id", itemIds),
+    supabase.from("item_contacts").select("*").in("item_id", itemIds).order("sort_order"),
   ]);
 
   const photos = photosRes.data || [];
@@ -156,7 +156,15 @@ export async function getPublishedPacket(slug: string): Promise<Packet | null> {
     const itemDetails: ItemDetail[] = details
       .filter((d) => d.item_id === item.id)
       .map((d) => ({ label: d.label, value: d.value }));
-    const itemContact = contacts.find((c) => c.item_id === item.id);
+    const itemContacts = contacts
+      .filter((c) => c.item_id === item.id)
+      .map((c) => ({
+        name: c.name || undefined,
+        role: c.role || undefined,
+        phone: c.phone || undefined,
+        email: c.email || undefined,
+        website: c.website || undefined,
+      }));
 
     const assembled: Item = {
       id: item.id,
@@ -167,14 +175,7 @@ export async function getPublishedPacket(slug: string): Promise<Packet | null> {
       photos: itemPhotos.length > 0 ? itemPhotos : undefined,
       links: itemLinks.length > 0 ? itemLinks : undefined,
       details: itemDetails.length > 0 ? itemDetails : undefined,
-      contact: itemContact
-        ? {
-            name: itemContact.name || undefined,
-            phone: itemContact.phone || undefined,
-            email: itemContact.email || undefined,
-            website: itemContact.website || undefined,
-          }
-        : undefined,
+      contacts: itemContacts.length > 0 ? itemContacts : undefined,
     };
     return assembled;
   });
@@ -296,7 +297,7 @@ export async function assembleItemsByIds(
     supabase.from("item_photos").select("*").in("item_id", itemIds).order("sort_order"),
     supabase.from("item_links").select("*").in("item_id", itemIds).order("sort_order"),
     supabase.from("item_details").select("*").in("item_id", itemIds).order("sort_order"),
-    supabase.from("item_contacts").select("*").in("item_id", itemIds),
+    supabase.from("item_contacts").select("*").in("item_id", itemIds).order("sort_order"),
   ]);
   const photos = photosRes.data || [];
   const links = linksRes.data || [];
@@ -312,7 +313,15 @@ export async function assembleItemsByIds(
     const itemDetails: ItemDetail[] = details
       .filter((d) => d.item_id === it.id)
       .map((d) => ({ label: d.label, value: d.value }));
-    const c = contacts.find((x) => x.item_id === it.id);
+    const itemContacts = contacts
+      .filter((x) => x.item_id === it.id)
+      .map((x) => ({
+        name: x.name || undefined,
+        role: x.role || undefined,
+        phone: x.phone || undefined,
+        email: x.email || undefined,
+        website: x.website || undefined,
+      }));
     map[it.id] = {
       id: it.id,
       title: it.title,
@@ -322,9 +331,7 @@ export async function assembleItemsByIds(
       photos: itemPhotos.length > 0 ? itemPhotos : undefined,
       links: itemLinks.length > 0 ? itemLinks : undefined,
       details: itemDetails.length > 0 ? itemDetails : undefined,
-      contact: c
-        ? { name: c.name || undefined, phone: c.phone || undefined, email: c.email || undefined, website: c.website || undefined }
-        : undefined,
+      contacts: itemContacts.length > 0 ? itemContacts : undefined,
     };
   }
   return map;
@@ -398,7 +405,7 @@ export async function getPacketForEditor(
     supabase.from("item_photos").select("*").in("item_id", itemIds).order("sort_order"),
     supabase.from("item_links").select("*").in("item_id", itemIds).order("sort_order"),
     supabase.from("item_details").select("*").in("item_id", itemIds).order("sort_order"),
-    supabase.from("item_contacts").select("*").in("item_id", itemIds),
+    supabase.from("item_contacts").select("*").in("item_id", itemIds).order("sort_order"),
   ]);
 
   const photos = photosRes.data || [];
@@ -415,10 +422,9 @@ export async function getPacketForEditor(
     photos: photos.filter((p) => p.item_id === item.id).map((p) => p.url),
     links: links.filter((l) => l.item_id === item.id).map((l) => ({ url: l.url, label: l.label || undefined })),
     details: details.filter((d) => d.item_id === item.id).map((d) => ({ label: d.label, value: d.value })),
-    contact: (() => {
-      const c = contacts.find((c) => c.item_id === item.id);
-      return c ? { name: c.name || undefined, phone: c.phone || undefined, email: c.email || undefined, website: c.website || undefined } : undefined;
-    })(),
+    contacts: contacts
+      .filter((c) => c.item_id === item.id)
+      .map((c) => ({ name: c.name || undefined, role: c.role || undefined, phone: c.phone || undefined, email: c.email || undefined, website: c.website || undefined })),
   }));
 
   const assembledSections = sections.map((section) => ({

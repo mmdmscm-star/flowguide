@@ -161,15 +161,18 @@ create index idx_item_details_item_id on public.item_details(item_id);
 -- ============================================================
 create table public.item_contacts (
   id uuid primary key default gen_random_uuid(),
-  item_id uuid unique not null references public.items(id) on delete cascade,
+  item_id uuid not null references public.items(id) on delete cascade,
   name text not null default '',
+  role text not null default '',
   phone text not null default '',
   email text not null default '',
   website text not null default '',
+  sort_order integer not null default 0,
   created_at timestamptz not null default now()
 );
 
 create index idx_item_contacts_item_id on public.item_contacts(item_id);
+create index idx_item_contacts_item_sort on public.item_contacts(item_id, sort_order);
 
 -- ============================================================
 -- ROW LEVEL SECURITY
@@ -344,6 +347,7 @@ declare
   di int;
   li int;
   pi int;
+  ci int;
   new_item_id uuid;
 begin
   -- Validate + lock the target section (also serializes concurrent adds).
@@ -405,22 +409,35 @@ begin
       end if;
     end loop;
 
-    c := it->'contact';
-    if c is not null and jsonb_typeof(c) = 'object' and (
-      coalesce(c->>'name', '') <> '' or
-      coalesce(c->>'phone', '') <> '' or
-      coalesce(c->>'email', '') <> '' or
-      coalesce(c->>'website', '') <> ''
-    ) then
-      insert into public.item_contacts (item_id, name, phone, email, website)
-      values (
-        new_item_id,
-        coalesce(c->>'name', ''),
-        coalesce(c->>'phone', ''),
-        coalesce(c->>'email', ''),
-        coalesce(c->>'website', '')
-      );
-    end if;
+    -- Ordered contacts: prefer `contacts` array; fall back to a legacy singular
+    -- `contact` object. Every supplied person is preserved; blanks are skipped.
+    ci := 0;
+    for c in select value from jsonb_array_elements(
+      coalesce(
+        it->'contacts',
+        case when jsonb_typeof(it->'contact') = 'object' then jsonb_build_array(it->'contact') else '[]'::jsonb end
+      )
+    )
+    loop
+      if jsonb_typeof(c) = 'object' and (
+        coalesce(c->>'name', '') <> '' or
+        coalesce(c->>'phone', '') <> '' or
+        coalesce(c->>'email', '') <> '' or
+        coalesce(c->>'website', '') <> ''
+      ) then
+        insert into public.item_contacts (item_id, name, role, phone, email, website, sort_order)
+        values (
+          new_item_id,
+          coalesce(c->>'name', ''),
+          coalesce(c->>'role', ''),
+          coalesce(c->>'phone', ''),
+          coalesce(c->>'email', ''),
+          coalesce(c->>'website', ''),
+          ci
+        );
+        ci := ci + 1;
+      end if;
+    end loop;
 
     ii := ii + 1;
   end loop;
@@ -1181,7 +1198,7 @@ create or replace function public.update_block_item_content(
   p_details jsonb,
   p_links jsonb,
   p_photos jsonb,
-  p_contact jsonb
+  p_contacts jsonb
 )
 returns void
 language plpgsql
@@ -1260,21 +1277,29 @@ begin
     end loop;
   end if;
 
-  -- Replace contact (one row per item; empty/absent clears it).
+  -- Replace contacts (ordered; blank rows dropped; malformed -> rollback).
   delete from public.item_contacts where item_id = p_item_id;
-  if p_contact is not null and jsonb_typeof(p_contact) = 'object'
-     and ( coalesce(p_contact->>'name', '') <> ''
-        or coalesce(p_contact->>'phone', '') <> ''
-        or coalesce(p_contact->>'email', '') <> ''
-        or coalesce(p_contact->>'website', '') <> '' ) then
-    insert into public.item_contacts (item_id, name, phone, email, website)
-      values (
-        p_item_id,
-        coalesce(p_contact->>'name', ''),
-        coalesce(p_contact->>'phone', ''),
-        coalesce(p_contact->>'email', ''),
-        coalesce(p_contact->>'website', '')
-      );
+  if p_contacts is not null then
+    if jsonb_typeof(p_contacts) <> 'array' then raise exception 'item content: contacts must be a JSON array'; end if;
+    i := 0;
+    for r in select value from jsonb_array_elements(p_contacts) loop
+      if coalesce(r->>'name', '') <> ''
+         or coalesce(r->>'phone', '') <> ''
+         or coalesce(r->>'email', '') <> ''
+         or coalesce(r->>'website', '') <> '' then
+        insert into public.item_contacts (item_id, name, role, phone, email, website, sort_order)
+          values (
+            p_item_id,
+            coalesce(r->>'name', ''),
+            coalesce(r->>'role', ''),
+            coalesce(r->>'phone', ''),
+            coalesce(r->>'email', ''),
+            coalesce(r->>'website', ''),
+            i
+          );
+        i := i + 1;
+      end if;
+    end loop;
   end if;
 end;
 $$;

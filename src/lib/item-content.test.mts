@@ -55,19 +55,60 @@ test("photos: only http(s) URLs are stored", async () => {
   assert.equal(ins.value[0].url, "https://ok.test/a.jpg");
 });
 
-test("contact object → delete + insert; contact null → delete only", async () => {
+test("one contact → delete + insert; empty array → delete only", async () => {
   {
     const { supabase, calls } = mockSupabase();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await applyItemContentUpdate(supabase as any, "item-1", { contact: { name: "Jo", phone: "555" } });
+    await applyItemContentUpdate(supabase as any, "item-1", { contacts: [{ name: "Jo", phone: "555" }] });
     assert.deepEqual(opsOn(calls, "item_contacts"), ["delete", "insert"]);
+    const ins = calls.find((c) => c.op === "insert" && c.table === "item_contacts") as { value: { sort_order: number }[] };
+    assert.equal(ins.value.length, 1, "one row written");
+    assert.equal(ins.value[0].sort_order, 0);
   }
   {
     const { supabase, calls } = mockSupabase();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await applyItemContentUpdate(supabase as any, "item-1", { contact: null });
-    assert.deepEqual(opsOn(calls, "item_contacts"), ["delete"], "null contact clears without insert");
+    await applyItemContentUpdate(supabase as any, "item-1", { contacts: [] });
+    assert.deepEqual(opsOn(calls, "item_contacts"), ["delete"], "empty list clears without insert");
   }
+});
+
+test("multiple contacts → every person preserved, in order, with per-person fields", async () => {
+  const { supabase, calls } = mockSupabase();
+  // Two co-owners of the same community — the exact case that used to drop the second.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await applyItemContentUpdate(supabase as any, "item-1", {
+    contacts: [
+      { name: "Helen", role: "Co-owner", phone: "(415) 205-3276" },
+      { name: "Joel", role: "Co-owner", phone: "(415) 203-3624" },
+    ],
+  });
+  const ins = calls.find((c) => c.op === "insert" && c.table === "item_contacts") as {
+    value: { name: string; role: string; phone: string; sort_order: number }[];
+  };
+  assert.equal(ins.value.length, 2, "BOTH people written — the second is never dropped");
+  assert.deepEqual(ins.value.map((r) => r.name), ["Helen", "Joel"], "entered order preserved");
+  assert.deepEqual(ins.value.map((r) => r.sort_order), [0, 1], "sort_order is deterministic");
+  // Each person keeps their OWN phone — no cross-assignment.
+  assert.equal(ins.value[0].phone, "(415) 205-3276");
+  assert.equal(ins.value[1].phone, "(415) 203-3624");
+  assert.deepEqual(ins.value.map((r) => r.role), ["Co-owner", "Co-owner"], "roles stored only as given");
+});
+
+test("blank contact rows are dropped even amid real ones (no empty rows saved)", async () => {
+  const { supabase, calls } = mockSupabase();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await applyItemContentUpdate(supabase as any, "item-1", {
+    contacts: [
+      { name: "Helen", phone: "(415) 205-3276" },
+      { name: "", role: "", phone: "", email: "", website: "" }, // blank while editing
+      { name: "Joel", phone: "(415) 203-3624" },
+    ],
+  });
+  const ins = calls.find((c) => c.op === "insert" && c.table === "item_contacts") as { value: { name: string; sort_order: number }[] };
+  assert.equal(ins.value.length, 2, "the blank row is not persisted");
+  assert.deepEqual(ins.value.map((r) => r.name), ["Helen", "Joel"]);
+  assert.deepEqual(ins.value.map((r) => r.sort_order), [0, 1], "sort_order re-densified after dropping blank");
 });
 
 test("omitted fields touch nothing; NEVER writes items sort_order/section_id or composition tables", async () => {

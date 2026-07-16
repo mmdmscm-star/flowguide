@@ -81,7 +81,7 @@ export async function PATCH(request: Request) {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await request.json();
-  const { id, title, description, notes, address, sortOrder, sectionId, links, details, contact, photos } = body;
+  const { id, title, description, notes, address, sortOrder, sectionId, links, details, contacts, photos } = body;
 
   const supabase = createServerClient();
   const item = await verifyItemOwnership(supabase, id, session.userId);
@@ -127,7 +127,7 @@ export async function PATCH(request: Request) {
   }
 
   const { error: contentError } = await applyItemContentUpdate(supabase, id, {
-    title, description, notes, address, links, details, photos, contact,
+    title, description, notes, address, links, details, photos, contacts,
   });
   if (contentError) return NextResponse.json({ error: contentError }, { status: 500 });
 

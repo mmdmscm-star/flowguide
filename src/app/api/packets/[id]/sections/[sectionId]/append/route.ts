@@ -37,7 +37,7 @@ Each item may include:
 - details: key-value pairs [{ "label": string, "value": string }]
 - links: URLs with labels [{ "url": string, "label": string }]
 - photos: image URLs only
-- contact: { name, phone, email, website } for a related person/business
+- contacts: an ORDERED array of the people/businesses related to this item. An item may legitimately have SEVERAL people (co-owners, an agent and a coordinator, a doctor and an office manager). Add EVERY person the source lists as a SEPARATE entry, in order. NEVER merge two people into one, and NEVER assign one person's phone/email/website to another. Each: { name, role (ONLY if the source states it), phone, email, website (ONLY a site belonging to that specific person) }. A community/business website is an item-level link, NOT a person's website.
 
 URL classification:
 - IMAGE URLs (unsplash/imgur/cloudinary, or ending .jpg/.jpeg/.png/.webp/.gif) -> "photos"
@@ -46,15 +46,16 @@ URL classification:
 Rules:
 - Do not invent information not present in the input.
 - Preserve all specific details (addresses, phones, prices, hours, names).
+- If two people are listed for one item, output TWO contacts — never drop the second.
 - Keep titles concise (under 60 characters).
 
 Respond with ONLY valid JSON in this exact shape (no markdown, no extra keys):
-{ "items": [ { "title": "string", "address": "string?", "description": "string?", "notes": "string?", "details": [{"label":"string","value":"string"}], "links": [{"url":"string","label":"string"}], "photos": ["string"], "contact": {"name":"string?","phone":"string?","email":"string?","website":"string?"} } ] }
+{ "items": [ { "title": "string", "address": "string?", "description": "string?", "notes": "string?", "details": [{"label":"string","value":"string"}], "links": [{"url":"string","label":"string"}], "photos": ["string"], "contacts": [{"name":"string?","role":"string?","phone":"string?","email":"string?","website":"string?"}] } ] }
 
 Omit any empty field. Do NOT include section titles, section ids, groupings, or any field other than those listed above. "items" must be the only top-level key.`;
 
 const ALLOWED_ITEM_KEYS = new Set([
-  "title", "address", "description", "notes", "details", "links", "photos", "contact",
+  "title", "address", "description", "notes", "details", "links", "photos", "contacts",
 ]);
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {
@@ -82,8 +83,15 @@ function validateItemsOnly(parsed: unknown): { ok: true; items: unknown[] } | { 
     if ("details" in raw && !Array.isArray(raw.details)) return { ok: false, error: "details_not_array" };
     if ("links" in raw && !Array.isArray(raw.links)) return { ok: false, error: "links_not_array" };
     if ("photos" in raw && !Array.isArray(raw.photos)) return { ok: false, error: "photos_not_array" };
-    if ("contact" in raw && raw.contact !== null && !isPlainObject(raw.contact)) {
-      return { ok: false, error: "contact_not_object" };
+    // Contacts is an ORDERED array — one entry per person. Reject a bare object
+    // (the old single-contact shape) so a two-person item can't collapse to one.
+    if ("contacts" in raw && raw.contacts !== null && !Array.isArray(raw.contacts)) {
+      return { ok: false, error: "contacts_not_array" };
+    }
+    if (Array.isArray(raw.contacts)) {
+      for (const c of raw.contacts) {
+        if (!isPlainObject(c)) return { ok: false, error: "contact_not_object" };
+      }
     }
   }
   return { ok: true, items: parsed.items };

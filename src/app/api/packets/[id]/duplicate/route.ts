@@ -149,21 +149,26 @@ export async function POST(_request: Request, context: Context) {
           );
         }
 
-        // Copy contact
-        const { data: contact } = await supabase
+        // Copy contacts — an item may have several people; carry every one,
+        // preserving role and order.
+        const { data: contacts } = await supabase
           .from("item_contacts")
           .select("*")
           .eq("item_id", item.id)
-          .single();
+          .order("sort_order");
 
-        if (contact) {
-          await supabase.from("item_contacts").insert({
-            item_id: newItem.id,
-            name: contact.name || "",
-            phone: contact.phone || "",
-            email: contact.email || "",
-            website: contact.website || "",
-          });
+        if (contacts && contacts.length > 0) {
+          await supabase.from("item_contacts").insert(
+            contacts.map((c, ci) => ({
+              item_id: newItem.id,
+              name: c.name || "",
+              role: c.role || "",
+              phone: c.phone || "",
+              email: c.email || "",
+              website: c.website || "",
+              sort_order: c.sort_order ?? ci,
+            }))
+          );
         }
       }
     }

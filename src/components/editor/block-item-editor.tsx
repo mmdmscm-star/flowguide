@@ -17,7 +17,8 @@ import type { MutationResult } from "@/lib/serial-mutation";
 type Detail = { label: string; value: string };
 type Link = { url: string; label: string };
 type Photo = { url: string };
-type Contact = { name: string; phone: string; email: string; website: string };
+type Contact = { name: string; role: string; phone: string; email: string; website: string };
+const emptyContact = (): Contact => ({ name: "", role: "", phone: "", email: "", website: "" });
 
 export function BlockItemEditor({
   item,
@@ -37,8 +38,8 @@ export function BlockItemEditor({
   const [details, setDetails] = useState<Detail[]>(item.details ? item.details.map((d) => ({ label: d.label, value: d.value })) : []);
   const [links, setLinks] = useState<Link[]>(item.links ? item.links.map((l) => ({ url: l.url, label: l.label || "" })) : []);
   const [photos, setPhotos] = useState<Photo[]>(item.photos ? item.photos.map((u) => ({ url: u })) : []);
-  const [contact, setContact] = useState<Contact | null>(
-    item.contact ? { name: item.contact.name || "", phone: item.contact.phone || "", email: item.contact.email || "", website: item.contact.website || "" } : null
+  const [contacts, setContacts] = useState<Contact[]>(
+    item.contacts ? item.contacts.map((c) => ({ name: c.name || "", role: c.role || "", phone: c.phone || "", email: c.email || "", website: c.website || "" })) : []
   );
   const [error, setError] = useState("");
 
@@ -50,11 +51,12 @@ export function BlockItemEditor({
     const cleanDetails = details.filter((d) => d.label.trim() || d.value.trim());
     const cleanLinks = links.filter((l) => l.url.trim());
     const cleanPhotos = photos.filter((p) => p.url.trim());
-    const cleanContact = contact && (contact.name || contact.phone || contact.email || contact.website) ? contact : null;
+    // Drop meaningless completely-blank contact rows; keep order.
+    const cleanContacts = contacts.filter((c) => c.name.trim() || c.phone.trim() || c.email.trim() || c.website.trim());
 
     const payload: ItemContentPayload = {
       title, description, notes, address,
-      details: cleanDetails, links: cleanLinks, photos: cleanPhotos, contact: cleanContact,
+      details: cleanDetails, links: cleanLinks, photos: cleanPhotos, contacts: cleanContacts,
     };
     const updatedItem: Item = {
       id: item.id,
@@ -65,8 +67,8 @@ export function BlockItemEditor({
       photos: cleanPhotos.length ? cleanPhotos.map((p) => p.url) : undefined,
       details: cleanDetails.length ? cleanDetails : undefined,
       links: cleanLinks.length ? cleanLinks.map((l) => ({ url: l.url, label: l.label || undefined })) : undefined,
-      contact: cleanContact
-        ? { name: cleanContact.name || undefined, phone: cleanContact.phone || undefined, email: cleanContact.email || undefined, website: cleanContact.website || undefined }
+      contacts: cleanContacts.length
+        ? cleanContacts.map((c) => ({ name: c.name || undefined, role: c.role || undefined, phone: c.phone || undefined, email: c.email || undefined, website: c.website || undefined }))
         : undefined,
     };
 
@@ -160,24 +162,33 @@ export function BlockItemEditor({
             </div>
           </div>
 
-          {/* Contact */}
+          {/* Contacts — an ordered list; a community may legitimately have several people. */}
           <div>
             <div className="flex items-center justify-between mb-1">
-              <span className="text-xs font-medium text-muted">Contact</span>
-              {contact === null ? (
-                <button className={smallBtn} disabled={busy} onClick={() => setContact({ name: "", phone: "", email: "", website: "" })}>+ Add contact</button>
-              ) : (
-                <button className="text-xs font-medium text-red-400 hover:text-red-600" disabled={busy} onClick={() => setContact(null)}>Remove contact</button>
-              )}
+              <span className="text-xs font-medium text-muted">Contacts (people)</span>
+              <button className={smallBtn} disabled={busy} onClick={() => setContacts((cs) => [...cs, emptyContact()])}>+ Add contact</button>
             </div>
-            {contact !== null && (
-              <div className="grid grid-cols-2 gap-2">
-                <input value={contact.name} disabled={busy} onChange={(e) => setContact((c) => c && { ...c, name: e.target.value })} placeholder="Name" className={field} />
-                <input value={contact.phone} disabled={busy} onChange={(e) => setContact((c) => c && { ...c, phone: e.target.value })} placeholder="Phone" className={field} />
-                <input value={contact.email} disabled={busy} onChange={(e) => setContact((c) => c && { ...c, email: e.target.value })} placeholder="Email" className={field} />
-                <input value={contact.website} disabled={busy} onChange={(e) => setContact((c) => c && { ...c, website: e.target.value })} placeholder="Website" className={field} />
-              </div>
-            )}
+            <div className="space-y-2">
+              {contacts.map((c, i) => {
+                const up = (patch: Partial<Contact>) => setContacts((arr) => arr.map((x, j) => j === i ? { ...x, ...patch } : x));
+                return (
+                  <div key={i} className="rounded-lg border border-border p-2">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-[11px] font-medium text-muted">Contact {i + 1}</span>
+                      <button className="text-[11px] font-medium text-red-400 hover:text-red-600" disabled={busy}
+                        onClick={() => setContacts((arr) => arr.filter((_, j) => j !== i))}>Remove</button>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <input value={c.name} disabled={busy} onChange={(e) => up({ name: e.target.value })} placeholder="Name" className={field} />
+                      <input value={c.role} disabled={busy} onChange={(e) => up({ role: e.target.value })} placeholder="Role (optional)" className={field} />
+                      <input value={c.phone} disabled={busy} onChange={(e) => up({ phone: e.target.value })} placeholder="Phone" className={field} />
+                      <input value={c.email} disabled={busy} onChange={(e) => up({ email: e.target.value })} placeholder="Email" className={field} />
+                      <input value={c.website} disabled={busy} onChange={(e) => up({ website: e.target.value })} placeholder="Website (this person's own)" className={`${field} col-span-2`} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </div>
       </div>

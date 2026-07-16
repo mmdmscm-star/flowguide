@@ -25,7 +25,9 @@ import { CSS } from "@dnd-kit/utilities";
 // Types for editor state
 // ============================================================
 interface EditorContact {
+  id: string;
   name: string;
+  role: string;
   phone: string;
   email: string;
   website: string;
@@ -59,7 +61,7 @@ interface EditorItem {
   photos: EditorPhoto[];
   links: EditorLink[];
   details: EditorDetail[];
-  contact: EditorContact | null;
+  contacts: EditorContact[];
 }
 
 interface EditorSection {
@@ -215,10 +217,10 @@ export function LegacyPacketEditor() {
       details: (data.details || [])
         .filter((d: Record<string, unknown>) => d.item_id === i.id)
         .map((d: Record<string, unknown>) => ({ id: d.id || crypto.randomUUID(), label: d.label || "", value: d.value || "" })),
-      contact: (() => {
-        const c = (data.contacts || []).find((c: Record<string, unknown>) => c.item_id === i.id);
-        return c ? { name: c.name || "", phone: c.phone || "", email: c.email || "", website: c.website || "" } : null;
-      })(),
+      contacts: (data.contacts || [])
+        .filter((c: Record<string, unknown>) => c.item_id === i.id)
+        .sort((a: Record<string, unknown>, b: Record<string, unknown>) => (Number(a.sort_order) || 0) - (Number(b.sort_order) || 0))
+        .map((c: Record<string, unknown>) => ({ id: c.id || crypto.randomUUID(), name: c.name || "", role: c.role || "", phone: c.phone || "", email: c.email || "", website: c.website || "" })),
     }));
     setItems(editorItems);
 
@@ -445,7 +447,7 @@ export function LegacyPacketEditor() {
           photos: [],
           links: [],
           details: [],
-          contact: null,
+          contacts: [],
         },
       ]);
     }
@@ -587,50 +589,47 @@ export function LegacyPacketEditor() {
     );
   }
 
-  function updateItemContact(itemId: string, field: string, value: string) {
-    setItems((prev) =>
-      prev.map((i) =>
-        i.id === itemId
-          ? {
-              ...i,
-              contact: { ...(i.contact || { name: "", phone: "", email: "", website: "" }), [field]: value },
-            }
-          : i
-      )
-    );
-    const item = items.find((i) => i.id === itemId);
-    if (!item) return;
-    const updatedContact = { ...(item.contact || { name: "", phone: "", email: "", website: "" }), [field]: value };
+  // Persist an item's full ordered contacts list (blank rows dropped, order kept).
+  function persistContacts(itemId: string, contacts: EditorContact[]) {
+    const payload = contacts
+      .filter((c) => c.name || c.phone || c.email || c.website)
+      .map((c) => ({ name: c.name, role: c.role, phone: c.phone, email: c.email, website: c.website }));
     debouncedSave(() =>
       fetch("/api/items", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: itemId, contact: updatedContact }),
+        body: JSON.stringify({ id: itemId, contacts: payload }),
       }).then((r) => { if (!r.ok) throw new Error(); })
     );
   }
 
-  function toggleItemContact(itemId: string) {
+  function addItemContact(itemId: string) {
+    // Append a blank contact; not saved until it has content (persistContacts drops blanks).
+    setItems((prev) =>
+      prev.map((i) =>
+        i.id === itemId
+          ? { ...i, contacts: [...i.contacts, { id: crypto.randomUUID(), name: "", role: "", phone: "", email: "", website: "" }] }
+          : i
+      )
+    );
+  }
+
+  function updateItemContact(itemId: string, contactId: string, field: "name" | "role" | "phone" | "email" | "website", value: string) {
+    setItems((prev) =>
+      prev.map((i) =>
+        i.id === itemId ? { ...i, contacts: i.contacts.map((c) => (c.id === contactId ? { ...c, [field]: value } : c)) } : i
+      )
+    );
     const item = items.find((i) => i.id === itemId);
     if (!item) return;
-    if (item.contact) {
-      setItems((prev) => prev.map((i) => (i.id === itemId ? { ...i, contact: null } : i)));
-      debouncedSave(() =>
-        fetch("/api/items", {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ id: itemId, contact: null }),
-        }).then((r) => { if (!r.ok) throw new Error(); })
-      );
-    } else {
-      setItems((prev) =>
-        prev.map((i) =>
-          i.id === itemId
-            ? { ...i, contact: { name: "", phone: "", email: "", website: "" } }
-            : i
-        )
-      );
-    }
+    persistContacts(itemId, item.contacts.map((c) => (c.id === contactId ? { ...c, [field]: value } : c)));
+  }
+
+  function removeItemContact(itemId: string, contactId: string) {
+    setItems((prev) => prev.map((i) => (i.id === itemId ? { ...i, contacts: i.contacts.filter((c) => c.id !== contactId) } : i)));
+    const item = items.find((i) => i.id === itemId);
+    if (!item) return;
+    persistContacts(itemId, item.contacts.filter((c) => c.id !== contactId));
   }
 
   // ============================================================
@@ -1035,8 +1034,9 @@ export function LegacyPacketEditor() {
                       onAddLink={addLink}
                       onUpdateLink={updateLink}
                       onRemoveLink={removeLink}
-                      onToggleContact={toggleItemContact}
+                      onAddContact={addItemContact}
                       onUpdateContact={updateItemContact}
+                      onRemoveContact={removeItemContact}
                       onAddPhoto={addPhoto}
                       onUpdatePhoto={updatePhoto}
                       onRemovePhoto={removePhoto}
@@ -1567,8 +1567,9 @@ function ItemEditor({
   onAddLink,
   onUpdateLink,
   onRemoveLink,
-  onToggleContact,
+  onAddContact,
   onUpdateContact,
+  onRemoveContact,
   onAddPhoto,
   onUpdatePhoto,
   onRemovePhoto,
@@ -1584,8 +1585,9 @@ function ItemEditor({
   onAddLink: (itemId: string) => void;
   onUpdateLink: (itemId: string, linkId: string, field: "url" | "label", value: string) => void;
   onRemoveLink: (itemId: string, linkId: string) => void;
-  onToggleContact: (itemId: string) => void;
-  onUpdateContact: (itemId: string, field: string, value: string) => void;
+  onAddContact: (itemId: string) => void;
+  onUpdateContact: (itemId: string, contactId: string, field: "name" | "role" | "phone" | "email" | "website", value: string) => void;
+  onRemoveContact: (itemId: string, contactId: string) => void;
   onAddPhoto: (itemId: string) => void;
   onUpdatePhoto: (itemId: string, photoId: string, url: string) => void;
   onRemovePhoto: (itemId: string, photoId: string) => void;
@@ -1817,46 +1819,37 @@ function ItemEditor({
             className="w-full px-3 py-2 rounded-lg border border-amber-200 bg-amber-50 text-sm resize-y focus:outline-none focus:ring-2 focus:ring-amber-300 placeholder:text-amber-300"
           />
 
-          {/* Contact */}
+          {/* Contacts — an ordered list; an item may have multiple people. */}
           <div>
-            <button
-              onClick={() => onToggleContact(item.id)}
-              className="text-xs text-accent hover:text-accent-hover font-medium"
-            >
-              {item.contact ? "Remove contact" : "+ Add contact info"}
-            </button>
-            {item.contact && (
-              <div className="grid grid-cols-2 gap-2 mt-2">
-                <input
-                  type="text"
-                  value={item.contact.name}
-                  onChange={(e) => onUpdateContact(item.id, "name", e.target.value)}
-                  placeholder="Contact name"
-                  className="px-2.5 py-1.5 rounded border border-border text-xs focus:outline-none focus:ring-2 focus:ring-accent placeholder:text-gray-300"
-                />
-                <input
-                  type="tel"
-                  value={item.contact.phone}
-                  onChange={(e) => onUpdateContact(item.id, "phone", e.target.value)}
-                  placeholder="Phone"
-                  className="px-2.5 py-1.5 rounded border border-border text-xs focus:outline-none focus:ring-2 focus:ring-accent placeholder:text-gray-300"
-                />
-                <input
-                  type="email"
-                  value={item.contact.email}
-                  onChange={(e) => onUpdateContact(item.id, "email", e.target.value)}
-                  placeholder="Email"
-                  className="px-2.5 py-1.5 rounded border border-border text-xs focus:outline-none focus:ring-2 focus:ring-accent placeholder:text-gray-300"
-                />
-                <input
-                  type="url"
-                  value={item.contact.website}
-                  onChange={(e) => onUpdateContact(item.id, "website", e.target.value)}
-                  placeholder="Website"
-                  className="px-2.5 py-1.5 rounded border border-border text-xs focus:outline-none focus:ring-2 focus:ring-accent placeholder:text-gray-300"
-                />
-              </div>
-            )}
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-medium text-muted">Contacts (people)</span>
+              <button
+                onClick={() => onAddContact(item.id)}
+                className="text-xs text-accent hover:text-accent-hover font-medium"
+              >
+                + Add contact
+              </button>
+            </div>
+            <div className="mt-2 space-y-2">
+              {item.contacts.map((c, ci) => {
+                const cInput = "px-2.5 py-1.5 rounded border border-border text-xs focus:outline-none focus:ring-2 focus:ring-accent placeholder:text-gray-300";
+                return (
+                  <div key={c.id} className="rounded-lg border border-border p-2">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-[11px] font-medium text-muted">Contact {ci + 1}</span>
+                      <button onClick={() => onRemoveContact(item.id, c.id)} className="text-[11px] text-red-400 hover:text-red-600 font-medium">Remove</button>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <input type="text" value={c.name} onChange={(e) => onUpdateContact(item.id, c.id, "name", e.target.value)} placeholder="Name" className={cInput} />
+                      <input type="text" value={c.role} onChange={(e) => onUpdateContact(item.id, c.id, "role", e.target.value)} placeholder="Role (optional)" className={cInput} />
+                      <input type="tel" value={c.phone} onChange={(e) => onUpdateContact(item.id, c.id, "phone", e.target.value)} placeholder="Phone" className={cInput} />
+                      <input type="email" value={c.email} onChange={(e) => onUpdateContact(item.id, c.id, "email", e.target.value)} placeholder="Email" className={cInput} />
+                      <input type="url" value={c.website} onChange={(e) => onUpdateContact(item.id, c.id, "website", e.target.value)} placeholder="Website (this person's own)" className={`${cInput} col-span-2`} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </div>
       )}
