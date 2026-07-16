@@ -36,8 +36,10 @@
 -- parameter here — CREATE OR REPLACE FUNCTION cannot rename an input parameter,
 -- and renaming would break the deployed caller during the window.)
 --
--- Runs safely as a single transaction.
+-- Runs as a single explicit transaction (begin/commit below) — all-or-nothing.
 -- ============================================================================
+
+begin;
 
 -- ----------------------------------------------------------------------------
 -- 1. Additive columns + ordered index.
@@ -354,5 +356,7 @@ $$;
 
 -- Same hardened grant posture as the other content RPCs: reachable only by the
 -- service role (routes call it after their own auth checks).
-revoke all on function public.update_item_content(uuid, uuid, uuid, text, text, text, text, jsonb, jsonb, jsonb, jsonb, jsonb) from public, anon, authenticated, service_role;
-grant execute on function public.update_item_content(uuid, uuid, uuid, text, text, text, text, jsonb, jsonb, jsonb, jsonb, jsonb) to service_role;
+revoke all on function public.update_item_content(uuid, uuid, uuid, text, text, text, text, text, jsonb, jsonb, jsonb, jsonb) from public, anon, authenticated, service_role;
+grant execute on function public.update_item_content(uuid, uuid, uuid, text, text, text, text, text, jsonb, jsonb, jsonb, jsonb) to service_role;
+
+commit;

@@ -90,7 +90,33 @@ test("migration/schema parity: update_item_content body byte-identical + granted
   assert.equal(grantLines.length, 2, "one revoke + one grant");
   assert.ok(grantLines.some((l) => /^revoke all/.test(l)), "revoke all from public/anon/authenticated/service_role");
   assert.ok(grantLines.some((l) => /^grant execute/.test(l) && /service_role/.test(l)), "grant execute to service_role only");
-  assert.ok(grantLines.every((l) => /jsonb, jsonb, jsonb, jsonb\)/.test(l)), "grants reference the 12-arg signature");
+  // Exact signature (3 uuid, 5 text, 4 jsonb) — a wrong type count here would make
+  // the grant target a non-existent function and abort the migration.
+  const SIG = "public.update_item_content(uuid, uuid, uuid, text, text, text, text, text, jsonb, jsonb, jsonb, jsonb)";
+  assert.ok(grantLines.every((l) => l.includes(SIG)), "grants reference the exact 12-arg signature");
+});
+
+test("migration 0011 is wrapped in one explicit transaction (all-or-nothing)", () => {
+  const stmts = migration
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l && !l.startsWith("--"));
+  assert.equal(stmts[0], "begin;", "first executable statement is begin;");
+  assert.equal(stmts[stmts.length - 1], "commit;", "last executable statement is commit;");
+});
+
+test("grant signature matches the update_item_content parameter list exactly", () => {
+  // Derive the type list from the function DEFINITION and assert the grants use it,
+  // so a hand-written grant signature can never drift from the real parameters.
+  const def = body.slice(body.indexOf("("), body.indexOf(")") + 1);
+  const types = def
+    .slice(1, -1)
+    .split(",")
+    .map((p) => p.trim().split(/\s+/)[1]) // "p_name uuid" -> "uuid"
+    .join(", ");
+  assert.equal(types, "uuid, uuid, uuid, text, text, text, text, text, jsonb, jsonb, jsonb, jsonb", "definition is 3 uuid, 5 text, 4 jsonb");
+  const grantLines = migration.split("\n").filter((l) => /on function public\.update_item_content/.test(l));
+  assert.ok(grantLines.length === 2 && grantLines.every((l) => l.includes(`public.update_item_content(${types})`)), "migration grants use the definition's exact type list");
 });
 
 test("0010 update_block_item_content is left intact for the migrate->deploy window (not redefined by 0011)", () => {

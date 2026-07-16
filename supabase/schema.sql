@@ -1434,5 +1434,5 @@ begin
 end;
 $$;
 
-revoke all on function public.update_item_content(uuid, uuid, uuid, text, text, text, text, jsonb, jsonb, jsonb, jsonb, jsonb) from public, anon, authenticated, service_role;
-grant execute on function public.update_item_content(uuid, uuid, uuid, text, text, text, text, jsonb, jsonb, jsonb, jsonb, jsonb) to service_role;
+revoke all on function public.update_item_content(uuid, uuid, uuid, text, text, text, text, text, jsonb, jsonb, jsonb, jsonb) from public, anon, authenticated, service_role;
+grant execute on function public.update_item_content(uuid, uuid, uuid, text, text, text, text, text, jsonb, jsonb, jsonb, jsonb) to service_role;
