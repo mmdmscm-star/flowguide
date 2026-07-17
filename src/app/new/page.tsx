@@ -35,22 +35,23 @@ export default function NewPacketPage() {
       const { packet } = await createRes.json();
       if (!packet) { setError("Could not create packet."); setProcessing(false); return; }
 
-      // 2. AI structure + hydrate
-      const structureRes = await fetch(`/api/packets/${packet.id}/structure`, {
+      // 2. Start a persisted, resumable ingestion run (segments the source; the
+      //    editor drives the chunks and shows real progress, so an ordinary or a
+      //    large source both complete reliably instead of timing out all-at-once).
+      const ing = await fetch(`/api/packets/${packet.id}/ingest`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ rawText: rawText.trim(), packetType }),
+        body: JSON.stringify({ entryPoint: "organize", rawText: rawText.trim(), packetType }),
       });
-
-      if (!structureRes.ok) {
-        const data = await structureRes.json();
-        setError(data.message || data.error || "AI structuring failed. Try again.");
+      const data = await ing.json();
+      if (!ing.ok || !data.runId) {
+        setError(data.message || data.error || "Could not start organizing. Try again.");
         setProcessing(false);
         return;
       }
 
-      // 3. Redirect to editor with AI banner
-      router.push(`/edit/${packet.id}?ai=1`);
+      // 3. Hand off to the editor, which hosts the import progress + resume.
+      router.push(`/edit/${packet.id}?import=${data.runId}`);
     } catch {
       setError("Something went wrong. Please try again.");
       setProcessing(false);

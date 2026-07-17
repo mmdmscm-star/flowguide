@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback, useRef, type ReactNode } from "react";
 import { useRouter, useParams, useSearchParams } from "next/navigation";
 import { CompositionModeControl } from "@/components/editor/composition-mode-control";
+import ImportProgress from "@/components/ImportProgress";
 import {
   DndContext,
   closestCenter,
@@ -137,6 +138,10 @@ export function LegacyPacketEditor() {
   // When set, the AI modal is in "add items to THIS existing section" mode
   // (Operation 1). When null, it is "add new sections" mode (Operation 2).
   const [appendTargetSection, setAppendTargetSection] = useState<{ id: string; title: string } | null>(null);
+  // Active resilient-ingestion run for this packet (Organize / Add with AI). While
+  // set, an import is in progress: the ImportProgress panel drives it and publish
+  // is blocked. Detected on load so a refresh mid-import reconnects and resumes.
+  const [importRunId, setImportRunId] = useState<string | null>(null);
 
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const titleRef = useRef<HTMLTextAreaElement>(null);
@@ -242,6 +247,21 @@ export function LegacyPacketEditor() {
   }, [packetId, router]);
 
   useEffect(() => { loadPacket(); }, [loadPacket]);
+
+  // Reconnect to an in-progress import (from ?import=, or any active run for this
+  // packet) so a refresh mid-import resumes instead of showing an empty packet.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const fromParam = searchParams.get("import");
+      if (fromParam) { if (!cancelled) setImportRunId(fromParam); return; }
+      const res = await fetch(`/api/packets/${packetId}/ingest`);
+      if (!res.ok) return;
+      const data = await res.json();
+      if (!cancelled && data.activeRun?.runId) setImportRunId(data.activeRun.runId);
+    })();
+    return () => { cancelled = true; };
+  }, [packetId, searchParams]);
 
   // ============================================================
   // Auto-save helpers
@@ -750,6 +770,11 @@ export function LegacyPacketEditor() {
   // Publish
   // ============================================================
   async function publishPacket(skipProfileCheck: boolean) {
+    if (importRunId) {
+      setPublishError("An import is still in progress. Finish or discard it before publishing.");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
     setPublishError("");
     const res = await fetch(`/api/packets/${packetId}/publish`, {
       method: "POST",
@@ -797,26 +822,28 @@ export function LegacyPacketEditor() {
     if (!appendText.trim() || appendText.trim().length < 10) return;
     setAppendLoading(true);
     try {
-      // Operation 1: add items into the preselected existing section.
-      // Operation 2 (no target): create new section(s).
-      const url = appendTargetSection
-        ? `/api/packets/${packetId}/sections/${appendTargetSection.id}/append`
-        : `/api/packets/${packetId}/append`;
-      const res = await fetch(url, {
+      // Both "Add with AI" (new sections) and section-level "Add items with AI"
+      // now go through the SAME resilient ingestion pipeline as Organize — a
+      // persisted, resumable run that the ImportProgress panel drives. A small
+      // paste is a one-chunk run; a large one is chunked automatically.
+      const entryPoint = appendTargetSection ? "section_append" : "append";
+      const res = await fetch(`/api/packets/${packetId}/ingest`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ rawText: appendText }),
+        body: JSON.stringify({ entryPoint, rawText: appendText, targetSectionId: appendTargetSection?.id ?? null }),
       });
       const data = await res.json();
-      if (!res.ok) {
-        alert(data.message || data.error || "Failed to add items.");
+      if (res.ok && data.runId) {
+        setImportRunId(data.runId);
+      } else if (res.status === 409 && data.runId) {
+        setImportRunId(data.runId); // an import is already active — reconnect to it
+      } else {
+        alert(data.message || data.error || "Could not start adding items.");
         return;
       }
       setAppendText("");
       setShowAppendModal(false);
       setAppendTargetSection(null);
-      setShowAiBanner(true);
-      await loadPacket();
     } catch {
       alert("Something went wrong. Please try again.");
     } finally {
@@ -888,8 +915,18 @@ export function LegacyPacketEditor() {
         </div>
       )}
 
+      {/* Resilient import in progress (Organize / Add with AI) */}
+      {importRunId && (
+        <ImportProgress
+          packetId={packetId}
+          runId={importRunId}
+          onDone={() => { setImportRunId(null); setShowAiBanner(true); loadPacket(); }}
+          onDiscarded={() => { setImportRunId(null); loadPacket(); }}
+        />
+      )}
+
       {/* AI review banner */}
-      {showAiBanner && (
+      {showAiBanner && !importRunId && (
         <div className="mb-4 p-3 rounded-lg bg-blue-50 border border-blue-200 text-sm text-blue-800 flex items-center justify-between">
           <span>AI organized your info. Review and edit anything before publishing.</span>
           <button
