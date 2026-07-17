@@ -1,7 +1,7 @@
 // Server-side ingestion pipeline helpers: build the persisted plan, process one
 // chunk with a bounded model call, and compute adaptive-split children. One
 // pipeline for all three entry points; a small source is simply a one-chunk run.
-import { segment, splitRange, segmentHash, DEFAULT_BUDGET, SEGMENTER_VERSION } from "./segmentation";
+import { segment, splitRange, segmentHash, isContinuation, DEFAULT_BUDGET, SEGMENTER_VERSION } from "./segmentation";
 import { callStructuringModel } from "./ai-structure";
 import { organizeLeadPrompt, sectionsPrompt, itemsOnlyPrompt } from "./ai-prompts";
 
@@ -32,7 +32,9 @@ function nearestHeading(source: string, offset: number): string {
   return "";
 }
 
-// Build the ordered chunk plan persisted by create_ingestion_run.
+// Build the ordered chunk plan persisted by create_ingestion_run. is_continuation
+// (from segmentation) is the deterministic flag finalize uses to recombine a
+// heading group split across chunks — never by title.
 export function buildRunChunks(source: string) {
   const segs = segment(source, DEFAULT_BUDGET);
   return segs.map((s) => ({
@@ -42,18 +44,23 @@ export function buildRunChunks(source: string) {
     segment_text: s.text,
     segment_hash: s.hash,
     section_hint: nearestHeading(source, s.sourceStart),
+    is_continuation: isContinuation(s.sourceStart, s.text),
   }));
 }
 
 // Children for split_chunk: divide [start,end) at a natural boundary; carry exact
-// slices + hashes so the persisted plan stays self-consistent.
+// slices + hashes + continuation flags so the persisted plan stays self-consistent.
 export function buildSplitChildren(source: string, start: number, end: number) {
-  return splitRange(source, start, end).map((r) => ({
-    source_start: r.start,
-    source_end: r.end,
-    segment_text: source.slice(r.start, r.end),
-    segment_hash: segmentHash(source.slice(r.start, r.end)),
-  }));
+  return splitRange(source, start, end).map((r) => {
+    const text = source.slice(r.start, r.end);
+    return {
+      source_start: r.start,
+      source_end: r.end,
+      segment_text: text,
+      segment_hash: segmentHash(text),
+      is_continuation: isContinuation(r.start, text),
+    };
+  });
 }
 
 export function shouldPresplit(segmentText: string): boolean {

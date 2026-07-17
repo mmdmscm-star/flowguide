@@ -145,6 +145,22 @@ export function segment(source: string, budget: SegmentBudget = DEFAULT_BUDGET):
   return segments;
 }
 
+// Whether a segment's FIRST block is a heading (a single heading line, not a
+// content block). Used to decide continuation below.
+export function firstBlockIsHeading(segmentText: string): boolean {
+  const firstBlock = segmentText.split(/\n[ \t]*\n/)[0]?.trim() || "";
+  return looksLikeHeading(firstBlock);
+}
+
+// A chunk that neither begins at source offset 0 nor begins with a heading is a
+// CONTINUATION — the spillover of the previous chunk's heading group. finalize
+// uses this DETERMINISTIC flag to recombine a heading group split across chunks,
+// never by matching the AI's displayed section titles (which could combine two
+// genuinely separate sections).
+export function isContinuation(sourceStart: number, segmentText: string): boolean {
+  return sourceStart > 0 && !firstBlockIsHeading(segmentText);
+}
+
 // Adaptive re-split: divide a single [start,end) range into 2+ non-overlapping
 // child ranges at the best natural boundary near the midpoint. Used when a chunk
 // still times out / truncates. Prefers a blank line, then a line break, then a

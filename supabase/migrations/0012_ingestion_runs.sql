@@ -6,19 +6,26 @@
 -- ordered set of bounded chunks. Chunk results are STAGED here (transient
 -- processing state), never written to the canonical packet as they arrive; the
 -- whole combined result is applied to the packet in ONE transaction at finalize.
--- The staged source + model results are cleared on finalize/discard so sensitive
--- material is not retained past the run.
+-- Staged source + model results are cleared on finalize/discard.
 --
--- The packet remains the sole canonical product record. ingestion_runs /
--- ingestion_chunks are temporary and are safe to delete after finalization.
+-- Safety posture (v1 corrections):
+--   * Sections are recombined by a DETERMINISTIC continuation flag from the
+--     segmentation plan (is_continuation), NEVER by matching displayed titles.
+--   * Concurrency: at most one active run per packet; a trigger blocks publishing
+--     while a run is active; finalize refuses if the packet's canonical content
+--     changed since the run began (content baseline).
+--   * Discard deletes a packet ONLY when it was explicitly created for this run
+--     (packets.origin_ingestion_run_id), is a draft owned by the caller, and has
+--     no canonical content; otherwise only staged data is cleared.
 --
+-- The packet remains the sole canonical product record.
 -- Runs as a single explicit transaction.
 -- ============================================================================
 
 begin;
 
 -- ----------------------------------------------------------------------------
--- 1. Tables
+-- 1. Tables + the explicit packet lifecycle marker
 -- ----------------------------------------------------------------------------
 create table if not exists public.ingestion_runs (
   id uuid primary key default gen_random_uuid(),
@@ -33,6 +40,8 @@ create table if not exists public.ingestion_runs (
     check (status in ('active','finalizing','finalized','discarded','error')),
   total_chunks int not null default 0,      -- number of LEAF chunks (real work total)
   completed_chunks int not null default 0,
+  baseline_section_count int not null default 0,  -- canonical content at run creation
+  baseline_item_count int not null default 0,
   derived_title text not null default '',   -- organize: title captured from the lead chunk
   derived_client_name text not null default '',
   error text not null default '',
@@ -42,8 +51,8 @@ create table if not exists public.ingestion_runs (
 );
 create index if not exists idx_ingestion_runs_packet on public.ingestion_runs(packet_id);
 create index if not exists idx_ingestion_runs_user on public.ingestion_runs(user_id);
--- At most ONE active/finalizing run per packet — prevents conflicting concurrent
--- imports and makes "resume" unambiguous.
+-- At most ONE active/finalizing run per packet — blocks a conflicting second run
+-- at the database level (not just the UI).
 create unique index if not exists idx_ingestion_runs_one_active
   on public.ingestion_runs(packet_id) where status in ('active','finalizing');
 
@@ -55,7 +64,8 @@ create table if not exists public.ingestion_chunks (
   source_end int not null,
   segment_text text,                -- cleared on finalize/discard
   segment_hash text not null,
-  section_hint text not null default '',  -- nearest preceding heading (organize grouping)
+  section_hint text not null default '',  -- nearest preceding heading (grouping context)
+  is_continuation boolean not null default false, -- spillover of the previous chunk's heading group
   status text not null default 'pending'
     check (status in ('pending','processing','completed','failed','split')),
   attempt_count int not null default 0,
@@ -68,15 +78,44 @@ create table if not exists public.ingestion_chunks (
 );
 create index if not exists idx_ingestion_chunks_run on public.ingestion_chunks(run_id, source_start);
 
+-- Explicit "this packet's canonical content originates from this run" marker, so
+-- discard can safely delete an abandoned initial-import draft without inferring
+-- from entry_point alone.
+alter table public.packets add column if not exists origin_ingestion_run_id uuid;
+
 alter table public.ingestion_runs enable row level security;
 alter table public.ingestion_chunks enable row level security;
--- No anon/authenticated policies: reachable only via the service role (like the
--- rest of FlowGuide's server routes). Service role bypasses RLS.
+-- No anon/authenticated policies: reachable only via the service role.
 
 -- ----------------------------------------------------------------------------
--- 2. create_ingestion_run — validate + persist the plan atomically.
+-- 2. Publish guard trigger — a packet cannot be published while an active or
+--    finalizing ingestion run exists for it. Airtight (any route / direct write).
+-- ----------------------------------------------------------------------------
+create or replace function public.block_publish_during_ingest()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if new.status = 'published' and old.status is distinct from 'published' then
+    if exists (select 1 from public.ingestion_runs where packet_id = new.id and status in ('active','finalizing')) then
+      raise exception 'cannot publish while an import is in progress';
+    end if;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_block_publish_during_ingest on public.packets;
+create trigger trg_block_publish_during_ingest
+  before update on public.packets
+  for each row execute function public.block_publish_during_ingest();
+
+-- ----------------------------------------------------------------------------
+-- 3. create_ingestion_run — validate + persist the plan atomically.
 --    p_chunks: ordered jsonb array of
---      { ordinal, source_start, source_end, segment_text, segment_hash, section_hint }
+--      { ordinal, source_start, source_end, segment_text, segment_hash, section_hint, is_continuation }
 -- ----------------------------------------------------------------------------
 create or replace function public.create_ingestion_run(
   p_owner uuid,
@@ -95,8 +134,11 @@ as $$
 declare
   v_user uuid;
   v_status text;
+  v_mode text;
   v_sec_packet uuid;
   v_run_id uuid;
+  v_base_sections int;
+  v_base_items int;
   c jsonb;
   n int;
 begin
@@ -107,10 +149,15 @@ begin
   n := jsonb_array_length(p_chunks);
   if n < 1 then raise exception 'ingestion: at least one chunk required'; end if;
 
-  select user_id, status into v_user, v_status from public.packets where id = p_packet_id for update;
+  select user_id, status, composition_mode into v_user, v_status, v_mode
+    from public.packets where id = p_packet_id for update;
   if v_user is null then raise exception 'ingestion: packet % not found', p_packet_id; end if;
   if v_user <> p_owner then raise exception 'ingestion: caller does not own packet %', p_packet_id; end if;
   if v_status <> 'draft' then raise exception 'ingestion: packet % is not draft', p_packet_id; end if;
+  -- organize/append create sections; those only make sense on a legacy-mode packet.
+  if p_entry_point in ('organize','append') and v_mode <> 'legacy' then
+    raise exception 'ingestion: % requires legacy composition mode', p_entry_point;
+  end if;
 
   if p_entry_point = 'section_append' then
     if p_target_section_id is null then raise exception 'ingestion: section_append needs a target section'; end if;
@@ -120,19 +167,23 @@ begin
     end if;
   end if;
 
+  -- Content baseline (used by finalize to detect edits during the run).
+  select count(*) into v_base_sections from public.sections where packet_id = p_packet_id;
+  select count(*) into v_base_items from public.items i join public.sections s on s.id = i.section_id where s.packet_id = p_packet_id;
+
   insert into public.ingestion_runs (
     user_id, packet_id, entry_point, target_section_id, source_text, source_hash,
-    segmenter_version, status, total_chunks, completed_chunks
+    segmenter_version, status, total_chunks, completed_chunks, baseline_section_count, baseline_item_count
   ) values (
     p_owner, p_packet_id, p_entry_point,
     case when p_entry_point = 'section_append' then p_target_section_id else null end,
-    p_source_text, p_source_hash, p_segmenter_version, 'active', n, 0
+    p_source_text, p_source_hash, p_segmenter_version, 'active', n, 0, v_base_sections, v_base_items
   ) returning id into v_run_id;
 
   for c in select value from jsonb_array_elements(p_chunks)
   loop
     insert into public.ingestion_chunks (
-      run_id, ordinal, source_start, source_end, segment_text, segment_hash, section_hint, status
+      run_id, ordinal, source_start, source_end, segment_text, segment_hash, section_hint, is_continuation, status
     ) values (
       v_run_id,
       (c->>'ordinal')::int,
@@ -141,18 +192,24 @@ begin
       c->>'segment_text',
       coalesce(c->>'segment_hash',''),
       coalesce(c->>'section_hint',''),
+      coalesce((c->>'is_continuation')::boolean, false),
       'pending'
     );
   end loop;
+
+  -- Mark an empty draft as originating from THIS run so discard can safely remove
+  -- it later. Only when organize, still empty, and not already claimed.
+  if p_entry_point = 'organize' and v_base_sections = 0 then
+    update public.packets set origin_ingestion_run_id = v_run_id
+      where id = p_packet_id and origin_ingestion_run_id is null;
+  end if;
 
   return v_run_id;
 end;
 $$;
 
 -- ----------------------------------------------------------------------------
--- 3. stage_chunk_result — idempotent staging of one chunk's model result.
---    Re-staging an already-completed chunk returns the existing result and does
---    NOT double-count. Serialized by a run-row lock so concurrent posts are safe.
+-- 4. stage_chunk_result — idempotent staging of one chunk's model result.
 -- ----------------------------------------------------------------------------
 create or replace function public.stage_chunk_result(
   p_run_id uuid,
@@ -203,7 +260,7 @@ end;
 $$;
 
 -- ----------------------------------------------------------------------------
--- 4. mark_chunk_failed — record a failed attempt (before a split or a retry).
+-- 5. mark_chunk_failed — record a failed attempt (before a split or a retry).
 -- ----------------------------------------------------------------------------
 create or replace function public.mark_chunk_failed(
   p_run_id uuid, p_owner uuid, p_ordinal int, p_error text
@@ -224,10 +281,8 @@ end;
 $$;
 
 -- ----------------------------------------------------------------------------
--- 5. split_chunk — adaptive subdivision. Marks the parent 'split' and inserts
---    child leaves (new ordinals) whose ranges tile the parent range. Raises past
---    a depth limit so a pathological block yields a recoverable error, not a loop.
---    p_children: ordered jsonb array of { source_start, source_end, segment_text, segment_hash }
+-- 6. split_chunk — adaptive subdivision. p_children: ordered jsonb array of
+--    { source_start, source_end, segment_text, segment_hash, is_continuation }
 -- ----------------------------------------------------------------------------
 create or replace function public.split_chunk(
   p_run_id uuid, p_owner uuid, p_ordinal int, p_children jsonb
@@ -259,15 +314,15 @@ begin
   for ch in select value from jsonb_array_elements(p_children)
   loop
     insert into public.ingestion_chunks (
-      run_id, ordinal, source_start, source_end, segment_text, segment_hash, section_hint, status, split_depth
+      run_id, ordinal, source_start, source_end, segment_text, segment_hash, section_hint, is_continuation, status, split_depth
     ) values (
       p_run_id, v_next, (ch->>'source_start')::int, (ch->>'source_end')::int,
-      ch->>'segment_text', coalesce(ch->>'segment_hash',''), v_hint, 'pending', v_chunk.split_depth + 1
+      ch->>'segment_text', coalesce(ch->>'segment_hash',''), v_hint,
+      coalesce((ch->>'is_continuation')::boolean, false), 'pending', v_chunk.split_depth + 1
     );
     v_next := v_next + 1; v_added := v_added + 1;
   end loop;
 
-  -- total leaf count grows by (children - 1): the split parent stops being a leaf.
   update public.ingestion_runs set total_chunks = total_chunks + (v_added - 1), updated_at = now()
     where id = p_run_id;
 
@@ -276,10 +331,10 @@ end;
 $$;
 
 -- ----------------------------------------------------------------------------
--- 6. finalize_ingestion_run — apply the combined staged result to the canonical
---    packet in ONE transaction, then mark finalized and CLEAR staged material.
---    Idempotent: a second call returns the stored outcome. Any failure rolls the
---    whole thing back (packet + run unchanged).
+-- 7. finalize_ingestion_run — apply the combined staged result to the canonical
+--    packet in ONE transaction, then mark finalized + clear staged material.
+--    Refuses if canonical content changed since the run began. Sections are
+--    recombined by the deterministic is_continuation flag, never by title.
 -- ----------------------------------------------------------------------------
 create or replace function public.finalize_ingestion_run(
   p_run_id uuid, p_owner uuid
@@ -289,10 +344,11 @@ security definer
 set search_path = ''
 as $$
 declare
-  v_run record; v_pstatus text; v_puser uuid;
+  v_run record; v_pstatus text; v_puser uuid; v_sec_packet uuid;
   v_srclen int; v_prev int := 0; leaf record;
+  v_cur_sections int; v_cur_items int;
   v_base_sort int; v_item_base int; v_target_section uuid;
-  v_last_title text := null; v_last_section uuid := null;
+  v_last_section uuid := null; v_first_sec boolean;
   sec jsonb; it jsonb; d jsonb; l jsonb; ph text; ct jsonb;
   v_new_section uuid; v_new_item uuid; di int; li int; pi int; ci int;
   v_sections int := 0; v_items int := 0;
@@ -309,6 +365,15 @@ begin
   if v_puser is null then raise exception 'ingestion: packet not found'; end if;
   if v_puser <> p_owner then raise exception 'ingestion: caller does not own packet'; end if;
   if v_pstatus <> 'draft' then raise exception 'ingestion: packet is not draft (cannot finalize)'; end if;
+
+  -- Content-change detection: refuse if the packet was edited since the run began,
+  -- so a stale/concurrent finalize can't overwrite or silently combine with edits.
+  select count(*) into v_cur_sections from public.sections where packet_id = v_run.packet_id;
+  select count(*) into v_cur_items from public.items i join public.sections s on s.id = i.section_id where s.packet_id = v_run.packet_id;
+  if v_cur_sections <> v_run.baseline_section_count or v_cur_items <> v_run.baseline_item_count then
+    raise exception 'ingestion: packet content changed since the import began (expected %/% sections/items, found %/%)',
+      v_run.baseline_section_count, v_run.baseline_item_count, v_cur_sections, v_cur_items;
+  end if;
 
   -- Coverage/completeness over LEAF chunks (status <> 'split'), ordered by source_start.
   v_srclen := char_length(coalesce(v_run.source_text,''));
@@ -327,17 +392,22 @@ begin
     for leaf in
       select * from public.ingestion_chunks where run_id = p_run_id and status <> 'split' order by source_start
     loop
+      v_first_sec := true;
       for sec in select value from jsonb_array_elements(coalesce(leaf.result->'sections','[]'::jsonb))
       loop
-        if v_last_section is not null and coalesce(sec->>'title','') = coalesce(v_last_title,'') then
-          v_new_section := v_last_section;  -- merge adjacent same-title section across chunks
+        -- Recombine a heading group split across chunks by the DETERMINISTIC
+        -- continuation flag from the plan — never by comparing titles. Only the
+        -- FIRST section of a continuation chunk joins the previous group's section.
+        if v_first_sec and leaf.is_continuation and v_last_section is not null then
+          v_new_section := v_last_section;
         else
           insert into public.sections (packet_id, title, description, sort_order)
             values (v_run.packet_id, coalesce(nullif(sec->>'title',''),'Section'), coalesce(sec->>'description',''), v_base_sort)
             returning id into v_new_section;
           v_base_sort := v_base_sort + 1; v_sections := v_sections + 1;
-          v_last_section := v_new_section; v_last_title := coalesce(sec->>'title','');
         end if;
+        v_last_section := v_new_section; v_first_sec := false;
+
         select coalesce(max(sort_order),-1)+1 into v_item_base from public.items where section_id = v_new_section;
         for it in select value from jsonb_array_elements(coalesce(sec->'items','[]'::jsonb))
         loop
@@ -346,7 +416,6 @@ begin
                     coalesce(it->>'description',''), coalesce(it->>'notes',''), v_item_base)
             returning id into v_new_item;
           v_item_base := v_item_base + 1; v_items := v_items + 1;
-          -- children (mirrors insert_items_into_section)
           di := 0;
           for d in select value from jsonb_array_elements(coalesce(it->'details','[]'::jsonb)) loop
             insert into public.item_details (item_id,label,value,sort_order)
@@ -392,8 +461,8 @@ begin
 
   else  -- section_append: items only, into the named section
     v_target_section := v_run.target_section_id;
-    select packet_id into v_puser from public.sections where id = v_target_section; -- reuse v_puser as scratch
-    if v_puser is null or v_puser <> v_run.packet_id then raise exception 'ingestion: target section no longer valid'; end if;
+    select packet_id into v_sec_packet from public.sections where id = v_target_section;
+    if v_sec_packet is null or v_sec_packet <> v_run.packet_id then raise exception 'ingestion: target section no longer valid'; end if;
     select coalesce(max(sort_order),-1)+1 into v_item_base from public.items where section_id = v_target_section;
     for leaf in
       select * from public.ingestion_chunks where run_id = p_run_id and status <> 'split' order by source_start
@@ -447,9 +516,9 @@ end;
 $$;
 
 -- ----------------------------------------------------------------------------
--- 7. discard_ingestion_run — abandon an import. Clears staged material and, for
---    an 'organize' run whose packet is still empty, removes the orphan draft so
---    no unexplained empty packet is left behind.
+-- 8. discard_ingestion_run — abandon an import. Clears staged material. Deletes
+--    the packet ONLY when it was explicitly created for THIS run and still holds
+--    no canonical content (draft, owner match, 0 sections/items/blocks).
 -- ----------------------------------------------------------------------------
 create or replace function public.discard_ingestion_run(
   p_run_id uuid, p_owner uuid
@@ -458,7 +527,9 @@ language plpgsql
 security definer
 set search_path = ''
 as $$
-declare v_run record; v_secs int; v_deleted_packet boolean := false;
+declare
+  v_run record; v_pstatus text; v_origin uuid; v_secs int; v_items int; v_blocks int;
+  v_deleted_packet boolean := false;
 begin
   select * into v_run from public.ingestion_runs where id = p_run_id for update;
   if v_run.id is null then raise exception 'ingestion: run % not found', p_run_id; end if;
@@ -468,13 +539,19 @@ begin
   update public.ingestion_runs set status='discarded', source_text=null, updated_at=now() where id = p_run_id;
   update public.ingestion_chunks set result=null, segment_text=null, updated_at=now() where run_id = p_run_id;
 
-  if v_run.entry_point = 'organize' then
-    select count(*) into v_secs from public.sections where packet_id = v_run.packet_id;
-    if v_secs = 0 then
-      -- run FK is ON DELETE CASCADE; deleting the empty draft removes the run too.
-      delete from public.packets where id = v_run.packet_id and status = 'draft';
-      v_deleted_packet := true;
-    end if;
+  -- Safe orphan-draft deletion: ALL conditions must hold.
+  select status, origin_ingestion_run_id into v_pstatus, v_origin from public.packets where id = v_run.packet_id for update;
+  select count(*) into v_secs from public.sections where packet_id = v_run.packet_id;
+  select count(*) into v_items from public.items i join public.sections s on s.id = i.section_id where s.packet_id = v_run.packet_id;
+  select count(*) into v_blocks from public.packet_blocks where packet_id = v_run.packet_id;
+
+  if v_run.entry_point = 'organize'
+     and v_origin = p_run_id                 -- packet was created FOR this run
+     and v_pstatus = 'draft'                 -- still a draft
+     and v_secs = 0 and v_items = 0 and v_blocks = 0  -- no canonical / user content
+  then
+    delete from public.packets where id = v_run.packet_id;  -- run cascades away
+    v_deleted_packet := true;
   end if;
 
   return jsonb_build_object('status','discarded','deletedPacket',v_deleted_packet);
@@ -482,7 +559,8 @@ end;
 $$;
 
 -- ----------------------------------------------------------------------------
--- Grants: service-role only, matching the other content RPCs.
+-- Grants: service-role only, matching the other content RPCs. (The trigger
+-- function is invoked by the trigger, not called directly, so it is not granted.)
 -- ----------------------------------------------------------------------------
 revoke all on function public.create_ingestion_run(uuid, uuid, text, uuid, text, text, text, jsonb) from public, anon, authenticated, service_role;
 grant execute on function public.create_ingestion_run(uuid, uuid, text, uuid, text, text, text, jsonb) to service_role;

@@ -15,6 +15,20 @@ export async function POST(request: Request, context: Context) {
   const supabase = createServerClient();
 
   if (action === "publish") {
+    // Reject publishing while an import is in progress (server-side, not just the
+    // UI). The DB trigger (migration 0012) is the hard guard; this returns a clear
+    // message before hitting it.
+    const { data: activeRun } = await supabase
+      .from("ingestion_runs")
+      .select("id")
+      .eq("packet_id", id)
+      .eq("user_id", session.userId)
+      .in("status", ["active", "finalizing"])
+      .maybeSingle();
+    if (activeRun) {
+      return NextResponse.json({ error: "import_in_progress", message: "An import is still in progress. Finish or discard it before publishing." }, { status: 409 });
+    }
+
     // Validate the packet has required content
     const { data: packet } = await supabase
       .from("packets")
