@@ -25,33 +25,25 @@ export default function NewPacketPage() {
     setProcessing(true);
 
     try {
-      // 1. Create the packet with type
-      const createRes = await fetch("/api/packets", {
+      // ONE atomic call creates the draft packet + ingestion run + chunk plan +
+      // origin marker together, so a partial failure can't leave an orphan draft.
+      // The editor then drives the chunks and shows real progress, so an ordinary
+      // or a large source both complete reliably instead of timing out at once.
+      const ing = await fetch("/api/ingest/organize", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: "", packetType }),
+        body: JSON.stringify({ rawText: rawText.trim(), packetType }),
       });
-      if (createRes.status === 401) { router.push("/login"); return; }
-      const { packet } = await createRes.json();
-      if (!packet) { setError("Could not create packet."); setProcessing(false); return; }
-
-      // 2. Start a persisted, resumable ingestion run (segments the source; the
-      //    editor drives the chunks and shows real progress, so an ordinary or a
-      //    large source both complete reliably instead of timing out all-at-once).
-      const ing = await fetch(`/api/packets/${packet.id}/ingest`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ entryPoint: "organize", rawText: rawText.trim(), packetType }),
-      });
+      if (ing.status === 401) { router.push("/login"); return; }
       const data = await ing.json();
-      if (!ing.ok || !data.runId) {
+      if (!ing.ok || !data.packetId || !data.runId) {
         setError(data.message || data.error || "Could not start organizing. Try again.");
         setProcessing(false);
         return;
       }
 
-      // 3. Hand off to the editor, which hosts the import progress + resume.
-      router.push(`/edit/${packet.id}?import=${data.runId}`);
+      // Hand off to the editor, which hosts the import progress + resume.
+      router.push(`/edit/${data.packetId}?import=${data.runId}`);
     } catch {
       setError("Something went wrong. Please try again.");
       setProcessing(false);

@@ -102,6 +102,22 @@ test("splitRange divides at a natural boundary near the midpoint and tiles the r
   assert.ok(src[cut - 1] === "\n" || src[cut] === "\n" || /\s/.test(src[cut] || " "), "cut at whitespace boundary");
 });
 
+test("non-BMP characters (emoji): ranges tile in JS UTF-16 units; last end === source.length", () => {
+  const src = "Recommended 🏡 Communities\n\n" +
+    Array.from({ length: 15 }, (_, i) => `Community ${i} 🌟\n123 Main St 🏠 Santa Rosa\nGreat place ☕ around $4,500/mo.\nWebsite: https://x${i}.example.com`).join("\n\n");
+  const segs = segment(src);
+  let joined = "";
+  for (let i = 0; i < segs.length; i++) {
+    if (i > 0) assert.equal(segs[i].sourceStart, segs[i - 1].sourceEnd, "contiguous");
+    joined += segs[i].text;
+  }
+  assert.equal(joined, src, "reassembles exactly across surrogate-pair characters");
+  // The route stores source_len = src.length (JS UTF-16 units); finalize compares
+  // the summed offsets to it — never to Postgres char_length (code points).
+  assert.equal(segs[segs.length - 1].sourceEnd, src.length, "last end == JS source.length (== stored source_len)");
+  assert.ok(src.length > [...src].length, "sanity: contains non-BMP chars (units > code points)");
+});
+
 test("hash is stable and length-tagged", () => {
   assert.equal(segmentHash("abc"), segmentHash("abc"));
   assert.notEqual(segmentHash("abc"), segmentHash("abd"));

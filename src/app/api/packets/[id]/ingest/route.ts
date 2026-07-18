@@ -39,7 +39,8 @@ export async function POST(request: Request, context: Context) {
   const rawText = typeof body.rawText === "string" ? body.rawText.trim() : "";
   const targetSectionId = body.targetSectionId ?? null;
 
-  if (!["organize", "append", "section_append"].includes(entryPoint)) {
+  // Organize creates its own packet atomically via /api/ingest/organize.
+  if (!["append", "section_append"].includes(entryPoint)) {
     return NextResponse.json({ error: "bad entryPoint" }, { status: 400 });
   }
   if (rawText.length < 10) return NextResponse.json({ error: "Paste more text first." }, { status: 400 });
@@ -69,6 +70,7 @@ export async function POST(request: Request, context: Context) {
     p_target_section_id: targetSectionId,
     p_source_text: rawText,
     p_source_hash: segmentHash(rawText),
+    p_source_len: rawText.length, // JS UTF-16 code-unit length (matches chunk offsets)
     p_segmenter_version: SEGMENTER_VERSION,
     p_chunks: chunks,
   });
