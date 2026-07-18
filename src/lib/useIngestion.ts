@@ -77,9 +77,21 @@ export function useIngestion(packetId: string, opts?: { onComplete?: () => void 
 
       const next = leaves.find((c) => c.status === "pending" || c.status === "failed");
       if (!next) {
+        // A chunk claimed by a still-in-flight request is 'processing', not
+        // pending. Finalizing now would fail with "chunk N not completed". This
+        // happens on reconnect (refresh mid-import): the pre-refresh worker is
+        // still running server-side. Wait for it — the lease guarantees the
+        // chunk becomes reclaimable if that worker never returns.
+        if (leaves.some((c) => c.status === "processing")) {
+          await sleep(RETRY_BACKOFF_MS);
+          continue;
+        }
         setState((s) => ({ ...s, phase: "combining" }));
         const fin = await postJSON(`/api/ingest/${runId}/finalize`, {});
         if (fin.data?.ok) { setState((s) => ({ ...s, phase: "done", done: run.totalChunks, total: run.totalChunks })); opts?.onComplete?.(); return; }
+        // 409 means "not every part is done yet" — recoverable, so keep driving
+        // instead of surfacing it as a failure.
+        if (fin.status === 409) { await sleep(RETRY_BACKOFF_MS); continue; }
         setState((s) => ({ ...s, phase: "error", error: fin.data?.message || fin.data?.error || "Could not combine the results." }));
         return;
       }

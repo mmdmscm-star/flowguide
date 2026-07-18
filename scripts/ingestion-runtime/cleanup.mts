@@ -18,9 +18,13 @@ const unsafe = (victims ?? []).filter((v: any) => !/^flowguide-rt-\d+(-other)?@d
 if (unsafe.length) { console.error("ABORT — non-disposable email matched:", unsafe); process.exit(1); }
 
 for (const v of victims ?? []) {
+  // magic_links key off email, not a user FK, so they do not cascade.
+  await svc.from("magic_links").delete().eq("email", v.email);
   const { error } = await svc.from("users").delete().eq("id", v.id);
   if (error) console.error(`  delete ${v.id} failed: ${errText(error)}`);
 }
+// Any magic link minted for a disposable address, even if its user is already gone.
+await svc.from("magic_links").delete().like("email", "flowguide-rt-%@disposable.invalid");
 
 console.log("\n=== BASELINE RESTORATION ===");
 const after = await census();
@@ -41,5 +45,12 @@ check("no ingestion_runs left behind", leftRuns === 0, `${leftRuns}`);
 check("no ingestion_chunks left behind", leftChunks === 0, `${leftChunks}`);
 const { count: leftUsers } = await svc.from("users").select("*", { count: "exact", head: true }).like("email", "%@disposable.invalid");
 check("no disposable users left behind", leftUsers === 0, `${leftUsers}`);
+const { count: leftLinks } = await svc.from("magic_links").select("*", { count: "exact", head: true }).like("email", "%@disposable.invalid");
+check("no disposable magic links left behind", leftLinks === 0, `${leftLinks}`);
+const { count: leftSessions } = await svc.from("sessions").select("*", { count: "exact", head: true });
+console.log(`  sessions remaining (genuine): ${leftSessions}`);
+// No staged source text may survive anywhere.
+const { data: staleRuns } = await svc.from("ingestion_runs").select("id, source_text");
+check("no staged source text anywhere", (staleRuns ?? []).every((r: any) => !r.source_text), `${(staleRuns ?? []).filter((r: any) => r.source_text).length} runs still hold source`);
 
 process.exit(summary("CLEANUP") > 0 ? 1 : 0);

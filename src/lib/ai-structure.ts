@@ -137,6 +137,26 @@ export async function callStructuringModel(opts: {
         };
       }
 
+      // Billing/auth failures are PERMANENT for this key — retrying cannot fix
+      // them. Flattening them to a generic 502 made the ingestion orchestrator
+      // treat them as transient: it retried, then subdivided, then subdivided
+      // again until split_depth was exhausted and the whole import died with
+      // "too small to subdivide further". Surface them as their own condition so
+      // the caller fails fast with something the professional can act on.
+      const billingOrAuth = structuredCode === 402 || aiRes.status === 402
+        ? "credits" : structuredCode === 401 || aiRes.status === 401 || structuredCode === 403 || aiRes.status === 403
+        ? "auth" : null;
+      if (billingOrAuth) {
+        return {
+          ok: false,
+          status: 402,
+          error: billingOrAuth === "credits" ? "ai_credits_exhausted" : "ai_key_rejected",
+          message: billingOrAuth === "credits"
+            ? "The AI account is out of credits, so this couldn't be organized. Add credits and retry — your text was not lost."
+            : "The AI service rejected FlowGuide's credentials, so this couldn't be organized. Your text was not lost.",
+        };
+      }
+
       return { ok: false, status: 502, error: "AI service error. Please try again." };
     }
 

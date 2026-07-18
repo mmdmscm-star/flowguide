@@ -4,6 +4,7 @@
 import { segment, splitRange, segmentHash, isContinuation, DEFAULT_BUDGET, SEGMENTER_VERSION } from "./segmentation";
 import { callStructuringModel } from "./ai-structure";
 import { organizeLeadPrompt, sectionsPrompt, itemsOnlyPrompt } from "./ai-prompts";
+import { validateEntryPointResult } from "./ingest-validate";
 
 export { SEGMENTER_VERSION };
 export type EntryPoint = "organize" | "append" | "section_append";
@@ -100,12 +101,14 @@ export async function processSegment(opts: {
   }
 
   const data = res.data as Record<string, unknown>;
-  if (entryPoint === "section_append") {
-    if (!Array.isArray((data as { items?: unknown }).items)) return { kind: "error", status: 502, message: "AI returned no items." };
-    return { kind: "ok", result: { items: (data as { items: unknown[] }).items } };
-  }
-  if (!Array.isArray((data as { sections?: unknown }).sections)) return { kind: "error", status: 502, message: "AI returned no sections." };
-  const out: ProcessOutcome = { kind: "ok", result: { sections: (data as { sections: unknown[] }).sections } };
+  // Entry-point-aware shape validation BEFORE staging. Without this, a wrong or
+  // empty shape stages cleanly and finalizes to zero content — a "successful"
+  // import that added nothing. See ingest-validate.ts.
+  const valid = validateEntryPointResult(entryPoint, data);
+  if (!valid.ok) return { kind: "error", status: 502, message: valid.message };
+
+  if (entryPoint === "section_append") return { kind: "ok", result: valid.result };
+  const out: ProcessOutcome = { kind: "ok", result: valid.result };
   if (entryPoint === "organize" && isLead) {
     out.title = typeof (data as { title?: unknown }).title === "string" ? (data as { title: string }).title : undefined;
     out.clientName = typeof (data as { clientName?: unknown }).clientName === "string" ? (data as { clientName: string }).clientName : undefined;

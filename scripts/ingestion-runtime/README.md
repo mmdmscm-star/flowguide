@@ -62,3 +62,28 @@ Containment is structural, not conventional:
   `result->'items'`. Supplying the wrong shape finalizes to a silent no-op.
 - Packets must be created in legacy mode (DB trigger); blocks mode is reachable
   only via `convert_packet_to_blocks`, and sections are frozen afterwards.
+
+## Acceptance pass (end-to-end, real HTTP + real model)
+
+`e2e.mts` is the shared driver: it mints a disposable user + session and mirrors
+the client orchestrator in `src/lib/useIngestion.ts`, so the code path under test
+is the one the editor uses.
+
+- `acceptance-model.mts` — the five real product flows against the **real model**
+  (Organize at ~40 items, a larger multi-chunk fixture, a one-chunk fixture,
+  general Add with AI, section-level Add items with AI). Records chunk counts,
+  per-chunk model duration, HTTP statuses, section/item counts, and fidelity
+  (name/link/phone/address recall and source ordering) against the generator's
+  ground truth in `docs/investigations/fixtures/`.
+- `acceptance-orch.mts` — orchestration and recovery, using deterministic fault
+  injection (`src/lib/test-faults.ts`, inert unless `FLOWGUIDE_TEST_FAULT_FILE`
+  is set outside production).
+- `ui-session.mts` — mints a real magic link so a browser can authenticate through
+  the product's own `/api/auth/verify` flow for the manual UI pass.
+
+Both acceptance scripts need a running dev server with `FLOWGUIDE_TEST_FAULT_FILE`
+set, and **consume real model credits**. Scoring notes:
+
+- Fixture names repeat with a `" 2"` suffix past index 29, so substring matching
+  maps late items onto early indices. `matchIndex()` resolves exact-first, then
+  longest — a naive `includes()` reports a spurious ordering failure.
