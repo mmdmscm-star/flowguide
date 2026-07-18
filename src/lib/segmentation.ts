@@ -14,14 +14,29 @@
 // 60s Vercel limit, rather than approaching it.
 // ============================================================
 
-export const SEGMENTER_VERSION = "seg-v1";
+// Bumped with the seg-v2 budget below: the same source now plans into more,
+// smaller chunks. Recorded per run, so in-flight runs keep their persisted plan.
+export const SEGMENTER_VERSION = "seg-v2";
 
 export interface SegmentBudget {
   maxItems: number;
   maxChars: number;
 }
 
-export const DEFAULT_BUDGET: SegmentBudget = { maxItems: 10, maxChars: 6000 };
+// seg-v2 budget, derived from measured acceptance timings rather than guessed.
+//
+// Under seg-v1 (maxItems 10 / maxChars 6000) chunks were ITEM-capped at the
+// acceptance fixture's density (~405 chars/item, so ~4,000 chars per chunk), and
+// the worst observed model call took 37.8s against a 60s function ceiling — only
+// ~1.6x headroom, which a slow provider day would erase. Per-item cost at that
+// worst case was ~3.8s.
+//
+// Targeting an ordinary chunk in the 20-30s band: 6 items x ~3.8s ~= 23s worst,
+// ~11-19s typical. maxChars is scaled to keep prose-dense (char-capped) chunks
+// doing comparable work to a 6-7 item chunk. The tradeoff is deliberately more
+// chunks: each is independently claimed, retried and resumable, so extra chunks
+// cost wall-clock and calls, while approaching the ceiling costs the whole run.
+export const DEFAULT_BUDGET: SegmentBudget = { maxItems: 6, maxChars: 3800 };
 
 export interface Segment {
   ordinal: number;

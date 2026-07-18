@@ -5,14 +5,16 @@
 // acceptance-model.mts use the real model.
 import {
   api, drive, packetContent, newMetrics, bump, organize,
-  TAG, makeSource, check, summary, svc, errText,
+  TAG, makeSource, check, summary, svc, errText, modelCalls,
 } from "./e2e.mts";
 import { writeFileSync } from "node:fs";
 
 const FAULTS = process.env.FLOWGUIDE_TEST_FAULT_FILE!;
 const setFaults = (spec: object) => writeFileSync(FAULTS, JSON.stringify(spec));
 const clearFaults = () => setFaults({});
-const SRC = makeSource(24); // reliably multi-chunk
+// Smallest fixture that still gives a genuine MIDDLE chunk (>=3) under seg-v2,
+// so retry/resume/split are proven without paying for a large run.
+const SRC = makeSource(12);
 const evidence: any = {};
 
 async function startOrganize(label: string, source = SRC) {
@@ -217,6 +219,72 @@ console.log("\n[6] structurally wrong model output is a visible, retryable error
   evidence.shape = { recoveredItems: content.items.length };
 }
 
+// ------------------------------------------------- 7. finalize rollback
+console.log("\n[7] a refused finalization rolls back completely (no partial write)");
+{
+  clearFaults();
+  const start = await startOrganize("rollback");
+  const runId = start.data.runId;
+  const packetId = start.data.packetId;
+  const m = newMetrics("rollback", SRC.length);
+
+  // Complete every chunk, but do NOT let the loop finalize yet.
+  const st0 = await api(`/api/ingest/${runId}`);
+  for (const c of st0.data.chunks) {
+    await api(`/api/ingest/${runId}/chunks/${c.ordinal}`, { method: "POST" });
+  }
+  const ready = await api(`/api/ingest/${runId}`);
+  const allDone = ready.data.chunks.every((c: any) => c.status === "completed");
+  check("all chunks staged and ready to finalize", allDone, JSON.stringify(ready.data.chunks.map((c: any) => c.status)));
+
+  // Edit the packet concurrently: content_rev moves, so finalize must refuse.
+  await svc.from("packets").update({ title: "edited during import" }).eq("id", packetId);
+  const fin = await api(`/api/ingest/${runId}/finalize`, { method: "POST" });
+  check("finalize refused after a concurrent edit", fin.status >= 400, `${fin.status} ${JSON.stringify(fin.data).slice(0, 120)}`);
+  check("refusal message is human, not raw SQL", !/content_rev|ingestion:/i.test(String(fin.data?.message ?? "")), JSON.stringify(fin.data).slice(0, 140));
+
+  const content = await packetContent(packetId);
+  check("ROLLBACK: not one section was written", content.secs.length === 0, `${content.secs.length} sections`);
+  check("ROLLBACK: not one item was written", content.items.length === 0, `${content.items.length} items`);
+  const runRow = (await svc.from("ingestion_runs").select("status").eq("id", runId).maybeSingle()).data;
+  check("run is not left in a finalized state", runRow?.status !== "finalized", String(runRow?.status));
+  const chunksStill = await chunkRows(runId);
+  check("staged results survive the refusal (retryable, nothing lost)", chunksStill.every((c: any) => c.status === "completed"), JSON.stringify(chunksStill.map((c: any) => c.status)));
+  evidence.rollback = { status: fin.status, sections: content.secs.length, items: content.items.length };
+}
+
+// ------------------------------------------------- 8. permanent provider failure
+console.log("\n[8] a permanent 401/402/403 neither retries nor subdivides");
+for (const status of [402, 401, 403]) {
+  clearFaults();
+  const start = await startOrganize(`permanent-${status}`);
+  const runId = start.data.runId;
+  const packetId = start.data.packetId;
+  const beforeChunks = (await chunkRows(runId)).length;
+  setFaults({ runId, permanent: { "0": status } });
+
+  const first = await api(`/api/ingest/${runId}/chunks/0`, { method: "POST" });
+  check(`[${status}] chunk request fails with the provider status`, first.status === status, `${first.status} ${JSON.stringify(first.data).slice(0, 100)}`);
+  const row1 = (await chunkRows(runId)).find((c: any) => c.ordinal === 0);
+  check(`[${status}] chunk recorded as failed`, row1.status === "failed", String(row1.status));
+  check(`[${status}] failure is tagged permanent, not transient`, String(row1.error).startsWith("[permanent]"), String(row1.error).slice(0, 60));
+
+  // Drive it again: must NOT subdivide and must NOT keep retrying.
+  const second = await api(`/api/ingest/${runId}/chunks/0`, { method: "POST" });
+  check(`[${status}] second attempt still refuses`, second.status === 402 || second.status === status, `${second.status}`);
+  check(`[${status}] second attempt reports it as permanent`, second.data?.permanent === true, JSON.stringify(second.data).slice(0, 120));
+  const rows2 = await chunkRows(runId);
+  check(`[${status}] NO subdivision occurred`, rows2.length === beforeChunks && !rows2.some((c: any) => c.split_depth > 0), `${rows2.length} chunks (was ${beforeChunks})`);
+  check(`[${status}] chunk still failed, not split`, rows2.find((c: any) => c.ordinal === 0).status === "failed", String(rows2.find((c: any) => c.ordinal === 0).status));
+
+  const content = await packetContent(packetId);
+  check(`[${status}] canonical packet untouched`, content.secs.length === 0 && content.items.length === 0, `${content.secs.length}/${content.items.length}`);
+  evidence[`permanent${status}`] = { chunks: rows2.length, split: rows2.some((c: any) => c.split_depth > 0) };
+  clearFaults();
+}
+
 clearFaults();
+console.log(`\nreal model calls billed in this script: ${modelCalls()}`);
+evidence.realModelCalls = modelCalls();
 writeFileSync(new URL("./evidence-orch.json", import.meta.url), JSON.stringify(evidence, null, 2));
 process.exit(summary("ORCHESTRATION & RECOVERY") > 0 ? 1 : 0);

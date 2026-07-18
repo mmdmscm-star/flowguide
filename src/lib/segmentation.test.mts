@@ -121,5 +121,19 @@ test("non-BMP characters (emoji): ranges tile in JS UTF-16 units; last end === s
 test("hash is stable and length-tagged", () => {
   assert.equal(segmentHash("abc"), segmentHash("abc"));
   assert.notEqual(segmentHash("abc"), segmentHash("abd"));
-  assert.equal(SEGMENTER_VERSION, "seg-v1");
+  // Pinned deliberately: changing the budget changes how a source plans into
+  // chunks, so it must come with a conscious version bump.
+  assert.equal(SEGMENTER_VERSION, "seg-v2");
+});
+
+// The budget exists to keep ONE model call comfortably inside the 60s function
+// ceiling. Measured worst case under seg-v1 was 37.8s at 10 items (~3.8s/item);
+// seg-v2 trades more chunks for headroom.
+test("the default budget keeps a worst-case chunk well under the function ceiling", () => {
+  const WORST_SECONDS_PER_ITEM = 3.8; // measured, seg-v1 acceptance run
+  const projected = DEFAULT_BUDGET.maxItems * WORST_SECONDS_PER_ITEM;
+  assert.ok(projected <= 30, `projected worst chunk ${projected.toFixed(1)}s should be <= 30s`);
+  assert.ok(60 / projected >= 2.5, `headroom ${(60 / projected).toFixed(2)}x should be >= 2.5x`);
+  // Chars must stay in step with items or prose-dense sources reintroduce the risk.
+  assert.ok(DEFAULT_BUDGET.maxChars <= DEFAULT_BUDGET.maxItems * 700, "maxChars scaled to maxItems");
 });

@@ -27,12 +27,32 @@ if (serr) { console.error("session:", errText(serr)); process.exit(1); }
 const COOKIE = `flowguide_session=${token}`;
 console.log(`disposable user ${UID}  (${TAG})\nbase ${BASE}\n`);
 
+// ---------------------------------------------------------------- safety cap
+// A REAL 401/402/403 means the provider account is rejected or out of credits.
+// Retrying cannot help and every further chunk request burns nothing but time,
+// so the whole pass halts at the first one. Injected permanent faults (scenario
+// 11) carry a marker and are exempt.
+export class PermanentProviderFailure extends Error {}
+const INJECTED_PERMANENT = "Injected permanent provider failure";
+let realModelCalls = 0;
+export const modelCalls = () => realModelCalls;
+export const countModelCall = () => { realModelCalls++; };
+
 async function api(path: string, init: RequestInit = {}) {
   const r = await fetch(`${BASE}${path}`, {
     ...init,
     headers: { "Content-Type": "application/json", Cookie: COOKIE, ...(init.headers || {}) },
   });
   const data = await r.json().catch(() => ({}));
+  if ([401, 402, 403].includes(r.status)) {
+    const msg = String(data?.message ?? data?.error ?? "");
+    if (!msg.includes(INJECTED_PERMANENT)) {
+      throw new PermanentProviderFailure(
+        `HALTED: real provider ${r.status} on ${path} — ${msg.slice(0, 160)}. ` +
+        `Made ${realModelCalls} real model calls before halting.`,
+      );
+    }
+  }
   return { status: r.status, data };
 }
 
@@ -79,7 +99,7 @@ async function drive(runId: string, m: Metrics, opts: { stopAfterCompleted?: num
     const r = await api(`/api/ingest/${runId}/chunks/${next.ordinal}`, { method: "POST" });
     const ms = performance.now() - t0;
     bump(m, r.status);
-    if (r.status === 200 && r.data?.status === "completed") { m.chunkMs.push(ms); m.modelCalls++; continue; }
+    if (r.status === 200 && r.data?.status === "completed") { m.chunkMs.push(ms); m.modelCalls++; countModelCall(); continue; }
     if (r.status === 200 && r.data?.status === "split") { m.splits++; m.adaptive++; continue; }
     if (r.status === 200 && r.data?.status === "processing") { m.retries++; await new Promise((x) => setTimeout(x, 1500)); continue; }
     if (r.status >= 500 || r.status === 409) { m.retries++; await new Promise((x) => setTimeout(x, 1200)); continue; }

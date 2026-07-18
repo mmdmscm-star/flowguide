@@ -31,7 +31,13 @@ type Spec = {
   truncate?: number[];
   wrongShape?: number[];
   emptyResult?: number[];
+  /** ordinal -> HTTP status (401/402/403): a permanent provider rejection. */
+  permanent?: Record<string, number>;
 };
+
+// Marks an injected permanent failure so an acceptance harness can tell it apart
+// from a REAL provider 402 (which must halt the whole pass immediately).
+export const INJECTED_PERMANENT = "Injected permanent provider failure";
 
 function loadSpec(): Spec | null {
   if (process.env.NODE_ENV === "production") return null;
@@ -48,6 +54,13 @@ export function nextFault(runId: string, ordinal: number, attempt: number): Faul
   const spec = loadSpec();
   if (!spec) return null;
   if (spec.runId && spec.runId !== runId) return null;
+
+  // Permanent rejections are checked first: they must not be masked by a
+  // transient rule on the same ordinal.
+  const permStatus = spec.permanent?.[String(ordinal)];
+  if (typeof permStatus === "number") {
+    return { kind: "error", status: permStatus, message: `${INJECTED_PERMANENT} (${permStatus}).` };
+  }
 
   const failFor = spec.failAttempts?.[String(ordinal)];
   if (typeof failFor === "number" && attempt <= failFor) {

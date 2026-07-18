@@ -2,13 +2,19 @@
 // the real configured model. No fault injection.
 import {
   api, drive, packetContent, newMetrics, bump, report, organize, results,
-  UID, TAG, makeSource, check, summary, svc, errText,
+  UID, TAG, makeSource, check, summary, svc, errText, modelCalls,
 } from "./e2e.mts";
+import { root } from "./lib.mts";
 import { writeFileSync } from "node:fs";
+const { buildRunChunks } = await import(`${root}/src/lib/ingestion.ts`);
 
 const FIXTURE_40 = makeSource(40);
-const FIXTURE_BIG = makeSource(110);
 const FIXTURE_SMALL = makeSource(2);
+// The 110-item fixture is deliberately NOT run here. Under seg-v2 it plans into
+// 19 chunks, and because it comes from the same generator its per-chunk density
+// (and therefore per-chunk duration) is identical to the 40-item fixture. Running
+// it would spend ~19 model calls to re-measure a number the 7-chunk run already
+// establishes. Chunk-count scaling is verified locally instead, with no calls.
 
 // Ground truth the generator guarantees, for fidelity scoring.
 const { community } = await import(
@@ -88,6 +94,9 @@ const evidence: any = {};
 // ---------------------------------------------------------------- 1. 40 items
 console.log("[1] Organize with AI — original ~40-item fixture (REAL MODEL)");
 {
+  const plan40 = buildRunChunks(FIXTURE_40);
+  evidence.maxChunkChars40 = Math.max(...plan40.map((c: any) => c.segment_text.length));
+  console.log(`    planned ${plan40.length} chunks, largest ${evidence.maxChunkChars40} chars (seg-v2)`);
   const r = await organize("organize-40", FIXTURE_40);
   check("[40] run finalized", r.outcome === "finalized", String(r.outcome) + " " + JSON.stringify((r as any).driveInfo ?? {}).slice(0, 200));
   report(r.m);
@@ -105,27 +114,22 @@ console.log("[1] Organize with AI — original ~40-item fixture (REAL MODEL)");
     evidence.f40 = { metrics: r.m, fidelity: f, order: o, sections: c.secs.length, items: c.items.length };
   }
   const slow = Math.max(0, ...r.m.chunkMs);
-  check("[40] slowest model chunk far under the 60s boundary", slow < 45000, `${(slow / 1000).toFixed(1)}s`);
+  // seg-v2 target: an ordinary chunk lands in the 20-30s band with >= 2x headroom.
+  check("[40] slowest chunk within the seg-v2 design target (<=30s)", slow <= 30000, `${(slow / 1000).toFixed(1)}s`);
+  check("[40] slowest chunk keeps >= 2x headroom to the 60s ceiling", slow > 0 && 60000 / slow >= 2, `${(60000 / Math.max(slow,1)).toFixed(2)}x`);
 }
 
-// ---------------------------------------------------------------- 2. larger
-console.log("\n[2] Organize with AI — substantially larger fixture (REAL MODEL)");
+// ------------------------------------------------- 2. chunk scaling (no calls)
+console.log("\n[2] large-source chunk scaling — verified locally, zero model calls");
 {
-  const r = await organize("organize-big", FIXTURE_BIG);
-  check("[big] run finalized", r.outcome === "finalized", String(r.outcome) + " " + JSON.stringify((r as any).driveInfo ?? {}).slice(0, 200));
-  report(r.m);
-  check("[big] required more chunks than the 40-item run", r.m.initialChunks > (evidence.f40?.metrics?.initialChunks ?? 0), `${r.m.initialChunks}`);
-  if (r.packetId) {
-    const c = await packetContent(r.packetId);
-    const f = fidelity("big", c, 110);
-    const o = orderScore(c, 110);
-    check("[big] produced a plausible number of items", c.items.length >= 90, `${c.items.length} items`);
-    check("[big] name recall >= 85%", f.nameHits / 110 >= 0.85, `${f.nameHits}/110`);
-    check("[big] source order largely preserved", o.best / Math.max(1, o.total) >= 0.8, `${o.best}/${o.total}`);
-    evidence.fBig = { metrics: r.m, fidelity: f, order: o, sections: c.secs.length, items: c.items.length };
-  }
-  const slow = Math.max(0, ...r.m.chunkMs);
-  check("[big] slowest model chunk far under the 60s boundary", slow < 45000, `${(slow / 1000).toFixed(1)}s`);
+  const big = makeSource(110);
+  const plan = buildRunChunks(big);
+  const lens = plan.map((c: any) => c.segment_text.length);
+  console.log(`    110 items = ${big.length} chars -> ${plan.length} chunks, largest ${Math.max(...lens)} chars`);
+  check("large source plans into many bounded chunks", plan.length >= 15, `${plan.length} chunks`);
+  check("no planned chunk exceeds the seg-v2 char budget envelope", Math.max(...lens) <= 3800, `${Math.max(...lens)}`);
+  check("large-source chunk size matches the measured 40-item run", Math.abs(Math.max(...lens) - evidence.maxChunkChars40) < 400, `${Math.max(...lens)} vs ${evidence.maxChunkChars40}`);
+  evidence.bigPlan = { chars: big.length, chunks: plan.length, maxChunkChars: Math.max(...lens) };
 }
 
 // ---------------------------------------------------------------- 3. one chunk
@@ -207,12 +211,14 @@ console.log("\n[5] Section-level 'Add items with AI' on a legacy packet (REAL MO
   }
 }
 
-console.log("\n=== SLOWEST MODEL CHUNK ACROSS ALL REAL-MODEL RUNS ===");
+console.log("\n=== TIMING + COST ACROSS ALL REAL-MODEL RUNS ===");
 const allChunks = results.flatMap((r) => r.chunkMs);
 const slowest = Math.max(0, ...allChunks);
 console.log(`  slowest single chunk: ${(slowest / 1000).toFixed(2)}s over ${allChunks.length} model calls (60s boundary)`);
 console.log(`  median chunk: ${(([...allChunks].sort((a, b) => a - b)[Math.floor(allChunks.length / 2)] ?? 0) / 1000).toFixed(2)}s`);
-check("NO model request approached the 60s failure boundary", slowest < 45000, `${(slowest / 1000).toFixed(1)}s`);
+check("NO model request approached the 60s failure boundary", slowest <= 30000, `${(slowest / 1000).toFixed(1)}s`);
+console.log(`  real model calls billed in this script: ${modelCalls()}`);
+evidence.realModelCalls = modelCalls();
 
 evidence.slowestChunkMs = slowest;
 evidence.allRuns = results;
