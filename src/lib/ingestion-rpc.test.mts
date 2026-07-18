@@ -121,6 +121,57 @@ test("create_ingestion_run (append/section_append) captures baseline_content_rev
   assert.match(b, /source_len/, "stores source_len");
 });
 
+// Section-level "Add items with AI" exists ONLY in the legacy editor; the block
+// editor renders no AI-append control, and /edit/[id] branches strictly on
+// composition_mode so a block packet never reaches that UI. Finalization for both
+// append entry points writes sections/items, which a block packet does not render.
+// So both are legacy-only, enforced at the DB and restated at the route.
+test("append and section_append are legacy-only (block packets rejected at the DB)", () => {
+  const b = fnBody(mig, "create_ingestion_run");
+  assert.match(b, /p_entry_point in \('append','section_append'\) and v_mode <> 'legacy'[\s\S]*raise exception/, "both append entry points require legacy mode");
+  // The mode is read under the same packet lock as ownership/status.
+  assert.match(b, /composition_mode, content_rev into v_user, v_status, v_mode, v_rev[\s\S]*from public\.packets where id = p_packet_id for update/, "mode read under the packet lock");
+  const guard = b.search(/v_mode <> 'legacy'/);
+  const insert = b.search(/insert into public\.ingestion_runs/);
+  assert.ok(guard !== -1 && insert !== -1 && guard < insert, "rejected before any run row is created");
+});
+
+test("the ingest route rejects non-legacy packets before creating a run", () => {
+  const route = readFileSync(join(root, "src/app/api/packets/[id]/ingest/route.ts"), "utf8");
+  assert.match(route, /composition_mode !== "legacy"/, "route checks composition mode");
+  assert.match(route, /unsupported_composition_mode/, "explicit error code");
+  const guard = route.search(/composition_mode !== "legacy"/);
+  const rpc = route.search(/rpc\("create_ingestion_run"/);
+  assert.ok(guard !== -1 && rpc !== -1 && guard < rpc, "checked before the RPC call");
+  // Owner-scoped read: a packet the caller does not own must not be probed for mode.
+  assert.match(route, /\.eq\("user_id", session\.userId\)[\s\S]{0,80}maybeSingle/, "mode lookup is owner-scoped");
+});
+
+// The older single-pass section append route has no client callers left, but it
+// still reaches insert_items_into_section, so a direct call must not be able to
+// write sections/items into a block packet.
+test("the pre-resilient section append route is legacy-only too", () => {
+  const route = readFileSync(join(root, "src/app/api/packets/[id]/sections/[sectionId]/append/route.ts"), "utf8");
+  assert.match(route, /composition_mode !== "legacy"/, "route checks composition mode");
+  const guard = route.search(/composition_mode !== "legacy"/);
+  // Match the call site, not the top-of-file import.
+  const insert = route.search(/await insertItemsIntoSection\(/);
+  assert.ok(guard !== -1 && insert !== -1 && guard < insert, "checked before any item insert");
+  // Also before the model is ever called, so a block packet costs nothing.
+  const model = route.search(/await callStructuringModel\(/);
+  assert.ok(model !== -1 && guard < model, "checked before the model call");
+});
+
+test("the block editor exposes no AI ingestion entry point (nothing to hide in block mode)", () => {
+  const block = readFileSync(join(root, "src/components/editor/block-packet-editor.tsx"), "utf8");
+  assert.ok(!/section_append|useIngestion|\/ingest/.test(block), "block editor has no ingestion control");
+  const legacy = readFileSync(join(root, "src/components/editor/legacy-packet-editor.tsx"), "utf8");
+  assert.match(legacy, /section_append/, "section_append is a legacy-editor-only control");
+  // /edit/[id] branches on mode, so a block packet never renders the legacy editor.
+  const page = readFileSync(join(root, "src/app/edit/[id]/page.tsx"), "utf8");
+  assert.match(page, /data\.mode === "blocks"[\s\S]*BlockPacketEditor/, "block packets render the block editor");
+});
+
 test("claim_chunk is atomic, returns the attempt generation, single attempt++, lease recovery, rejects live claims", () => {
   const b = fnBody(mig, "claim_chunk");
   assert.match(b, /from public\.ingestion_runs where id = p_run_id for update/, "locks run");
@@ -180,6 +231,44 @@ test("discard: idempotent (never re-evaluates deletion), clears source-derived f
 
 test("finalize clears the origin marker (finalized packet is never an orphan candidate)", () => {
   assert.match(fnBody(mig, "finalize_ingestion_run"), /update public\.packets set origin_ingestion_run_id = null\s*\n\s*where id = v_run\.packet_id and origin_ingestion_run_id = p_run_id/, "origin cleared on finalize");
+});
+
+// Scenario: a chunk is claimed, the user discards the run while the model request
+// is still outstanding, and the now-orphaned worker reports back. Every write path
+// available to that worker must refuse, so a discarded run can never be
+// repopulated with source-derived text.
+test("late worker writes after a run ends are rejected on every path (claim -> discard -> late stage/fail/split)", () => {
+  // 1-2. The claim is valid and the discard ends the run. Discard deliberately
+  // does NOT rewind chunk status, so the chunk stays 'processing' with a still
+  // -current attempt_count: the ownership, attempt-generation and 'processing'
+  // checks all still PASS for the late caller. The run-status guard is the only
+  // thing standing between that worker and a write.
+  const discard = fnBody(mig, "discard_ingestion_run");
+  assert.match(discard, /set status='discarded'/, "discard ends the run");
+  assert.ok(!/ingestion_chunks[\s\S]*set[^;]*status\s*=\s*'pending'/.test(discard), "discard does not rewind chunk status (so the guard must carry the rejection)");
+
+  // 3-4. Every write path rejects once the run is not active.
+  for (const fn of ["stage_chunk_result", "mark_chunk_failed", "split_chunk"]) {
+    const b = fnBody(mig, fn);
+    assert.match(b, /from public\.ingestion_runs where id = p_run_id for update/, `${fn} locks and reads the run`);
+    assert.match(b, /v_status <> 'active' then raise exception/, `${fn} requires an active run`);
+    // The guard must precede any write, so a terminal run is refused before the
+    // chunk row is even touched.
+    const guard = b.search(/v_status <> 'active' then raise exception/);
+    const write = b.search(/\bupdate public\./);
+    assert.ok(guard !== -1 && (write === -1 || guard < write), `${fn} checks run status before writing`);
+    // Rejection is an exception, not a silent no-op that returns success.
+    assert.ok(!/v_status <> 'active' then return/.test(b), `${fn} raises rather than returning ok`);
+    // The pre-existing claim-generation and state checks are preserved.
+    assert.match(b, /attempt_count <> p_attempt[\s\S]*stale claim/, `${fn} still binds to the claim generation`);
+  }
+  assert.match(fnBody(mig, "mark_chunk_failed"), /status <> 'processing' then raise exception[\s\S]*cannot fail/, "fail still requires processing state");
+
+  // 5. Nothing survives that could carry text: discard nulls every source-derived
+  // field, and the rejected calls above are the only writers that could restore
+  // them. p_error in particular never reaches the chunk row.
+  assert.match(discard, /source_text=null, derived_title='', derived_client_name='', error=''/, "run text cleared");
+  assert.match(discard, /result=null, segment_text=null, section_hint='', error=''/, "chunk text/result/hint/error cleared");
 });
 
 test("migration/schema parity: every function body byte-identical", () => {

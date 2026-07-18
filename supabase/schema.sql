@@ -1644,8 +1644,12 @@ begin
   if v_user is null then raise exception 'ingestion: packet % not found', p_packet_id; end if;
   if v_user <> p_owner then raise exception 'ingestion: caller does not own packet %', p_packet_id; end if;
   if v_status <> 'draft' then raise exception 'ingestion: packet % is not draft', p_packet_id; end if;
-  if p_entry_point = 'append' and v_mode <> 'legacy' then
-    raise exception 'ingestion: append requires legacy composition mode';
+  -- Both append entry points are legacy-only. Finalization for them writes rows
+  -- into sections/items, which is NOT the canonical representation for a block
+  -- packet (packet_blocks is). Allowing either in block mode would create content
+  -- invisible to the block editor and recipient renderer.
+  if p_entry_point in ('append','section_append') and v_mode <> 'legacy' then
+    raise exception 'ingestion: % requires legacy composition mode', p_entry_point;
   end if;
 
   if p_entry_point = 'section_append' then
@@ -1848,11 +1852,15 @@ language plpgsql
 security definer
 set search_path = ''
 as $$
-declare v_user uuid; v_chunk record;
+declare v_user uuid; v_status text; v_chunk record;
 begin
-  select user_id into v_user from public.ingestion_runs where id = p_run_id for update;
+  select user_id, status into v_user, v_status from public.ingestion_runs where id = p_run_id for update;
   if v_user is null then raise exception 'ingestion: run % not found', p_run_id; end if;
   if v_user <> p_owner then raise exception 'ingestion: caller does not own run'; end if;
+  -- A late failure from an in-flight model request must NOT write back into a run
+  -- that has ended. Discard clears the text but leaves the claimed chunk in
+  -- 'processing', so without this guard the error string would repopulate it.
+  if v_status <> 'active' then raise exception 'ingestion: run is % (not active)', v_status; end if;
 
   select * into v_chunk from public.ingestion_chunks where run_id = p_run_id and ordinal = p_ordinal for update;
   if v_chunk.id is null then raise exception 'ingestion: chunk % not found', p_ordinal; end if;

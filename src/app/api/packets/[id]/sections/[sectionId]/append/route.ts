@@ -128,11 +128,22 @@ export async function POST(request: Request, context: Context) {
   // Ownership: packet belongs to the caller.
   const { data: packet } = await supabase
     .from("packets")
-    .select("id")
+    .select("id, composition_mode")
     .eq("id", id)
     .eq("user_id", session.userId)
     .single();
   if (!packet) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  // Legacy-only, matching the resilient section_append path. This inserts rows
+  // into sections/items, which a block packet does not render. No client calls
+  // this route any more (the resilient run replaced it), so this closes the
+  // direct-call hole rather than a live UI path.
+  if (packet.composition_mode !== "legacy") {
+    return NextResponse.json(
+      { error: "unsupported_composition_mode", message: "AI append is not available for block packets." },
+      { status: 400 },
+    );
+  }
 
   // The target section must belong to THIS packet (route-level authz; the RPC
   // re-checks as defense in depth).

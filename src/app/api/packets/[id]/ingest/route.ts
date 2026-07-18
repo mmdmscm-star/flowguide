@@ -50,6 +50,26 @@ export async function POST(request: Request, context: Context) {
 
   const supabase = createServerClient();
 
+  // Both append entry points apply their result as sections/items, which is not
+  // the canonical representation for a block packet. The block editor exposes no
+  // AI-append control at all, so reaching here in block mode means a stale client
+  // or a direct call; reject it with a clear reason rather than writing content
+  // the block editor and recipient renderer would never show. The DB enforces the
+  // same rule inside create_ingestion_run — this is the friendly-message layer.
+  const { data: packet } = await supabase
+    .from("packets")
+    .select("composition_mode")
+    .eq("id", id)
+    .eq("user_id", session.userId)
+    .maybeSingle();
+  if (!packet) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (packet.composition_mode !== "legacy") {
+    return NextResponse.json(
+      { error: "unsupported_composition_mode", message: "AI append is not available for block packets." },
+      { status: 400 },
+    );
+  }
+
   // If an import is already active for this packet, tell the client to resume it.
   const { data: existing } = await supabase
     .from("ingestion_runs")
