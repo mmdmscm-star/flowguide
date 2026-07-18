@@ -20,11 +20,13 @@ export async function POST(request: Request) {
   const body = await request.json();
   const rawText = typeof body.rawText === "string" ? body.rawText.trim() : "";
   const packetType = typeof body.packetType === "string" ? body.packetType : "general";
+  const requestKey = typeof body.requestKey === "string" ? body.requestKey : "";
 
   if (rawText.length < 10) return NextResponse.json({ error: "Paste more text first." }, { status: 400 });
   if (rawText.length > INGEST_MAX_CHARS) {
     return NextResponse.json({ error: "input_too_large", message: `Too large (${rawText.length.toLocaleString()} chars; limit ${INGEST_MAX_CHARS.toLocaleString()}).` }, { status: 413 });
   }
+  if (requestKey.length < 8) return NextResponse.json({ error: "missing request key" }, { status: 400 });
 
   const supabase = createServerClient();
   const chunks = buildRunChunks(rawText);
@@ -35,6 +37,7 @@ export async function POST(request: Request) {
     p_source_text: rawText,
     p_source_hash: segmentHash(rawText),
     p_source_len: rawText.length, // JS UTF-16 code-unit length (matches chunk offsets)
+    p_request_key: requestKey,     // idempotency for duplicate/retried POSTs
     p_segmenter_version: SEGMENTER_VERSION,
     p_chunks: chunks,
   });

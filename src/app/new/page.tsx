@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 const PACKET_TYPES = [
@@ -15,24 +15,34 @@ export default function NewPacketPage() {
   const [packetType, setPacketType] = useState("general");
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState("");
+  // Stable idempotency key for the Organize POST, generated once per source. A
+  // retry after a lost response reuses it (server returns the same packet/run);
+  // changing the source mints a new key (a genuinely new import).
+  const requestKeyRef = useRef<string | null>(null);
+  const keySourceRef = useRef<string>("");
 
   async function handleOrganize() {
-    if (!rawText.trim()) {
+    const source = rawText.trim();
+    if (!source) {
       setError("Paste some text first.");
       return;
     }
     setError("");
     setProcessing(true);
 
+    if (!requestKeyRef.current || keySourceRef.current !== source) {
+      requestKeyRef.current = crypto.randomUUID();
+      keySourceRef.current = source;
+    }
+
     try {
       // ONE atomic call creates the draft packet + ingestion run + chunk plan +
       // origin marker together, so a partial failure can't leave an orphan draft.
-      // The editor then drives the chunks and shows real progress, so an ordinary
-      // or a large source both complete reliably instead of timing out at once.
+      // The request key makes a duplicate/retried POST return the same packet.
       const ing = await fetch("/api/ingest/organize", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ rawText: rawText.trim(), packetType }),
+        body: JSON.stringify({ rawText: source, packetType, requestKey: requestKeyRef.current }),
       });
       if (ing.status === 401) { router.push("/login"); return; }
       const data = await ing.json();

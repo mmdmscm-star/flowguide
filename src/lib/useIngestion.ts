@@ -20,8 +20,10 @@ export interface IngestState {
 
 interface StartArgs { entryPoint: "organize" | "append" | "section_append"; rawText: string; targetSectionId?: string | null; packetType?: string }
 
-const CHUNK_CLIENT_TIMEOUT_MS = 75000; // just past the 60s function limit
+const CHUNK_CLIENT_TIMEOUT_MS = 70000; // backstop past the 60s function limit
+const RETRY_BACKOFF_MS = 6000;         // wait before reclaiming a stuck/processing chunk
 const MAX_STEPS = 800;
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 async function getJSON(url: string) { const r = await fetch(url); return { status: r.status, data: await r.json().catch(() => ({})) }; }
 async function postJSON(url: string, body: unknown) {
@@ -29,30 +31,28 @@ async function postJSON(url: string, body: unknown) {
   return { status: r.status, data: await r.json().catch(() => ({})) };
 }
 
-// Process one chunk; on a client-side timeout / platform 504 subdivide & retry
-// once. Pure (no hook state) so it can recurse safely.
-async function processChunk(runId: string, ordinal: number, forceSplit = false): Promise<{ split?: boolean; completed?: boolean; error?: string }> {
+// Process one chunk. The server claims it atomically and, on a retry of a
+// timed-out/oversized segment, subdivides it automatically. A platform 504 or a
+// client-side timeout is transient: we back off and let the drive loop retry,
+// which reclaims after the lease and (on the 2nd attempt) triggers the split.
+async function processChunk(runId: string, ordinal: number): Promise<{ split?: boolean; completed?: boolean; retry?: boolean; error?: string }> {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), CHUNK_CLIENT_TIMEOUT_MS);
   try {
-    const r = await fetch(`/api/ingest/${runId}/chunks/${ordinal}`, {
-      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ forceSplit }), signal: ctrl.signal,
-    });
+    const r = await fetch(`/api/ingest/${runId}/chunks/${ordinal}`, { method: "POST", signal: ctrl.signal });
     clearTimeout(t);
-    if (r.status === 504 || r.status === 502 || r.status === 500) {
-      if (!forceSplit) return processChunk(runId, ordinal, true);
-      return { error: "The AI took too long on a part. You can retry." };
-    }
+    if (r.status === 504 || r.status === 502 || r.status === 500) return { retry: true };
     const data = await r.json().catch(() => ({}));
     if (r.ok) {
       if (data.status === "split") return { split: true };
-      return { completed: true };
+      if (data.status === "processing") return { retry: true }; // another attempt holds it
+      if (data.status === "completed") return { completed: true };
+      return { retry: true };
     }
     return { error: data.message || data.error || "A part failed. You can retry." };
   } catch {
     clearTimeout(t);
-    if (!forceSplit) return processChunk(runId, ordinal, true); // aborted -> subdivide then retry
-    return { error: "A part timed out. You can retry." };
+    return { retry: true }; // client-side timeout -> reclaim after lease
   }
 }
 
@@ -87,6 +87,7 @@ export function useIngestion(packetId: string, opts?: { onComplete?: () => void 
       if (cancelled.current) return;
       if (res.split) { setState((s) => ({ ...s, subdividing: true })); continue; }
       if (res.completed) { setState((s) => ({ ...s, subdividing: false })); continue; }
+      if (res.retry) { await sleep(RETRY_BACKOFF_MS); continue; } // reclaim after lease; server auto-splits on the 2nd attempt
       if (res.error) { const msg = res.error; setState((s) => ({ ...s, phase: "error", error: msg })); return; }
     }
     setState((s) => ({ ...s, phase: "error", error: "Import did not converge." }));

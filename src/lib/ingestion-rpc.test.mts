@@ -77,11 +77,11 @@ test("trigger functions revoked from PUBLIC + named roles, and never granted", (
 test("callable RPCs are service-role-only with exact signatures", () => {
   const sig: Record<string, string> = {
     create_ingestion_run: "(uuid, uuid, text, uuid, text, text, int, text, jsonb)",
-    create_organize_run: "(uuid, text, text, text, text, int, text, jsonb)",
+    create_organize_run: "(uuid, text, text, text, text, int, text, text, jsonb)",
     claim_chunk: "(uuid, uuid, int, int)",
-    stage_chunk_result: "(uuid, uuid, int, text, jsonb)",
-    mark_chunk_failed: "(uuid, uuid, int, text)",
-    split_chunk: "(uuid, uuid, int, jsonb)",
+    stage_chunk_result: "(uuid, uuid, int, int, text, jsonb)",
+    mark_chunk_failed: "(uuid, uuid, int, int, text)",
+    split_chunk: "(uuid, uuid, int, int, jsonb)",
     finalize_ingestion_run: "(uuid, uuid)",
     discard_ingestion_run: "(uuid, uuid)",
   };
@@ -101,6 +101,18 @@ test("create_organize_run creates packet + run + chunks + origin marker atomical
   assert.match(b, /update public\.packets set origin_ingestion_run_id = v_run/, "sets the origin marker");
 });
 
+test("Organize is idempotent per (owner, request_key); different source is rejected; concurrent dup collapses to one", () => {
+  assert.match(mig, /request_key text/, "request_key stored on the run");
+  assert.match(mig, /unique index[\s\S]*idx_ingestion_runs_request_key[\s\S]*on public\.ingestion_runs\(user_id, request_key\) where request_key is not null/, "per-owner unique key");
+  const b = fnBody(mig, "create_organize_run");
+  // existing key + matching source -> return existing; different source -> reject
+  assert.match(b, /where user_id = p_owner and request_key = p_request_key/, "looks up existing run by key");
+  assert.match(b, /v_hash <> p_source_hash then raise exception 'ingestion: request key reused with a different source'/, "rejects key reuse with different source");
+  assert.match(b, /'run_id', v_run, 'reused', true/, "returns the existing run");
+  // the concurrent race is resolved by the unique index + rollback of the loser's packet insert
+  assert.match(b, /exception when unique_violation then[\s\S]*where user_id = p_owner and request_key = p_request_key/, "loser returns the winner's packet/run");
+});
+
 test("create_ingestion_run (append/section_append) captures baseline_content_rev + source_len", () => {
   const b = fnBody(mig, "create_ingestion_run");
   assert.match(b, /create_ingestion_run is for append\/section_append/, "organize excluded");
@@ -109,7 +121,7 @@ test("create_ingestion_run (append/section_append) captures baseline_content_rev
   assert.match(b, /source_len/, "stores source_len");
 });
 
-test("claim_chunk is atomic: locks run+chunk, single attempt++, lease recovery, rejects live claims", () => {
+test("claim_chunk is atomic, returns the attempt generation, single attempt++, lease recovery, rejects live claims", () => {
   const b = fnBody(mig, "claim_chunk");
   assert.match(b, /from public\.ingestion_runs where id = p_run_id for update/, "locks run");
   assert.match(b, /from public\.ingestion_chunks where run_id = p_run_id and ordinal = p_ordinal for update/, "locks chunk row");
@@ -117,19 +129,28 @@ test("claim_chunk is atomic: locks run+chunk, single attempt++, lease recovery, 
   assert.match(b, /status = 'split' then return jsonb_build_object\('claimed', false/, "split not claimable");
   assert.match(b, /status = 'processing'[\s\S]*make_interval\(secs => p_lease_seconds\) > now\(\)[\s\S]*'claimed', false/, "live processing not stolen (lease)");
   assert.match(b, /set status = 'processing', attempt_count = attempt_count \+ 1/, "claims + counts the attempt exactly once");
+  assert.match(b, /'attempt', v_chunk\.attempt_count \+ 1/, "returns the new attempt generation");
 });
 
-test("stage/mark do NOT double-count the attempt (claim owns it)", () => {
-  assert.ok(!/attempt_count = attempt_count \+ 1/.test(fnBody(mig, "stage_chunk_result")), "stage does not increment attempt");
-  assert.ok(!/attempt_count = attempt_count \+ 1/.test(fnBody(mig, "mark_chunk_failed")), "mark_failed does not increment attempt");
-  assert.match(fnBody(mig, "stage_chunk_result"), /status = 'completed'[\s\S]*'reused',true/, "stage idempotent");
-});
-
-test("split_chunk is idempotent (already-split returns) and depth-limited", () => {
-  const b = fnBody(mig, "split_chunk");
-  assert.match(b, /status = 'split' then return jsonb_build_object\('added', 0, 'alreadySplit', true\)/, "idempotent");
-  assert.match(b, /split_depth >= 4[\s\S]*raise exception/, "depth limit");
-  assert.match(b, /is_continuation/, "children carry continuation flag");
+test("stage/fail/split are bound to the claim generation and enforce state rules", () => {
+  for (const fn of ["stage_chunk_result", "mark_chunk_failed", "split_chunk"]) {
+    const b = fnBody(mig, fn);
+    assert.match(b, /for update/, `${fn} locks the chunk`);
+    assert.match(b, /attempt_count <> p_attempt[\s\S]*raise exception[\s\S]*stale claim/, `${fn} rejects a stale attempt`);
+    assert.ok(!/attempt_count = attempt_count \+ 1/.test(b), `${fn} does not re-increment attempt`);
+  }
+  // staging: only the currently-claimed processing attempt; same-attempt re-stage idempotent
+  const stage = fnBody(mig, "stage_chunk_result");
+  assert.match(stage, /status = 'completed' then\s*\n\s*return jsonb_build_object\('status','completed'[\s\S]*'reused',true\)/, "same-attempt re-stage idempotent");
+  assert.match(stage, /status <> 'processing' then raise exception/, "stage only from processing");
+  // failure: only processing -> failed; never split/completed
+  assert.match(fnBody(mig, "mark_chunk_failed"), /status <> 'processing' then raise exception[\s\S]*cannot fail/, "fail only from processing");
+  // split: never resurrect a split/completed; acts on processing/failed
+  const split = fnBody(mig, "split_chunk");
+  assert.match(split, /status = 'split' then return jsonb_build_object\('added', 0, 'alreadySplit', true\)/, "split idempotent");
+  assert.match(split, /status = 'completed' then raise exception/, "cannot split a completed chunk");
+  assert.match(split, /status not in \('processing','failed'\) then raise exception/, "split only processing/failed");
+  assert.match(split, /split_depth >= 4[\s\S]*raise exception/, "depth limit");
 });
 
 test("finalize: atomic, content_rev match, JS-unit coverage (no char_length), continuation merge, full privacy cleanup", () => {
@@ -146,11 +167,19 @@ test("finalize: atomic, content_rev match, JS-unit coverage (no char_length), co
   assert.match(b, /result = null, segment_text = null, section_hint = '', error = ''/, "chunk source-derived cleared");
 });
 
-test("discard: clears ALL source-derived fields; deletes packet only under strict conditions", () => {
+test("discard: idempotent (never re-evaluates deletion), clears source-derived fields, clears origin on preserve", () => {
   const b = fnBody(mig, "discard_ingestion_run");
+  // repeat discard returns the prior result and does NOT re-run the delete check
+  assert.match(b, /status = 'discarded' then\s*\n\s*return jsonb_build_object\('status','discarded','deletedPacket',false,'reused',true\)/, "idempotent repeat discard");
   assert.match(b, /source_text=null, derived_title='', derived_client_name='', error=''/, "run cleared");
   assert.match(b, /result=null, segment_text=null, section_hint='', error=''/, "chunks cleared");
-  assert.match(b, /entry_point = 'organize' and v_origin = p_run_id and v_pstatus = 'draft'[\s\S]*v_secs = 0 and v_items = 0 and v_blocks = 0/, "strict delete");
+  assert.match(b, /entry_point = 'organize' and v_origin = p_run_id and v_pstatus = 'draft'[\s\S]*v_secs = 0 and v_items = 0 and v_blocks = 0/, "strict delete conditions");
+  // preserved packet: origin marker cleared so a LATER discard can never delete it
+  assert.match(b, /elsif v_origin = p_run_id then[\s\S]*update public\.packets set origin_ingestion_run_id = null/, "clears origin when preserved");
+});
+
+test("finalize clears the origin marker (finalized packet is never an orphan candidate)", () => {
+  assert.match(fnBody(mig, "finalize_ingestion_run"), /update public\.packets set origin_ingestion_run_id = null\s*\n\s*where id = v_run\.packet_id and origin_ingestion_run_id = p_run_id/, "origin cleared on finalize");
 });
 
 test("migration/schema parity: every function body byte-identical", () => {

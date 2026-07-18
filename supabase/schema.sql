@@ -1440,8 +1440,7 @@ grant execute on function public.update_item_content(uuid, uuid, uuid, text, tex
 
 -- ============================================================
 -- RESILIENT AI INGESTION (migration 0012) — ingestion_runs / ingestion_chunks
--- Transient staging for chunked AI ingestion. Mirrors 0012 (no begin/commit);
--- see migration 0012 and docs/investigations/resilient-ai-ingestion.md.
+-- Transient staging for chunked AI ingestion. Mirrors 0012 (no begin/commit).
 -- ============================================================
 -- ----------------------------------------------------------------------------
 -- 1. Packet columns: content revision + origin marker
@@ -1461,6 +1460,7 @@ create table if not exists public.ingestion_runs (
   source_text text,                 -- resumable source; cleared on finalize/discard
   source_hash text not null,
   source_len int not null default 0, -- JS UTF-16 code-unit length (matches offsets)
+  request_key text,                 -- idempotency key for initial Organize (per owner)
   segmenter_version text not null,
   status text not null default 'active'
     check (status in ('active','finalizing','finalized','discarded','error')),
@@ -1482,6 +1482,10 @@ create index if not exists idx_ingestion_runs_user on public.ingestion_runs(user
 -- at the database level (not just the UI).
 create unique index if not exists idx_ingestion_runs_one_active
   on public.ingestion_runs(packet_id) where status in ('active','finalizing');
+-- Idempotency: one run per (owner, request_key) so a duplicate/retried initial
+-- Organize POST cannot create a second packet/run.
+create unique index if not exists idx_ingestion_runs_request_key
+  on public.ingestion_runs(user_id, request_key) where request_key is not null;
 
 create table if not exists public.ingestion_chunks (
   id uuid primary key default gen_random_uuid(),
@@ -1686,6 +1690,7 @@ create or replace function public.create_organize_run(
   p_source_text text,
   p_source_hash text,
   p_source_len int,
+  p_request_key text,
   p_segmenter_version text,
   p_chunks jsonb
 ) returns jsonb
@@ -1693,34 +1698,54 @@ language plpgsql
 security definer
 set search_path = ''
 as $$
-declare v_packet uuid; v_run uuid; c jsonb; n int;
+declare v_packet uuid; v_run uuid; v_hash text; c jsonb; n int;
 begin
+  if p_request_key is null or length(p_request_key) < 8 then raise exception 'ingestion: a request key is required'; end if;
   if jsonb_typeof(p_chunks) <> 'array' then raise exception 'ingestion: chunks must be an array'; end if;
   n := jsonb_array_length(p_chunks);
   if n < 1 then raise exception 'ingestion: at least one chunk required'; end if;
 
-  insert into public.packets (user_id, slug, packet_type, status)
-    values (p_owner, p_slug, coalesce(nullif(p_packet_type,''),'general'), 'draft')
-    returning id into v_packet;
+  -- Idempotency: an existing run for (owner, request_key) is returned as-is when
+  -- the source matches; reuse of the key with a different source is rejected.
+  select id, packet_id, source_hash into v_run, v_packet, v_hash
+    from public.ingestion_runs where user_id = p_owner and request_key = p_request_key;
+  if v_run is not null then
+    if v_hash <> p_source_hash then raise exception 'ingestion: request key reused with a different source'; end if;
+    return jsonb_build_object('packet_id', v_packet, 'run_id', v_run, 'reused', true);
+  end if;
 
-  insert into public.ingestion_runs (
-    user_id, packet_id, entry_point, source_text, source_hash, source_len,
-    segmenter_version, status, total_chunks, completed_chunks, baseline_section_count, baseline_item_count, baseline_content_rev
-  ) values (
-    p_owner, v_packet, 'organize', p_source_text, p_source_hash, p_source_len,
-    p_segmenter_version, 'active', n, 0, 0, 0, 0
-  ) returning id into v_run;
+  -- Create packet + run + plan + origin marker. A concurrent identical request
+  -- loses the (user_id, request_key) unique race; we roll back its packet insert
+  -- and return the winner's packet/run (exactly one of each).
+  begin
+    insert into public.packets (user_id, slug, packet_type, status)
+      values (p_owner, p_slug, coalesce(nullif(p_packet_type,''),'general'), 'draft')
+      returning id into v_packet;
 
-  for c in select value from jsonb_array_elements(p_chunks) loop
-    insert into public.ingestion_chunks (run_id, ordinal, source_start, source_end, segment_text, segment_hash, section_hint, is_continuation, status)
-    values (v_run, (c->>'ordinal')::int, (c->>'source_start')::int, (c->>'source_end')::int,
-            c->>'segment_text', coalesce(c->>'segment_hash',''), coalesce(c->>'section_hint',''),
-            coalesce((c->>'is_continuation')::boolean, false), 'pending');
-  end loop;
+    insert into public.ingestion_runs (
+      user_id, packet_id, entry_point, source_text, source_hash, source_len, request_key,
+      segmenter_version, status, total_chunks, completed_chunks, baseline_section_count, baseline_item_count, baseline_content_rev
+    ) values (
+      p_owner, v_packet, 'organize', p_source_text, p_source_hash, p_source_len, p_request_key,
+      p_segmenter_version, 'active', n, 0, 0, 0, 0
+    ) returning id into v_run;
 
-  update public.packets set origin_ingestion_run_id = v_run where id = v_packet;
+    for c in select value from jsonb_array_elements(p_chunks) loop
+      insert into public.ingestion_chunks (run_id, ordinal, source_start, source_end, segment_text, segment_hash, section_hint, is_continuation, status)
+      values (v_run, (c->>'ordinal')::int, (c->>'source_start')::int, (c->>'source_end')::int,
+              c->>'segment_text', coalesce(c->>'segment_hash',''), coalesce(c->>'section_hint',''),
+              coalesce((c->>'is_continuation')::boolean, false), 'pending');
+    end loop;
 
-  return jsonb_build_object('packet_id', v_packet, 'run_id', v_run);
+    update public.packets set origin_ingestion_run_id = v_run where id = v_packet;
+    return jsonb_build_object('packet_id', v_packet, 'run_id', v_run, 'reused', false);
+  exception when unique_violation then
+    select id, packet_id, source_hash into v_run, v_packet, v_hash
+      from public.ingestion_runs where user_id = p_owner and request_key = p_request_key;
+    if v_run is null then raise; end if;  -- some other unique conflict
+    if v_hash <> p_source_hash then raise exception 'ingestion: request key reused with a different source'; end if;
+    return jsonb_build_object('packet_id', v_packet, 'run_id', v_run, 'reused', true);
+  end;
 end;
 $$;
 
@@ -1758,8 +1783,11 @@ begin
     set status = 'processing', attempt_count = attempt_count + 1, updated_at = now()
     where id = v_chunk.id;
 
+  -- The new attempt_count is the CLAIM GENERATION: stage/fail/split must present
+  -- it, so a stale claimant (after lease recovery by another attempt) is rejected.
   return jsonb_build_object(
     'claimed', true, 'status', 'processing', 'ordinal', v_chunk.ordinal,
+    'attempt', v_chunk.attempt_count + 1,
     'segment_text', v_chunk.segment_text, 'segment_hash', v_chunk.segment_hash,
     'section_hint', v_chunk.section_hint, 'is_continuation', v_chunk.is_continuation,
     'source_start', v_chunk.source_start, 'source_end', v_chunk.source_end,
@@ -1772,7 +1800,7 @@ $$;
 -- 8. stage_chunk_result — idempotent staging (attempt is counted at claim).
 -- ----------------------------------------------------------------------------
 create or replace function public.stage_chunk_result(
-  p_run_id uuid, p_owner uuid, p_ordinal int, p_segment_hash text, p_result jsonb
+  p_run_id uuid, p_owner uuid, p_ordinal int, p_attempt int, p_segment_hash text, p_result jsonb
 ) returns jsonb
 language plpgsql
 security definer
@@ -1785,15 +1813,20 @@ begin
   if v_user <> p_owner then raise exception 'ingestion: caller does not own run'; end if;
   if v_status <> 'active' then raise exception 'ingestion: run is % (not active)', v_status; end if;
 
-  select * into v_chunk from public.ingestion_chunks where run_id = p_run_id and ordinal = p_ordinal;
+  select * into v_chunk from public.ingestion_chunks where run_id = p_run_id and ordinal = p_ordinal for update;
   if v_chunk.id is null then raise exception 'ingestion: chunk % not found', p_ordinal; end if;
   if v_chunk.segment_hash <> p_segment_hash then
     raise exception 'ingestion: segment hash mismatch for chunk % (plan changed)', p_ordinal;
   end if;
-  if v_chunk.status = 'split' then raise exception 'ingestion: chunk % was subdivided; refresh the plan', p_ordinal; end if;
+  -- Bind to the claim generation: reject a stale attempt after lease recovery.
+  if v_chunk.attempt_count <> p_attempt then
+    raise exception 'ingestion: stale claim on chunk % (attempt % is not current %)', p_ordinal, p_attempt, v_chunk.attempt_count;
+  end if;
+  -- Same attempt re-staging (response-loss retry) is idempotent.
   if v_chunk.status = 'completed' then
     return jsonb_build_object('status','completed','ordinal',p_ordinal,'reused',true);
   end if;
+  if v_chunk.status <> 'processing' then raise exception 'ingestion: chunk % is % (not processing)', p_ordinal, v_chunk.status; end if;
   if jsonb_typeof(p_result) <> 'object' then raise exception 'ingestion: chunk result must be an object'; end if;
 
   update public.ingestion_chunks
@@ -1809,20 +1842,29 @@ $$;
 -- 9. mark_chunk_failed — record a failure (attempt already counted at claim).
 -- ----------------------------------------------------------------------------
 create or replace function public.mark_chunk_failed(
-  p_run_id uuid, p_owner uuid, p_ordinal int, p_error text
+  p_run_id uuid, p_owner uuid, p_ordinal int, p_attempt int, p_error text
 ) returns void
 language plpgsql
 security definer
 set search_path = ''
 as $$
-declare v_user uuid;
+declare v_user uuid; v_chunk record;
 begin
   select user_id into v_user from public.ingestion_runs where id = p_run_id for update;
   if v_user is null then raise exception 'ingestion: run % not found', p_run_id; end if;
   if v_user <> p_owner then raise exception 'ingestion: caller does not own run'; end if;
+
+  select * into v_chunk from public.ingestion_chunks where run_id = p_run_id and ordinal = p_ordinal for update;
+  if v_chunk.id is null then raise exception 'ingestion: chunk % not found', p_ordinal; end if;
+  -- Only the currently claimed processing attempt may be failed; never split/completed.
+  if v_chunk.attempt_count <> p_attempt then
+    raise exception 'ingestion: stale claim on chunk % (attempt % is not current %)', p_ordinal, p_attempt, v_chunk.attempt_count;
+  end if;
+  if v_chunk.status <> 'processing' then raise exception 'ingestion: chunk % is % (cannot fail)', p_ordinal, v_chunk.status; end if;
+
   update public.ingestion_chunks
     set status = 'failed', error = coalesce(p_error,''), updated_at = now()
-    where run_id = p_run_id and ordinal = p_ordinal and status <> 'completed';
+    where id = v_chunk.id;
 end;
 $$;
 
@@ -1831,7 +1873,7 @@ $$;
 --     p_children: { source_start, source_end, segment_text, segment_hash, is_continuation }
 -- ----------------------------------------------------------------------------
 create or replace function public.split_chunk(
-  p_run_id uuid, p_owner uuid, p_ordinal int, p_children jsonb
+  p_run_id uuid, p_owner uuid, p_ordinal int, p_attempt int, p_children jsonb
 ) returns jsonb
 language plpgsql
 security definer
@@ -1846,8 +1888,14 @@ begin
 
   select * into v_chunk from public.ingestion_chunks where run_id = p_run_id and ordinal = p_ordinal for update;
   if v_chunk.id is null then raise exception 'ingestion: chunk % not found', p_ordinal; end if;
-  if v_chunk.status = 'completed' then raise exception 'ingestion: chunk % already completed', p_ordinal; end if;
+  -- Bind to the claim generation: only the currently claimed attempt may split.
+  if v_chunk.attempt_count <> p_attempt then
+    raise exception 'ingestion: stale claim on chunk % (attempt % is not current %)', p_ordinal, p_attempt, v_chunk.attempt_count;
+  end if;
   if v_chunk.status = 'split' then return jsonb_build_object('added', 0, 'alreadySplit', true); end if;
+  if v_chunk.status = 'completed' then raise exception 'ingestion: chunk % already completed', p_ordinal; end if;
+  -- May split the claimed processing attempt, or a retryable failed attempt.
+  if v_chunk.status not in ('processing','failed') then raise exception 'ingestion: chunk % is % (not splittable)', p_ordinal, v_chunk.status; end if;
   if v_chunk.split_depth >= 4 then raise exception 'ingestion: chunk % too small to subdivide further', p_ordinal; end if;
   if jsonb_typeof(p_children) <> 'array' or jsonb_array_length(p_children) < 2 then
     raise exception 'ingestion: split needs >= 2 children';
@@ -2021,6 +2069,10 @@ begin
   end if;
 
   -- Finalize + privacy cleanup (same transaction): drop ALL source-derived fields.
+  -- Clearing the origin marker means the finalized packet is no longer an
+  -- orphan-import candidate for any later discard.
+  update public.packets set origin_ingestion_run_id = null
+    where id = v_run.packet_id and origin_ingestion_run_id = p_run_id;
   update public.ingestion_runs
     set status = 'finalized', finalized_at = now(), completed_chunks = total_chunks,
         source_text = null, derived_title = '', derived_client_name = '', error = '', updated_at = now()
@@ -2050,6 +2102,12 @@ begin
   if v_run.id is null then raise exception 'ingestion: run % not found', p_run_id; end if;
   if v_run.user_id <> p_owner then raise exception 'ingestion: caller does not own run'; end if;
   if v_run.status = 'finalized' then raise exception 'ingestion: run already finalized'; end if;
+  -- IDEMPOTENT: a repeat discard returns the prior result and NEVER re-evaluates
+  -- packet deletion. (If the first discard deleted the packet, the run cascaded
+  -- away, so reaching here means the packet was preserved -> deletedPacket=false.)
+  if v_run.status = 'discarded' then
+    return jsonb_build_object('status','discarded','deletedPacket',false,'reused',true);
+  end if;
 
   update public.ingestion_runs
     set status='discarded', source_text=null, derived_title='', derived_client_name='', error='', updated_at=now()
@@ -2058,6 +2116,7 @@ begin
     set result=null, segment_text=null, section_hint='', error='', updated_at=now()
     where run_id = p_run_id;
 
+  -- Deletion eligibility is evaluated exactly ONCE, on this first discard.
   select status, origin_ingestion_run_id into v_pstatus, v_origin from public.packets where id = v_run.packet_id for update;
   select count(*) into v_secs from public.sections where packet_id = v_run.packet_id;
   select count(*) into v_items from public.items i join public.sections s on s.id = i.section_id where s.packet_id = v_run.packet_id;
@@ -2067,6 +2126,11 @@ begin
      and v_secs = 0 and v_items = 0 and v_blocks = 0 then
     delete from public.packets where id = v_run.packet_id;
     v_deleted := true;
+  elsif v_origin = p_run_id then
+    -- Preserved: drop the origin marker so a LATER discard (or content removal)
+    -- can never delete this packet on behalf of this run.
+    update public.packets set origin_ingestion_run_id = null
+      where id = v_run.packet_id and origin_ingestion_run_id = p_run_id;
   end if;
 
   return jsonb_build_object('status','discarded','deletedPacket',v_deleted);
@@ -2079,16 +2143,16 @@ $$;
 -- ----------------------------------------------------------------------------
 revoke all on function public.create_ingestion_run(uuid, uuid, text, uuid, text, text, int, text, jsonb) from public, anon, authenticated, service_role;
 grant execute on function public.create_ingestion_run(uuid, uuid, text, uuid, text, text, int, text, jsonb) to service_role;
-revoke all on function public.create_organize_run(uuid, text, text, text, text, int, text, jsonb) from public, anon, authenticated, service_role;
-grant execute on function public.create_organize_run(uuid, text, text, text, text, int, text, jsonb) to service_role;
+revoke all on function public.create_organize_run(uuid, text, text, text, text, int, text, text, jsonb) from public, anon, authenticated, service_role;
+grant execute on function public.create_organize_run(uuid, text, text, text, text, int, text, text, jsonb) to service_role;
 revoke all on function public.claim_chunk(uuid, uuid, int, int) from public, anon, authenticated, service_role;
 grant execute on function public.claim_chunk(uuid, uuid, int, int) to service_role;
-revoke all on function public.stage_chunk_result(uuid, uuid, int, text, jsonb) from public, anon, authenticated, service_role;
-grant execute on function public.stage_chunk_result(uuid, uuid, int, text, jsonb) to service_role;
-revoke all on function public.mark_chunk_failed(uuid, uuid, int, text) from public, anon, authenticated, service_role;
-grant execute on function public.mark_chunk_failed(uuid, uuid, int, text) to service_role;
-revoke all on function public.split_chunk(uuid, uuid, int, jsonb) from public, anon, authenticated, service_role;
-grant execute on function public.split_chunk(uuid, uuid, int, jsonb) to service_role;
+revoke all on function public.stage_chunk_result(uuid, uuid, int, int, text, jsonb) from public, anon, authenticated, service_role;
+grant execute on function public.stage_chunk_result(uuid, uuid, int, int, text, jsonb) to service_role;
+revoke all on function public.mark_chunk_failed(uuid, uuid, int, int, text) from public, anon, authenticated, service_role;
+grant execute on function public.mark_chunk_failed(uuid, uuid, int, int, text) to service_role;
+revoke all on function public.split_chunk(uuid, uuid, int, int, jsonb) from public, anon, authenticated, service_role;
+grant execute on function public.split_chunk(uuid, uuid, int, int, jsonb) to service_role;
 revoke all on function public.finalize_ingestion_run(uuid, uuid) from public, anon, authenticated, service_role;
 grant execute on function public.finalize_ingestion_run(uuid, uuid) to service_role;
 revoke all on function public.discard_ingestion_run(uuid, uuid) from public, anon, authenticated, service_role;
