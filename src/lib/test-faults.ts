@@ -26,6 +26,8 @@ export type Fault =
   | { kind: "emptyResult" };
 
 type Spec = {
+  /** Must be exactly true or the spec is ignored entirely. */
+  flowguideFaultInjection?: boolean;
   runId?: string;
   failAttempts?: Record<string, number>;
   truncate?: number[];
@@ -39,15 +41,36 @@ type Spec = {
 // from a REAL provider 402 (which must halt the whole pass immediately).
 export const INJECTED_PERMANENT = "Injected permanent provider failure";
 
+// A spec must OPT IN explicitly with this key. An env var pointing at some other
+// JSON file — or a stale/misconfigured path — is therefore not enough to turn
+// fault injection on anywhere.
+const OPT_IN_KEY = "flowguideFaultInjection";
+
+/**
+ * Fault injection requires ALL THREE, checked on every call:
+ *   1. NODE_ENV !== "production"
+ *   2. FLOWGUIDE_TEST_FAULT_FILE set to a readable JSON file
+ *   3. that file explicitly setting flowguideFaultInjection: true
+ *
+ * Callers additionally guard the call site with a literal NODE_ENV comparison so
+ * the production bundle drops it entirely (see the chunk route). This function
+ * is the runtime backstop for that build-time elimination.
+ */
 function loadSpec(): Spec | null {
+  // Checked first and read directly from process.env (not cached at module load)
+  // so it cannot be bypassed by import order or a mutated cached value.
   if (process.env.NODE_ENV === "production") return null;
   const path = process.env.FLOWGUIDE_TEST_FAULT_FILE;
   if (!path) return null;
+  let parsed: unknown;
   try {
-    return JSON.parse(readFileSync(path, "utf8")) as Spec;
+    parsed = JSON.parse(readFileSync(path, "utf8"));
   } catch {
     return null; // absent/unparseable spec means "no faults"
   }
+  if (typeof parsed !== "object" || parsed === null) return null;
+  if ((parsed as Record<string, unknown>)[OPT_IN_KEY] !== true) return null;
+  return parsed as Spec;
 }
 
 export function nextFault(runId: string, ordinal: number, attempt: number): Fault | null {

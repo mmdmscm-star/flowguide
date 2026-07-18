@@ -188,12 +188,18 @@ export async function callStructuringModel(opts: {
     const cleaned = content.replace(/^```json?\s*\n?/i, "").replace(/\n?```\s*$/i, "").trim();
     return { ok: true, data: JSON.parse(cleaned) };
   } catch (e) {
-    const errMsg = e instanceof Error ? e.message : String(e);
     // Log only non-content diagnostics. The model output is derived from the
     // professional's (and their client's) private source text, so it must never
-    // be written to the function logs — even truncated. finish_reason and the
-    // error message are safe; the raw content is not.
-    console.error(`[${tag}] AI parse failure:`, errMsg);
+    // be written to the function logs — even truncated.
+    //
+    // V8's JSON.parse messages EMBED a fragment of the offending input
+    // (`Unexpected token 'x', "…" is not valid JSON`), so the raw message is
+    // itself model-derived content. Reduce it to the error type plus the failure
+    // offset, which is all that is diagnostically useful anyway.
+    const errName = e instanceof Error ? e.name : "Error";
+    const posMatch = e instanceof Error ? /position (\d+)/.exec(e.message) : null;
+    const where = posMatch ? ` at position ${posMatch[1]}` : "";
+    console.error(`[${tag}] AI parse failure: ${errName}${where} (content withheld)`);
     console.error(`[${tag}] finish_reason:`, aiData?.choices?.[0]?.finish_reason);
     return { ok: false, status: 502, error: "AI returned invalid data. Please try again." };
   }

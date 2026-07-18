@@ -10,7 +10,9 @@ import {
 import { writeFileSync } from "node:fs";
 
 const FAULTS = process.env.FLOWGUIDE_TEST_FAULT_FILE!;
-const setFaults = (spec: object) => writeFileSync(FAULTS, JSON.stringify(spec));
+// Every spec must carry the opt-in key or the app ignores the file entirely.
+const setFaults = (spec: object) =>
+  writeFileSync(FAULTS, JSON.stringify({ flowguideFaultInjection: true, ...spec }));
 const clearFaults = () => setFaults({});
 // Smallest fixture that still gives a genuine MIDDLE chunk (>=3) under seg-v2,
 // so retry/resume/split are proven without paying for a large run.

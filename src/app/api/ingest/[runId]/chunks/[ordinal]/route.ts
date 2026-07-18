@@ -123,7 +123,10 @@ export async function POST(_request: Request, context: Context) {
   // set outside production (see test-faults.ts). Injected results are fed through
   // the SAME validation path as a real model response, so a wrong shape is caught
   // by the real guard rather than by the hook.
-  const fault = nextFault(runId, ordinal, attempt);
+  // Literal NODE_ENV comparison: the bundler inlines it, so this whole branch —
+  // and every fault path below it — is dead code eliminated from the production
+  // build. test-faults.ts re-checks NODE_ENV at runtime as a backstop.
+  const fault = process.env.NODE_ENV === "production" ? null : nextFault(runId, ordinal, attempt);
   let outcome: Awaited<ReturnType<typeof processSegment>>;
   if (fault?.kind === "error") {
     outcome = { kind: "error", status: fault.status, message: fault.message };

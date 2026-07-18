@@ -87,3 +87,34 @@ set, and **consume real model credits**. Scoring notes:
 - Fixture names repeat with a `" 2"` suffix past index 29, so substring matching
   maps late items onto early indices. `matchIndex()` resolves exact-first, then
   longest — a naive `includes()` reports a spurious ordering failure.
+
+## Pre-merge checks
+
+- `preflight.mts` — **read-only**. Confirms migration 0012 is installed (tables,
+  columns, CHECK constraints and FKs proven by refusal), that `anon` can neither
+  read the ingestion tables nor execute any ingestion RPC, that every RPC
+  resolves with its exact signature, that no in-flight or disposable ingestion
+  data and no retained staged source remain, and that the genuine baseline is
+  intact. Writes nothing.
+- `published-snapshot.mts` — renders every published packet through the real
+  public route and records a hash of the recipient-visible text. Run it against
+  two app versions and diff the JSON to prove a change did not alter what
+  recipients see:
+
+  ```
+  # deployed commit in a git worktree on :3001, feature branch on :3000
+  FLOWGUIDE_BASE_URL=http://localhost:3001 npx tsx published-snapshot.mts /tmp/a.json
+  FLOWGUIDE_BASE_URL=http://localhost:3000 npx tsx published-snapshot.mts /tmp/b.json
+  ```
+
+  Note: a `node_modules` symlink pointing outside the worktree root breaks
+  Turbopack — hard-link it (`cp -Rl`) into a worktree on the same filesystem.
+
+## Fault injection is impossible in production
+
+`src/lib/test-faults.ts` requires ALL of: `NODE_ENV !== "production"`, a readable
+`FLOWGUIDE_TEST_FAULT_FILE`, and that file setting `flowguideFaultInjection: true`.
+The chunk route additionally guards the call site with a literal `NODE_ENV`
+comparison, so the branch is dead-code eliminated from the production bundle.
+`src/lib/test-faults.test.mts` pins all of this, including a sanity case proving
+the same spec DOES fire outside production (so the negative cases aren't vacuous).

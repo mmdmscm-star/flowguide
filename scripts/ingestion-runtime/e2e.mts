@@ -12,7 +12,9 @@ const FAULTS = process.env.FLOWGUIDE_TEST_FAULT_FILE!;
 const { makeSource } = await import(`${root}/docs/investigations/fixtures/senior-placement-source.mjs`);
 
 const TAG = "flowguide-rt-" + process.pid;
-export const setFaults = (spec: object) => writeFileSync(FAULTS, JSON.stringify(spec));
+// Every spec must carry the opt-in key or the app ignores the file entirely.
+export const setFaults = (spec: object) =>
+  writeFileSync(FAULTS, JSON.stringify({ flowguideFaultInjection: true, ...spec }));
 setFaults({});
 
 // ---------------------------------------------------------------- session
