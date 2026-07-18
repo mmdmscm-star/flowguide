@@ -39,3 +39,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Ingestion runtime-harness artifacts
+scripts/ingestion-runtime/baseline.json
+scripts/ingestion-runtime/uid.txt
