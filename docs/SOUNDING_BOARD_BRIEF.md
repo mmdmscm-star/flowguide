@@ -3,10 +3,11 @@
 > **Purpose:** seed a fresh chat with enough context to be a useful thinking
 > partner on FlowGuide. Paste this at the start of a new conversation.
 >
-> **Written by Claude Code (which has direct access to the FlowGuide codebase)
-> on 2026-08-07.** Everything in "What exists today" was read out of the actual
-> source, not recalled from conversation. If this file and your memory of an
-> older chat disagree, this file wins — but see *Staleness* at the bottom.
+> **Written by Claude Code (which has direct access to the FlowGuide codebase).
+> Last refreshed against the code on 2026-08-07** (packet renderer: adaptive
+> detail rows + link identity). Everything in "What exists today" was read out of
+> the actual source, not recalled from conversation. If this file and your memory
+> of an older chat disagree, this file wins — but see *Staleness* at the bottom.
 
 ---
 
@@ -72,7 +73,7 @@ from calcifying around senior living.
 |---|---|
 | **Packet** | The canonical unit. One packet = one prepared communication. Has a title, an optional client name, an optional personal note, and a body. |
 | **Item** | One thing being presented — a care home, a vendor, a listing. Carries title, address, description, notes, photos, **details**, links, and **contacts**. |
-| **Details** | An item's `label` / `value` pairs (e.g. "Monthly cost" / "$4,500"), rendered as a two-column list. Deliberately generic — see the roadmap. |
+| **Details** | An item's `label` / `value` pairs (e.g. "Monthly cost" / "$4,500"). Deliberately generic — see the roadmap. The renderer lays them out adaptively; see §4. |
 | **Contacts** | An item can have **several** contacts (name, role, phone, email, website). Plural support was added deliberately for source fidelity. |
 | **Section** | A titled group of items. The original body structure. |
 | **Block** | The newer body structure: one flat **ordered** sequence of blocks, each a heading, subheading, label, or item. |
@@ -144,12 +145,40 @@ and a failed chunk retries without redoing completed work.
 **AI seeds and then disconnects.** Once content is in the packet, the packet
 belongs to the professional. There is no live sync back to any source.
 
+### How the recipient card renders (updated 2026-08-07)
+
+The item card is **one shared renderer** used by legacy packets, block packets,
+and the block editor preview, so a change to it reaches every recipient surface
+at once. Two rules in it are worth knowing, because both are *layout* decisions
+that leave the stored packet untouched — useful precedents for "can we fix this
+at render time?":
+
+**Detail rows adapt to the shape of the value, not to a breakpoint.** A short
+value (≤20 characters — a price, a count, a range) is treated as an atom: pinned
+top-right in a stable column, never wrapped, with a long label wrapping beneath
+it. A long or prose value becomes a full-width block stacked under its label.
+This came from real data: the common long row is a long *label* with a short
+value ("Memory Care Private Suite with Private Bath" → "$5,200"), so uniform
+stacking would have destroyed the column of prices that makes a list scannable.
+
+**Link buttons are identified by destination, never by label.** Two buttons
+going to the same place collapse to one (this was real: 43 items stored a
+contact's website that was also an item link, drawing two identical "Website"
+buttons). Two buttons going to *different* places both survive even when the
+professional labelled both "Website" — those get the hostname as their label so
+they can be told apart. URL matching is deliberately conservative: it ignores
+`http`/`https`, a leading `www.`, and a trailing slash, but treats different
+paths, subdomains, or query parameters as genuinely different destinations.
+
+Neither rule edits, truncates, or cleans up stored content — long values render
+in full, and every distinct link is still reachable.
+
 ### Engineering culture — this matters for cost estimates
 
 FlowGuide's data layer is unusually hardened for a solo project: direct writes are
 revoked in favor of controlled database procedures, safety rules are enforced *in
-the database* (not just in application code), and there is a large body of tests
-plus a live verification harness that exercises real Postgres and even a
+the database* (not just in application code), and there are ~120 unit tests plus
+a live verification harness that exercises real Postgres and even a
 post-deployment smoke suite against production.
 
 **Practical implication for you:** when estimating effort, the UI is rarely the
