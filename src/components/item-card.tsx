@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Item, ItemLink } from "@/lib/types";
+import { Item } from "@/lib/types";
+import { detectLinkType, resolveCardLinks, type LinkType } from "@/lib/item-links";
 
 // ============================================================
 // Photo gallery with lightbox
@@ -64,37 +65,8 @@ function PhotoGallery({ photos }: { photos: string[] }) {
   );
 }
 
-// ============================================================
-// URL type detection and smart labels
-// ============================================================
-type LinkType = "video" | "brochure" | "map" | "website";
-
-function detectLinkType(url: string): LinkType {
-  const lower = url.toLowerCase();
-  if (lower.includes("youtube.com") || lower.includes("youtu.be") || lower.includes("vimeo.com") || lower.endsWith(".mp4")) {
-    return "video";
-  }
-  if (lower.endsWith(".pdf") || lower.includes("/brochure") || lower.includes("/flyer")) {
-    return "brochure";
-  }
-  if (lower.includes("google.com/maps") || lower.includes("goo.gl/maps") || lower.includes("maps.app.goo.gl")) {
-    return "map";
-  }
-  return "website";
-}
-
-function smartLabel(link: ItemLink): string {
-  if (link.label) return link.label;
-  const type = detectLinkType(link.url);
-  switch (type) {
-    case "video": return "Virtual Tour";
-    case "brochure": return "Brochure";
-    case "map": return "View on Map";
-    default:
-      try { return new URL(link.url).hostname.replace("www.", ""); }
-      catch { return "Link"; }
-  }
-}
+// URL type detection, labelling, and link identity live in @/lib/item-links so
+// the rules are pure and unit-testable; this file keeps only presentation.
 
 // SVG icons per link type
 function LinkIcon({ type }: { type: LinkType }) {
@@ -188,6 +160,15 @@ const isAtomicValue = (value: string) => value.trim().length <= SHORT_VALUE_MAX_
 // Item Card
 // ============================================================
 export function ItemCard({ item }: { item: Item }) {
+  // One destination, one button — decided in @/lib/item-links, which also picks
+  // the hostname fallback when two surviving links would read the same. Item
+  // links win placement over a contact website with the same destination,
+  // because they draw first. Nothing is removed from the packet.
+  const { links: visibleLinks, contactWebsiteVisible } = resolveCardLinks(
+    item.links,
+    (item.contacts ?? []).map((contact) => contact.website),
+  );
+
   return (
     <div className="bg-card border border-border rounded-xl overflow-hidden">
       {/* Photos at the top */}
@@ -291,12 +272,12 @@ export function ItemCard({ item }: { item: Item }) {
           </div>
         )}
 
-        {item.links && item.links.length > 0 && (() => {
-          const youtubeLinks = item.links.filter(l => extractYouTubeId(l.url));
-          const otherLinks = item.links.filter(l => !extractYouTubeId(l.url));
+        {visibleLinks.length > 0 && (() => {
+          const youtubeLinks = visibleLinks.filter(l => extractYouTubeId(l.link.url));
+          const otherLinks = visibleLinks.filter(l => !extractYouTubeId(l.link.url));
           return (
             <>
-              {youtubeLinks.map((link, i) => {
+              {youtubeLinks.map(({ link, label }, i) => {
                 const videoId = extractYouTubeId(link.url)!;
                 return (
                   <a
@@ -308,7 +289,7 @@ export function ItemCard({ item }: { item: Item }) {
                   >
                     <img
                       src={`https://img.youtube.com/vi/${videoId}/hqdefault.jpg`}
-                      alt={smartLabel(link)}
+                      alt={label}
                       className="w-full aspect-video object-cover"
                     />
                     <div className="absolute inset-0 flex items-center justify-center bg-black/20 group-hover:bg-black/30 transition-colors">
@@ -319,14 +300,14 @@ export function ItemCard({ item }: { item: Item }) {
                       </div>
                     </div>
                     <div className="absolute bottom-2 left-2 bg-black/70 text-white text-xs px-2 py-1 rounded">
-                      {smartLabel(link)}
+                      {label}
                     </div>
                   </a>
                 );
               })}
               {otherLinks.length > 0 && (
                 <div className="flex flex-wrap gap-2 mb-4">
-                  {otherLinks.map((link, i) => {
+                  {otherLinks.map(({ link, label }, i) => {
                     const type = detectLinkType(link.url);
                     return (
                       <a
@@ -334,10 +315,12 @@ export function ItemCard({ item }: { item: Item }) {
                         href={link.url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className={`inline-flex items-center gap-1.5 text-base font-medium px-3 py-1.5 rounded-lg border transition-colors ${linkStyles(type)}`}
+                        className={`inline-flex items-center gap-1.5 max-w-full min-w-0 text-base font-medium px-3 py-1.5 rounded-lg border transition-colors ${linkStyles(type)}`}
                       >
                         <LinkIcon type={type} />
-                        {smartLabel(link)}
+                        {/* min-w-0 + anywhere so a long hostname fallback shrinks
+                            inside the card instead of overflowing it. */}
+                        <span className="min-w-0 [overflow-wrap:anywhere]">{label}</span>
                       </a>
                     );
                   })}
@@ -382,7 +365,11 @@ export function ItemCard({ item }: { item: Item }) {
                       Email
                     </a>
                   )}
-                  {contact.website && (
+                  {/* Suppressed only when this exact destination is already on
+                      the card — most often the same URL also stored as an item
+                      link, or a second contact sharing one website. A contact
+                      website that goes somewhere new still renders. */}
+                  {contact.website && contactWebsiteVisible[ci] && (
                     <a
                       href={contact.website.startsWith("http") ? contact.website : `https://${contact.website}`}
                       target="_blank"
