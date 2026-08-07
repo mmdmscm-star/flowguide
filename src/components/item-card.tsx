@@ -158,6 +158,33 @@ function mapsUrl(address: string): string {
 }
 
 // ============================================================
+// Detail row treatment
+//
+// A detail is a generic label/value pair, but the two shapes it takes want
+// opposite layouts, so the renderer classifies each row by the length of its
+// VALUE — not by what the value means. This is deliberately content-shape based,
+// not domain based: nothing here knows about prices or any vertical.
+//
+//   atomic  (short value)  — an indivisible token: a price, a count, a range,
+//                            a short phrase. Anchored top-right in a stable
+//                            value column and never wrapped or shrunk; the
+//                            label flows around it. Keeps a column of values
+//                            scannable down the card even when labels are long
+//                            enough to wrap onto two or three lines.
+//
+//   block   (long value)   — a phrase, a sentence, a URL. Sits inline when it
+//                            genuinely fits, and stacks to full width when it
+//                            does not (see the row comment below).
+//
+// The threshold is a rendering judgement about what still reads as one token at
+// mobile width, not a limit on what may be authored — every value renders in
+// full either way, and nothing is ever truncated.
+// ============================================================
+const SHORT_VALUE_MAX_CHARS = 20;
+
+const isAtomicValue = (value: string) => value.trim().length <= SHORT_VALUE_MAX_CHARS;
+
+// ============================================================
 // Item Card
 // ============================================================
 export function ItemCard({ item }: { item: Item }) {
@@ -197,17 +224,64 @@ export function ItemCard({ item }: { item: Item }) {
 
         {item.details && item.details.length > 0 && (
           <div className="mb-4 rounded-lg bg-surface border border-border overflow-hidden">
-            {item.details.map((detail, i) => (
-              <div
-                key={i}
-                className={`flex justify-between px-3.5 py-2.5 text-base ${
-                  i !== item.details!.length - 1 ? "border-b border-border" : ""
-                }`}
-              >
-                <span className="text-gray-600 font-medium flex-shrink-0">{detail.label}</span>
-                <span className="text-foreground text-right ml-4 min-w-0 break-words">{detail.value}</span>
-              </div>
-            ))}
+            {item.details.map((detail, i) => {
+              const atomic = isAtomicValue(detail.value);
+              const divider = i !== item.details!.length - 1 ? "border-b border-border" : "";
+
+              // ATOMIC ROW — never wraps or stacks, at any width. The value is
+              // flex-shrink-0, so it always keeps its full natural width and the
+              // label absorbs every bit of the pressure by wrapping. items-start
+              // keeps the value on the first line, so values stay aligned across
+              // rows regardless of how tall their labels grow. This is what makes
+              // a run of short values scannable as a column.
+              if (atomic) {
+                return (
+                  <div key={i} className={`flex items-start gap-x-6 px-3.5 py-2.5 text-base ${divider}`}>
+                    {/* flex-1 + min-w-0 lets the label take the remaining space
+                        and wrap inside it; overflow-wrap:anywhere guarantees even
+                        a single unbroken word yields rather than pushing the
+                        value out of the card. */}
+                    <span className="flex-1 min-w-0 text-gray-600 font-medium [overflow-wrap:anywhere]">
+                      {detail.label}
+                    </span>
+                    <span className="flex-shrink-0 whitespace-nowrap text-right text-foreground">
+                      {detail.value}
+                    </span>
+                  </div>
+                );
+              }
+
+              // BLOCK ROW — a long value cannot be an anchor, so this row stays
+              // space-adaptive instead. `flex-wrap` makes it content-driven:
+              // flexbox breaks a line using each item's max-content width, so the
+              // value moves to its own row exactly when it cannot sit beside the
+              // label at natural width, and only shrinks once it is down there
+              // with the full row to use. Inline on a wide card, stacked on a
+              // narrow one — no breakpoints, no measurement, no JS.
+              //
+              // Alignment falls out of the layout rather than being asserted:
+              // justify-between pushes an inline value to the right edge, while a
+              // stacked value is alone on its line and therefore starts at the
+              // left, which is what prose needs. A literal text-right would keep
+              // right-aligning a paragraph after it stacked.
+              //
+              // gap-x-6 is the "comfortably" threshold — a value that would fit
+              // beside its label with under 1.5rem of clearance stacks instead of
+              // being crammed.
+              return (
+                <div
+                  key={i}
+                  className={`flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1 px-3.5 py-2.5 text-base ${divider}`}
+                >
+                  <span className="min-w-0 text-gray-600 font-medium break-words">{detail.label}</span>
+                  {/* overflow-wrap:anywhere (not break-words) so an unbroken token
+                      — a long URL — can shrink instead of overflowing the card. It
+                      lowers min-content only, leaving the max-content width that
+                      drives the stack decision untouched. */}
+                  <span className="min-w-0 text-foreground [overflow-wrap:anywhere]">{detail.value}</span>
+                </div>
+              );
+            })}
           </div>
         )}
 
