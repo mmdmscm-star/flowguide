@@ -169,6 +169,136 @@ Adjacency may *order* the candidates presented for review. It may not select one
 
 ---
 
+---
+
+## What counts as source media
+
+The ledger is scoped to **media**, not to every URL. Website and reference links
+may legitimately be normalized, deduplicated, or omitted, so they must not create
+a blocking accounting failure. Fidelity rules for links are a separate, later
+concern.
+
+**Source media** = a URL in the source whose path (ignoring any query string or
+fragment) ends in a recognized image extension: `.jpg`, `.jpeg`, `.png`, `.gif`,
+`.webp`, `.avif`, `.heic`. Case-insensitive. Each occurrence retains its **source
+offset**, which is what makes ownership checkable in Stage 2 and what lets the
+review UI show a professional where a photo came from.
+
+The definition is structural — an extension, not a host, a vertical, or a CDN.
+Video and document URLs are deliberately out of scope for now; they are links.
+
+## Review outcomes: blocking vs advisory
+
+Two distinct classes, never conflated:
+
+**Objective accounting failures — these block publishing.**
+
+- a source media URL is missing from the packet;
+- a media URL is stored more than once unexpectedly;
+- stored media has no source provenance;
+- media cannot be assigned safely and is awaiting a user decision.
+
+**Weaker quality signals — these warn or request inspection, and do not block.**
+
+- weak title grounding;
+- heuristic suspicion of misattribution that has produced no held content.
+
+Heuristic suspicion blocks only when it produces *unresolved held content*. The
+distinction is the point: an objective failure means the packet provably does not
+match its source; a quality signal means something merely looks odd.
+
+## The `needs_review` experience
+
+The packet remains **fully editable** throughout. Only publishing is gated, and
+only by objective failures.
+
+1. Everything structurally unambiguous is applied, so the professional keeps the
+   value of the import. Only disputed content is held on the run.
+2. The progress panel ends with *"Import needs your review"* — **not** an error.
+   Entering review is a normal outcome and the copy must say so.
+3. A persistent banner in the editor names the objective problem concretely
+   ("3 photos couldn't be matched to a community").
+4. Each unresolved entry shows **the source text it came from**, rendered from
+   the retained `raw_input`. This is the part that makes the feature real: a
+   professional cannot adjudicate ownership from a count, only from seeing the
+   rows the media sat between.
+5. Per entry, always three routes out: **Attach to →** (item picker), **Discard
+   with a reason** (which is what satisfies "deliberately rejected"), or leave it
+   pending.
+6. A **bulk "discard remaining", behind an explicit confirmation**, guarantees an
+   unresolved run can never permanently trap a packet.
+7. Publishing unblocks the moment zero objective failures remain; the run
+   transitions to `finalized`.
+
+## Tests
+
+- **The reported input**, as a sanitized synthetic replica (3 TSV rows, quoted
+  multiline cells, blank lines between `Image N:` entries): 3 chunks, one
+  photo-owner per chunk, 19/19 accounted, per-item counts 8/2/9, zero fabricated
+  items, zero unresolved review state, one section.
+- **The 2026-08-05 variant** — the chunk that returned nothing: assert the run
+  enters `needs_review` rather than finalizing with 16 photos. This is the
+  regression that matters most, because that failure reached a recipient.
+- **Regression:** existing prose fixtures plan byte-identically (detector returns
+  `null`).
+- **Format sweep:** the same data as quoted CSV / semicolon / pipe; markdown
+  table; JSON array; email with a trailing image list; prose with a `Photos:`
+  appendix.
+- **Detector false positives:** prose containing quotes, an odd quote count,
+  ragged field counts, a single line, an unbalanced quote ⇒ all fall back to
+  blank-line blocks **and** the ledger still catches resulting damage.
+- **Over-budget single record** ⇒ forced split ⇒ Stage 2 continuation path, and
+  `needs_review` when structure cannot resolve it.
+- **Adversarial:** two distinct records whose only content is `Website: <url>`
+  must not merge.
+- **Property test: output ranges tile `[0, len)` exactly.** Non-negotiable — a
+  prototype of the rejected pull-back approach hit three silent tiling bugs that
+  surface only at finalize, as a whole-run failure.
+- **Ledger:** inject a dropped URL, a duplicated URL, and a URL stored but absent
+  from source ⇒ each flags.
+
+## Retries, resumability, concurrency, mid-run deploys
+
+**Retries.** Chunk retry is unchanged. One real hazard: an empty result becomes a
+*legal terminal state*, and today an empty result raises `no_items` — the retry
+path must be updated or an empty chunk retries until it exhausts attempts.
+
+**Resumability.** `needs_review` is non-terminal, so it **must join the
+`idx_ingestion_runs_one_active` predicate** — otherwise a second Organize can
+start on a packet awaiting review. Re-finalize must be idempotent per leaf.
+
+**Concurrency.** Media accounting runs at finalize only, never per chunk. This is
+a deliberate constraint: per-chunk accounting would require cross-chunk
+visibility and break the claim/lease/generation model migration 0012 hardened. No
+chunk ever reads another chunk's state.
+
+**Mid-run deploys.** Plans are frozen in `ingestion_chunks` and
+`segmenter_version` is per run, so a run planned under `seg-v2` finalizes with
+`seg-v2` boundaries — no re-planning, no backfill. The sharp edge: results staged
+before a deploy carry no provenance, so finalize must treat missing provenance as
+*unknown* ⇒ `needs_review`. Never crash, and never assume the old result was
+fine. Likewise the run-level item guard must not be applied retroactively to a
+run half-processed under per-chunk rules.
+
+## Stage 1's honest limit
+
+Stage 1 addresses the demonstrated cause: it removes out-of-range injection,
+allows empty chunk results, preserves strongly-detected tabular records
+atomically, stops technical chunk boundaries from creating semantic sections, and
+makes media loss or duplication visible instead of silent.
+
+**Stage 1 does not prove correct media ownership for every unstructured source.**
+Its ledger proves nothing was lost or duplicated; it cannot prove a stored photo
+sits on the *right* item. For detected tabular input, record atomicity removes
+the mechanism that caused misattribution. For prose, an unbalanced-quote paste,
+or any source where detection declines, a boundary can still land mid-record and
+a photo can still land on a neighbouring item — silently, because no provenance
+exists to check it against.
+
+Stage 2 is the durable safety net for exactly those cases. Shipping Stage 1 first
+is deliberate: it fixes the known defect and closes the silent-loss hole without
+making the full provenance system a prerequisite.
+
 ## What is deliberately not being built
 
 - Mechanical attachment of orphan heads to the previous chunk's last item.
