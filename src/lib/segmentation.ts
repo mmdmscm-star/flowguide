@@ -14,9 +14,10 @@
 // 60s Vercel limit, rather than approaching it.
 // ============================================================
 
-// Bumped with the seg-v2 budget below: the same source now plans into more,
-// smaller chunks. Recorded per run, so in-flight runs keep their persisted plan.
-export const SEGMENTER_VERSION = "seg-v2";
+// Bumped for seg-v3 record-atomic segmentation: a strongly-detected delimited
+// table now plans one chunk boundary per RECORD instead of per blank-line block.
+// Recorded per run, so in-flight runs keep their persisted plan.
+export const SEGMENTER_VERSION = "seg-v3";
 
 export interface SegmentBudget {
   maxItems: number;
@@ -98,13 +99,128 @@ function parseBlocks(source: string): Block[] {
   return blocks;
 }
 
+// ============================================================
+// Record-atomic pre-pass (seg-v3)
+//
+// A blank line is a fine record separator for prose and a WRONG one for
+// delimited data: a spreadsheet cell may legally contain blank lines, so a
+// blank-line cut can land in the middle of one row. When the source is
+// convincingly a delimited table, records — not blank-line blocks — become the
+// unit that must never be split.
+//
+// This SCANS and never rewrites. The persistence contract depends on
+// `segment.text === source.slice(start, end)` and on ranges tiling [0, len)
+// exactly; masking quoted newlines would create a second representation of the
+// same input. A quote-state scan yields the same information as offsets, with
+// no mutation and no offset drift.
+// ============================================================
+
+interface ScannedRecord {
+  start: number;
+  /** Top-level field count with TRAILING EMPTY fields ignored — see below. */
+  fields: number;
+}
+
+// One left-to-right pass carrying RFC4180 quote state. Inside a quoted field a
+// newline and the delimiter are field-internal; a doubled "" is a literal quote.
+// Returns null if quoting is still open at EOF — a torn paste is not a table.
+//
+// Trailing empty fields are excluded from the count on purpose. Selecting a
+// range in Excel/Sheets pads rows out to the selection width, and it commonly
+// pads some rows and not the last one — the real reported paste scanned as
+// 26/26/6 tab fields for three otherwise identical rows. Counting to the last
+// NON-EMPTY field makes that 6/6/6. Without this, the detector would decline on
+// exactly the input it exists to handle.
+function scanRecords(source: string, delim: string): ScannedRecord[] | null {
+  const out: ScannedRecord[] = [];
+  let inQuotes = false;
+  let recStart = 0;
+  let fieldIndex = 0;
+  let lastNonEmptyField = -1;
+  let fieldHasContent = false;
+  let i = 0;
+
+  const endField = () => {
+    if (fieldHasContent) lastNonEmptyField = fieldIndex;
+    fieldHasContent = false;
+  };
+  const endRecord = () => {
+    endField();
+    out.push({ start: recStart, fields: lastNonEmptyField + 1 });
+    fieldIndex = 0;
+    lastNonEmptyField = -1;
+  };
+
+  while (i < source.length) {
+    const ch = source[i];
+    if (inQuotes) {
+      if (ch === '"') {
+        if (source[i + 1] === '"') { fieldHasContent = true; i += 2; continue; }
+        inQuotes = false; i++; continue;
+      }
+      if (!/\s/.test(ch)) fieldHasContent = true;
+      i++; continue;
+    }
+    if (ch === '"') { inQuotes = true; i++; continue; }
+    if (ch === delim) { endField(); fieldIndex++; i++; continue; }
+    if (ch === "\n") { endRecord(); i++; recStart = i; continue; }
+    if (!/\s/.test(ch)) fieldHasContent = true;
+    i++;
+  }
+  if (inQuotes) return null;
+  if (recStart < source.length) endRecord();
+  return out;
+}
+
+// Accept a delimiter only on strong STRUCTURAL evidence — never on vocabulary.
+// The delimiter is discovered by trial, not configured.
+function detectRecords(source: string): Block[] | null {
+  for (const delim of ["\t", ",", ";", "|"]) {
+    const scanned = scanRecords(source, delim);
+    if (!scanned) continue;
+
+    const recs = scanned
+      .map((r, k) => {
+        const end = k + 1 < scanned.length ? scanned[k + 1].start : source.length;
+        return { start: r.start, fields: r.fields, text: source.slice(r.start, end) };
+      })
+      .filter((r) => r.text.trim().length > 0);
+
+    if (recs.length < 2) continue;
+    const fields = recs[0].fields;
+    if (!recs.every((r) => r.fields === fields)) continue;
+
+    // A tab is essentially absent from prose; a comma is not. So non-tab
+    // delimiters must clear a higher bar, including at least one record that
+    // spans lines (the multi-line cell that makes blank-line cutting unsafe in
+    // the first place).
+    if (delim === "\t") {
+      if (fields < 2) continue;
+    } else {
+      if (fields < 3 || recs.length < 3) continue;
+      if (!recs.some((r) => r.text.trim().includes("\n"))) continue;
+    }
+
+    return recs.map((r) => ({
+      lineStart: r.start,
+      text: r.text.trim(),
+      isHeading: false,
+      items: 1,
+    }));
+  }
+  return null;
+}
+
 // Group blocks greedily under the budget. Boundaries fall between blocks (never
 // inside one). A chunk never ends on a trailing heading — those carry to the next
 // chunk so a heading stays with the block it introduces.
 export function segment(source: string, budget: SegmentBudget = DEFAULT_BUDGET): Segment[] {
   const src = source;
   if (src.trim().length === 0) return [];
-  const blocks = parseBlocks(src);
+  // Records when the source is convincingly a delimited table; blank-line blocks
+  // otherwise. Everything downstream — packing, budget, boundaries, tiling — is
+  // identical either way, because detectRecords returns the same Block shape.
+  const blocks = detectRecords(src) ?? parseBlocks(src);
   if (blocks.length === 0) return [];
 
   // Build chunk groups as arrays of block indices.
@@ -195,7 +311,17 @@ export function splitRange(source: string, start: number, end: number): Array<{ 
       if (off > start && off < end) candidates.push({ off, pref });
     }
   };
-  pushAll(/\n[ \t]*\n/, 3, 1); // blank line (highest)
+  // Record starts outrank every text boundary: if the source is a detected
+  // table, cutting anywhere else lands inside a row. Detection runs on the WHOLE
+  // source (not the slice) so quote state is read from the true start — a slice
+  // can begin inside a quoted cell and would scan as unbalanced.
+  const records = detectRecords(source);
+  if (records) {
+    for (const r of records) {
+      if (r.lineStart > start && r.lineStart < end) candidates.push({ off: r.lineStart, pref: 4 });
+    }
+  }
+  pushAll(/\n[ \t]*\n/, 3, 1); // blank line
   pushAll(/\n/, 2, 1); // any newline
   pushAll(/[.!?]\s/, 1, 1); // sentence end
 

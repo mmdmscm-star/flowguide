@@ -121,9 +121,10 @@ test("non-BMP characters (emoji): ranges tile in JS UTF-16 units; last end === s
 test("hash is stable and length-tagged", () => {
   assert.equal(segmentHash("abc"), segmentHash("abc"));
   assert.notEqual(segmentHash("abc"), segmentHash("abd"));
-  // Pinned deliberately: changing the budget changes how a source plans into
-  // chunks, so it must come with a conscious version bump.
-  assert.equal(SEGMENTER_VERSION, "seg-v2");
+  // Pinned deliberately: changing the budget OR the boundary rule changes how a
+  // source plans into chunks, so it must come with a conscious version bump.
+  // seg-v3 = record-atomic segmentation for strongly-detected delimited tables.
+  assert.equal(SEGMENTER_VERSION, "seg-v3");
 });
 
 // The budget exists to keep ONE model call comfortably inside the 60s function

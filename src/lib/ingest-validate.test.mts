@@ -51,13 +51,32 @@ test("sections-only output CANNOT pass a section_append run", () => {
 
 // --- empty / malformed ------------------------------------------------------
 
-test("empty and contentless results are rejected, not silently finalized", () => {
+// seg-v3 contract change. An EMPTY result is legal for ANY chunk, including the
+// first: a chunk may genuinely carry no complete new entity (the tail of a
+// record's media, say), and forcing it to produce one is what made the model
+// fabricate an item out of URL filenames. The "import that added nothing"
+// protection moves to a RUN-LEVEL check at finalize — the only place that can
+// see whether the run as a whole produced anything.
+// See docs/investigations/mid-record-chunk-splits-plan.md.
+test("an empty result is legal — a chunk may carry no new entity", () => {
+  const emptyCases: Array<[string, unknown]> = [
+    ["append", { sections: [] }],
+    ["append", { sections: [{ title: "Empty" }] }],
+    ["append", { sections: [{ title: "Empty", items: [] }] }],
+    ["section_append", { items: [] }],
+  ];
+  for (const [ep, data] of emptyCases) {
+    const r = validateEntryPointResult(ep, data);
+    assert.ok(r.ok, `${ep} ${JSON.stringify(data)} must be accepted as empty`);
+    assert.equal(r.ok && r.itemCount, 0, "and must report zero items");
+  }
+});
+
+test("items that exist but are unusable are still rejected", () => {
+  // Emptiness is legal; GARBAGE is not. A model that returns an item with no
+  // title has failed at its job, and that stays a retryable error.
   const cases: Array<[string, unknown, string]> = [
-    ["append", { sections: [] }, "no_sections"],
-    ["append", { sections: [{ title: "Empty" }] }, "no_items_in_sections"],
-    ["append", { sections: [{ title: "Empty", items: [] }] }, "no_items_in_sections"],
     ["append", { sections: [{ title: "T", items: [{ title: "  " }] }] }, "no_usable_item"],
-    ["section_append", { items: [] }, "no_items"],
     ["section_append", { items: [{ address: "no title" }] }, "no_usable_item"],
   ];
   for (const [ep, data, code] of cases) {

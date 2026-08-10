@@ -12,9 +12,17 @@
 // every leaf chunk completed) never runs.
 //
 // Deliberately permissive about OPTIONAL fields — models legitimately omit
-// address/notes/links/contacts. What is required is the correct top-level shape
-// for the entry point and at least one usable item, since a chunk of source text
-// that yields no items is silent data loss.
+// address/notes/links/contacts. What is required is the correct top-level SHAPE
+// for the entry point.
+//
+// An EMPTY result is legal for ANY chunk, including the first. A chunk may
+// genuinely contain no complete new entity — it may be the tail of media URLs
+// belonging to a record described earlier — and forcing it to produce one is
+// what made the model fabricate an item out of URL filenames. Emptiness is not
+// validated away here; the "import that added nothing" protection moves to a
+// RUN-LEVEL check at finalize, which is the only place that can see whether the
+// run as a whole produced useful output.
+// See docs/investigations/mid-record-chunk-splits-plan.md.
 
 export type ResultShape = "sections" | "items";
 
@@ -69,7 +77,7 @@ export function validateEntryPointResult(entryPoint: string, data: unknown): Val
       return err("wrong_shape_expected_items", `The AI returned ${got} instead of a list of items. ${RETRY}`);
     }
     if (!Array.isArray(items)) return err("items_not_array", `The AI returned a malformed list of items. ${RETRY}`);
-    if (items.length === 0) return err("no_items", `The AI returned no items for this part. ${RETRY}`);
+    if (items.length === 0) return { ok: true, result: { items: [] }, itemCount: 0 };
     for (const it of items) {
       const bad = validateItem(it, "this part");
       if (bad) return { ...bad, message: `${bad.message} ${RETRY}` };
@@ -86,7 +94,7 @@ export function validateEntryPointResult(entryPoint: string, data: unknown): Val
     return err("wrong_shape_expected_sections", `The AI returned ${got} instead of sections. ${RETRY}`);
   }
   if (!Array.isArray(sections)) return err("sections_not_array", `The AI returned a malformed set of sections. ${RETRY}`);
-  if (sections.length === 0) return err("no_sections", `The AI returned no sections for this part. ${RETRY}`);
+  if (sections.length === 0) return { ok: true, result: { sections: [] }, itemCount: 0 };
 
   let itemCount = 0;
   let usable = false;
@@ -103,9 +111,9 @@ export function validateEntryPointResult(entryPoint: string, data: unknown): Val
       if (hasUsableTitle(it as Record<string, unknown>)) usable = true;
     }
   }
-  // Sections with no items at all means this slice of the source produced nothing
-  // usable — exactly the silent-no-op case.
-  if (itemCount === 0) return err("no_items_in_sections", `The AI returned sections with no items. ${RETRY}`);
+  // Sections with no items is a legal empty result (see the header note): this
+  // slice of the source carried no complete new entity of its own.
+  if (itemCount === 0) return { ok: true, result: { sections: [] }, itemCount: 0 };
   if (!usable) return err("no_usable_item", `The AI returned items with no titles. ${RETRY}`);
 
   return { ok: true, result: { sections }, itemCount };

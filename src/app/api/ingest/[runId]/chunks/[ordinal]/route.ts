@@ -150,7 +150,6 @@ export async function POST(_request: Request, context: Context) {
       packetType: packet?.packet_type || "general",
       isLead,
       segmentText,
-      sectionHint: (c.section_hint as string) || "",
       apiKey,
     });
   }

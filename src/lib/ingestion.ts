@@ -13,25 +13,19 @@ export type EntryPoint = "organize" | "append" | "section_append";
 // even spend a model call on it (defends genuinely huge blocks).
 const PRESPLIT_CHARS = Math.floor(DEFAULT_BUDGET.maxChars * 1.6);
 
-function isHeadingLine(t: string): boolean {
-  const s = t.trim();
-  if (!s || s.length > 60) return false;
-  if (/[.!?,;:]$/.test(s)) return false;
-  if (/https?:\/\/|@|\d{3}[-.)]/.test(s)) return false;
-  return true;
-}
-
-// Nearest heading line at or before `offset` — used so appended sections group
-// under the source's heading rather than fragmenting across chunks.
-function nearestHeading(source: string, offset: number): string {
-  const before = source.slice(0, offset);
-  const lines = before.split("\n");
-  for (let i = lines.length - 1; i >= 0; i--) {
-    const l = lines[i].trim();
-    if (l && isHeadingLine(l)) return l;
-  }
-  return "";
-}
+// NOTE: a `nearestHeading()` back-scan used to run here, computing each chunk's
+// `section_hint` from `source.slice(0, sourceStart)` — text OUTSIDE the chunk,
+// belonging to earlier chunks — which was then prepended to the model input as
+// "Section heading context: …". On a real paste it walked 1,399 chars backwards
+// into the middle of the PREVIOUS spreadsheet row and handed a content-free
+// chunk the string "Community Fee: $15,000", which the model turned into a
+// fabricated item's title and its only detail.
+//
+// A chunk is now shown exactly its own segment text and nothing else. Section
+// identity comes from headings that appear INSIDE a chunk's own text, which is
+// safe because segment()'s flush() peels a trailing heading forward so a heading
+// always leads the chunk it introduces.
+// See docs/investigations/mid-record-chunk-splits.md.
 
 // Build the ordered chunk plan persisted by create_ingestion_run. is_continuation
 // (from segmentation) is the deterministic flag finalize uses to recombine a
@@ -44,7 +38,7 @@ export function buildRunChunks(source: string) {
     source_end: s.sourceEnd,
     segment_text: s.text,
     segment_hash: s.hash,
-    section_hint: nearestHeading(source, s.sourceStart),
+    section_hint: "",
     is_continuation: isContinuation(s.sourceStart, s.text),
   }));
 }
@@ -80,19 +74,17 @@ export async function processSegment(opts: {
   packetType: string;
   isLead: boolean;
   segmentText: string;
-  sectionHint: string;
   apiKey: string;
 }): Promise<ProcessOutcome> {
-  const { entryPoint, packetType, isLead, segmentText, sectionHint, apiKey } = opts;
+  const { entryPoint, packetType, isLead, segmentText, apiKey } = opts;
 
   let systemPrompt: string;
   if (entryPoint === "section_append") systemPrompt = itemsOnlyPrompt();
   else if (entryPoint === "organize" && isLead) systemPrompt = organizeLeadPrompt(packetType);
   else systemPrompt = sectionsPrompt(packetType);
 
-  const userText = sectionHint && entryPoint !== "section_append"
-    ? `Section heading context: ${sectionHint}\n\n${segmentText}`
-    : segmentText;
+  // The model sees the chunk's own text and nothing else (see the note above).
+  const userText = segmentText;
 
   const res = await callStructuringModel({ systemPrompt, rawText: userText, apiKey, tag: `ingest-${entryPoint}` });
   if (!res.ok) {
