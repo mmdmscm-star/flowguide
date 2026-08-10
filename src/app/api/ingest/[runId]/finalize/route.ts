@@ -44,8 +44,12 @@ export async function POST(_request: Request, context: Context) {
   // Objective failures (missing / duplicated / not-in-source media) put the run
   // into needs_review and block publishing. This does NOT prove a photo sits on
   // the RIGHT item — that needs per-item provenance, which is Stage 2.
-  const result = data as { packet_id?: string } | null;
-  const packetId = result?.packet_id;
+  // The packet id comes from the RUN ROW, not from the RPC result:
+  // finalize_ingestion_run returns {status, reused, sections, items} and no
+  // packet_id. Reading it from the result silently disabled this entire block.
+  const { data: runRow } = await supabase
+    .from("ingestion_runs").select("packet_id").eq("id", runId).eq("user_id", session.userId).maybeSingle();
+  const packetId = (runRow as { packet_id?: string } | null)?.packet_id;
   let review: { ok: boolean; summary: string; failures: unknown[] } | undefined;
 
   if (packetId) {

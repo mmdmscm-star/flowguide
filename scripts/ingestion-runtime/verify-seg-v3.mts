@@ -50,6 +50,18 @@ check("[run] planned 3 chunks", res.data.totalChunks === 3, `got ${res.data.tota
 const out = await drive(res.data.runId, m);
 check("[run] finalized", out.outcome === "finalized", JSON.stringify(out));
 
+// Observe the ROUTE's OWN accounting rather than recomputing it here. An earlier
+// version of this script computed the ledger in-process, which masked the
+// finalize route skipping it entirely (it read packet_id from a result that
+// never contained one). Finalize is idempotent, so calling it again replays the
+// accounting and returns the payload.
+const fin = await api(`/api/ingest/${res.data.runId}/finalize`, { method: "POST" });
+const routeReview = fin.data?.review as { ok?: boolean; failures?: unknown[] } | undefined;
+check("[route] finalize returned a media ledger", routeReview !== undefined,
+  `review=${JSON.stringify(fin.data)?.slice(0, 160)}`);
+check("[route] route's own ledger reports no failures", routeReview?.ok === true,
+  JSON.stringify(routeReview?.failures ?? []).slice(0, 200));
+
 // ---- stored result
 const { data: secs } = await svc.from("sections").select("id, title").eq("packet_id", packetId).order("sort_order");
 const sections = secs ?? [];
@@ -79,8 +91,9 @@ check("[photos] AlmaVia has 2", byPrefix("almavia") === 2, `got ${byPrefix("alma
 check("[photos] Drake Terrace has 9", byPrefix("drake") === 9, `got ${byPrefix("drake")}`);
 
 // ---- exact media accounting
+// Independent cross-check of the route's answer, computed from stored rows.
 const ledger = buildMediaLedger({ source: SOURCE, stored });
-console.log(`\nledger: source=${ledger.sourceCount} stored=${ledger.storedCount} failures=${ledger.failures.length}`);
+console.log(`\nledger (independent): source=${ledger.sourceCount} stored=${ledger.storedCount} failures=${ledger.failures.length}`);
 for (const f of ledger.failures) console.log(`  ${f.code}: ${f.url.slice(-34)}`);
 check("[ledger] 19 source media accounted", ledger.sourceCount === 19, `got ${ledger.sourceCount}`);
 check("[ledger] no unresolved review state", ledger.ok, JSON.stringify(ledger.failures.slice(0, 4)));
