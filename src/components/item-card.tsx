@@ -1,69 +1,8 @@
 "use client";
 
-import { useState } from "react";
 import { Item } from "@/lib/types";
 import { detectLinkType, resolveCardLinks, type LinkType } from "@/lib/item-links";
-
-// ============================================================
-// Photo gallery with lightbox
-// ============================================================
-function PhotoGallery({ photos }: { photos: string[] }) {
-  const [activeIndex, setActiveIndex] = useState(0);
-  const [lightboxOpen, setLightboxOpen] = useState(false);
-
-  return (
-    <>
-      <div className="relative">
-        <img
-          src={photos[activeIndex]}
-          alt=""
-          className="w-full max-h-[28rem] object-contain cursor-pointer"
-          onClick={() => setLightboxOpen(true)}
-        />
-        {photos.length > 1 && (
-          <div className="absolute bottom-2 right-3 bg-black/60 text-white text-xs px-2 py-0.5 rounded-full">
-            {activeIndex + 1} / {photos.length}
-          </div>
-        )}
-      </div>
-      {photos.length > 1 && (
-        <div className="flex gap-1.5 px-5 mt-2 mb-1">
-          {photos.map((photo, i) => (
-            <button
-              key={i}
-              onClick={() => setActiveIndex(i)}
-              className={`h-12 w-12 rounded-lg overflow-hidden border-2 flex-shrink-0 ${
-                i === activeIndex ? "border-accent" : "border-transparent"
-              }`}
-            >
-              <img src={photo} alt="" className="w-full h-full object-cover" />
-            </button>
-          ))}
-        </div>
-      )}
-
-      {lightboxOpen && (
-        <div
-          className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4"
-          onClick={() => setLightboxOpen(false)}
-        >
-          <button
-            className="absolute top-4 right-4 text-white/80 hover:text-white text-3xl leading-none"
-            onClick={() => setLightboxOpen(false)}
-          >
-            &times;
-          </button>
-          <img
-            src={photos[activeIndex]}
-            alt=""
-            className="max-w-full max-h-full object-contain"
-            onClick={(e) => e.stopPropagation()}
-          />
-        </div>
-      )}
-    </>
-  );
-}
+import { PhotoGallery } from "./photo-gallery";
 
 // URL type detection, labelling, and link identity live in @/lib/item-links so
 // the rules are pure and unit-testable; this file keeps only presentation.
