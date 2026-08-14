@@ -79,8 +79,13 @@ Replaces seg-v3's "every record must share one field count".
 - **Noise rows** are excluded from the shape test and attach to the preceding
   record's span. A row is noise only if it has ≤1 field **and** is either:
   1. pure punctuation/whitespace — `----`, `====`, `***`, `___`; or
-  2. a **FlowGuide append marker** — `--- Added Jun 30, 2026, 6:57 PM ---`,
-     i.e. a single-field row bracketed by `--` at both ends.
+  2. **FlowGuide's own generated append marker**, matched narrowly on our
+     literal keyword rather than on "text between dashes":
+     `/^-{3}\s*Added\b[^\n]*?-{3}$/` on the trimmed row. Both shapes we emit
+     are covered — `--- Added ---` (finalize, SQL) and
+     `--- Added Jun 30, 2026, 6:57 PM ---` (append routes, en-US
+     `toLocaleString`). `--- Notes ---` and other bracketed prose are **not**
+     noise.
 - **Modal field count** across non-noise rows must be ≥2, and *every* non-noise
   row must match it. Genuinely ragged data still declines — that is real
   ambiguity, not cosmetics.
@@ -107,8 +112,26 @@ passes in silence. It becomes explicit: recorded on the run, and — **when the
 source contains media** — it puts the run into `needs_review`.
 
 **Honest scope:** this design guarantees ownership for *structured* sources. For
-prose it guarantees accounting and no fabricated items, not ownership. Claiming
-otherwise would be false.
+prose it guarantees accounting, not ownership — but it does not stay silent
+about that.
+
+**The prose lane's user-facing behaviour is an explicit decision, not an
+omission:**
+
+| Prose source | Behaviour |
+|---|---|
+| no media | nothing |
+| media, **0 or 1 item** | nothing — with one item, media cannot be misassigned |
+| media, **2+ items** | **non-blocking advisory** in the review panel: *"FlowGuide couldn't confirm which item each photo belongs to — worth a quick check."* |
+
+Non-blocking is deliberate. We have *absence of proof*, not evidence of a
+problem, and blocking on that would train professionals to click through
+warnings. But silence is the habit this whole design exists to break.
+
+Corpus evidence for the size of this lane: **2 sources, 4 photos**, each
+producing 2 items with 1 photo apiece. Both are the same "Most Popular National
+Parks" packet. Small enough that an advisory is proportionate; not zero, so it
+needs a decision.
 
 ### Layer 3 — Ownership verification (at finalize, and on demand)
 
@@ -197,8 +220,20 @@ The two that still block are genuine ambiguity, not cosmetics:
 Three of the original five declined **only** because of our own append marker
 (`--- Added <date> ---`), which is why rule (2) exists.
 
-Distribution: 16 aligned, 16 structured-unaligned (2 with media), 10 prose
-(2 with media).
+Distribution across all 42: 16 aligned, 16 structured-unaligned, 10 prose.
+
+**Among the 19 sources that actually contain media** — the only ones where
+ownership matters:
+
+| Class | Sources | Photo occurrences |
+|---|---|---|
+| **aligned** | **15** | **345** |
+| structured-unaligned | 2 | 56 |
+| prose | 2 | 4 |
+
+So ownership becomes verifiable for **15 of 19 media-bearing sources, covering
+345 of 405 photo occurrences (85%)**. Quote that figure rather than 16/42:
+alignment is only meaningful where there is media to misplace.
 
 ---
 
@@ -221,11 +256,18 @@ Distribution: 16 aligned, 16 structured-unaligned (2 with media), 10 prose
 - **None** for detection, classification, verification or accounting — findings
   fit the existing `ingestion_runs.review` jsonb, and `needs_review` already
   exists from 0013.
-- **One migration (0014)** for resolution: an owner-scoped, draft-only RPC to
-  move a photo between items within one packet and to record a resolution, so
-  the editor never writes `item_photos` directly. Consistent with how the rest
-  of this schema is guarded. *Open:* confirm whether the existing item-content
-  writer can carry this before adding a new RPC.
+- **One migration (0014)** for resolution — *confirmed necessary after
+  inspecting the existing path.* `update_item_content` (0011) is scoped to a
+  single item: it locks the packet, then replaces that item's photos wholesale
+  via `delete … where item_id = p_item_id`. Every other photo write in the
+  schema is likewise single-item; **no RPC accepts two item ids**. Moving a
+  photo from item A to item B through the existing writer therefore takes two
+  separate calls — leaving a window where the photo is on both items or on
+  neither — plus a third write to record the resolution on `ingestion_runs`.
+  Three non-atomic writes fails the correctness bar, so 0014 adds one narrow,
+  owner-scoped, draft-only RPC that applies the moves and records the resolution
+  **in a single transaction**, with both items verified to belong to the same
+  packet.
 - `SEGMENTER_VERSION` → `seg-v4`. Version is per run and plans are frozen in
   `ingestion_chunks`, so in-flight runs keep their boundaries; no backfill.
 
@@ -262,7 +304,12 @@ quoting, blank lines inside quoted cells, photo-cell shape, record lengths.
 
 ## Open questions
 
-1. Whether the resolution RPC can reuse the existing item-content writer.
+1. ~~Whether the resolution RPC can reuse the existing item-content writer.~~
+   **Resolved:** it cannot, on atomicity grounds. See Migrations.
 2. Whether `structured-unaligned` without media should be visible to the
    professional at all, or recorded only for diagnostics. Current proposal:
    recorded only.
+3. One residual edge in the narrowed marker rule: a professional who literally
+   types `--- Added photos from tour ---` produces a row we treat as a
+   separator. It is a single-field row either way, so the consequence is
+   limited, and requiring our literal `Added` keyword keeps the exposure small.
