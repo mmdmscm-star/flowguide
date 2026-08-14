@@ -54,13 +54,17 @@ export function extractSourceMedia(source: string): SourceMedia[] {
 }
 
 export type MediaFailureCode =
-  | "media_missing"        // in the source, stored nowhere
-  | "media_duplicated"     // stored on more than one item
+  | "media_missing"        // stored fewer times than the source lists it
+  | "media_duplicated"     // stored MORE times than the source lists it
   | "media_not_in_source"; // stored but absent from the source
 
 export interface MediaFailure {
   code: MediaFailureCode;
   url: string;
+  /** How many times the SOURCE lists this URL (0 = not in source at all). */
+  sourceOccurrences?: number;
+  /** How many rows actually hold it. */
+  storedRows?: number;
   /** Present for source-derived failures; absent for media_not_in_source. */
   offset?: number;
   /** Item ids holding this URL — for duplicated/not-in-source. */
@@ -73,7 +77,10 @@ export interface StoredMedia {
 }
 
 export interface MediaLedger {
+  /** Distinct media URLs in the source. */
   sourceCount: number;
+  /** Total occurrences, which may exceed sourceCount when one is listed twice. */
+  sourceOccurrences: number;
   storedCount: number;
   /** Objective accounting failures. Non-empty ⇒ the run needs review and
    *  publishing is blocked. These are facts, not heuristics. */
@@ -103,38 +110,56 @@ export function buildMediaLedger(opts: {
   const stored = (opts.stored || []).filter((s) => isMediaUrl(s.url));
   const rejected = new Set((opts.rejected || []).map((u) => u.trim()));
 
-  const byUrl = new Map<string, string[]>();
+  // OCCURRENCE-AWARE. Stage 1 deduplicated the source, so an author who listed
+  // the same photo twice was indistinguishable from a duplicate FlowGuide
+  // introduced. Both real incidents contained the former: the client source
+  // lists 89033BrookPC twice on purpose. Counting occurrences separates
+  // "the author repeated it" from "we duplicated it".
+  const sourceCounts = new Map<string, number>();
+  const firstOffset = new Map<string, number>();
+  for (const m of sourceMedia) {
+    sourceCounts.set(m.url, (sourceCounts.get(m.url) ?? 0) + 1);
+    if (!firstOffset.has(m.url)) firstOffset.set(m.url, m.offset);
+  }
+
+  const storedByUrl = new Map<string, string[]>();
   for (const s of stored) {
-    const list = byUrl.get(s.url) ?? [];
+    const list = storedByUrl.get(s.url) ?? [];
     list.push(s.itemId);
-    byUrl.set(s.url, list);
+    storedByUrl.set(s.url, list);
   }
 
   const failures: MediaFailure[] = [];
-  const seenSource = new Set<string>();
 
-  for (const m of sourceMedia) {
-    if (seenSource.has(m.url)) continue; // the same URL twice in source is one asset
-    seenSource.add(m.url);
-    if (rejected.has(m.url)) continue;
-    const holders = byUrl.get(m.url);
-    if (!holders || holders.length === 0) {
-      failures.push({ code: "media_missing", url: m.url, offset: m.offset });
-      continue;
-    }
-    if (new Set(holders).size > 1 || holders.length > 1) {
-      failures.push({ code: "media_duplicated", url: m.url, offset: m.offset, itemIds: holders });
+  for (const [url, expected] of sourceCounts) {
+    if (rejected.has(url)) continue;
+    const holders = storedByUrl.get(url) ?? [];
+    if (holders.length < expected) {
+      failures.push({
+        code: "media_missing", url, offset: firstOffset.get(url),
+        sourceOccurrences: expected, storedRows: holders.length,
+        ...(holders.length ? { itemIds: holders } : {}),
+      });
+    } else if (holders.length > expected) {
+      failures.push({
+        code: "media_duplicated", url, offset: firstOffset.get(url),
+        sourceOccurrences: expected, storedRows: holders.length, itemIds: holders,
+      });
     }
   }
 
-  for (const [url, holders] of byUrl) {
-    if (!seenSource.has(url)) {
-      failures.push({ code: "media_not_in_source", url, itemIds: holders });
+  for (const [url, holders] of storedByUrl) {
+    if (!sourceCounts.has(url)) {
+      failures.push({
+        code: "media_not_in_source", url,
+        sourceOccurrences: 0, storedRows: holders.length, itemIds: holders,
+      });
     }
   }
 
   return {
-    sourceCount: seenSource.size,
+    sourceCount: sourceCounts.size,
+    sourceOccurrences: sourceMedia.length,
     storedCount: stored.length,
     failures,
     ok: failures.length === 0,

@@ -17,7 +17,7 @@
 // Bumped for seg-v3 record-atomic segmentation: a strongly-detected delimited
 // table now plans one chunk boundary per RECORD instead of per blank-line block.
 // Recorded per run, so in-flight runs keep their persisted plan.
-export const SEGMENTER_VERSION = "seg-v3";
+export const SEGMENTER_VERSION = "seg-v4";
 
 export interface SegmentBudget {
   maxItems: number;
@@ -174,41 +174,98 @@ function scanRecords(source: string, delim: string): ScannedRecord[] | null {
 
 // Accept a delimiter only on strong STRUCTURAL evidence — never on vocabulary.
 // The delimiter is discovered by trial, not configured.
-function detectRecords(source: string): Block[] | null {
+// A row that carries no data of its own and must not be judged as a record.
+// Two shapes only, both deliberately narrow:
+//
+//   1. a cosmetic separator — "----", "====", "***", "___";
+//   2. FlowGuide's OWN generated append marker, matched on the exact shapes we
+//      emit rather than on "text between dashes". `--- Added ---` comes from
+//      finalize_ingestion_run; the timestamped form comes from the append
+//      routes via en-US toLocaleString. User text such as
+//      "--- Added photos from tour ---" is NOT a separator and is preserved.
+//
+// Noise never becomes its own block; it attaches to the preceding record.
+const SEPARATOR_ROW = /^[\s\-_=*~.·—–]*$/;
+const APPEND_MARKER = /^--- Added(?: [A-Z][a-z]{2} \d{1,2}, \d{4}, \d{1,2}:\d{2} (?:AM|PM))? ---$/;
+
+function isNoiseRow(fields: number, text: string): boolean {
+  if (fields > 1) return false;
+  const t = text.trim();
+  return SEPARATOR_ROW.test(text) || APPEND_MARKER.test(t);
+}
+
+export interface SourceRecord {
+  start: number;
+  /** exclusive; records tile the source in order */
+  end: number;
+}
+
+export interface RecordDetection {
+  delimiter: string;
+  /** modal top-level field count of the data rows */
+  fields: number;
+  records: SourceRecord[];
+  separatorRows: number;
+}
+
+/**
+ * Structural record detection. Accepts only on evidence, never on vocabulary.
+ *
+ * seg-v3 required EVERY record to share one field count, so four cosmetic
+ * "----" rows in a real spreadsheet paste made it decline, fall back to
+ * blank-line blocks, and cut every record — the 2026-08-14 incident. seg-v4
+ * excludes noise rows from the shape test and compares the rest against the
+ * MODAL count. Genuinely ragged data still declines: that is real ambiguity.
+ */
+export function detectSourceRecords(source: string): RecordDetection | null {
   for (const delim of ["\t", ",", ";", "|"]) {
     const scanned = scanRecords(source, delim);
     if (!scanned) continue;
 
-    const recs = scanned
-      .map((r, k) => {
-        const end = k + 1 < scanned.length ? scanned[k + 1].start : source.length;
-        return { start: r.start, fields: r.fields, text: source.slice(r.start, end) };
-      })
-      .filter((r) => r.text.trim().length > 0);
+    const spans = scanned.map((r, k) => ({
+      start: r.start,
+      end: k + 1 < scanned.length ? scanned[k + 1].start : source.length,
+      fields: r.fields,
+    }));
+    const nonBlank = spans.filter((r) => source.slice(r.start, r.end).trim().length > 0);
+    const data = nonBlank.filter((r) => !isNoiseRow(r.fields, source.slice(r.start, r.end)));
+    // A source that is ONE record is trivially aligned: any split falls inside
+    // that record, so media ownership cannot be ambiguous.
+    if (data.length < 1) continue;
 
-    if (recs.length < 2) continue;
-    const fields = recs[0].fields;
-    if (!recs.every((r) => r.fields === fields)) continue;
+    const tally = new Map<number, number>();
+    for (const r of data) tally.set(r.fields, (tally.get(r.fields) ?? 0) + 1);
+    const mode = [...tally.entries()].sort((a, b) => b[1] - a[1])[0][0];
+    if (mode < 2) continue;
+    if (!data.every((r) => r.fields === mode)) continue;
 
-    // A tab is essentially absent from prose; a comma is not. So non-tab
-    // delimiters must clear a higher bar, including at least one record that
-    // spans lines (the multi-line cell that makes blank-line cutting unsafe in
-    // the first place).
-    if (delim === "\t") {
-      if (fields < 2) continue;
-    } else {
-      if (fields < 3 || recs.length < 3) continue;
-      if (!recs.some((r) => r.text.trim().includes("\n"))) continue;
+    // A tab is essentially absent from prose; a comma is not.
+    if (delim !== "\t") {
+      if (mode < 3 || data.length < 3) continue;
+      if (!data.some((r) => source.slice(r.start, r.end).trim().includes("\n"))) continue;
     }
 
-    return recs.map((r) => ({
-      lineStart: r.start,
-      text: r.text.trim(),
-      isHeading: false,
-      items: 1,
+    // Noise attaches to the preceding record so ranges keep tiling exactly.
+    const records: SourceRecord[] = data.map((r, i) => ({
+      start: r.start,
+      end: i + 1 < data.length ? data[i + 1].start : source.length,
     }));
+    records[0].start = 0;
+    return { delimiter: delim, fields: mode, records, separatorRows: nonBlank.length - data.length };
   }
   return null;
+}
+
+/** Records as segmenter Blocks, or null when the source is not a table. */
+function detectRecords(source: string): Block[] | null {
+  const found = detectSourceRecords(source);
+  if (!found) return null;
+  return found.records.map((r) => ({
+    lineStart: r.start,
+    text: source.slice(r.start, r.end).trim(),
+    isHeading: false,
+    items: 1,
+  }));
 }
 
 // Group blocks greedily under the budget. Boundaries fall between blocks (never

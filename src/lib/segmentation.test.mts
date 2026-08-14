@@ -123,8 +123,10 @@ test("hash is stable and length-tagged", () => {
   assert.notEqual(segmentHash("abc"), segmentHash("abd"));
   // Pinned deliberately: changing the budget OR the boundary rule changes how a
   // source plans into chunks, so it must come with a conscious version bump.
-  // seg-v3 = record-atomic segmentation for strongly-detected delimited tables.
-  assert.equal(SEGMENTER_VERSION, "seg-v3");
+  // seg-v4 = record detection tolerant of cosmetic separator rows and of
+  // FlowGuide's own append marker, so a legitimate table is no longer rejected
+  // into blank-line fallback. See docs/investigations/media-ownership-provenance.md.
+  assert.equal(SEGMENTER_VERSION, "seg-v4");
 });
 
 // The budget exists to keep ONE model call comfortably inside the 60s function

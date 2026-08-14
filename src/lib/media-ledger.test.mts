@@ -92,11 +92,29 @@ test("the corrected packet accounts exactly", () => {
   assert.deepEqual(ledger.failures, []);
 });
 
-test("duplicate occurrences of one URL in the source count as one asset", () => {
-  const src = `Image 1: ${P}\n\nAgain: ${P}`;
-  const ledger = buildMediaLedger({ source: src, stored: [{ url: P, itemId: "i1" }] });
-  assert.equal(ledger.ok, true);
-  assert.equal(ledger.sourceCount, 1);
+// OCCURRENCE-AWARE: an author who lists a photo twice is not the same thing as
+// a duplicate FlowGuide introduced. The real client source lists one photo
+// twice on purpose, so conflating the two hid a genuine defect behind a
+// legitimate one.
+test("a URL the source lists twice must be stored twice", () => {
+  const src = `Image 1: ${P}\n\nImage 2: ${P}`;
+  const twice = buildMediaLedger({ source: src, stored: [{ url: P, itemId: "i1" }, { url: P, itemId: "i1" }] });
+  assert.equal(twice.ok, true, "listed twice, stored twice = correct");
+  assert.equal(twice.sourceCount, 1, "one distinct URL");
+  assert.equal(twice.sourceOccurrences, 2, "two occurrences");
+
+  const once = buildMediaLedger({ source: src, stored: [{ url: P, itemId: "i1" }] });
+  assert.equal(once.ok, false, "listed twice, stored once = an occurrence is missing");
+  assert.equal(once.failures[0].code, "media_missing");
+  assert.equal(once.failures[0].sourceOccurrences, 2);
+  assert.equal(once.failures[0].storedRows, 1);
+
+  const thrice = buildMediaLedger({ source: src, stored: [
+    { url: P, itemId: "i1" }, { url: P, itemId: "i1" }, { url: P, itemId: "i2" },
+  ] });
+  assert.equal(thrice.ok, false, "stored more often than listed = OUR duplicate");
+  assert.equal(thrice.failures[0].code, "media_duplicated");
+  assert.equal(thrice.failures[0].storedRows, 3);
 });
 
 test("trailing prose punctuation is not part of the URL", () => {
