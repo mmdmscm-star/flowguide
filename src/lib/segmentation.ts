@@ -14,8 +14,11 @@
 // 60s Vercel limit, rather than approaching it.
 // ============================================================
 
-// Bumped for seg-v3 record-atomic segmentation: a strongly-detected delimited
-// table now plans one chunk boundary per RECORD instead of per blank-line block.
+// seg-v3 made a strongly-detected delimited table plan one chunk boundary per
+// RECORD instead of per blank-line block. seg-v4 makes that detection survive
+// cosmetic rows — separator lines and FlowGuide's own append markers — which
+// under seg-v3 broke the modal field count and silently dropped a real table
+// back to blank-line splitting, cutting every record in half.
 // Recorded per run, so in-flight runs keep their persisted plan.
 export const SEGMENTER_VERSION = "seg-v4";
 

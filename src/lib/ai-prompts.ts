@@ -28,6 +28,14 @@ const TYPE_GUIDANCE: Record<string, string> = {
   general: "",
 };
 
+// The escape hatch. A segment can be the TAIL of an entry that began in an
+// earlier segment — a run of photos with no identifying text of its own. With no
+// legal way to say "there is nothing here", the model composed an entity from
+// the only string available: the image filename. That is exactly how
+// `Primrose Photo 4` and `Drake T Community Property` reached client packets.
+// The validator has always accepted an empty result; the model was never told.
+const NOTHING_RULE = `If this segment has no entry of its own — only photos, URLs or a fragment continuing something that started earlier — return an EMPTY list. Returning nothing is a valid, expected answer. NEVER build a title out of a URL, filename or image path.`;
+
 // organize LEAD chunk: also captures a packet title + optional client name.
 export function organizeLeadPrompt(packetType: string): string {
   const g = TYPE_GUIDANCE[packetType] || "";
@@ -38,6 +46,7 @@ ${g ? "\n" + g + "\n" : ""}
 ${URL_RULES}
 
 Rules: preserve ALL specifics (addresses, phones, prices, hours, names); do not invent; ambiguous -> notes; full street addresses -> address; keep every person + their own phone/email; keep titles < 60 chars; a label for every link.
+${NOTHING_RULE}
 
 Respond with ONLY valid JSON (no markdown):
 { "title": "string", "clientName": "string or null", "sections": ${SECTION_SCHEMA.slice(1)}`;
@@ -52,6 +61,7 @@ ${g ? "\n" + g + "\n" : ""}
 ${URL_RULES}
 
 Rules: preserve ALL specifics; do not invent; ambiguous -> notes; full addresses -> address; keep every person + their own phone/email; titles < 60 chars; a label for every link.
+${NOTHING_RULE}
 If a section heading is provided as context, use it as the section title so items group consistently.
 
 Respond with ONLY valid JSON (no markdown): ${SECTION_SCHEMA}`;
@@ -65,6 +75,7 @@ Return ONLY items — no sections, titles, or grouping.
 ${URL_RULES}
 
 Rules: do not invent; preserve all specifics; keep every person + their own phone/email; titles < 60 chars.
+${NOTHING_RULE}
 Respond with ONLY valid JSON (no markdown), items is the ONLY top-level key:
 { "items": [ { "title": "string", "address": "string?", "description": "string?", "notes": "string?", "details": [{"label":"string","value":"string"}], "links": [{"url":"string","label":"string"}], "photos": ["string"], "contacts": [{"name":"string?","role":"string?","phone":"string?","email":"string?","website":"string?"}] } ] }`;
 }

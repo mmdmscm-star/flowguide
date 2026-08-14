@@ -3,6 +3,7 @@ import { getSession } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase";
 import { buildMediaLedger, describeMediaFailures, type StoredMedia } from "@/lib/media-ledger";
 import { describeReviewExit } from "@/lib/review-exit";
+import { checkRunOutcome } from "@/lib/run-guards";
 
 export const maxDuration = 60;
 type Context = { params: Promise<{ runId: string }> };
@@ -91,10 +92,32 @@ export async function POST(_request: Request, context: Context) {
       });
 
       const ledger = buildMediaLedger({ source, stored });
-      review = { ok: ledger.ok, summary: describeMediaFailures(ledger.failures), exit, failures: ledger.failures };
+      const failures: unknown[] = [...ledger.failures];
+      const summaries = ledger.failures.length ? [describeMediaFailures(ledger.failures)] : [];
 
-      if (!ledger.ok) {
-        console.error("[finalize] media accounting failed", { runId, packetId, failures: ledger.failures });
+      // Run-level outcome. Per-chunk validation cannot see this: every chunk can
+      // report success while the run as a whole produced nothing. Mode-aware —
+      // an append run may legitimately add no NEW item. Skipped on an idempotent
+      // replay, which returns `reused` and no counts.
+      const applied = data as { reused?: boolean; items?: number };
+      if (!applied?.reused) {
+        const outcome = checkRunOutcome({
+          entryPoint: run?.entry_point ?? "organize",
+          source,
+          itemsCreated: applied?.items ?? 0,
+        });
+        if (outcome) {
+          failures.push(outcome);
+          summaries.push(outcome.summary);
+          console.error("[finalize] run produced nothing", { runId, packetId, usableChars: outcome.usableChars });
+        }
+      }
+
+      const ok = failures.length === 0;
+      review = { ok, summary: summaries.join(" "), exit, failures };
+
+      if (!ok) {
+        console.error("[finalize] run needs review", { runId, packetId, failures });
         // Persisting the review state needs migration 0013 (the `needs_review`
         // status and the `review` column). Until it is applied this write fails
         // harmlessly and the failure still reaches the caller and the logs —
