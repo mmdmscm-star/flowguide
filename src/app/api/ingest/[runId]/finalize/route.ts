@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase";
 import { buildMediaLedger, describeMediaFailures, type StoredMedia } from "@/lib/media-ledger";
-import { describeReviewExit } from "@/lib/review-exit";
+import { describeReviewExit, discardWouldDeletePacket } from "@/lib/review-exit";
 import { checkRunOutcome } from "@/lib/run-guards";
 
 export const maxDuration = 60;
@@ -16,6 +16,21 @@ export async function POST(_request: Request, context: Context) {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { runId } = await context.params;
   const supabase = createServerClient();
+
+  // Read the origin marker BEFORE finalizing. finalize_ingestion_run clears
+  // packets.origin_ingestion_run_id on its way through, and discard's
+  // delete-the-empty-draft rule depends on it — so after the RPC there is no
+  // way to tell whether this run created the packet. Best-effort: a failure
+  // here must never stop a finalize.
+  const { data: preRow } = await supabase
+    .from("ingestion_runs").select("packet_id").eq("id", runId).eq("user_id", session.userId).maybeSingle();
+  const prePacketId = (preRow as { packet_id?: string } | null)?.packet_id;
+  let createdThisPacket = false;
+  if (prePacketId) {
+    const { data: prePacket } = await supabase
+      .from("packets").select("origin_ingestion_run_id").eq("id", prePacketId).maybeSingle();
+    createdThisPacket = (prePacket as { origin_ingestion_run_id?: string | null } | null)?.origin_ingestion_run_id === runId;
+  }
 
   const { data, error } = await supabase.rpc("finalize_ingestion_run", {
     p_run_id: runId,
@@ -79,17 +94,9 @@ export async function POST(_request: Request, context: Context) {
         }
       }
 
-      // The way OUT must be computed here, because only the server can see the
-      // three counts and the origin marker that decide whether discard deletes
-      // this packet or preserves it. Mirrors discard_ingestion_run (0012).
       const { count: blockCount } = await supabase
         .from("packet_blocks").select("id", { count: "exact", head: true }).eq("packet_id", packetId);
-      const exit = describeReviewExit({
-        entryPoint: run?.entry_point ?? "organize",
-        isOriginRun: pk?.origin_ingestion_run_id === runId,
-        isDraft: pk?.status === "draft",
-        isEmpty: sectionIds.length === 0 && stored.length === 0 && (blockCount ?? 0) === 0 && itemCount === 0,
-      });
+      const isEmpty = sectionIds.length === 0 && stored.length === 0 && (blockCount ?? 0) === 0 && itemCount === 0;
 
       const ledger = buildMediaLedger({ source, stored });
       const failures: unknown[] = [...ledger.failures];
@@ -114,6 +121,30 @@ export async function POST(_request: Request, context: Context) {
       }
 
       const ok = failures.length === 0;
+
+      // A run held for review did not really finish, so the packet it created is
+      // still an orphan-import candidate. finalize cleared that marker assuming
+      // the run succeeded; restore it for an EMPTY packet this run created, so
+      // discard does what 0012 already intends — remove the empty draft instead
+      // of stranding the professional in one. Discard re-evaluates emptiness at
+      // discard time, so a packet they meanwhile fill in is preserved and the
+      // marker is dropped then.
+      const disposition = {
+        entryPoint: run?.entry_point ?? "organize",
+        isOriginRun: createdThisPacket,
+        isDraft: pk?.status === "draft",
+        isEmpty,
+      };
+      const willRemovePacket = !ok && discardWouldDeletePacket(disposition);
+      if (willRemovePacket) {
+        const { error: markErr } = await supabase
+          .from("packets").update({ origin_ingestion_run_id: runId }).eq("id", packetId);
+        if (markErr) console.error("[finalize] could not restore origin marker:", markErr.message);
+      }
+
+      // Mirrors discard_ingestion_run's own predicate, so the sentence promises
+      // exactly what the SQL will do.
+      const exit = describeReviewExit({ ...disposition, isOriginRun: willRemovePacket });
       review = { ok, summary: summaries.join(" "), exit, failures };
 
       if (!ok) {

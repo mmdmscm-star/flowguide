@@ -36,3 +36,28 @@ test("every phrasing names the affordance that exists", () => {
     assert.match(describeReviewExit({ ...EMPTY_ORIGIN_DRAFT, isEmpty }), /Discard/);
   }
 });
+
+// The zero-item case, made intentional.
+//
+// finalize clears packets.origin_ingestion_run_id on the assumption the run
+// succeeded, which would leave a held run's empty packet un-deletable and strand
+// the professional in an empty draft. The finalize route restores the marker for
+// exactly this shape, so discard removes the empty packet as 0012 intends — and
+// the sentence promises that only when the restore actually happened.
+test("a held, empty, self-created organize draft is the one case that gets removed", () => {
+  const held = { entryPoint: "organize", isOriginRun: true, isDraft: true, isEmpty: true };
+  assert.equal(discardWouldDeletePacket(held), true);
+  assert.match(describeReviewExit(held), /empty packet will be removed/);
+
+  // The marker is NOT restored when the packet has content, so the professional
+  // keeps everything and the sentence says so.
+  const withContent = { ...held, isEmpty: false };
+  assert.equal(discardWouldDeletePacket(withContent), false);
+  assert.match(describeReviewExit(withContent), /Everything you can see stays/);
+
+  // An append run never created the packet, so it can never remove it.
+  assert.equal(discardWouldDeletePacket({ ...held, entryPoint: "append" }), false);
+
+  // If this run did not create the packet, nothing is restored and nothing goes.
+  assert.equal(discardWouldDeletePacket({ ...held, isOriginRun: false }), false);
+});
