@@ -13,7 +13,7 @@ export async function GET(_request: Request, context: Context) {
 
   const { data: run } = await supabase
     .from("ingestion_runs")
-    .select("id, packet_id, entry_point, target_section_id, status, total_chunks, completed_chunks, error")
+    .select("id, packet_id, entry_point, target_section_id, status, total_chunks, completed_chunks, error, review")
     .eq("id", runId)
     .eq("user_id", session.userId)
     .maybeSingle();

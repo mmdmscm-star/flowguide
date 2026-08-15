@@ -7,7 +7,7 @@ import { useCallback, useRef, useState } from "react";
 // and finalizes when every leaf chunk is done. Safe to stop and reconnect: the
 // server holds the truth, so resume() re-drives from the persisted cursor.
 
-export type IngestPhase = "idle" | "preparing" | "processing" | "combining" | "done" | "error";
+export type IngestPhase = "idle" | "preparing" | "processing" | "combining" | "done" | "needs_review" | "error";
 
 export interface IngestState {
   phase: IngestPhase;
@@ -16,6 +16,12 @@ export interface IngestState {
   total: number;
   subdividing: boolean;
   error: string;
+  /** Why the run needs review, in the professional's language. Set with
+   *  phase "needs_review" — the run applied, but publishing is blocked. */
+  reviewSummary: string;
+  /** The way out, computed server-side: discard removes an EMPTY packet but
+   *  preserves one with content, so the honest sentence differs per case. */
+  reviewExit: string;
 }
 
 interface StartArgs { entryPoint: "organize" | "append" | "section_append"; rawText: string; targetSectionId?: string | null; packetType?: string }
@@ -56,8 +62,8 @@ async function processChunk(runId: string, ordinal: number): Promise<{ split?: b
   }
 }
 
-export function useIngestion(packetId: string, opts?: { onComplete?: () => void }) {
-  const [state, setState] = useState<IngestState>({ phase: "idle", runId: null, done: 0, total: 0, subdividing: false, error: "" });
+export function useIngestion(packetId: string, opts?: { onComplete?: () => void; onNeedsReview?: () => void }) {
+  const [state, setState] = useState<IngestState>({ phase: "idle", runId: null, done: 0, total: 0, subdividing: false, error: "", reviewSummary: "", reviewExit: "" });
   const cancelled = useRef(false);
   const runIdRef = useRef<string | null>(null);
 
@@ -68,9 +74,17 @@ export function useIngestion(packetId: string, opts?: { onComplete?: () => void 
       if (cancelled.current) return;
       const { data: st } = await getJSON(`/api/ingest/${runId}`);
       if (!st?.run) { setState((s) => ({ ...s, phase: "error", error: "Lost track of the import." })); return; }
-      const run = st.run as { status: string; totalChunks: number };
+      const run = st.run as { status: string; totalChunks: number; review?: { ok?: boolean; summary?: string; exit?: string } };
       const leaves = (st.chunks || []) as Array<{ ordinal: number; status: string }>;
       if (run.status === "finalized") { setState((s) => ({ ...s, phase: "done", done: run.totalChunks, total: run.totalChunks })); opts?.onComplete?.(); return; }
+      // needs_review is non-terminal and BLOCKS PUBLISHING. Treating it as
+      // "finalized" here (or letting it fall through to the processing path)
+      // is what left a professional with a blocked packet and no way out.
+      if (run.status === "needs_review") {
+        setState((s) => ({ ...s, phase: "needs_review", done: run.totalChunks, total: run.totalChunks, reviewSummary: run.review?.summary || "", reviewExit: run.review?.exit || "" }));
+        opts?.onNeedsReview?.();
+        return;
+      }
       if (run.status === "discarded" || run.status === "error") { setState((s) => ({ ...s, phase: "error", error: "Import was stopped." })); return; }
       const done = leaves.filter((c) => c.status === "completed").length;
       setState((s) => ({ ...s, phase: "processing", done, total: run.totalChunks }));
@@ -88,7 +102,17 @@ export function useIngestion(packetId: string, opts?: { onComplete?: () => void 
         }
         setState((s) => ({ ...s, phase: "combining" }));
         const fin = await postJSON(`/api/ingest/${runId}/finalize`, {});
-        if (fin.data?.ok) { setState((s) => ({ ...s, phase: "done", done: run.totalChunks, total: run.totalChunks })); opts?.onComplete?.(); return; }
+        if (fin.data?.ok) {
+          // `ok` only means the RPC applied. The accounting verdict is
+          // review.ok — reading the wrong one reported a blocked run as "Done."
+          const review = fin.data?.review as { ok?: boolean; summary?: string; exit?: string } | undefined;
+          if (review && review.ok === false) {
+            setState((s) => ({ ...s, phase: "needs_review", done: run.totalChunks, total: run.totalChunks, reviewSummary: review.summary || "", reviewExit: review.exit || "" }));
+            opts?.onNeedsReview?.();
+            return;
+          }
+          setState((s) => ({ ...s, phase: "done", done: run.totalChunks, total: run.totalChunks })); opts?.onComplete?.(); return;
+        }
         // 409 means "not every part is done yet" — recoverable, so keep driving
         // instead of surfacing it as a failure.
         if (fin.status === 409) { await sleep(RETRY_BACKOFF_MS); continue; }
@@ -107,7 +131,7 @@ export function useIngestion(packetId: string, opts?: { onComplete?: () => void 
 
   const start = useCallback(async (args: StartArgs) => {
     cancelled.current = false;
-    setState({ phase: "preparing", runId: null, done: 0, total: 0, subdividing: false, error: "" });
+    setState({ phase: "preparing", runId: null, done: 0, total: 0, subdividing: false, error: "", reviewSummary: "", reviewExit: "" });
     const res = await postJSON(`/api/packets/${packetId}/ingest`, args);
     if (res.status === 409 && res.data?.runId) { await drive(res.data.runId); return; }
     if (!res.data?.runId) { setState((s) => ({ ...s, phase: "error", error: res.data?.message || res.data?.error || "Could not start the import." })); return; }
@@ -120,7 +144,7 @@ export function useIngestion(packetId: string, opts?: { onComplete?: () => void 
     const runId = runIdRef.current; if (!runId) return;
     cancelled.current = true;
     await postJSON(`/api/ingest/${runId}/discard`, {});
-    setState({ phase: "idle", runId: null, done: 0, total: 0, subdividing: false, error: "" });
+    setState({ phase: "idle", runId: null, done: 0, total: 0, subdividing: false, error: "", reviewSummary: "", reviewExit: "" });
   }, []);
   const cancel = useCallback(() => { cancelled.current = true; }, []);
 

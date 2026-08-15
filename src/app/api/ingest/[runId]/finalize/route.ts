@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase";
 import { buildMediaLedger, describeMediaFailures, type StoredMedia } from "@/lib/media-ledger";
+import { describeReviewExit } from "@/lib/review-exit";
 
 export const maxDuration = 60;
 type Context = { params: Promise<{ runId: string }> };
@@ -48,22 +49,26 @@ export async function POST(_request: Request, context: Context) {
   // finalize_ingestion_run returns {status, reused, sections, items} and no
   // packet_id. Reading it from the result silently disabled this entire block.
   const { data: runRow } = await supabase
-    .from("ingestion_runs").select("packet_id").eq("id", runId).eq("user_id", session.userId).maybeSingle();
-  const packetId = (runRow as { packet_id?: string } | null)?.packet_id;
-  let review: { ok: boolean; summary: string; failures: unknown[] } | undefined;
+    .from("ingestion_runs").select("packet_id, entry_point").eq("id", runId).eq("user_id", session.userId).maybeSingle();
+  const run = runRow as { packet_id?: string; entry_point?: string } | null;
+  const packetId = run?.packet_id;
+  let review: { ok: boolean; summary: string; exit: string; failures: unknown[] } | undefined;
 
   if (packetId) {
     try {
       const { data: packet } = await supabase
-        .from("packets").select("raw_input").eq("id", packetId).maybeSingle();
-      const source = (packet as { raw_input?: string } | null)?.raw_input ?? "";
+        .from("packets").select("raw_input, status, origin_ingestion_run_id").eq("id", packetId).maybeSingle();
+      const pk = packet as { raw_input?: string; status?: string; origin_ingestion_run_id?: string | null } | null;
+      const source = pk?.raw_input ?? "";
 
       const { data: sections } = await supabase.from("sections").select("id").eq("packet_id", packetId);
       const sectionIds = (sections ?? []).map((s: { id: string }) => s.id);
       const stored: StoredMedia[] = [];
+      let itemCount = 0;
       if (sectionIds.length > 0) {
         const { data: items } = await supabase.from("items").select("id").in("section_id", sectionIds);
         const itemIds = (items ?? []).map((i: { id: string }) => i.id);
+        itemCount = itemIds.length;
         if (itemIds.length > 0) {
           const { data: photos } = await supabase
             .from("item_photos").select("item_id, url").in("item_id", itemIds);
@@ -73,8 +78,20 @@ export async function POST(_request: Request, context: Context) {
         }
       }
 
+      // The way OUT must be computed here, because only the server can see the
+      // three counts and the origin marker that decide whether discard deletes
+      // this packet or preserves it. Mirrors discard_ingestion_run (0012).
+      const { count: blockCount } = await supabase
+        .from("packet_blocks").select("id", { count: "exact", head: true }).eq("packet_id", packetId);
+      const exit = describeReviewExit({
+        entryPoint: run?.entry_point ?? "organize",
+        isOriginRun: pk?.origin_ingestion_run_id === runId,
+        isDraft: pk?.status === "draft",
+        isEmpty: sectionIds.length === 0 && stored.length === 0 && (blockCount ?? 0) === 0 && itemCount === 0,
+      });
+
       const ledger = buildMediaLedger({ source, stored });
-      review = { ok: ledger.ok, summary: describeMediaFailures(ledger.failures), failures: ledger.failures };
+      review = { ok: ledger.ok, summary: describeMediaFailures(ledger.failures), exit, failures: ledger.failures };
 
       if (!ledger.ok) {
         console.error("[finalize] media accounting failed", { runId, packetId, failures: ledger.failures });

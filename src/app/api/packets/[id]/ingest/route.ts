@@ -19,7 +19,9 @@ export async function GET(_request: Request, context: Context) {
     .select("id, status, total_chunks, completed_chunks")
     .eq("packet_id", id)
     .eq("user_id", session.userId)
-    .in("status", ["active", "finalizing"])
+    // needs_review is NON-TERMINAL: it holds the packet's one run slot and
+    // blocks publishing, so the editor must reconnect to it on reload.
+    .in("status", ["active", "finalizing", "needs_review"])
     .maybeSingle();
   return NextResponse.json({ activeRun: data ? { runId: data.id, status: data.status, totalChunks: data.total_chunks, completedChunks: data.completed_chunks } : null });
 }
@@ -76,7 +78,7 @@ export async function POST(request: Request, context: Context) {
     .select("id")
     .eq("packet_id", id)
     .eq("user_id", session.userId)
-    .in("status", ["active", "finalizing"])
+    .in("status", ["active", "finalizing", "needs_review"])
     .maybeSingle();
   if (existing) {
     return NextResponse.json({ error: "run_active", runId: existing.id, message: "An import is already in progress for this packet." }, { status: 409 });

@@ -10,13 +10,18 @@ export default function ImportProgress({
   runId,
   onDone,
   onDiscarded,
+  onNeedsReview,
 }: {
   packetId: string;
   runId: string;
   onDone: () => void;
   onDiscarded: () => void;
+  /** The run applied but publishing is blocked. The packet has content, so the
+   *  editor should refresh — but this panel must STAY, because it holds the
+   *  only way out. */
+  onNeedsReview?: () => void;
 }) {
-  const { state, resume, retry, discard } = useIngestion(packetId, { onComplete: onDone });
+  const { state, resume, retry, discard } = useIngestion(packetId, { onComplete: onDone, onNeedsReview });
   const started = useRef(false);
 
   useEffect(() => {
@@ -25,26 +30,28 @@ export default function ImportProgress({
     resume(runId);
   }, [runId, resume]);
 
-  const { phase, done, total, subdividing, error } = state;
+  const { phase, done, total, subdividing, error, reviewSummary, reviewExit } = state;
+  const needsReview = phase === "needs_review";
   const pct = total > 0 ? Math.round((done / total) * 100) : 0;
 
   const heading =
     phase === "preparing" ? "Preparing your information…"
     : phase === "combining" ? "Combining and checking the result…"
     : phase === "done" ? "Done."
+    : needsReview ? "Imported — but check this before publishing"
     : phase === "error" ? "Import paused"
     : total > 0 ? `Processing part ${Math.min(done + 1, total)} of ${total}…`
     : "Reading your notes…";
 
   return (
-    <div className="rounded-xl border border-border bg-blue-50/60 p-4 mb-5">
+    <div className={`rounded-xl border p-4 mb-5 ${needsReview ? "border-amber-300 bg-amber-50/70" : "border-border bg-blue-50/60"}`}>
       <div className="flex items-center gap-3">
-        {phase !== "error" && phase !== "done" && (
+        {phase !== "error" && phase !== "done" && !needsReview && (
           <div className="w-4 h-4 border-2 border-accent border-t-transparent rounded-full animate-spin" />
         )}
         <div className="flex-1">
           <p className="text-sm font-medium text-foreground">{heading}</p>
-          {phase !== "error" && (
+          {phase !== "error" && !needsReview && (
             <div className="mt-2 h-1.5 w-full rounded-full bg-blue-100 overflow-hidden">
               <div className="h-full bg-accent transition-all" style={{ width: `${phase === "combining" ? 100 : pct}%` }} />
             </div>
@@ -53,6 +60,12 @@ export default function ImportProgress({
             <p className="mt-1 text-xs text-muted">A large part is being divided further so it stays reliable…</p>
           )}
           {phase === "error" && <p className="mt-1 text-sm text-red-700">{error} Your completed parts are saved.</p>}
+          {needsReview && (
+            <p className="mt-1 text-sm text-amber-900">
+              {reviewSummary || "Something didn't add up in this import."}{" "}
+              {reviewExit || "Discard the import to unblock publishing."}
+            </p>
+          )}
         </div>
       </div>
 
@@ -65,7 +78,11 @@ export default function ImportProgress({
         {phase !== "done" && (
           <button
             onClick={async () => { await discard(); onDiscarded(); }}
-            className="px-3 py-1.5 rounded-lg text-sm font-medium text-muted hover:text-foreground border border-border"
+            // In needs_review this is the ONLY way out, so it stops being a
+            // muted secondary action and becomes the thing to press.
+            className={needsReview
+              ? "px-3 py-1.5 rounded-lg bg-amber-700 text-white text-sm font-medium hover:bg-amber-800"
+              : "px-3 py-1.5 rounded-lg text-sm font-medium text-muted hover:text-foreground border border-border"}
           >
             Discard import
           </button>

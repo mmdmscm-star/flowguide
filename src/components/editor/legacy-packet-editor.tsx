@@ -922,6 +922,10 @@ export function LegacyPacketEditor() {
           runId={importRunId}
           onDone={() => { setImportRunId(null); setShowAiBanner(true); loadPacket(); }}
           onDiscarded={() => { setImportRunId(null); loadPacket(); }}
+          // Content applied, so show it — but keep the panel mounted and the
+          // success banner suppressed. "AI organized your info" over a blocked
+          // packet is how a safety state became a dead end.
+          onNeedsReview={() => { loadPacket(); }}
         />
       )}
 

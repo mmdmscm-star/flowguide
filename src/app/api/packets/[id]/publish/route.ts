@@ -18,14 +18,27 @@ export async function POST(request: Request, context: Context) {
     // Reject publishing while an import is in progress (server-side, not just the
     // UI). The DB trigger (migration 0012) is the hard guard; this returns a clear
     // message before hitting it.
+    // needs_review MUST be in this list. The trigger (0013) blocks publishing on
+    // it, so leaving it out doesn't allow the publish — it just replaces this
+    // sentence with raw Postgres text and gives the professional nothing to do.
     const { data: activeRun } = await supabase
       .from("ingestion_runs")
-      .select("id")
+      .select("id, status, review")
       .eq("packet_id", id)
       .eq("user_id", session.userId)
-      .in("status", ["active", "finalizing"])
+      .in("status", ["active", "finalizing", "needs_review"])
       .maybeSingle();
     if (activeRun) {
+      const run = activeRun as { id: string; status: string; review?: { summary?: string; exit?: string } | null };
+      if (run.status === "needs_review") {
+        const why = run.review?.summary?.trim();
+        const exit = run.review?.exit?.trim() || "Discard the import to unblock publishing.";
+        return NextResponse.json({
+          error: "import_needs_review",
+          runId: run.id,
+          message: `${why ? why + " " : ""}${exit}`,
+        }, { status: 409 });
+      }
       return NextResponse.json({ error: "import_in_progress", message: "An import is still in progress. Finish or discard it before publishing." }, { status: 409 });
     }
 
