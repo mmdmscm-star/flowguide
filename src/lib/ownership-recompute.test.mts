@@ -10,7 +10,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { segment, segmentHash, detectSourceRecords, SEGMENTER_VERSION, DEFAULT_BUDGET } from "./segmentation.ts";
 import { mediaOccurrences } from "./media-ownership.ts";
-import { recomputeOwnership, resolveFindings, type ItemProvenance, type RunProvenance } from "./ownership-recompute.ts";
+import { recomputeOwnership, resolveFindings, availableActions, blocksPublishing,
+         type ItemProvenance, type RunProvenance } from "./ownership-recompute.ts";
 import { CLIENT_SOURCE } from "./__fixtures__/incident-sources.ts";
 
 const CHUNKS = [[0, 2856], [2856, 5125], [5125, 7751], [7751, 9767], [9767, 9885]] as Array<[number, number]>;
@@ -164,4 +165,97 @@ test("an APPEND run is located by its base, not assumed to start at 0", () => {
   // Assuming 0 would slice the wrong window and must not silently "work".
   const wrong = recomputeOwnership({ rawInput, run: run({ sourceOffsetBase: 0 }), chunks: plan, items: incidentItems() });
   assert.equal(wrong.status === "declined" && wrong.reason, "source_moved");
+});
+
+// ------------------------------------------------------------------
+// Deleting an item must not shift bindings into confident wrong proposals
+// ------------------------------------------------------------------
+test("deleting an item makes its chunk unverifiable, never mis-bound", () => {
+  // A chunk that begins two records and emitted two items. Delete the FIRST.
+  // Positional binding on survivors alone would match the remaining item to
+  // record 0 — the deleted one's record — and confidently propose moving its
+  // photos there. Emission indices make the gap visible instead.
+  const P0 = "https://cdn.example.com/r0.jpg";
+  const P1 = "https://cdn.example.com/r1.jpg";
+  const source = `Alpha\tone\t${P0}\nBravo\ttwo\t${P1}\nCharlie\tthree\tx`;
+  const records = detectSourceRecords(source)!.records;
+  assert.equal(records.length, 3);
+
+  // One chunk spanning records 0 and 1, which emitted two items.
+  const chunks = [{ ordinal: 0, start: records[0].start, end: records[1].end },
+                  { ordinal: 1, start: records[2].start, end: records[2].end }];
+  const run2 = { id: "r", sourceHash: segmentHash(source), sourceLen: source.length,
+                 segmenterVersion: SEGMENTER_VERSION, sourceOffsetBase: 0 };
+
+  const intact: ItemProvenance[] = [
+    { id: "a", title: "Alpha", originChunkOrdinal: 0, originEmitIndex: 0, photoUrls: [P0] },
+    { id: "b", title: "Bravo", originChunkOrdinal: 0, originEmitIndex: 1, photoUrls: [P1] },
+    { id: "c", title: "Charlie", originChunkOrdinal: 1, originEmitIndex: 0, photoUrls: [] },
+  ];
+  const clean = recomputeOwnership({ rawInput: source, run: run2, chunks, items: intact });
+  assert.equal(clean.status, "ok");
+  assert.deepEqual(resolveFindings(clean), [], "intact emission: correctly placed, nothing reported");
+
+  // Now the professional deletes Alpha. Bravo survives with emitIndex 1 — a gap.
+  const afterDelete = intact.filter((i) => i.id !== "a");
+  const r = recomputeOwnership({ rawInput: source, run: run2, chunks, items: afterDelete });
+  assert.equal(r.status, "ok");
+  const found = resolveFindings(r);
+  assert.deepEqual(found.filter((f) => f.code === "media_on_wrong_record"), [],
+    "must NOT accuse Bravo of holding Alpha's photo");
+  const unver = found.filter((f) => f.code === "ownership_unverifiable" && f.itemId === "b");
+  assert.equal(unver.length, 1, "the gap is surfaced, not silently guessed through");
+  assert.match(unver[0].detail, /missing items from its original output/);
+});
+
+// ------------------------------------------------------------------
+// Resolution semantics: what may be offered, and what blocks
+// ------------------------------------------------------------------
+test("a URL in several source records offers NEITHER Move nor Keep, and does not block", () => {
+  // The founder's requirement, pinned end to end: duplicate occurrences that
+  // make ownership ambiguous must stay ambiguous. A Move would be a guess; a
+  // url-level Keep would convert "we don't know" into "the user decided".
+  const P = "https://cdn.example.com/shared.jpg";
+  const source = `Alpha\tone\t${P}\nBravo\ttwo\t${P}\nCharlie\tthree\tx`;
+  const records = detectSourceRecords(source)!.records;
+  const chunks = records.map((r, ordinal) => ({ ordinal, start: r.start, end: r.end }));
+  const r = recomputeOwnership({
+    rawInput: source,
+    run: { id: "r", sourceHash: segmentHash(source), sourceLen: source.length,
+           segmenterVersion: SEGMENTER_VERSION, sourceOffsetBase: 0 },
+    chunks,
+    items: [
+      { id: "a", title: "Alpha", originChunkOrdinal: 0, originEmitIndex: 0, photoUrls: [] },
+      { id: "b", title: "Bravo", originChunkOrdinal: 1, originEmitIndex: 0, photoUrls: [] },
+      { id: "c", title: "Charlie", originChunkOrdinal: 2, originEmitIndex: 0, photoUrls: [P] },
+    ],
+  });
+  const found = resolveFindings(r);
+  const amb = found.filter((f) => f.url === P);
+  assert.equal(amb.length, 1);
+  assert.equal(amb[0].code, "ownership_unverifiable");
+  assert.deepEqual(availableActions(amb[0]), [], "no Move AND no Keep");
+  assert.equal(blocksPublishing(amb[0]), false, "advisory, not a dead end");
+  assert.equal(amb[0].proposedItemId, undefined, "no destination is even named");
+});
+
+test("a uniquely-owned misplaced photo offers Move + Keep and blocks", () => {
+  const records = detectSourceRecords(CLIENT_SOURCE)!.records;
+  const items = incidentItems();
+  const r = recomputeOwnership({ rawInput: CLIENT_SOURCE, run: run(), chunks: plan, items });
+  const wrong = resolveFindings(r).filter((f) => f.code === "media_on_wrong_record");
+  assert.ok(wrong.length > 0);
+  for (const f of wrong) {
+    assert.deepEqual(availableActions(f), ["move", "keep"], "unique owner => both actions");
+    assert.equal(blocksPublishing(f), true);
+  }
+  assert.equal(records.length, 4);
+});
+
+test("fabrication is advisory: no actions, no block", () => {
+  const r = recomputeOwnership({ rawInput: CLIENT_SOURCE, run: run(), chunks: plan, items: incidentItems() });
+  const fab = resolveFindings(r).filter((f) => f.code === "continuation_fabrication");
+  assert.equal(fab.length, 1);
+  assert.deepEqual(availableActions(fab[0]), [], "its real fix is deleting the item, an editor action");
+  assert.equal(blocksPublishing(fab[0]), false);
 });

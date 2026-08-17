@@ -111,6 +111,10 @@ export function recomputeOwnership(opts: {
     chunkOrdinal: i.originChunkOrdinal!,
     title: i.title,
     photos: i.photoUrls,
+    // Carried so binding can tell "this is the model's output" from "this is
+    // what is left after the professional deleted one". Without it a deletion
+    // shifts every later binding and manufactures confident wrong proposals.
+    emitIndex: i.originEmitIndex!,
   }));
 
   return {
@@ -148,4 +152,42 @@ export function resolveFindings(result: RecomputeResult): ResolvedFinding[] {
       detail: f.detail,
     };
   });
+}
+
+// ---------------------------------------------------------------------------
+// What the professional may DO about a finding, and what blocks publishing.
+//
+// Pure, and deliberately separate from detection: detection says what is true of
+// the source, this says what FlowGuide is willing to offer as a resolution.
+// ---------------------------------------------------------------------------
+
+export type OwnershipAction = "move" | "keep";
+
+/**
+ * Only `media_on_wrong_record` blocks.
+ *
+ * The other two codes carry no url, so neither button can act on them and
+ * neither can be recorded as a decision — blocking on a finding with no
+ * affordance is a dead end, which is the shape of bug this whole line of work
+ * exists to remove. They are advisory.
+ */
+export function blocksPublishing(f: { code: string }): boolean {
+  return f.code === "media_on_wrong_record";
+}
+
+/**
+ * `media_on_wrong_record` is only ever emitted when the URL occurs in exactly
+ * ONE source record, so its ownership fact is certain and Keep is a genuine
+ * override of a known truth. Move is offered only when that record resolves to
+ * a single destination item.
+ *
+ * An ambiguous finding — the same URL listed under several records — is
+ * `ownership_unverifiable` and gets NEITHER action. A Move would be a guess, and
+ * a url-level Keep would record intent about an ownership question the source
+ * never answered, quietly converting "we don't know" into "the user decided".
+ * Ambiguity has to stay visible, which is why it also does not block.
+ */
+export function availableActions(f: { code: string; proposedItemId?: string }): OwnershipAction[] {
+  if (f.code !== "media_on_wrong_record") return [];
+  return f.proposedItemId ? ["move", "keep"] : ["keep"];
 }

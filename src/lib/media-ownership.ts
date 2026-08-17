@@ -31,6 +31,11 @@ export interface ProducedItem {
   chunkOrdinal: number;
   title: string;
   photos: string[];
+  /** Zero-based position within its chunk's output, as EMITTED (0014's
+   *  origin_emit_index). Optional so callers replaying a plan directly can omit
+   *  it, but when present it is what proves the positional binding below is
+   *  still describing the model's output rather than what survives today. */
+  emitIndex?: number;
 }
 
 export type OwnershipCode =
@@ -120,9 +125,25 @@ export function verifyOwnership(opts: {
     // provably on the wrong record rather than merely unverifiable.
     const heads = touched.filter(({ r }) => r.start >= chunk.start && r.start < chunk.end);
 
-    if (heads.length === idxs.length) {
+    // Positional binding says "the nth item is the nth head". That is only a
+    // FACT about the model's output; `idxs` is what survives TODAY. Deleting an
+    // item — an ordinary edit — silently shifts every later binding by one and
+    // turns correct placements into confident, wrong "move it to X" proposals.
+    // So when emission indices are recorded, require them to be intact: exactly
+    // 0..n-1 with no gap. A gap means rows were removed and the correspondence
+    // is no longer something we know.
+    const emits = idxs.map((i) => producedItems[i].emitIndex);
+    const emitsKnown = emits.every((e) => e !== undefined);
+    const emitsIntact = !emitsKnown ||
+      [...emits as number[]].sort((a, b) => a - b).every((e, n) => e === n);
+
+    if (heads.length === idxs.length && emitsIntact) {
       // Source order is preserved, so the nth item corresponds to the nth head.
-      idxs.forEach((itemIdx, n) => { bindings[itemIdx] = heads[n].i; });
+      // Bind in EMITTED order when known, not in whatever order rows arrived.
+      const ordered = emitsKnown
+        ? [...idxs].sort((a, b) => producedItems[a].emitIndex! - producedItems[b].emitIndex!)
+        : idxs;
+      ordered.forEach((itemIdx, n) => { bindings[itemIdx] = heads[n].i; });
       continue;
     }
     if (heads.length === 0 && touched.length === 1) {
@@ -135,7 +156,9 @@ export function verifyOwnership(opts: {
         code: "ownership_unverifiable",
         itemIndex: i,
         itemTitle: producedItems[i].title,
-        detail: `chunk ${chunk.ordinal} begins ${heads.length} records but produced ${idxs.length} items, so ownership cannot be established structurally`,
+        detail: emitsIntact
+          ? `chunk ${chunk.ordinal} begins ${heads.length} records but produced ${idxs.length} items, so ownership cannot be established structurally`
+          : `chunk ${chunk.ordinal} is missing items from its original output, so the remaining ones cannot be matched to records by position`,
       });
     }
   }
