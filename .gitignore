@@ -44,3 +44,11 @@ next-env.d.ts
 scripts/ingestion-runtime/baseline.json
 scripts/ingestion-runtime/uid.txt
 scripts/ingestion-runtime/evidence-*.json
+
+# macOS/iCloud duplication artifacts ("foo 2.ts", "chunks 2/"). These appear
+# spontaneously in this working copy — two identical copies of review-exit.ts
+# were committed this way before anyone noticed. Ignoring them stops `git add -A`
+# from sweeping a dead second copy of a module into src/.
+* 2.*
+* 2
+* [0-9].[a-z]*
