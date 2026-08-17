@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase";
+import { loadPacketOwnership } from "@/lib/ownership-service";
 
 type Context = { params: Promise<{ id: string }> };
 
@@ -206,6 +207,38 @@ export async function POST(request: Request, context: Context) {
           { status: 422 }
         );
       }
+    }
+
+    // ---- Media ownership gate. RECOMPUTED, never read from a stored finding.
+    //
+    // This is the last check before the single UPDATE that publishes, and this
+    // route is the only writer of status='published' in the codebase — verified,
+    // not assumed. It cannot live in the DB trigger: the check needs
+    // detectSourceRecords and segmentHash, which are TypeScript.
+    //
+    // FAIL-OPEN ON DECLINE, deliberately. A packet with no usable provenance —
+    // imported before 0014, prose with no record structure, a source that was
+    // replaced — yields no findings and publishes normally. Blocking there would
+    // trap every historical packet behind a check that can never be satisfied.
+    // Declines are logged so that "checked and clean" stays distinguishable from
+    // "could not be checked".
+    try {
+      const ownership = await loadPacketOwnership(id, supabase);
+      if (ownership.declines.length > 0) {
+        console.warn("[publish] ownership not verifiable", { packetId: id, declines: ownership.declines });
+      }
+      if (ownership.blocking.length > 0) {
+        console.error("[publish] blocked by ownership", { packetId: id, count: ownership.blocking.length });
+        const n = ownership.blocking.length;
+        return NextResponse.json({
+          error: "ownership_unresolved",
+          message: `${n} photo${n === 1 ? "" : "s"} ${n === 1 ? "is" : "are"} on an item your source doesn't put ${n === 1 ? "it" : "them"} on. Move ${n === 1 ? "it" : "them"} or keep ${n === 1 ? "it" : "them"} where ${n === 1 ? "it is" : "they are"}, then publish.`,
+          findings: ownership.blocking,
+        }, { status: 409 });
+      }
+    } catch (e) {
+      // A failure to CHECK must not become a failure to publish.
+      console.error("[publish] ownership check threw:", e);
     }
 
     const { error } = await supabase
