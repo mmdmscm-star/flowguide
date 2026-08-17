@@ -163,3 +163,60 @@ test("when a record has several legitimate items, no move is proposed", () => {
   assert.ok(report.findings.length > 0, "ambiguity still blocks — it is never silently accepted");
   assert.equal(report.fullyBound, false);
 });
+
+// ------------------------------------------------------------------
+// Two defects found while reviewing 0014, fixed here
+// ------------------------------------------------------------------
+test("the same URL in two DIFFERENT records is ambiguous, not a confident accusation", () => {
+  // Record 0 and record 1 both list P; item 2 (Charlie) holds it and is bound to
+  // record 2, which does not. So the copy is provably misplaced, but the source
+  // does not say WHICH of the two records it belongs to. The old code took
+  // sourceRecords[0] and accused record 0 with full confidence.
+  //
+  // Note the deliberate asymmetry: an item bound to record 0 OR record 1 holding
+  // P is left alone, because that placement cannot be shown to be wrong.
+  const P = "https://cdn.example.com/shared.jpg";
+  const source = `Alpha\tone\t${P}\nBravo\ttwo\t${P}\nCharlie\tthree\tx`;
+  const records = detectSourceRecords(source)!.records;
+  assert.equal(records.length, 3);
+  const chunks = plan(records.map((r) => [r.start, r.end] as [number, number]));
+  const items: ProducedItem[] = [
+    { chunkOrdinal: 0, title: "Alpha", photos: [] },
+    { chunkOrdinal: 1, title: "Bravo", photos: [] },
+    { chunkOrdinal: 2, title: "Charlie", photos: [P] },
+  ];
+  const report = verifyOwnership({ source, records, chunks, producedItems: items });
+  const amb = report.findings.filter((f) => f.code === "ownership_unverifiable" && f.url === P);
+  assert.equal(amb.length, 1, "surfaced as unresolvable rather than silently accepted");
+  assert.equal(amb[0].proposedItemIndex, undefined, "no destination is invented");
+  assert.deepEqual(report.findings.filter((f) => f.code === "media_on_wrong_record"), [],
+    "and NOT reported as a confident wrong-record move");
+
+  // The asymmetry: the same photo on an item bound to one of the two candidate
+  // records is NOT accused, because that placement cannot be shown to be wrong.
+  const plausible = verifyOwnership({ source, records, chunks, producedItems: [
+    { chunkOrdinal: 0, title: "Alpha", photos: [] },
+    { chunkOrdinal: 1, title: "Bravo", photos: [P] },
+    { chunkOrdinal: 2, title: "Charlie", photos: [] },
+  ] });
+  assert.deepEqual(plausible.findings, [], "a defensible placement is left alone");
+});
+
+test("an item holding one URL twice yields ONE finding, not two identical ones", () => {
+  // The correct repair for a source that lists a photo twice puts two identical
+  // rows on one item. That must not become two indistinguishable findings.
+  const records = detectSourceRecords(CLIENT_SOURCE)!.records;
+  const chunks = CLIENT_INCIDENT_PLAN.slice(0, 2);
+  const stranded = mediaOccurrences(CLIENT_SOURCE)
+    .filter((m) => m.at >= 2856 && m.at < 3109)[0];
+  assert.ok(stranded, "record 0 has media stranded in chunk 1");
+  const items: ProducedItem[] = [
+    { chunkOrdinal: 0, title: "The Reserve", photos: [] },
+    { chunkOrdinal: 1, title: "Brookdale Chanate", photos: [stranded.url, stranded.url] },
+  ];
+  const report = verifyOwnership({ source: CLIENT_SOURCE, records, chunks, producedItems: items });
+  const forUrl = report.findings.filter((f) => f.url === stranded.url);
+  assert.equal(forUrl.length, 1, "deduped per (url, item)");
+  assert.equal(forUrl[0].code, "media_on_wrong_record");
+  assert.equal(forUrl[0].proposedItemIndex, 0);
+});

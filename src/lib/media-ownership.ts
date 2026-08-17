@@ -184,12 +184,35 @@ export function verifyOwnership(opts: {
   producedItems.forEach((it, i) => {
     const rec = bindings[i];
     if (rec === null) return;
+    // An item may legitimately hold the same URL twice — that is what a source
+    // listing it twice SHOULD produce. Reporting it twice would be two
+    // indistinguishable findings the professional cannot act on separately.
+    const seen = new Set<string>();
     for (const url of it.photos) {
       if (!isMediaUrl(url)) continue;
+      if (seen.has(url)) continue;
+      seen.add(url);
       const sourceRecords = byUrl.get(url);
       if (!sourceRecords || sourceRecords.length === 0) continue; // accounting's job
-      if (sourceRecords.includes(rec)) continue;                  // correct owner
-      const expected = sourceRecords[0];
+      const distinct = [...new Set(sourceRecords)];
+      if (distinct.includes(rec)) continue;                       // correct owner
+
+      // The SAME url in two DIFFERENT records is genuinely ambiguous: the source
+      // itself does not say which one this copy belongs to. Picking the first
+      // would be a guess, and `includes(rec)` would silence a real finding
+      // whenever the item happened to bind to either. Ambiguity is review.
+      if (distinct.length > 1) {
+        findings.push({
+          code: "ownership_unverifiable",
+          url,
+          itemIndex: i,
+          itemTitle: it.title,
+          detail: `the source lists this photo under ${distinct.length} different records, so which one owns this copy cannot be established`,
+        });
+        continue;
+      }
+
+      const expected = distinct[0];
       const owners = producedItems
         .map((s, si) => ({ s, si }))
         .filter(({ si }) => bindings[si] === expected);
