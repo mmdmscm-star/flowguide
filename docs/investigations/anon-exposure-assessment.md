@@ -50,9 +50,11 @@ bound, not a measurement.
 
 **Supabase request logs cannot answer this.** They are Dashboard-only (Logs
 Explorer); the Management API needs a personal access token this project does
-not hold, and the anon/service keys grant no access to them. Retention is 1 day
-on Free and 7 days on Pro — against a ~73-day window, even full access would
-cover the last few percent of it.
+not hold, and the anon/service keys grant no access to them. Log retention is
+**plan-dependent** and I have not established what this project's plan provides
+— check the Dashboard for the actual available history. Whatever it is, it will
+almost certainly be a fraction of the ~73-day window, so a clean result narrows
+the question rather than answering it.
 
 **In-database signals are uninformative.** The one shape an external overwrite
 would leave is `updated_at > published_at` on a published packet. That is true
@@ -110,10 +112,27 @@ matter more than archaeology:
    | 8 chars (~41 bits) | 50 | **16** |
    | 22 chars (~114 bits) | 13 | 3 |
 
-   41 bits is not brute-forceable over HTTP in any practical sense (2.8e12
-   candidates; decades at thousands of requests per second, against a rate-limited
-   CDN). It is not an emergency. But it is the weakest remaining link in the
-   recipient privacy model, and unlike the RLS hole it is bounded and fixable at
-   leisure: re-slugging a published packet breaks any link already sent, so it
-   needs a product decision about which packets are still live rather than a
-   blanket migration.
+   **There is no rate limiting on the recipient route.** Verified, not assumed:
+   no `middleware.ts`, no `vercel.json`, no rate-limit library, and no limiter in
+   `src/` other than the unrelated 5-per-hour cap on magic-link sends. Whatever
+   the hosting platform does about volumetric abuse is not something this
+   assessment has established, so it is not part of the reasoning below.
+
+   The honest arithmetic, resting on the size of the space alone:
+
+   - 36^8 ≈ **2.82e12** possible 8-char slugs.
+   - Guessing one **specific** packet is infeasible.
+   - Guessing **any** valid packet is ~50x easier, because 50 slugs are live in
+     that space: ≈ **5.6e10** expected requests. At a sustained 1,000 req/s that
+     is ~650 days; at 10,000 req/s, ~65 days.
+
+   So this is not trivially exploitable, but "decades" would have been wrong, and
+   the reason it is hard is the keyspace — not a rate limiter anyone has
+   confirmed exists. A sustained, noisy, months-long scan is within reach of a
+   determined attacker, and nothing currently observes or interrupts one.
+
+   Flagged for deliberate hardening, NOT blanket re-slugging: rotating a slug
+   breaks links already sent to clients, so the design has to decide which
+   packets are still active, whether old links must keep working, and whether
+   `/p/[slug]` should carry explicit abuse/rate-limit protection of its own —
+   which, on this evidence, is probably the higher-value half of the fix.
