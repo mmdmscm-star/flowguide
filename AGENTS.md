@@ -39,8 +39,14 @@ per-channel generated content, reconsider the approach.
 
 ## Working norms
 
-- This is a solo-founder product that values simplicity. Let real usage drive
-  decisions; don't invent complexity or build ahead of evidence.
+- **Build toward the product we intend to sell**, while preserving architectural
+  coherence and avoiding gratuitous complexity. Real-world friction is evidence,
+  not permission — a genuinely better solution does not need a prior customer
+  failure to justify it.
+- Still no speculative feature sprawl and no software for software's sake. When
+  a problem is worth solving, build the narrowest *coherent* version of the right
+  answer rather than the cheapest thing the existing code already allows.
+- This remains a solo-founder product that values simplicity of experience.
 - The principles above are directional, not a mandate to build any specific
   renderer now. They are the philosophy that implementation must obey when work
   does happen.
