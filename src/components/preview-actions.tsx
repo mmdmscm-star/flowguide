@@ -27,7 +27,7 @@ export function PreviewActions({ packetId, slug, initialStatus }: Props) {
   async function loadOwnership() {
     try {
       const res = await fetch(`/api/packets/${packetId}/ownership`);
-      if (!res.ok) return;
+      if (!res.ok) return;   // includes 503: an unavailable check has no panel to draw
       setOwnership(await res.json());
     } catch {
       // Leaving the panel unmounted falls back to the 409's own sentence, which
@@ -59,6 +59,14 @@ export function PreviewActions({ packetId, slug, initialStatus }: Props) {
           setResolved(false);
           setError(data.message || "Some photos need checking before you can publish.");
           await loadOwnership();
+          return;
+        }
+        // The check did not run. Not the professional's fault and not their
+        // problem to fix, so no panel and no findings — just the retry.
+        if (res.status === 503 && data.error === "ownership_unavailable") {
+          setResolved(false);
+          setOwnership(null);
+          setError(data.message || "Photo checks are temporarily unavailable. Try again in a moment.");
           return;
         }
         setError(data.message || data.error || "Could not publish");

@@ -212,33 +212,65 @@ export async function POST(request: Request, context: Context) {
     // ---- Media ownership gate. RECOMPUTED, never read from a stored finding.
     //
     // This is the last check before the single UPDATE that publishes, and this
-    // route is the only writer of status='published' in the codebase — verified,
-    // not assumed. It cannot live in the DB trigger: the check needs
-    // detectSourceRecords and segmentHash, which are TypeScript.
+    // route is the only writer of status='published' in server code — asserted
+    // by ownership-route.test.mts, not assumed. It cannot live in the DB
+    // trigger: the check needs detectSourceRecords and segmentHash, which are
+    // TypeScript.
     //
-    // FAIL-OPEN ON DECLINE, deliberately. A packet with no usable provenance —
-    // imported before 0014, prose with no record structure, a source that was
-    // replaced — yields no findings and publishes normally. Blocking there would
-    // trap every historical packet behind a check that can never be satisfied.
-    // Declines are logged so that "checked and clean" stays distinguishable from
-    // "could not be checked".
+    // THREE OUTCOMES, AND THEY ARE NOT INTERCHANGEABLE:
+    //
+    //   declined    — the check RAN and could not establish ownership: no
+    //                 provenance, a replaced source, prose, incomplete
+    //                 correspondence. Nonblocking by design, because blocking
+    //                 there traps every historical packet behind a check it can
+    //                 never satisfy. Logged, so "checked and clean" stays
+    //                 distinguishable from "could not be checked".
+    //
+    //   blocking    — the check ran and found photos the source puts elsewhere.
+    //                 409, with the findings and a way to resolve them.
+    //
+    //   unavailable — the check DID NOT RUN. 503, retryable. This is the case
+    //                 that must never be mistaken for a pass: publishing here
+    //                 would be publishing on the strength of a check that never
+    //                 happened, and blaming the professional would be accusing
+    //                 them on the same absent evidence.
+    let ownership;
     try {
-      const ownership = await loadPacketOwnership(id, supabase);
-      if (ownership.declines.length > 0) {
-        console.warn("[publish] ownership not verifiable", { packetId: id, declines: ownership.declines });
-      }
-      if (ownership.blocking.length > 0) {
-        console.error("[publish] blocked by ownership", { packetId: id, count: ownership.blocking.length });
-        const n = ownership.blocking.length;
-        return NextResponse.json({
-          error: "ownership_unresolved",
-          message: `${n} photo${n === 1 ? "" : "s"} ${n === 1 ? "is" : "are"} on an item your source doesn't put ${n === 1 ? "it" : "them"} on. Move ${n === 1 ? "it" : "them"} or keep ${n === 1 ? "it" : "them"} where ${n === 1 ? "it is" : "they are"}, then publish.`,
-          findings: ownership.blocking,
-        }, { status: 409 });
-      }
+      ownership = await loadPacketOwnership(id, supabase);
     } catch (e) {
-      // A failure to CHECK must not become a failure to publish.
-      console.error("[publish] ownership check threw:", e);
+      // A throw is a failure to CHECK, which is exactly the unavailable case.
+      // It must not become a silent pass, and it must not become a blame.
+      console.error("[publish] ownership check threw", { packetId: id, error: e });
+      return NextResponse.json({
+        error: "ownership_unavailable",
+        retryable: true,
+        message: "Photo checks are temporarily unavailable, so this packet wasn't published. Try again in a moment.",
+      }, { status: 503 });
+    }
+
+    if (ownership.unavailable) {
+      console.error("[publish] ownership verification unavailable", {
+        packetId: id, source: ownership.unavailable.source, detail: ownership.unavailable.detail,
+      });
+      return NextResponse.json({
+        error: "ownership_unavailable",
+        retryable: true,
+        message: "Photo checks are temporarily unavailable, so this packet wasn't published. Try again in a moment.",
+      }, { status: 503 });
+    }
+
+    if (ownership.declines.length > 0) {
+      console.warn("[publish] ownership not establishable", { packetId: id, declines: ownership.declines });
+    }
+
+    if (ownership.blocking.length > 0) {
+      console.error("[publish] blocked by ownership", { packetId: id, count: ownership.blocking.length });
+      const n = ownership.blocking.length;
+      return NextResponse.json({
+        error: "ownership_unresolved",
+        message: `${n} photo${n === 1 ? "" : "s"} ${n === 1 ? "is" : "are"} on an item your source doesn't put ${n === 1 ? "it" : "them"} on. Move ${n === 1 ? "it" : "them"} or keep ${n === 1 ? "it" : "them"} where ${n === 1 ? "it is" : "they are"}, then publish.`,
+        findings: ownership.blocking,
+      }, { status: 409 });
     }
 
     const { error } = await supabase

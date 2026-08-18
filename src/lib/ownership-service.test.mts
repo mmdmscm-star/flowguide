@@ -4,13 +4,16 @@
 // here is what happens when the database does not cooperate: a table that is not
 // there yet, a run row that outlived its items, a query that simply fails.
 //
-// One direction of failure is dangerous and the rest are not. Losing photos, or
-// items, or a source makes findings DISAPPEAR — the check goes quiet, publishing
-// proceeds, and the professional is no worse off than before this feature
-// existed. Losing the OVERRIDES makes findings REAPPEAR: a Keep that was already
-// recorded stops being seen, a resolved packet looks unresolved, and the person
-// who did the work is blocked by their own resolution sitting unread in a table.
-// That asymmetry is the whole subject of this file.
+// The distinction under test is between two kinds of not-knowing:
+//
+//   DECLINED    — the check RAN and ownership is not establishable here. Real
+//                 answer, nonblocking, logged.
+//   UNAVAILABLE — the check DID NOT RUN. Says nothing about the packet, so it
+//                 can be neither a pass nor an accusation.
+//
+// Collapsing the second into the first is the bug this file exists to prevent:
+// it turns an outage into a clean bill of health and publishes on a check that
+// never happened.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { segmentHash, detectSourceRecords, SEGMENTER_VERSION } from "./segmentation.ts";
@@ -92,11 +95,29 @@ function incidentTables(): Record<string, Row[]> {
 test("the incident loads from live rows and blocks publishing", async () => {
   const o = await loadPacketOwnership(PACKET, fakeDb(incidentTables()));
   assert.equal(o.checkedAnyRun, true);
-  assert.equal(o.overridesReadable, true);
+  assert.equal(o.unavailable, null);
   assert.deepEqual(o.declines, []);
+  assert.deepEqual(o.kept, []);
   assert.equal(o.blocking.length, 7, "seven misplaced photos, same as the pure recompute finds");
   assert.ok(o.blocking.every((f) => f.code === "media_on_wrong_record"));
   assert.ok(o.blocking.every((f) => f.itemId && f.url), "each names the row and the photo an RPC would act on");
+});
+
+test("kept photos are returned with the titles needed to show and undo them", async () => {
+  // Reversibility lives on this field. A Keep suppresses its own finding, so
+  // nothing derived from findings can ever surface it again — the decision rows
+  // themselves are the only durable handle on it.
+  const tables = incidentTables();
+  const target = (await loadPacketOwnership(PACKET, fakeDb(tables))).blocking[0];
+  tables.item_media_decisions = [{ item_id: target.itemId, url: target.url }];
+
+  const o = await loadPacketOwnership(PACKET, fakeDb(tables));
+  assert.equal(o.kept.length, 1);
+  assert.equal(o.kept[0].itemId, target.itemId);
+  assert.equal(o.kept[0].url, target.url);
+  assert.ok(o.kept[0].itemTitle, "a bare id is not something a professional can recognise");
+  assert.equal(o.findings.filter((f) => f.itemId === target.itemId && f.url === target.url).length, 0,
+    "and the finding it settles is gone");
 });
 
 test("a Keep suppresses exactly its own photo and nothing else", async () => {
@@ -129,49 +150,81 @@ test("a Keep recorded for one item does not travel to the same url elsewhere", a
 // ---------------------------------------------------------------------------
 // The asymmetry. This is the reason the file exists.
 // ---------------------------------------------------------------------------
-test("an unreadable decisions table withdraws the block instead of discarding every Keep", async () => {
+test("an unreadable decisions table is reported as unavailable", async () => {
   // The live shape of this on the day 0016 ships: the code is deployed, the
-  // migration is not yet applied, and the table does not exist. Reading no rows
-  // and calling that "no Keeps" would block every affected packet, and the one
-  // action that clears the block writes to the table that is missing.
-  const clean = await loadPacketOwnership(PACKET, fakeDb(incidentTables()));
+  // migration is not, and the table does not exist.
+  //
+  // Both guesses are wrong and in opposite directions. "No Keeps" accuses a
+  // professional who already resolved this, with their resolution sitting
+  // unread in the table. "All Kept" publishes on data nobody could read. So the
+  // answer is neither: the check did not run.
   const o = await loadPacketOwnership(PACKET, fakeDb(incidentTables(), {
     item_media_decisions: 'relation "public.item_media_decisions" does not exist',
   }));
 
-  assert.equal(o.overridesReadable, false);
-  assert.deepEqual(o.blocking, [], "nothing may block while the overrides are unknown");
-  assert.deepEqual(o.findings, clean.findings,
-    "but every finding is still reported — the signal is withheld from the GATE, not thrown away");
-  assert.equal(o.findings.filter((f) => f.code === "media_on_wrong_record").length, 7);
-  assert.equal(o.declines.length, 1, "and the reason is recorded rather than inferred from silence");
-  assert.equal(o.declines[0].reason, "provenance_unreadable");
-  assert.match(o.declines[0].detail, /item_media_decisions/);
+  assert.ok(o.unavailable, "a failed decisions read must be reported as unavailable");
+  assert.equal(o.unavailable.source, "item_media_decisions");
+  assert.deepEqual(o.blocking, [], "an unavailable check cannot block");
+  assert.deepEqual(o.findings, [], "and cannot report findings it did not finish deriving");
+  assert.deepEqual(o.kept, [], "and must not imply there are no Keeps");
 });
 
-test("a failure to read decisions is distinguishable from having read zero of them", async () => {
+test("a failed decisions read is never mistaken for having read zero of them", async () => {
   const clean = await loadPacketOwnership(PACKET, fakeDb(incidentTables()));
   const broken = await loadPacketOwnership(PACKET, fakeDb(incidentTables(), { item_media_decisions: "boom" }));
 
-  // Both saw an empty override set. Only one of them KNOWS it.
-  assert.equal(clean.overridesReadable, true);
-  assert.equal(broken.overridesReadable, false);
-  assert.equal(clean.blocking.length, 7);
-  assert.equal(broken.blocking.length, 0);
+  // Both saw an empty override set. One of them KNOWS it; the other must not
+  // be allowed to claim it.
+  assert.equal(clean.unavailable, null);
+  assert.equal(clean.blocking.length, 7, "a real empty set still blocks");
+  assert.ok(broken.unavailable, "an unread set does not");
+  assert.deepEqual(broken.blocking, []);
 });
 
 // ---------------------------------------------------------------------------
-// Every other read fails open, and says so.
+// The read is only performed when it could change an answer.
 // ---------------------------------------------------------------------------
-test("every other failed read reports nothing and blocks nothing, with a reason", async () => {
+test("a clean packet does not consult decisions at all, so it cannot be held hostage by them", async () => {
+  // Overrides can only SUPPRESS a blocking finding. With none to suppress, the
+  // table cannot affect the outcome — so a packet with nothing wrong publishes
+  // normally whether or not 0016 has been applied. This is the rule applied
+  // precisely, not relaxed: the read is load-bearing only when it bears
+  // something.
+  const tables = incidentTables();
+  tables.item_photos = [];                       // no photos, so no misplacement
+  const db = fakeDb(tables, { item_media_decisions: "table missing" });
+  const o = await loadPacketOwnership(PACKET, db);
+
+  assert.equal(o.unavailable, null, "an unread table that could not matter is not a failure");
+  assert.deepEqual(o.blocking, []);
+  assert.equal((db as unknown as { calls: string[] }).calls.includes("item_media_decisions"), false,
+    "and it is not even queried");
+});
+
+test("a packet WITH a blocking finding refuses to resolve itself against unread decisions", async () => {
+  const db = fakeDb(incidentTables(), { item_media_decisions: "table missing" });
+  const o = await loadPacketOwnership(PACKET, db);
+  assert.equal((db as unknown as { calls: string[] }).calls.includes("item_media_decisions"), true,
+    "here the read IS load-bearing, so it is performed");
+  assert.ok(o.unavailable, "and its failure is fatal to the check");
+});
+
+// ---------------------------------------------------------------------------
+// Any failed read is unavailable, and names itself.
+// ---------------------------------------------------------------------------
+test("every failed read is unavailable, and never a decline", async () => {
+  // A decline is an ANSWER. Filing an outage as one would put "we looked and
+  // found nothing to prove" in the log for a check that never ran, and the
+  // publish gate treats declines as safe to proceed past.
   for (const table of ["packets", "sections", "items", "item_photos", "ingestion_runs", "ingestion_chunks"]) {
-    const o = await loadPacketOwnership(PACKET, fakeDb(incidentTables(), { [table]: `${table} unavailable` }));
-    assert.deepEqual(o.blocking, [], `${table}: a failed read must never block`);
+    const o = await loadPacketOwnership(PACKET, fakeDb(incidentTables(), { [table]: `${table} is down` }));
+    assert.ok(o.unavailable, `${table}: a failed read must be unavailable`);
+    assert.equal(o.unavailable.source, table, `${table}: must name which read failed`);
+    assert.match(o.unavailable.detail, new RegExp(table));
+    assert.deepEqual(o.blocking, [], `${table}: must never block`);
     assert.deepEqual(o.findings, [], `${table}: nothing was proven, so nothing is claimed`);
+    assert.deepEqual(o.declines, [], `${table}: an outage is not a decline`);
     assert.equal(o.checkedAnyRun, false, `${table}: must not report itself as checked`);
-    assert.equal(o.declines.length, 1, `${table}: the failure has to be visible`);
-    assert.equal(o.declines[0].reason, "provenance_unreadable");
-    assert.match(o.declines[0].detail, new RegExp(table));
   }
 });
 
@@ -181,7 +234,22 @@ test("unreadable photos never pass as an item with no photos", async () => {
   // is pronounced clean.
   const o = await loadPacketOwnership(PACKET, fakeDb(incidentTables(), { item_photos: "timeout" }));
   assert.equal(o.checkedAnyRun, false);
-  assert.equal(o.declines[0].reason, "provenance_unreadable");
+  assert.equal(o.unavailable?.source, "item_photos");
+  assert.deepEqual(o.blocking, []);
+});
+
+// ---------------------------------------------------------------------------
+// A decline is the other kind of not-knowing, and stays nonblocking.
+// ---------------------------------------------------------------------------
+test("a legitimate decline is an answer: reported, nonblocking, and NOT unavailable", async () => {
+  const tables = incidentTables();
+  (tables.ingestion_runs[0] as Row).source_hash = "a-different-source-entirely";
+  const o = await loadPacketOwnership(PACKET, fakeDb(tables));
+
+  assert.equal(o.unavailable, null, "the check ran; it simply could not establish ownership");
+  assert.equal(o.declines.length, 1);
+  assert.equal(o.declines[0].reason, "source_moved");
+  assert.deepEqual(o.blocking, [], "a decline never blocks");
 });
 
 // ---------------------------------------------------------------------------

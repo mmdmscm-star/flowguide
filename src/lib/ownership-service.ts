@@ -7,11 +7,28 @@
 // findings are the union across all of them, each recomputed independently
 // against its own source slice.
 //
-// EVERY QUERY HERE FAILS OPEN, AND FAILING OPEN IS CHECKED, NOT ASSUMED. A read
-// that errors must never become a block: the professional cannot fix a query.
-// The subtle direction is the overrides — losing THEM makes a resolved finding
-// look unresolved, which blocks. So a failure to read decisions withdraws the
-// block for the whole packet rather than quietly under-suppressing.
+// ---------------------------------------------------------------------------
+// THE DISTINCTION THIS MODULE EXISTS TO PRESERVE
+//
+//   A legitimate inability to prove ownership may be nonblocking.
+//   A technical failure to PERFORM the check must never masquerade as a clean one.
+//
+// These are different kinds of not-knowing and they must never collapse into
+// each other:
+//
+//   DECLINED    — the check ran, and the answer is "ownership is not established
+//                 here": no provenance, a voided offset base, a replaced source,
+//                 prose with no records, incomplete correspondence. Nothing is
+//                 broken; there is simply nothing to prove. Nonblocking, logged.
+//
+//   UNAVAILABLE — the check did NOT run. A query failed, a table was missing, a
+//                 timeout fired. This says nothing whatever about the packet.
+//                 Treating it as "no findings" converts an outage into a clean
+//                 bill of health and publishes on a check that never happened.
+//
+// Unavailable is therefore neither a pass nor an accusation. It is retryable,
+// and every caller must surface it as such.
+// ---------------------------------------------------------------------------
 
 import { createServerClient } from "./supabase.ts";
 import {
@@ -22,12 +39,18 @@ import type { ChunkRange } from "./media-ownership.ts";
 
 type Db = ReturnType<typeof createServerClient>;
 
-/** Why a run, or the packet as a whole, could not be checked. Widens the pure
- *  layer's vocabulary with the two conditions only the data layer can see. */
+/** Why a run could not be checked, when the checking itself worked. Widens the
+ *  pure layer's vocabulary with the one condition only the data layer can see. */
 export type PacketDeclineReason =
   | DeclineReason
-  | "run_row_missing"         // items cite a run whose row is gone
-  | "provenance_unreadable";  // a query failed; nothing was proven either way
+  | "run_row_missing";   // items cite a run whose row is gone
+
+/** Which read failed. Named so an operator reading a log knows where to look,
+ *  and so "the migration is not applied" stays distinguishable from "the
+ *  database was briefly unreachable" without parsing driver messages. */
+export type UnavailableSource =
+  | "packets" | "sections" | "items" | "item_photos"
+  | "item_media_decisions" | "ingestion_runs" | "ingestion_chunks";
 
 /** The composite key overrides are looked up by. NUL cannot occur in a uuid or
  *  a url, so it is the one separator neither half can forge. Written as an
@@ -35,33 +58,41 @@ export type PacketDeclineReason =
  *  binary to git, with no diffs and no reviewable history. */
 const keyOf = (itemId: string, url: string) => `${itemId}\u0000${url}`;
 
+/** A photo the professional deliberately kept where it is, carried with enough
+ *  context to show and undo it long after the decision was made. */
+export interface KeptPhoto {
+  itemId: string;
+  itemTitle: string;
+  url: string;
+}
+
 export interface PacketOwnership {
   findings: ResolvedFinding[];
   /** Findings that stop publishing. Always a subset of `findings`. */
   blocking: ResolvedFinding[];
-  /** Why a run could not be checked. Logged, never shown — there is nothing the
-   *  professional could do about it — but a packet that silently stopped being
-   *  checked must not be indistinguishable from a clean one. */
+  /** Deliberate Keeps on record for this packet. Empty is a real answer; when
+   *  verification is unavailable this is not populated at all. */
+  kept: KeptPhoto[];
+  /** Why a run could not be checked, where the check itself succeeded. Logged,
+   *  not shown — there is nothing the professional could do about it — but a
+   *  packet that stopped being checked must not look identical to a clean one. */
   declines: Array<{ runId: string | null; reason: PacketDeclineReason; detail: string }>;
   /** True when at least one run was actually verified. */
   checkedAnyRun: boolean;
-  /** False when the intentional-Keep overrides could not be read. Findings are
-   *  still reported, but NONE may block: without the overrides there is no way
-   *  to tell a finding the professional already resolved from one they never
-   *  saw, and guessing "unresolved" re-traps the person who did the work. */
-  overridesReadable: boolean;
+  /**
+   * NON-NULL means the check did not run. Not a pass and not an accusation: the
+   * caller must refuse to publish AND refuse to blame, and say try again.
+   */
+  unavailable: { source: UnavailableSource; detail: string } | null;
 }
 
 const EMPTY: PacketOwnership = {
-  findings: [], blocking: [], declines: [], checkedAnyRun: false, overridesReadable: true,
+  findings: [], blocking: [], kept: [], declines: [], checkedAnyRun: false, unavailable: null,
 };
 
-/** A packet-level dead end: nothing was proven, and nothing may block. */
-function unreadable(detail: string): PacketOwnership {
-  return {
-    findings: [], blocking: [], checkedAnyRun: false, overridesReadable: true,
-    declines: [{ runId: null, reason: "provenance_unreadable", detail }],
-  };
+/** The check did not run. Nothing in here is a statement about the packet. */
+function unavailable(source: UnavailableSource, detail: string): PacketOwnership {
+  return { ...EMPTY, unavailable: { source, detail } };
 }
 
 /**
@@ -78,12 +109,12 @@ export async function loadPacketOwnership(packetId: string, db?: Db): Promise<Pa
 
   const { data: packet, error: packetErr } = await supabase
     .from("packets").select("raw_input").eq("id", packetId).maybeSingle();
-  if (packetErr) return unreadable(`packets: ${packetErr.message}`);
+  if (packetErr) return unavailable("packets", packetErr.message);
   const rawInput = (packet as { raw_input?: string } | null)?.raw_input ?? "";
 
   const { data: sections, error: sectionErr } = await supabase
     .from("sections").select("id").eq("packet_id", packetId);
-  if (sectionErr) return unreadable(`sections: ${sectionErr.message}`);
+  if (sectionErr) return unavailable("sections", sectionErr.message);
   const sectionIds = (sections ?? []).map((s: { id: string }) => s.id);
   if (sectionIds.length === 0) return EMPTY;
 
@@ -91,7 +122,7 @@ export async function loadPacketOwnership(packetId: string, db?: Db): Promise<Pa
     .from("items")
     .select("id, title, origin_run_id, origin_chunk_ordinal, origin_emit_index")
     .in("section_id", sectionIds);
-  if (itemErr) return unreadable(`items: ${itemErr.message}`);
+  if (itemErr) return unavailable("items", itemErr.message);
   const items = (itemRows ?? []) as Array<{
     id: string; title: string;
     origin_run_id: string | null; origin_chunk_ordinal: number | null; origin_emit_index: number | null;
@@ -99,55 +130,36 @@ export async function loadPacketOwnership(packetId: string, db?: Db): Promise<Pa
   if (items.length === 0) return EMPTY;
 
   const itemIds = items.map((i) => i.id);
+  const titleOf = new Map(items.map((i) => [i.id, i.title]));
 
   const { data: photoRows, error: photoErr } = await supabase
     .from("item_photos").select("item_id, url").in("item_id", itemIds);
-  // Reasoning about photos we could not read would compare an item's real
-  // contents to an empty list and pronounce every one of them clean.
-  if (photoErr) return unreadable(`item_photos: ${photoErr.message}`);
+  // Comparing an item's real contents against an empty list would pronounce
+  // every misplaced photo in the packet clean.
+  if (photoErr) return unavailable("item_photos", photoErr.message);
   const photosByItem = new Map<string, string[]>();
   for (const p of (photoRows ?? []) as Array<{ item_id: string; url: string }>) {
     photosByItem.set(p.item_id, [...(photosByItem.get(p.item_id) ?? []), p.url]);
   }
 
-  // Intentional overrides. Presence of a row means "kept".
-  //
-  // This is the one read whose loss pushes TOWARD blocking, so it is the one
-  // read whose error cannot be shrugged off. Missing this table — 0016 not
-  // applied yet, most obviously — would otherwise discard every Keep and block
-  // a packet the professional had already resolved, with the resolution still
-  // sitting in the database.
-  const { data: decisionRows, error: decisionErr } = await supabase
-    .from("item_media_decisions").select("item_id, url").in("item_id", itemIds);
-  const overridesReadable = !decisionErr;
-  const kept = new Set(
-    ((decisionRows ?? []) as Array<{ item_id: string; url: string }>).map((d) => keyOf(d.item_id, d.url)),
-  );
-
   const out: PacketOwnership = {
-    findings: [], blocking: [], declines: [], checkedAnyRun: false, overridesReadable,
+    findings: [], blocking: [], kept: [], declines: [], checkedAnyRun: false, unavailable: null,
   };
-  if (decisionErr) {
-    out.declines.push({
-      runId: null, reason: "provenance_unreadable",
-      detail: `item_media_decisions: ${decisionErr.message} — overrides unknown, so nothing may block`,
-    });
-  }
 
   const runIds = [...new Set(items.map((i) => i.origin_run_id).filter((r): r is string => !!r))];
-  if (runIds.length === 0) return { ...EMPTY, declines: out.declines, overridesReadable };
+  if (runIds.length === 0) return EMPTY;
 
   const { data: runRows, error: runErr } = await supabase
     .from("ingestion_runs")
     .select("id, source_hash, source_len, segmenter_version, source_offset_base")
     .in("id", runIds);
-  if (runErr) return unreadable(`ingestion_runs: ${runErr.message}`);
+  if (runErr) return unavailable("ingestion_runs", runErr.message);
 
   const { data: chunkRows, error: chunkErr } = await supabase
     .from("ingestion_chunks")
     .select("run_id, ordinal, source_start, source_end, status")
     .in("run_id", runIds);
-  if (chunkErr) return unreadable(`ingestion_chunks: ${chunkErr.message}`);
+  if (chunkErr) return unavailable("ingestion_chunks", chunkErr.message);
 
   const runs = (runRows ?? []) as Array<{
     id: string; source_hash: string; source_len: number;
@@ -164,6 +176,8 @@ export async function loadPacketOwnership(packetId: string, db?: Db): Promise<Pa
     });
   }
 
+  // Every finding, before overrides are consulted at all.
+  const raw: ResolvedFinding[] = [];
   for (const r of runs) {
     const run: RunProvenance = {
       id: r.id,
@@ -196,18 +210,48 @@ export async function loadPacketOwnership(packetId: string, db?: Db): Promise<Pa
       continue;
     }
     out.checkedAnyRun = true;
-    for (const f of resolveFindings(result)) {
-      // An override suppresses ONLY a proven wrong-record finding for exactly
-      // that item and url. It can never suppress an ambiguous one, because
-      // ambiguous findings offer no Keep and so never produce a decision row.
-      if (blocksPublishing(f) && f.url && kept.has(keyOf(f.itemId, f.url))) continue;
-      out.findings.push(f);
-    }
+    raw.push(...resolveFindings(result));
   }
 
-  // Findings still surface when the overrides are unknown; they simply cannot
-  // stop a publish. Reporting them costs nothing, and hiding them would erase
-  // the only signal that something is worth a look.
-  out.blocking = overridesReadable ? out.findings.filter(blocksPublishing) : [];
+  // ---- Overrides, read LAST and only when they could change an answer.
+  //
+  // A decision can only ever SUPPRESS a blocking finding. With none to suppress,
+  // the table's contents cannot affect the outcome — so reading it is not part
+  // of performing the check, and failing to read it is not a failure to check.
+  //
+  // This is not a softening of the rule at the top of the file. It is that rule
+  // applied precisely: the read is load-bearing only when there is something for
+  // it to bear. A packet with nothing wrong is unaffected by the state of this
+  // table; a packet with a real finding still refuses to resolve itself against
+  // data it could not read.
+  const couldBeSuppressed = raw.some(blocksPublishing);
+  if (!couldBeSuppressed) {
+    out.findings = raw;
+    out.blocking = [];
+    return out;
+  }
+
+  const { data: decisionRows, error: decisionErr } = await supabase
+    .from("item_media_decisions").select("item_id, url").in("item_id", itemIds);
+  // The one read whose loss pushes TOWARD blocking. Guessing "no Keeps" accuses
+  // a professional who already resolved this, with their resolution sitting
+  // unread in the table; guessing "all Kept" publishes on unread data. Neither
+  // guess is available, so the check is unavailable.
+  if (decisionErr) return unavailable("item_media_decisions", decisionErr.message);
+
+  const decisions = (decisionRows ?? []) as Array<{ item_id: string; url: string }>;
+  const kept = new Set(decisions.map((d) => keyOf(d.item_id, d.url)));
+  out.kept = decisions
+    .filter((d) => titleOf.has(d.item_id))
+    .map((d) => ({ itemId: d.item_id, itemTitle: titleOf.get(d.item_id)!, url: d.url }));
+
+  for (const f of raw) {
+    // An override suppresses ONLY a proven wrong-record finding for exactly that
+    // item and url. It can never suppress an ambiguous one, because ambiguous
+    // findings offer no Keep and so never produce a decision row.
+    if (blocksPublishing(f) && f.url && kept.has(keyOf(f.itemId, f.url))) continue;
+    out.findings.push(f);
+  }
+  out.blocking = out.findings.filter(blocksPublishing);
   return out;
 }

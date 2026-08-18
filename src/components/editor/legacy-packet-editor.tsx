@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useRef, type ReactNode } from "react"
 import { useRouter, useParams, useSearchParams } from "next/navigation";
 import { CompositionModeControl } from "@/components/editor/composition-mode-control";
 import ImportProgress from "@/components/ImportProgress";
+import OwnershipDecisions from "@/components/OwnershipDecisions";
 import {
   DndContext,
   closestCenter,
@@ -914,6 +915,10 @@ export function LegacyPacketEditor() {
           {publishError}
         </div>
       )}
+
+      {/* Photos deliberately kept where the source does not put them. Renders
+          itself away unless a decision actually exists. */}
+      <OwnershipDecisions packetId={packetId} />
 
       {/* Resilient import in progress (Organize / Add with AI) */}
       {importRunId && (

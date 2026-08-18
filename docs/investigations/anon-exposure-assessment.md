@@ -51,10 +51,9 @@ bound, not a measurement.
 **Supabase request logs cannot answer this.** They are Dashboard-only (Logs
 Explorer); the Management API needs a personal access token this project does
 not hold, and the anon/service keys grant no access to them. Log retention is
-**plan-dependent** and I have not established what this project's plan provides
-— check the Dashboard for the actual available history. Whatever it is, it will
-almost certainly be a fraction of the ~73-day window, so a clean result narrows
-the question rather than answering it.
+**plan-dependent**; for this project it turned out to be **24 hours** (see "Log
+review" below), a fraction of the ~73-day window — so the clean result it
+produced narrows the question rather than answering it.
 
 **In-database signals are uninformative.** The one shape an external overwrite
 would leave is `updated_at > published_at` on a published packet. That is true
@@ -73,22 +72,66 @@ I verified it empirically rather than inferring it. Whether anyone found it
 cannot be determined with the history available, and the existence of a
 vulnerability is not itself grounds to conclude it was used.
 
+This still stands after the log review below. That review covered 24 hours of a
+~73-day window and found nothing suspicious — which is a bounded negative, not a
+clearance.
+
 Deliberately NOT done, because it would be inference dressed as investigation:
 guessing at compromise from packet contents, notifying clients on the strength
 of a possibility, or treating the 19/19 timestamp pattern as a finding.
 
-## If you want the last few days checked
+## Log review — done, bounded, and negative
 
-One bounded thing is still available to you and not to me — the Dashboard's
-Logs Explorer, covering whatever retention your plan gives:
+**Completed by the founder on 2026-08-17**, covering the **24 hours** the
+Dashboard's Logs Explorer actually retained for this project — not the ~73-day
+exposure window.
 
-> Dashboard → Logs → **API / Edge**, filter `path` containing `/rest/v1/packets`
-> and look for requests where the role is `anon` with method `PATCH` or `GET`.
+**Result: no activity identified as unexplained anonymous enumeration or
+overwrite.** Probe and view-proof traffic was identifiable as such, and
+post-0015 anon attempts appear rejected, which is the closure behaving as
+`scripts/security/anon-exposure-probe.mts` claims it does.
 
-Legitimate FlowGuide traffic never appears there as `anon` — every server path
-uses the service role — so **any** `anon` row against `/rest/v1/` is worth a
-look. If that window is clean it does not clear the preceding two months, but
-it costs five minutes and it is the only real evidence that exists.
+### The one successful pre-fix write, recorded without embellishment
+
+A single successful `PATCH` predating the fix:
+
+```
+2026-08-17 14:26:00
+PATCH | 200 | /rest/v1/packets?id=eq.fc868318-33dc-4422-b438-f589b3d7df7c&select=id | node
+auth_user: null
+```
+
+`GET`s against the same packet occurred in the same second. The shape is
+consistent with an ordinary server-side FlowGuide operation.
+
+**That is where the evidence stops, and the attribution stops with it.** The
+available log does **not** expose the API role, so this cannot be shown to be a
+service-role request, and it equally cannot be shown to be an anon one. It is
+recorded here as unattributed rather than resolved in either direction.
+
+### A correction to this document's own earlier advice
+
+The instructions previously given here said to look for rows where "the role is
+`anon`", on the reasoning that legitimate traffic never appears that way. The
+review showed that guidance does not survive contact with the actual log:
+
+> **`auth_user: null` is not the same as role `anon`.** A service-role request
+> carries no end-user JWT either, so it also logs a null `auth_user`. The field
+> that would settle it — the API key's role — is not in the available log at all.
+
+Anyone repeating this review should not read a null `auth_user` as evidence of
+anonymous access. On this log surface, the question is not answerable.
+
+### Bounded conclusion
+
+**No suspicious activity was identified in the available 24-hour logs.
+Historical exploitation remains unknown, because the available logs do not
+cover the exposure window.**
+
+The 24 hours reviewed are a small and late slice of ~73 days. A clean result
+there narrows the question and does not close it. This does not upgrade
+"exploitation unknown" to "no exploitation occurred", and nothing below should
+be deferred on the strength of it.
 
 ## What actually reduces risk now
 

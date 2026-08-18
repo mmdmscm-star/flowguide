@@ -40,15 +40,48 @@ test("the ownership check runs BEFORE the update that publishes", () => {
   assert.ok(check < update, "a gate after the write is not a gate");
 });
 
-test("a throw in the check cannot become a failure to publish", () => {
-  // Fail-open is the deliberate posture: a packet whose provenance cannot be
-  // read must publish normally rather than be trapped behind a check it can
-  // never satisfy. That only holds if the call is actually wrapped.
+test("a throw in the check publishes nothing and blames nobody", () => {
+  // A throw IS the unavailable case. The earlier version of this route swallowed
+  // it and published, which is the precise failure the decline/unavailable split
+  // exists to prevent: an outage reported as a clean check.
   const src = read(PUBLISH_ROUTE);
   const check = src.indexOf("loadPacketOwnership(");
-  const tryStart = src.lastIndexOf("try {", check);
-  const catchAfter = src.indexOf("} catch", check);
-  assert.ok(tryStart > 0 && catchAfter > check, "the ownership check must sit inside try/catch");
+  const catchAt = src.indexOf("} catch", check);
+  assert.ok(catchAt > check, "the ownership check must sit inside try/catch");
+
+  const handler = src.slice(catchAt, catchAt + 600);
+  assert.match(handler, /ownership_unavailable/, "a throw must surface as unavailable");
+  assert.match(handler, /status: 503/, "and as retryable, not as success");
+  assert.doesNotMatch(handler.slice(0, handler.indexOf("return")), /^\s*\}\s*$/m,
+    "the catch must not simply fall through to the publish");
+});
+
+test("an unavailable check is neither a pass nor an accusation", () => {
+  // The invariant, stated as code: a legitimate inability to prove ownership may
+  // be nonblocking; a technical failure to PERFORM the check must never
+  // masquerade as a successful clean check.
+  const src = read(PUBLISH_ROUTE);
+  const guard = src.indexOf("ownership.unavailable");
+  const update = src.indexOf('status: "published"');
+  assert.ok(guard > 0, "the publish route must inspect the unavailable state");
+  assert.ok(guard < update, "and do so before publishing");
+
+  const branch = src.slice(guard, src.indexOf("ownership.declines", guard));
+  assert.match(branch, /503/, "unavailable must be retryable, not a 200 and not a 409");
+  assert.doesNotMatch(branch, /findings/, "and must not accuse: there are no findings to show");
+});
+
+test("a decline still publishes — it is an answer, not an outage", () => {
+  // Blocking on a decline traps every packet imported before 0014, every prose
+  // source, and every replaced source behind a check none of them can satisfy.
+  const src = read(PUBLISH_ROUTE);
+  const declines = src.indexOf("ownership.declines.length > 0");
+  const blocking = src.indexOf("ownership.blocking.length > 0");
+  assert.ok(declines > 0 && blocking > declines);
+
+  const branch = src.slice(declines, blocking);
+  assert.match(branch, /console\.warn/, "a decline is logged");
+  assert.doesNotMatch(branch, /return NextResponse/, "and never returned as a refusal");
 });
 
 test("publishing has exactly one door, and it is the publish route", () => {
@@ -151,5 +184,46 @@ test("neither handler describes a packet the caller does not own", () => {
     const compute = src.indexOf("currentState(", start);
     assert.ok(owns > start, `${handler} must verify ownership`);
     assert.ok(owns < compute, `${handler} must verify ownership before recomputing anything`);
+  }
+});
+
+
+// ---------------------------------------------------------------------------
+// Durable reversibility
+// ---------------------------------------------------------------------------
+test("the editor's decisions surface is the same component as the publish panel", () => {
+  // A second surface describing the same findings would drift from this one the
+  // first time either changed. The editor mounts the SAME component in a
+  // different default state.
+  const loader = read("src/components/OwnershipDecisions.tsx");
+  assert.match(loader, /from "\.\/OwnershipResolution"/, "must reuse, not fork");
+
+  const files = sourceFiles().filter((f) => /"Keep here"/.test(readFileSync(f, "utf8")));
+  assert.deepEqual(
+    files.map((f) => f.slice(ROOT.length + 1)),
+    ["src/components/OwnershipResolution.tsx"],
+    "exactly one component may describe what can be done about a finding",
+  );
+});
+
+test("the undo is driven by decisions, not by findings", () => {
+  // A Keep suppresses its own finding, so an undo derived from findings can
+  // never show one. Reversibility has to hang off the decision rows themselves.
+  const panel = read("src/components/OwnershipResolution.tsx");
+  assert.match(panel, /state\.kept/, "the kept list must come from server state");
+  assert.doesNotMatch(panel, /useState<OwnershipFinding\[\]>/,
+    "and must not be reconstructed from what this session happened to do");
+});
+
+test("the editor surface appears only when a decision exists", () => {
+  const loader = read("src/components/OwnershipDecisions.tsx");
+  assert.match(loader, /state\.kept\.length === 0\) return null/,
+    "a professional who never kept anything sees no ownership section");
+});
+
+test("both editors mount it, so reversibility does not depend on composition mode", () => {
+  for (const editor of ["legacy-packet-editor.tsx", "block-packet-editor.tsx"]) {
+    const src = read(`src/components/editor/${editor}`);
+    assert.match(src, /<OwnershipDecisions packetId=\{packetId\} \/>/, `${editor} must mount it`);
   }
 });

@@ -22,6 +22,7 @@ import type { ItemContentPayload } from "@/lib/item-content";
 import { ItemCard } from "@/components/item-card";
 import { BlockItemEditor } from "@/components/editor/block-item-editor";
 import { CompositionModeControl } from "@/components/editor/composition-mode-control";
+import OwnershipDecisions from "@/components/OwnershipDecisions";
 import { SerialMutations, type MutationResult } from "@/lib/serial-mutation";
 
 // ============================================================
@@ -379,6 +380,10 @@ export function BlockPacketEditor({
             This packet is <strong>{status}</strong>. Unpublish it to edit its composition.
           </div>
         )}
+
+        {/* Photos deliberately kept where the source does not put them. Renders
+            itself away unless a decision actually exists. */}
+        <OwnershipDecisions packetId={packetId} />
 
         {/* Deliberate reversion control — only for owned DRAFT block packets. */}
         {!readOnly && (

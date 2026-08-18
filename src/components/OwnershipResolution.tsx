@@ -21,17 +21,23 @@ export type OwnershipFinding = {
   actions: Array<"move" | "keep">;
 };
 
+/** A photo deliberately kept where it is, as recorded in the database. */
+export type KeptPhoto = { itemId: string; itemTitle: string; url: string };
+
 export type OwnershipState = {
   findings: OwnershipFinding[];
   blockingCount: number;
+  /** Every Keep on record for this packet — not just the ones made on this
+   *  screen. This is what makes a Keep reversible next week rather than only
+   *  for as long as the panel happens to stay mounted. */
+  kept: KeptPhoto[];
   checked: boolean;
-  overridesReadable: boolean;
 };
 
 /** Identity of a finding for React and for tracking which row is mid-flight.
  *  Findings have no id — they are derived — so this is the (item, photo) pair
  *  the RPCs themselves are keyed on. */
-const rowKey = (f: OwnershipFinding) => `${f.itemId}::${f.url ?? ""}`;
+const rowKey = (f: { itemId: string; url?: string }) => `${f.itemId}::${f.url ?? ""}`;
 
 export default function OwnershipResolution({
   packetId,
@@ -47,18 +53,16 @@ export default function OwnershipResolution({
 }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState("");
-  // Keeps made on this screen, so they can be taken back on this screen.
-  //
-  // A Keep SUPPRESSES its finding — that is what a Keep is — so the row simply
-  // vanishes, and nothing that recomputes findings can ever show it again. The
-  // undo RPC exists precisely because a resolution the professional cannot
-  // reverse is a trap, but an undo with nothing to press is the same trap. This
-  // holds the row for the moment a misclick is actually noticed: immediately
-  // after making it.
-  const [kept, setKept] = useState<OwnershipFinding[]>([]);
+
+  // A Keep SUPPRESSES its finding — that is what a Keep is — so the row vanishes
+  // and no recompute can ever surface it again. The undo therefore cannot be
+  // driven off findings; it is driven off the decisions themselves, which the
+  // server returns with every response. That is what makes this reversible long
+  // after the decision was made, rather than only while this panel is mounted.
+  const kept = state.kept ?? [];
 
   const act = useCallback(
-    async (f: OwnershipFinding, action: "move" | "keep" | "unkeep") => {
+    async (f: { itemId: string; url?: string; proposedItemId?: string }, action: "move" | "keep" | "unkeep") => {
       setError("");
       setBusy(`${rowKey(f)}:${action}`);
       try {
@@ -86,8 +90,6 @@ export default function OwnershipResolution({
           return;
         }
         if (Array.isArray(data.findings)) {
-          if (action === "keep") setKept((prev) => [...prev, f]);
-          if (action === "unkeep") setKept((prev) => prev.filter((k) => rowKey(k) !== rowKey(f)));
           onState(data as OwnershipState);
           if (data.blockingCount === 0) onResolved?.();
         }
@@ -105,23 +107,37 @@ export default function OwnershipResolution({
 
   if (blocking.length === 0 && advisory.length === 0 && kept.length === 0) return null;
 
+  // Nothing needs doing when only settled decisions remain, so the panel stops
+  // dressing as a warning. Amber means "act now"; a Keep the professional made
+  // on purpose is not a problem to be nagged about, it is a record to be able
+  // to find and undo.
+  const needsAction = blocking.length > 0;
+
   return (
-    <div className="rounded-xl border border-amber-300 bg-amber-50/70 p-4 mb-5 text-left">
+    <div className={`rounded-xl border p-4 mb-5 text-left ${
+      needsAction ? "border-amber-300 bg-amber-50/70" : "border-border bg-white"
+    }`}>
       <p className="text-sm font-medium text-foreground">
-        {blocking.length > 0
+        {needsAction
           ? `Check ${blocking.length === 1 ? "this photo" : `these ${blocking.length} photos`} before publishing`
           : kept.length > 0
-            ? "Photos sorted"
+            ? `${kept.length === 1 ? "One photo is" : `${kept.length} photos are`} kept here intentionally`
             : "Worth a look before publishing"}
       </p>
-      {blocking.length > 0 && (
+      {needsAction ? (
         <p className="mt-1 text-xs text-amber-900">
           Your original source puts {blocking.length === 1 ? "this photo" : "these photos"} on a
           different item than {blocking.length === 1 ? "it is" : "they are"} on now. Move
           {blocking.length === 1 ? " it" : " them"}, or keep {blocking.length === 1 ? "it" : "them"} where
           {blocking.length === 1 ? " it is" : " they are"} if that was deliberate.
         </p>
-      )}
+      ) : kept.length > 0 ? (
+        <p className="mt-1 text-xs text-muted">
+          Your source lists {kept.length === 1 ? "it" : "them"} under
+          {kept.length === 1 ? " a different item" : " different items"}, and you chose to keep
+          {kept.length === 1 ? " it" : " them"} here. Undo any of these to put the check back.
+        </p>
+      ) : null}
 
       {error && <p className="mt-2 text-xs text-red-700">{error}</p>}
 
@@ -175,19 +191,22 @@ export default function OwnershipResolution({
       </ul>
 
       {kept.length > 0 && (
-        <div className="mt-3 border-t border-amber-200 pt-3">
-          <p className="text-xs font-medium text-amber-900">
-            Kept where {kept.length === 1 ? "it is" : "they are"}
-          </p>
+        <div className={needsAction ? "mt-3 border-t border-amber-200 pt-3" : "mt-3"}>
+          {needsAction && (
+            <p className="text-xs font-medium text-amber-900">
+              Kept here intentionally
+            </p>
+          )}
           <ul className="mt-1 space-y-1">
             {kept.map((f) => {
               const undoing = busy === `${rowKey(f)}:unkeep`;
               return (
-                <li key={rowKey(f)} className="flex items-center justify-between gap-3 text-xs">
-                  <span className="min-w-0 truncate text-muted">
-                    <span className="font-medium text-foreground">{f.itemTitle}</span>
-                    {f.proposedItemTitle ? ` — your source lists it under ${f.proposedItemTitle}` : ""}
-                  </span>
+                <li key={rowKey(f)} className="flex items-center gap-2 text-xs">
+                  {/* Which photo, not just which item — an item can hold several,
+                      and "Primrose" alone does not say which one was kept. */}
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={f.url} alt="" className="h-7 w-7 flex-none rounded object-cover bg-amber-100" />
+                  <span className="min-w-0 flex-1 truncate font-medium text-foreground">{f.itemTitle}</span>
                   <button
                     onClick={() => act(f, "unkeep")}
                     disabled={busy !== null}
@@ -207,8 +226,8 @@ export default function OwnershipResolution({
           because staying silent about something the check genuinely noticed is
           how the original incident stayed invisible. */}
       {advisory.length > 0 && (
-        <div className="mt-3 border-t border-amber-200 pt-3">
-          <p className="text-xs font-medium text-amber-900">Also worth checking</p>
+        <div className={`mt-3 border-t pt-3 ${needsAction ? "border-amber-200" : "border-border"}`}>
+          <p className={`text-xs font-medium ${needsAction ? "text-amber-900" : "text-foreground"}`}>Also worth checking</p>
           <ul className="mt-1 space-y-1">
             {advisory.map((f, i) => (
               <li key={`${rowKey(f)}:${i}`} className="text-xs text-muted">
