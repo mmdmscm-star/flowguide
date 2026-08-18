@@ -202,6 +202,79 @@ it.
 - **Professionals:** none. No editor, packet, or publish behaviour changes.
 - **Existing links:** all continue to work exactly as they do today.
 
+---
+
+## What protection exists today (second inspection pass)
+
+Verified rather than assumed, 2026-08-18:
+
+**Present and working:**
+
+- **`/p/[slug]` is the ONLY unauthenticated surface that reads a packet.**
+  `getPublishedPacket` / `createPublicClient` appear in exactly three files:
+  the recipient page, `queries.ts`, and `supabase.ts`. Every `/api/` route
+  requires a session. There is no second door to close.
+- **0015's RLS**, which is what made the slug the access control rather than one
+  lock among several.
+- **Generic metadata + `robots: noindex`.** No packet or client content reaches
+  titles, descriptions or OpenGraph tags — the things crawlers and link-unfurl
+  bots ingest. So the packets are not discoverable through search engines; an
+  attacker must guess slugs directly.
+- **`force-dynamic`.** No cached HTML can outlive an unpublish.
+- **Unpublished and nonexistent are indistinguishable** — both 404 through the
+  same `status = 'published'` filter, so the route leaks no existence signal.
+- **A weak tamper-evidence signal.** `markPacketViewed` flips `viewed` on first
+  open. An enumerator who actually lands on a live packet leaves that mark. It
+  is not an alert and nobody is watching it, but it is evidence that exists.
+
+**Absent:**
+
+- No rate limiting of any kind on this route. No `middleware.ts`, no
+  `vercel.json`, no limiter in `src/` beyond the unrelated magic-link cap.
+- No alerting on 404 volume.
+- No expiry, no revocation short of unpublishing, no second factor.
+
+So the gap is precisely one thing: **nothing makes guessing expensive.**
+
+---
+
+## Verification plan
+
+Unit-testable, because the window/threshold/cooldown logic is pure:
+
+1. under threshold → allowed; at threshold → cooldown opens
+2. cooldown expiry → allowed again
+3. a **hit** never records anything (the legitimate path must stay untouched)
+4. window rollover discards stale misses rather than accumulating forever
+5. limiter read error → **allowed** (fails open)
+6. two different hashed IPs never share a bucket
+7. the raw IP never appears in what is stored
+
+Then a disposable runtime check in the existing harness style: N+1 misses from
+one synthetic source produce a cooldown; a valid packet fetched from a different
+source during that cooldown still renders.
+
+**Explicitly not tested by attack:** no enumeration run against production. The
+arithmetic is not in doubt and the test would be indistinguishable from the
+thing being defended against.
+
+## Rollback plan
+
+Deliberately trivial, because a limiter that cannot be switched off is itself a
+risk to the recipient experience:
+
+- **Kill switch first.** An env var (`RECIPIENT_THROTTLE=off`) short-circuits the
+  check before any query. No deploy needed to disable — set and redeploy, or
+  unset in the dashboard.
+- **Code rollback:** revert one commit. The route's behaviour returns to today's
+  exactly; nothing about packets, slugs or links changed.
+- **Schema rollback:** `drop table recipient_probe_attempts`. It holds no packet
+  data and nothing references it.
+- **No link is ever touched**, so there is nothing to un-rotate. That is the
+  point of doing Part 1 before Part 2.
+
+---
+
 ## Out of scope, deliberately
 
 Login-gated packets, per-recipient tokens, link expiry, watermarking, view
