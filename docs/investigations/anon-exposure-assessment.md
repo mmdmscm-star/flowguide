@@ -82,9 +82,10 @@ of a possibility, or treating the 19/19 timestamp pattern as a finding.
 
 ## Log review — done, bounded, and negative
 
-**Completed by the founder on 2026-08-17**, covering the **24 hours** the
-Dashboard's Logs Explorer actually retained for this project — not the ~73-day
-exposure window.
+**Completed by the founder on 2026-08-17**, covering the **full 24-hour window**
+the Dashboard's Logs Explorer retained for this project — **60 rows** against
+`/rest/v1/packets`, reviewed in their entirety. Not a sample; also not the
+~73-day exposure window.
 
 **Result: no activity identified as unexplained anonymous enumeration or
 overwrite.** Probe and view-proof traffic was identifiable as such, and
@@ -101,13 +102,58 @@ PATCH | 200 | /rest/v1/packets?id=eq.fc868318-33dc-4422-b438-f589b3d7df7c&select
 auth_user: null
 ```
 
-`GET`s against the same packet occurred in the same second. The shape is
-consistent with an ordinary server-side FlowGuide operation.
+`GET`s against the same packet occurred in the same second.
 
-**That is where the evidence stops, and the attribution stops with it.** The
-available log does **not** expose the API role, so this cannot be shown to be a
-service-role request, and it equally cannot be shown to be an anon one. It is
-recorded here as unattributed rather than resolved in either direction.
+### What the URL shape narrows it to
+
+The log does **not** expose the API role, so nothing below is proof. But the URL
+is specific enough to be matched against the code, and it was:
+
+`?id=eq.<uuid>&select=id` is what `supabase-js` emits for
+`.update(...).eq("id", x).select("id")`. That is **one** call site in this
+repository — `scripts/security/anon-exposure-probe.mts`, the exposure probe
+itself:
+
+```ts
+const { data: w, error: wErr } = await anon.from("packets")
+  .update({ raw_input: "OVERWRITTEN-BY-ANON", title: "OVERWRITTEN" })
+  .eq("id", packetId).select("id");
+```
+
+Everything about the event fits that line: it uses the **anon** client (so
+`auth_user` is null), it runs under Node, it targets a disposable packet the
+probe created moments earlier — which is why anon `GET`s hit the same packet in
+the same second — and **before 0015 it would have returned 200**, which is
+precisely the exposure the probe exists to demonstrate.
+
+**No server-side FlowGuide path produces that URL.** Checked rather than
+assumed: the publish route filters by `user_id` as well as `id`;
+`markPacketViewed` filters by `slug`; every other `packets` update in `src/`
+carries no `.select("id")`. So the reading of this row as "an ordinary
+server-side operation" does not survive the code — the better-fitting
+explanation is the probe's own proof-of-exposure write.
+
+### Why it would not have appeared as "probe traffic"
+
+The probe's disposable packet is recognisable by its `zz-secprobe-…` **slug**,
+but the write probes address it by **id**. Any pass that separated probe traffic
+by slug would miss exactly these rows, which is consistent with this one being
+the single PATCH left unexplained.
+
+### The check that would settle it
+
+The probe deletes its packet in a `finally` block, so:
+
+```sql
+-- Read-only. Consistent with the probe = zero rows.
+select id, slug, title, status from public.packets
+where id = 'fc868318-33dc-4422-b438-f589b3d7df7c';
+```
+
+Zero rows is consistent with the probe's own cleanup. A row that turns out to be
+a **real client packet** would refute this reading entirely and should be treated
+as a finding. Until that query is run, this stays **unattributed** — a coherent
+benign explanation is not the same as a proven one.
 
 ### A correction to this document's own earlier advice
 
@@ -132,6 +178,11 @@ The 24 hours reviewed are a small and late slice of ~73 days. A clean result
 there narrows the question and does not close it. This does not upgrade
 "exploitation unknown" to "no exploitation occurred", and nothing below should
 be deferred on the strength of it.
+
+**The bounded exposure assessment is complete.** What remains open is not
+investigation — there is no further evidence to obtain — but the hardening in
+the next section, which stands on its own merits regardless of what the logs did
+or did not show.
 
 ## What actually reduces risk now
 
