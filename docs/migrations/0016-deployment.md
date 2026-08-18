@@ -448,91 +448,107 @@ cause and re-run; the migration is idempotent.
 
 ## 8. Post-apply verification
 
+Run this **before** the E2E proof, and before anything writes through the new
+RPCs. The migration's own `do $verify$` block asserts the same boundary, but it
+asserts it about itself; this confirms it from outside, in one query, and does
+not depend on the SQL editor surfacing a `NOTICE`.
+
+One row per check. **SAFE = 12 rows, every `status` = `PASS`.**
+
 ```sql
--- (a) Three functions, SECURITY DEFINER, pinned search_path.
---     SAFE = 3 rows, prosecdef = t, proconfig = {search_path=}
-select proname, prosecdef, proconfig
-from pg_proc p join pg_namespace n on n.oid = p.pronamespace
-where n.nspname = 'public'
-  and proname in ('move_item_photos','set_item_media_decision','clear_item_media_decision');
-
--- (b) Functions not EXECUTABLE by anon or authenticated — tested by EFFECT, so
---     a privilege held through PUBLIC is caught.
---     SAFE = zero rows.
-select p.proname, r.rolname
-from pg_proc p
-join pg_namespace n on n.oid = p.pronamespace
-cross join (values ('anon'),('authenticated')) as r(rolname)
-where n.nspname = 'public'
-  and p.proname in ('move_item_photos','set_item_media_decision','clear_item_media_decision')
-  and has_function_privilege(r.rolname, p.oid, 'execute');
-
--- (c) PUBLIC holds no EXECUTE. PUBLIC is a pseudo-role, so it is checked as
---     grantee 0 in the ACL — and a NULL proacl means DEFAULT privileges, under
---     which functions ARE executable by PUBLIC.
---     SAFE = zero rows.
-select p.proname,
-       case when p.proacl is null then 'NULL acl — PUBLIC CAN EXECUTE'
-            else 'explicit PUBLIC grant' end as why
-from pg_proc p join pg_namespace n on n.oid = p.pronamespace
-where n.nspname = 'public'
-  and p.proname in ('move_item_photos','set_item_media_decision','clear_item_media_decision')
-  and (p.proacl is null or exists (select 1 from aclexplode(p.proacl) a where a.grantee = 0));
-
--- (d) The TABLE is unreachable by anon/authenticated, across every privilege
---     type, by effect.
---     SAFE = zero rows.
-select r.rolname, pr.priv
-from (values ('anon'),('authenticated')) as r(rolname)
-cross join (values ('SELECT'),('INSERT'),('UPDATE'),('DELETE'),
-                   ('TRUNCATE'),('REFERENCES'),('TRIGGER')) as pr(priv)
-where has_table_privilege(r.rolname, 'public.item_media_decisions', pr.priv);
-
--- (e) PUBLIC holds nothing on the table.
---     SAFE = zero rows.
-select a.privilege_type
-from pg_class c
-join pg_namespace n on n.oid = c.relnamespace
-cross join lateral aclexplode(c.relacl) a
-where n.nspname='public' and c.relname='item_media_decisions' and a.grantee = 0;
-
--- (f) RLS on, no policy.
---     SAFE = relrowsecurity = t, policies = 0.
-select c.relrowsecurity,
-       (select count(*) from pg_policies
-         where schemaname='public' and tablename='item_media_decisions') as policies
-from pg_class c join pg_namespace n on n.oid = c.relnamespace
-where n.nspname='public' and c.relname='item_media_decisions';
-
--- (g) The legitimate caller still works. A lockdown that locks out the intended
---     caller is a permanent 503, not a success.
---     SAFE = three rows, all true.
-select pr.priv, has_table_privilege('service_role', 'public.item_media_decisions', pr.priv) as allowed
-from (values ('SELECT'),('INSERT'),('DELETE')) as pr(priv);
-
--- (h) Every function is SECURITY DEFINER with a pinned search_path.
---     SAFE = 3 rows, prosecdef = t, proconfig contains search_path=
-select proname, prosecdef, proconfig
-from pg_proc p join pg_namespace n on n.oid = p.pronamespace
-where n.nspname='public'
-  and proname in ('move_item_photos','set_item_media_decision','clear_item_media_decision');
-
--- (i) The unique key that makes a Keep idempotent.
---     SAFE = one unique index on (item_id, url).
-select indexname, indexdef from pg_indexes
-where schemaname='public' and tablename='item_media_decisions';
-
--- (j) The cascade, so a deleted item cannot strand a decision.
---     SAFE = delete_rule = CASCADE.
-select rc.delete_rule
-from information_schema.referential_constraints rc
-join information_schema.table_constraints tc on tc.constraint_name = rc.constraint_name
-where tc.table_schema='public' and tc.table_name='item_media_decisions';
+with checks as (
+  select 1 as ord, 'table exists'::text as check_name,
+         (to_regclass('public.item_media_decisions') is not null) as ok,
+         coalesce(to_regclass('public.item_media_decisions')::text, '(missing)') as detail
+  union all
+  select 2, 'three functions exist', count(*) = 3, count(*)::text || ' found'
+  from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public'
+    and p.proname in ('move_item_photos','set_item_media_decision','clear_item_media_decision')
+  union all
+  select 3, 'SECURITY DEFINER + pinned search_path', count(*) = 0,
+         coalesce(string_agg(p.proname::text, ', '), 'all three pinned')
+  from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public'
+    and p.proname in ('move_item_photos','set_item_media_decision','clear_item_media_decision')
+    and (not p.prosecdef or coalesce(array_to_string(p.proconfig, ','), '') not like '%search_path=%')
+  union all
+  select 4, 'anon/authenticated cannot EXECUTE', count(*) = 0,
+         coalesce(string_agg(distinct r.rolname::text || ' -> ' || p.proname::text, ', '), 'neither can')
+  from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+  cross join (values ('anon'),('authenticated')) as r(rolname)
+  where n.nspname = 'public'
+    and p.proname in ('move_item_photos','set_item_media_decision','clear_item_media_decision')
+    and has_function_privilege(r.rolname, p.oid, 'execute')
+  union all
+  select 5, 'PUBLIC cannot EXECUTE', count(*) = 0,
+         coalesce(string_agg(p.proname::text, ', '), 'none can')
+  from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public'
+    and p.proname in ('move_item_photos','set_item_media_decision','clear_item_media_decision')
+    and (p.proacl is null or exists (select 1 from aclexplode(p.proacl) a where a.grantee = 0))
+  union all
+  select 6, 'anon/authenticated cannot touch table', count(*) = 0,
+         coalesce(string_agg(r.rolname::text || ':' || pr.priv::text, ', '), 'no privileges held')
+  from (values ('anon'),('authenticated')) as r(rolname)
+  cross join (values ('SELECT'),('INSERT'),('UPDATE'),('DELETE'),
+                     ('TRUNCATE'),('REFERENCES'),('TRIGGER')) as pr(priv)
+  where has_table_privilege(r.rolname, 'public.item_media_decisions', pr.priv)
+  union all
+  select 7, 'PUBLIC holds nothing on table', count(*) = 0,
+         coalesce(string_agg(a.privilege_type::text, ', '), 'nothing')
+  from pg_class c join pg_namespace n on n.oid = c.relnamespace
+  cross join lateral aclexplode(c.relacl) a
+  where n.nspname = 'public' and c.relname = 'item_media_decisions' and a.grantee = 0
+  union all
+  select 8, 'RLS enabled', coalesce(bool_and(c.relrowsecurity), false),
+         coalesce(bool_and(c.relrowsecurity), false)::text
+  from pg_class c join pg_namespace n on n.oid = c.relnamespace
+  where n.nspname = 'public' and c.relname = 'item_media_decisions'
+  union all
+  select 9, 'no policies', count(*) = 0, count(*)::text || ' policies'
+  from pg_policies where schemaname = 'public' and tablename = 'item_media_decisions'
+  union all
+  select 10, 'service_role can read and write', count(*) = 0,
+         coalesce(string_agg(pr.priv::text, ', ') || ' MISSING', 'select/insert/delete all held')
+  from (values ('SELECT'),('INSERT'),('DELETE')) as pr(priv)
+  where not has_table_privilege('service_role', 'public.item_media_decisions', pr.priv)
+  union all
+  select 11, 'unique (item_id, url)', count(*) = 1,
+         coalesce(string_agg(indexname::text, ', '), '(none)')
+  from pg_indexes
+  where schemaname = 'public' and tablename = 'item_media_decisions' and indexdef like '%UNIQUE%'
+  union all
+  select 12, 'FK cascades on item delete', count(*) = 1,
+         coalesce(string_agg(rc.delete_rule::text, ', '), '(none)')
+  from information_schema.referential_constraints rc
+  join information_schema.table_constraints tc
+    on tc.constraint_name = rc.constraint_name
+   and tc.constraint_schema = rc.constraint_schema
+  where tc.table_schema = 'public' and tc.table_name = 'item_media_decisions'
+    and rc.delete_rule = 'CASCADE'
+)
+select ord, check_name, case when ok then 'PASS' else 'FAIL' end as status, detail
+from checks order by ord;
 ```
 
-Then run the E2E proof (§10).
+Reading a failure: `detail` names what is still reachable, so a `FAIL` on rows
+4-7 is a live privilege hole and the rollback in §9 applies immediately. A `FAIL`
+on row 10 is the opposite problem — the boundary is intact but the only
+legitimate caller is locked out, which surfaces as a permanent 503 rather than
+an error, and needs the `grant` re-run rather than a rollback.
 
----
+Rows 1-2 confirm the objects exist. Row 3 is the escalation guard: a
+`SECURITY DEFINER` function without a pinned `search_path` resolves unqualified
+names against whatever schema the caller puts first. Rows 8-9 are the second
+layer — RLS with no policy means no row is visible even if a privilege were
+somehow granted. Rows 11-12 are correctness rather than security: the unique key
+is what makes a Keep idempotent, and the cascade is what stops a deleted item
+stranding a decision that would later suppress a finding about a different item
+reusing the url.
+
+If every row reads `PASS`, the boundary is proven from outside the migration and
+the E2E proof in §10 is the next step.
 
 ## 9. Rollback
 
