@@ -32,17 +32,46 @@ const CEILING = LIMIT * 3;            // give up well past the limit
 const NAMESPACE = `zz-throttle-probe-${Date.now().toString(36)}`;
 
 console.log(`\nrecipient throttle probe — ${BASE}`);
-console.log(`expecting the limit to engage at or before ${LIMIT} requests to /p/*\n`);
+console.log(`expecting the limit to engage at or before ${LIMIT} requests to /p/*`);
+// Printed so the run can be located in Firewall Observability afterwards. In Log
+// mode the dashboard is the ONLY place the result is visible, and without this
+// there is no way to filter to exactly these requests.
+console.log(`path filter for the logs: /p/${NAMESPACE}-*`);
+console.log(`started at: ${new Date().toISOString()}\n`);
 
 let firstThrottledAt: number | null = null;
 let sent = 0;
 const statuses = new Map<number, number>();
+const started = Date.now();
+let windowNote = "";
+
+/** Any header a firewall might use to signal it acted. Captured because in LOG
+ *  mode the status code alone cannot distinguish "rule matched and logged" from
+ *  "rule never matched" — both are a plain 404 from outside. */
+const interesting = (h: Headers) =>
+  [...h.entries()].filter(([k]) =>
+    k.startsWith("x-vercel") || k.includes("ratelimit") || k.includes("rate-limit") ||
+    k === "retry-after" || k.includes("firewall"));
 
 for (let i = 1; i <= CEILING; i++) {
   // A slug that cannot collide with a real packet: reserved prefix + counter.
   const res = await fetch(`${BASE}/p/${NAMESPACE}-${i}`, { redirect: "manual" });
   sent = i;
   statuses.set(res.status, (statuses.get(res.status) ?? 0) + 1);
+
+  if (i === 1 || i === LIMIT + 1) {
+    console.log(`  [request ${i}] status ${res.status}, elapsed ${Date.now() - started}ms`);
+    for (const [k, v] of interesting(res.headers)) console.log(`      ${k}: ${v}`);
+  }
+  // The rule counts per 60s window, so exceeding the limit only proves anything
+  // if the requests actually landed inside one.
+  if (i === LIMIT + 1) {
+    const secs = (Date.now() - started) / 1000;
+    windowNote = secs <= 60
+      ? `${LIMIT + 1} requests sent in ${secs.toFixed(1)}s — inside the 60s window, so the limit WAS exceeded`
+      : `${LIMIT + 1} requests took ${secs.toFixed(1)}s — LONGER than the 60s window, so the limit may never have been exceeded`;
+    console.log(`  ${windowNote}`);
+  }
 
   // 429 is the default action; Deny may surface as 403. Either proves the rule
   // is enforcing. A 404 means the request reached the app and found nothing,
@@ -57,10 +86,19 @@ for (let i = 1; i <= CEILING; i++) {
 console.log(`\nsent ${sent} requests`);
 console.log("status counts:", JSON.stringify(Object.fromEntries(statuses)));
 
+console.log(`elapsed: ${((Date.now() - started) / 1000).toFixed(1)}s`);
+if (windowNote) console.log(windowNote);
+
 if (firstThrottledAt === null) {
-  console.log(`\nNOT ENFORCING — ${sent} requests to /p/* were all served.`);
-  console.log("Expected if the rule is in Log mode, or absent.");
-  console.log("If the rule is set to Deny, this is a FAILURE: the protection is not live.");
+  console.log(`\nNOT BLOCKING — ${sent} requests to /p/* were all served.`);
+  console.log("");
+  console.log("In LOG mode this is the CORRECT result: the rule counts and records,");
+  console.log("it does not reject. What this probe canNOT tell you is whether the rule");
+  console.log("MATCHED — a logged request and an unmatched request are both a plain 404");
+  console.log("from outside. That answer lives in Firewall Observability, and it is the");
+  console.log("thing to read before switching to Deny.");
+  console.log("");
+  console.log("If the rule were set to Deny, this same output WOULD be a failure.");
   process.exitCode = 1;
 } else {
   console.log(`\nENFORCING — throttled at request ${firstThrottledAt}.`);
