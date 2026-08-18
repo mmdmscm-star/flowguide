@@ -13,7 +13,18 @@
 //               overwrites those newer edits with older-derived values.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { diffItemContent, decideSaveBack, type LibraryAncestry } from "./library.ts";
+import {
+  diffItemContent,
+  decideSaveBack,
+  type LibraryAncestry,
+  isRevisionConflict,
+  REVISION_CONFLICT,
+  recomputeAfterConflict,
+  isLineageCoherent,
+  lineageForInsert,
+  CLEARED_LINEAGE,
+  isDuplicateCandidate,
+} from "./library.ts";
 import type { ItemContentPayload } from "./item-content.ts";
 
 /** The comprehensive reusable base. */
@@ -179,4 +190,84 @@ test("a missing recorded revision never fabricates a moved-on warning", () => {
   assert.equal(decision.ancestorMovedOn, false,
     "unknown is not the same as changed — do not warn on an absence");
   assert.equal(decision.primary, "update");
+});
+
+// ---------------------------------------------------------------------------
+// Optimistic concurrency — the decision is reviewed against a revision, and the
+// write must land only against THAT revision.
+// ---------------------------------------------------------------------------
+test("a conflict is recognised from the writer's sentinel, not from an exception", () => {
+  // Modelling a lost race as a failure pushes callers toward blind retry, which
+  // is exactly the overwrite this exists to prevent.
+  assert.equal(isRevisionConflict(REVISION_CONFLICT), true);
+  assert.equal(isRevisionConflict(7), false);
+  assert.equal(isRevisionConflict(null), false);
+});
+
+test("after a conflict the professional is shown the CURRENT comparison, not the stale one", () => {
+  // They reviewed against rev 1. Someone added memory-care pricing (rev 2).
+  // Their pruned copy must now be diffed against what the Library IS.
+  const withExtra: ItemContentPayload = {
+    ...BASE,
+    details: [...BASE.details!, { label: "Respite", value: "$300/day" }],
+  };
+  const { diff, decision } = recomputeAfterConflict(
+    withExtra, TAILORED,
+    { libraryItemId: "lib-1", copiedFromRevision: 1, currentRevision: 2 },
+  );
+
+  const details = diff.fields.find((f) => f.field === "details")!;
+  assert.ok(details.removed.includes("Respite"),
+    "the recomputed diff must reflect the content added while they were deciding");
+  assert.equal(decision.primary, "save_as_new");
+  assert.ok(decision.warnings.includes("ancestor_moved_on"));
+  assert.ok(decision.warnings.includes("removals"));
+});
+
+// ---------------------------------------------------------------------------
+// Lineage coherence — the two meaningful states, and the two impossible ones.
+// ---------------------------------------------------------------------------
+test("only both-or-neither is coherent lineage", () => {
+  assert.equal(isLineageCoherent({ libraryItemId: "lib-1", copiedFromRevision: 3 }), true);
+  assert.equal(isLineageCoherent({ libraryItemId: null, copiedFromRevision: null }), true);
+  // A live ancestor whose revision is unknown: the save-back logic could not
+  // tell "unchanged" from "moved on".
+  assert.equal(isLineageCoherent({ libraryItemId: "lib-1", copiedFromRevision: null }), false);
+  // An orphan revision: what `on delete set null` would leave behind if it
+  // cleared only the id.
+  assert.equal(isLineageCoherent({ libraryItemId: null, copiedFromRevision: 9 }), false);
+});
+
+test("the lineage writers always set or clear BOTH columns", () => {
+  const set = lineageForInsert("lib-1", 4);
+  assert.deepEqual(set, { library_item_id: "lib-1", library_item_revision: 4 });
+  assert.deepEqual(CLEARED_LINEAGE, { library_item_id: null, library_item_revision: null });
+  assert.equal(isLineageCoherent({ libraryItemId: set.library_item_id, copiedFromRevision: set.library_item_revision }), true);
+  assert.equal(isLineageCoherent({ libraryItemId: null, copiedFromRevision: null }), true);
+});
+
+// ---------------------------------------------------------------------------
+// Duplicate detection — warn, never merge, never block.
+// ---------------------------------------------------------------------------
+test("the same name at the same address is a duplicate candidate", () => {
+  assert.equal(isDuplicateCandidate(BASE, { ...TAILORED }), true);
+  assert.equal(isDuplicateCandidate(BASE, { ...BASE, title: "  brookdale   CHANATE " }), true,
+    "casing and spacing are not distinctions a professional intends");
+});
+
+test("the same name at a DIFFERENT address is not a duplicate", () => {
+  // Two branches of one operator. Merging them would be unrecoverable.
+  assert.equal(isDuplicateCandidate(BASE, { ...BASE, address: "900 Sonoma Ave" }), false);
+});
+
+test("a missing address does not make a namesake a different place", () => {
+  const noAddress = { ...BASE, address: "" };
+  assert.equal(isDuplicateCandidate(BASE, noAddress), true,
+    "an absence is not evidence of difference");
+});
+
+test("different names never match, however similar", () => {
+  assert.equal(isDuplicateCandidate(BASE, { ...BASE, title: "Brookdale Paulin Creek" }), false);
+  assert.equal(isDuplicateCandidate({ title: "" }, { title: "" }), false,
+    "two untitled items are not duplicates of each other");
 });

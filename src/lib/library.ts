@@ -196,3 +196,89 @@ export function decideSaveBack(
     ancestorMovedOn, wouldRemoveContent: false, warnings,
   };
 }
+
+// ---------------------------------------------------------------------------
+// Ancestry coherence, mirrored in TypeScript.
+//
+// The database makes a half state unrepresentable (CHECK + a BEFORE DELETE
+// trigger). This mirrors that rule so a route can never CONSTRUCT one and only
+// discover it at the constraint — an error surfacing as a 500 from Postgres
+// instead of a refusal the caller can act on.
+// ---------------------------------------------------------------------------
+
+/** True when lineage is one of the two meaningful states. */
+export function isLineageCoherent(a: Pick<LibraryAncestry, "libraryItemId" | "copiedFromRevision">): boolean {
+  return (a.libraryItemId === null) === (a.copiedFromRevision === null);
+}
+
+/** Lineage to write when inserting from the Library. Both columns or neither —
+ *  never one. */
+export function lineageForInsert(libraryItemId: string, revision: number) {
+  return { library_item_id: libraryItemId, library_item_revision: revision };
+}
+
+/** Lineage to write when the ancestor is gone. Both cleared together. */
+export const CLEARED_LINEAGE = { library_item_id: null, library_item_revision: null } as const;
+
+// ---------------------------------------------------------------------------
+// Optimistic concurrency.
+//
+// The decision the professional reviewed was computed against a revision. The
+// Library can change again between reviewing and submitting — another tab,
+// another device. A replacement must land only against the state that was
+// actually reviewed.
+//
+// The conflict is NOT an error. It is an ordinary race with a defined
+// resolution: recompute the comparison and show what changed. Modelling it as a
+// failure would push callers toward retrying blindly, which is exactly the
+// overwrite this exists to prevent.
+// ---------------------------------------------------------------------------
+
+/** The sentinel `library_update_from_item` returns when the revision moved. */
+export const REVISION_CONFLICT = -1;
+
+export type SaveBackResult =
+  | { status: "updated"; revision: number }
+  | { status: "conflict"; currentRevision: number; diff: ContentDiff; decision: SaveBackDecision };
+
+/** Did the atomic writer refuse because the reviewed revision was stale? */
+export const isRevisionConflict = (returned: number | null): boolean =>
+  returned === REVISION_CONFLICT;
+
+/**
+ * What to send a caller after a conflict: the CURRENT comparison, not the stale
+ * one they submitted against. The professional then decides again with accurate
+ * information — which is the whole point of refusing the write.
+ */
+export function recomputeAfterConflict(
+  currentSnapshot: ItemContentPayload,
+  descendant: ItemContentPayload,
+  ancestry: LibraryAncestry,
+): { diff: ContentDiff; decision: SaveBackDecision } {
+  const diff = diffItemContent(currentSnapshot, descendant);
+  return { diff, decision: decideSaveBack(ancestry, diff) };
+}
+
+// ---------------------------------------------------------------------------
+// Duplicate detection, for Save to Library.
+// ---------------------------------------------------------------------------
+
+const norm = (s: string | undefined) =>
+  (s ?? "").toLowerCase().replace(/\s+/g, " ").replace(/[.,#]/g, "").trim();
+
+/**
+ * Warn, never merge and never block. Two genuinely different things can share a
+ * name — two branches of one operator, two units at one address — and silently
+ * merging a professional's content is unrecoverable.
+ *
+ * Address participates only when BOTH sides have one: a Library entry saved
+ * without an address should still match its namesake rather than being treated
+ * as a different place on the strength of an absence.
+ */
+export function isDuplicateCandidate(a: ItemContentPayload, b: ItemContentPayload): boolean {
+  const ta = norm(a.title), tb = norm(b.title);
+  if (!ta || !tb || ta !== tb) return false;
+  const aa = norm(a.address), ab = norm(b.address);
+  if (aa && ab) return aa === ab;
+  return true;
+}

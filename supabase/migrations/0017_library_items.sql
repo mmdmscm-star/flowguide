@@ -22,10 +22,23 @@
 -- hand. Array ORDER is the display order and is carried by position, which is
 -- why no sort_order travels.
 --
--- WHY NO RPCs. Unlike 0016, nothing here needs SECURITY DEFINER: this is one row
--- per record with no child tables, so there is no multi-table atomicity problem
--- to solve. Ownership is enforced in the route layer with the service role and
--- an explicit user_id predicate on every query.
+-- WHY TWO RPCs, AFTER ALL. An earlier draft of this migration claimed none were
+-- needed because a Library record is a single row. That is true of a Library
+-- WRITE and false of the two operations that matter:
+--
+--   Update Library version  = replace library_items + bump its revision
+--                             + refresh the DESCENDANT's recorded revision
+--   Save as new             = insert library_items + repoint the descendant
+--
+-- Both span two tables. Split into separate statements, a failure between them
+-- leaves the Library updated while the descendant still records the OLD
+-- revision — which the save-back logic then reports as "the ancestor moved on",
+-- warning the professional about their own change. That is a false warning, and
+-- a false warning is worse than none: it teaches people to dismiss the real one.
+--
+-- supabase-js exposes no multi-statement transaction, so atomicity requires a
+-- function. Direct Library edits stay a plain conditional UPDATE — genuinely one
+-- row, genuinely atomic, no function needed.
 begin;
 set local lock_timeout = '3s';
 set local statement_timeout = '60s';
@@ -103,6 +116,38 @@ create index if not exists items_library_item_idx on public.items(library_item_i
   where library_item_id is not null;
 
 -- ---------------------------------------------------------------------------
+-- ANCESTRY COHERENCE. Four combinations exist; two are meaningless:
+--
+--   id set,  revision set   -> descendant of a known revision            OK
+--   id null, revision null  -> no ancestry                                OK
+--   id set,  revision null  -> live ancestor, unknown revision       IMPOSSIBLE
+--   id null, revision set   -> orphan revision                       IMPOSSIBLE
+--
+-- The fourth is not hypothetical: `on delete set null` nulls ONLY the id, so
+-- deleting a Library entry would strand its revision on every descendant. The
+-- trigger below therefore clears BOTH before the row goes, and the FK's own
+-- action then finds the id already null. With that in place the CHECK is safe;
+-- without it, deleting a Library item would violate the constraint and fail.
+-- ---------------------------------------------------------------------------
+create or replace function public.library_clear_descendant_lineage() returns trigger
+language plpgsql security definer set search_path = '' as $$
+begin
+  update public.items
+     set library_item_id = null, library_item_revision = null
+   where library_item_id = old.id;
+  return old;
+end;
+$$;
+
+drop trigger if exists trg_library_clear_lineage on public.library_items;
+create trigger trg_library_clear_lineage before delete on public.library_items
+  for each row execute function public.library_clear_descendant_lineage();
+
+alter table public.items drop constraint if exists items_library_lineage_coherent;
+alter table public.items add constraint items_library_lineage_coherent
+  check ((library_item_id is null) = (library_item_revision is null));
+
+-- ---------------------------------------------------------------------------
 -- Privilege boundary — 0016's posture, including the correction that cost two
 -- rounds there.
 -- ---------------------------------------------------------------------------
@@ -110,6 +155,144 @@ alter table public.library_items enable row level security;
 revoke all on table public.library_items from public;
 revoke all on table public.library_items from anon, authenticated;
 grant select, insert, update, delete on table public.library_items to service_role;
+
+-- ---------------------------------------------------------------------------
+-- Update Library version — ATOMIC, with optimistic concurrency.
+--
+-- p_expected_revision is the revision the professional actually REVIEWED in the
+-- confirmation dialog. Between seeing that comparison and pressing the button,
+-- the Library entry may have changed again — another tab, another device. A
+-- replacement must only land against the state that was reviewed, so a mismatch
+-- returns -1 rather than overwriting work nobody looked at. The caller then
+-- recomputes the diff and shows the updated comparison.
+--
+-- Both writes happen here, in one transaction, for the reason in the header:
+-- a partial apply would make the descendant report its own change as somebody
+-- else's.
+-- ---------------------------------------------------------------------------
+create or replace function public.library_update_from_item(
+  p_owner uuid,
+  p_library_item_id uuid,
+  p_item_id uuid,
+  p_expected_revision bigint
+) returns bigint
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_lib_owner uuid; v_current bigint; v_item_owner uuid; v_new bigint;
+  v_title text; v_address text; v_description text; v_notes text;
+  v_details jsonb; v_links jsonb; v_photos jsonb; v_contacts jsonb;
+begin
+  -- Lock the Library row FIRST and for the whole transaction: the revision check
+  -- and the write must not be separable, or two concurrent replacements could
+  -- both read the same revision and both believe they won.
+  select user_id, revision into v_lib_owner, v_current
+    from public.library_items where id = p_library_item_id for update;
+  if v_lib_owner is null then raise exception 'library: entry % not found', p_library_item_id; end if;
+  if v_lib_owner <> p_owner then raise exception 'library: caller does not own this entry'; end if;
+
+  -- The conflict signal. NOT an exception: this is an ordinary race with a
+  -- defined resolution (show the professional what changed), not a fault.
+  if v_current <> p_expected_revision then return -1; end if;
+
+  -- The descendant must belong to the same owner. Verified through the packet,
+  -- because items carry no user_id of their own.
+  select pk.user_id into v_item_owner
+    from public.items i
+    join public.sections s on s.id = i.section_id
+    join public.packets pk on pk.id = s.packet_id
+   where i.id = p_item_id;
+  if v_item_owner is null then raise exception 'library: item % not found', p_item_id; end if;
+  if v_item_owner <> p_owner then raise exception 'library: caller does not own this item'; end if;
+
+  select i.title, i.address, i.description, i.notes,
+         coalesce((select jsonb_agg(jsonb_build_object('label', d.label, 'value', d.value)
+                    order by d.sort_order, d.created_at) from public.item_details d where d.item_id = i.id), '[]'::jsonb),
+         coalesce((select jsonb_agg(jsonb_build_object('url', l.url, 'label', l.label)
+                    order by l.sort_order, l.created_at) from public.item_links l where l.item_id = i.id), '[]'::jsonb),
+         coalesce((select jsonb_agg(jsonb_build_object('url', ph.url)
+                    order by ph.sort_order, ph.created_at) from public.item_photos ph where ph.item_id = i.id), '[]'::jsonb),
+         coalesce((select jsonb_agg(jsonb_build_object('name', c.name, 'role', c.role, 'phone', c.phone,
+                                                       'email', c.email, 'website', c.website)
+                    order by c.sort_order, c.created_at) from public.item_contacts c where c.item_id = i.id), '[]'::jsonb)
+    into v_title, v_address, v_description, v_notes, v_details, v_links, v_photos, v_contacts
+    from public.items i where i.id = p_item_id;
+
+  update public.library_items
+     set title = v_title, address = v_address, description = v_description, notes = v_notes,
+         details = v_details, links = v_links, photos = v_photos, contacts = v_contacts,
+         revision = revision + 1, updated_at = now()
+   where id = p_library_item_id
+   returning revision into v_new;
+
+  -- The descendant that just BECAME the base is no longer stale against it.
+  -- Same transaction, so it can never be left reporting its own change as
+  -- somebody else's.
+  update public.items
+     set library_item_id = p_library_item_id, library_item_revision = v_new
+   where id = p_item_id;
+
+  return v_new;
+end;
+$$;
+
+-- ---------------------------------------------------------------------------
+-- Save as new — ATOMIC. Creates a fresh entry from a packet item and repoints
+-- the descendant, so a tailored copy stops being measured against a base it
+-- deliberately does not match.
+-- ---------------------------------------------------------------------------
+create or replace function public.library_save_as_new_from_item(
+  p_owner uuid,
+  p_item_id uuid
+) returns uuid
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare v_item_owner uuid; v_new_id uuid;
+begin
+  select pk.user_id into v_item_owner
+    from public.items i
+    join public.sections s on s.id = i.section_id
+    join public.packets pk on pk.id = s.packet_id
+   where i.id = p_item_id;
+  if v_item_owner is null then raise exception 'library: item % not found', p_item_id; end if;
+  if v_item_owner <> p_owner then raise exception 'library: caller does not own this item'; end if;
+
+  insert into public.library_items
+    (user_id, title, address, description, notes, details, links, photos, contacts,
+     source_packet_item_id, revision)
+  select p_owner, i.title, i.address, i.description, i.notes,
+         coalesce((select jsonb_agg(jsonb_build_object('label', d.label, 'value', d.value)
+                    order by d.sort_order, d.created_at) from public.item_details d where d.item_id = i.id), '[]'::jsonb),
+         coalesce((select jsonb_agg(jsonb_build_object('url', l.url, 'label', l.label)
+                    order by l.sort_order, l.created_at) from public.item_links l where l.item_id = i.id), '[]'::jsonb),
+         coalesce((select jsonb_agg(jsonb_build_object('url', ph.url)
+                    order by ph.sort_order, ph.created_at) from public.item_photos ph where ph.item_id = i.id), '[]'::jsonb),
+         coalesce((select jsonb_agg(jsonb_build_object('name', c.name, 'role', c.role, 'phone', c.phone,
+                                                       'email', c.email, 'website', c.website)
+                    order by c.sort_order, c.created_at) from public.item_contacts c where c.item_id = i.id), '[]'::jsonb),
+         i.id, 1
+    from public.items i where i.id = p_item_id
+  returning id into v_new_id;
+
+  -- Both lineage columns together — the CHECK constraint makes a half state
+  -- unrepresentable, and this is where it would otherwise be introduced.
+  update public.items
+     set library_item_id = v_new_id, library_item_revision = 1
+   where id = p_item_id;
+
+  return v_new_id;
+end;
+$$;
+
+revoke all on function public.library_update_from_item(uuid, uuid, uuid, bigint) from public;
+revoke all on function public.library_update_from_item(uuid, uuid, uuid, bigint) from anon, authenticated;
+revoke all on function public.library_save_as_new_from_item(uuid, uuid) from public;
+revoke all on function public.library_save_as_new_from_item(uuid, uuid) from anon, authenticated;
+revoke all on function public.library_clear_descendant_lineage() from public, anon, authenticated, service_role;
 
 do $verify$
 declare v_left text;
@@ -155,6 +338,48 @@ begin
   where not has_table_privilege('service_role', 'public.library_items', pr.priv);
   if v_left is not null then
     raise exception '0017: service_role lacks % on library_items', v_left;
+  end if;
+
+  -- The two cross-table writers must be SECURITY DEFINER with a pinned
+  -- search_path, and unreachable by anon/authenticated or PUBLIC.
+  select string_agg(p.proname::text, ', ') into v_left
+  from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public'
+    and p.proname in ('library_update_from_item','library_save_as_new_from_item')
+    and (not p.prosecdef
+      or coalesce(array_to_string(p.proconfig, ','), '') not like '%search_path=%');
+  if v_left is not null then
+    raise exception '0017: not SECURITY DEFINER with a pinned search_path: %', v_left;
+  end if;
+
+  select string_agg(distinct r.rolname::text || ' -> ' || p.proname::text, ', ') into v_left
+  from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+  cross join (values ('anon'),('authenticated')) as r(rolname)
+  where n.nspname = 'public'
+    and p.proname in ('library_update_from_item','library_save_as_new_from_item')
+    and has_function_privilege(r.rolname, p.oid, 'execute');
+  if v_left is not null then
+    raise exception '0017: functions still executable: %', v_left;
+  end if;
+
+  select string_agg(p.proname::text, ', ') into v_left
+  from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public'
+    and p.proname in ('library_update_from_item','library_save_as_new_from_item')
+    and (p.proacl is null or exists (select 1 from aclexplode(p.proacl) a where a.grantee = 0));
+  if v_left is not null then
+    raise exception '0017: PUBLIC can still execute: %', v_left;
+  end if;
+
+  -- Half-lineage must be unrepresentable, and deleting an entry must clear both
+  -- columns rather than stranding a revision.
+  if not exists (select 1 from pg_constraint
+                 where conname = 'items_library_lineage_coherent') then
+    raise exception '0017: the lineage coherence constraint is missing';
+  end if;
+  if not exists (select 1 from pg_trigger
+                 where tgname = 'trg_library_clear_lineage' and not tgisinternal) then
+    raise exception '0017: the lineage-clearing trigger is missing';
   end if;
 
   raise notice '0017: library_items created; anon/authenticated/PUBLIC hold nothing; service_role can read and write; RLS on with no policy';
