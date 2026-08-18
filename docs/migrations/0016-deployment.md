@@ -342,13 +342,32 @@ from pg_proc p join pg_namespace n on n.oid = p.pronamespace
 where n.nspname = 'public'
   and p.proname in ('move_item_photos','set_item_media_decision','clear_item_media_decision');
 
--- (c) The shapes the RPCs assume.
---     SAFE = item_photos has (id, item_id, url, sort_order, created_at)
---            and items has (id, section_id).
-select table_name, column_name, data_type
+-- (c) Every column the three RPCs actually reference. They touch FIVE tables,
+--     not two: items and sections to resolve an item to its packet, packets for
+--     the owner and draft checks, ingestion_runs for the in-flight refusal, and
+--     item_photos for the move itself.
+--     Expected-minus-actual, so SAFE = zero rows.
+select e.tbl, e.col
+from (values
+  ('items','id'),            ('items','section_id'),
+  ('sections','id'),         ('sections','packet_id'),
+  ('packets','id'),          ('packets','user_id'),      ('packets','status'),
+  ('item_photos','id'),      ('item_photos','item_id'),  ('item_photos','url'),
+  ('item_photos','sort_order'), ('item_photos','created_at'),
+  ('ingestion_runs','packet_id'), ('ingestion_runs','status')
+) as e(tbl, col)
+where not exists (
+  select 1 from information_schema.columns c
+  where c.table_schema = 'public' and c.table_name = e.tbl and c.column_name = e.col
+);
+
+-- (c2) The two types move_item_photos actually computes on: it does
+--      max(sort_order) + 1 arithmetic, and matches url against 'http%'.
+--      SAFE = sort_order integer, url text.
+select column_name, data_type
 from information_schema.columns
-where table_schema = 'public' and table_name in ('item_photos','items')
-order by table_name, ordinal_position;
+where table_schema = 'public' and table_name = 'item_photos'
+  and column_name in ('sort_order','url');
 
 -- (d) No name collision with anything already present.
 --     SAFE = zero rows.
