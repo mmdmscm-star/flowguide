@@ -466,12 +466,20 @@ with checks as (
   where n.nspname = 'public'
     and p.proname in ('move_item_photos','set_item_media_decision','clear_item_media_decision')
   union all
-  select 3, 'SECURITY DEFINER + pinned search_path', count(*) = 0,
-         coalesce(string_agg(p.proname::text, ', '), 'all three pinned')
-  from pg_proc p join pg_namespace n on n.oid = p.pronamespace
-  where n.nspname = 'public'
-    and p.proname in ('move_item_photos','set_item_media_decision','clear_item_media_decision')
-    and (not p.prosecdef or coalesce(array_to_string(p.proconfig, ','), '') not like '%search_path=%')
+  select 3, 'SECURITY DEFINER + search_path pinned EMPTY',
+         (count(*) = 3 and bool_and(f.prosecdef) and bool_and(f.sp is not null)
+          and bool_and(btrim(regexp_replace(coalesce(f.sp, 'x'), '^search_path=', ''), '"') = '')),
+         coalesce(string_agg(f.proname || ' sd=' || f.prosecdef::text
+                             || ' [' || coalesce(f.sp, '(unset)') || ']', ', ' order by f.proname),
+                  '(no functions found)')
+  from (
+    select p.proname::text as proname, p.prosecdef,
+           (select e from unnest(coalesce(p.proconfig, '{}'::text[])) e
+             where e like 'search_path=%' limit 1) as sp
+    from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'public'
+      and p.proname in ('move_item_photos','set_item_media_decision','clear_item_media_decision')
+  ) f
   union all
   select 4, 'anon/authenticated cannot EXECUTE', count(*) = 0,
          coalesce(string_agg(distinct r.rolname::text || ' -> ' || p.proname::text, ', '), 'neither can')
@@ -514,10 +522,21 @@ with checks as (
   from (values ('SELECT'),('INSERT'),('DELETE')) as pr(priv)
   where not has_table_privilege('service_role', 'public.item_media_decisions', pr.priv)
   union all
-  select 11, 'unique (item_id, url)', count(*) = 1,
-         coalesce(string_agg(indexname::text, ', '), '(none)')
-  from pg_indexes
-  where schemaname = 'public' and tablename = 'item_media_decisions' and indexdef like '%UNIQUE%'
+  select 11, 'exactly one UNIQUE constraint, on (item_id, url)',
+         count(*) filter (where u.cols = 'item_id,url') = 1 and count(*) = 1,
+         coalesce(string_agg(u.conname || ' on (' || u.cols || ')', ', ' order by u.conname),
+                  '(no unique constraint)')
+  from (
+    select con.conname::text as conname,
+           (select string_agg(a.attname::text, ',' order by a.attname)
+              from unnest(con.conkey) k
+              join pg_attribute a on a.attrelid = con.conrelid and a.attnum = k) as cols
+    from pg_constraint con
+    join pg_class c on c.oid = con.conrelid
+    join pg_namespace n on n.oid = c.relnamespace
+    where n.nspname = 'public' and c.relname = 'item_media_decisions'
+      and con.contype = 'u'
+  ) u
   union all
   select 12, 'FK cascades on item delete', count(*) = 1,
          coalesce(string_agg(rc.delete_rule::text, ', '), '(none)')
@@ -537,6 +556,22 @@ Reading a failure: `detail` names what is still reachable, so a `FAIL` on rows
 on row 10 is the opposite problem — the boundary is intact but the only
 legitimate caller is locked out, which surfaces as a permanent 503 rather than
 an error, and needs the `grant` re-run rather than a rollback.
+
+Row 11 counts UNIQUE **constraints** (`contype = 'u'`), not unique **indexes**.
+The first draft counted indexes and asserted `= 1`, which fails on a correct
+schema: `id uuid primary key` creates `item_media_decisions_pkey`, a unique index
+that is not a unique constraint of the kind being asserted. Two unique indexes is
+the right answer here; one unique constraint, on exactly `(item_id, url)`, is the
+thing worth checking. Columns are compared as a sorted set, because uniqueness
+does not depend on index column order.
+
+Row 3 asserts the search_path is pinned to the EMPTY value, not merely that some
+`search_path` setting exists. A function pinned to `search_path=public` is still
+`SECURITY DEFINER` with a setting present, and is still resolving unqualified
+names against a schema a caller could shadow. The stored form is printed in
+`detail` on pass as well as fail, so the exact value is visible rather than
+inferred, and both storage spellings of empty (`search_path=` and
+`search_path=""`) are accepted by stripping quotes before comparing.
 
 Rows 1-2 confirm the objects exist. Row 3 is the escalation guard: a
 `SECURITY DEFINER` function without a pinned `search_path` resolves unqualified
