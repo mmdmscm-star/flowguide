@@ -61,3 +61,31 @@ test("a held, empty, self-created organize draft is the one case that gets remov
   // If this run did not create the packet, nothing is restored and nothing goes.
   assert.equal(discardWouldDeletePacket({ ...held, isOriginRun: false }), false);
 });
+
+// Review outcome #5 of the ownership-resolution design.
+//
+// Discard clears the `needs_review` block and nothing else. It abandons the
+// SOURCE, not the rows the run already wrote, so every photo it placed survives
+// it — and a media-ownership finding is derived from those photos. Promising
+// "publish is unblocked" would be a second gate's business to decide, and a
+// professional who discards on that promise and still cannot publish has been
+// told a falsehood by the one screen meant to explain the way out.
+test("no phrasing claims discard unblocks publishing — a second gate may still hold", () => {
+  for (const isEmpty of [true, false]) {
+    for (const entryPoint of ["organize", "append"]) {
+      for (const isOriginRun of [true, false]) {
+        const sentence = describeReviewExit({ entryPoint, isOriginRun, isDraft: true, isEmpty });
+        assert.doesNotMatch(sentence, /unblock/i);
+      }
+    }
+  }
+});
+
+// The preserved case must say what discard does NOT take with it. "Everything
+// you can see stays" alone reads as reassurance; the photos are the specific
+// thing whose survival is load-bearing for the ownership gate.
+test("the preserved sentence names the photos as surviving discard", () => {
+  const preserved = { entryPoint: "append", isOriginRun: false, isDraft: true, isEmpty: false };
+  assert.equal(discardWouldDeletePacket(preserved), false);
+  assert.match(describeReviewExit(preserved), /photos/i);
+});

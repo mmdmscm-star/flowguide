@@ -1,5 +1,11 @@
 // What discard will actually do to this packet, in the professional's language.
 //
+// It clears the `needs_review` block and nothing else. Discard abandons the
+// SOURCE, not the content the run already wrote — the photos it placed stay
+// exactly where they are, so a media-ownership finding survives it untouched.
+// The copy must not promise publishing is unblocked when a second, independent
+// gate may still be holding it.
+//
 // `needs_review` blocks publishing, and discard is the way out. But discard is
 // not one behaviour: `discard_ingestion_run` (migration 0012) DELETES the packet
 // when it is the empty draft this very run created, and PRESERVES it in every
@@ -28,5 +34,5 @@ export function discardWouldDeletePacket(d: PacketDisposition): boolean {
 export function describeReviewExit(d: PacketDisposition): string {
   return discardWouldDeletePacket(d)
     ? "Discard this import and try again — the empty packet will be removed."
-    : "Discard the import to unblock publishing. Everything you can see stays.";
+    : "Discard the import to clear this review. Everything you can see stays — discarding abandons the source, not the photos it already placed.";
 }

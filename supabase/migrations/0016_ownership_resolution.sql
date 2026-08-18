@@ -126,24 +126,41 @@ begin
     raise exception 'move photos: an import is in progress on this packet';
   end if;
 
-  -- APPEND to the destination rather than carrying sort_order across. Readers
-  -- order by sort_order with no tie-break, so a carried value would collide with
-  -- the destination's existing photos and make the carousel order — and the hero
-  -- photo — nondeterministic.
-  select coalesce(max(sort_order), -1) + 1 into v_base
-    from public.item_photos where item_id = p_to_item;
+  -- The destination may ALREADY hold this url. A model that DUPLICATES a photo
+  -- onto two items, rather than misfiling one copy, produces exactly that: the
+  -- correct owner keeps its copy and a second lands somewhere it does not
+  -- belong. item_photos carries no unique (item_id, url), so reassigning here
+  -- would hand the destination the same photo twice and leave the professional
+  -- deleting a duplicate they never created.
+  --
+  -- The intent behind Move is "this belongs there, not here". When it is already
+  -- there, honouring that intent means removing the misplaced copies, not adding
+  -- another. Either way the finding stops being true on the next recompute,
+  -- which is the outcome that actually has to hold.
+  if exists (select 1 from public.item_photos where item_id = p_to_item and url = p_url) then
+    delete from public.item_photos where item_id = p_from_item and url = p_url;
+    get diagnostics v_moved = row_count;
+  else
+    -- APPEND to the destination rather than carrying sort_order across. Readers
+    -- order by sort_order with no tie-break, so a carried value would collide
+    -- with the destination's existing photos and make the carousel order — and
+    -- the hero photo — nondeterministic.
+    select coalesce(max(sort_order), -1) + 1 into v_base
+      from public.item_photos where item_id = p_to_item;
 
-  with ranked as (
-    select id, row_number() over (order by sort_order, created_at, id) - 1 as n
-      from public.item_photos
-     where item_id = p_from_item and url = p_url
-  )
-  update public.item_photos p
-     set item_id = p_to_item, sort_order = v_base + r.n
-    from ranked r
-   where p.id = r.id;
+    with ranked as (
+      select id, row_number() over (order by sort_order, created_at, id) - 1 as n
+        from public.item_photos
+       where item_id = p_from_item and url = p_url
+    )
+    update public.item_photos p
+       set item_id = p_to_item, sort_order = v_base + r.n
+      from ranked r
+     where p.id = r.id;
 
-  get diagnostics v_moved = row_count;
+    get diagnostics v_moved = row_count;
+  end if;
+
   if v_moved = 0 then
     raise exception 'move photos: no photo with that url on item %', p_from_item;
   end if;

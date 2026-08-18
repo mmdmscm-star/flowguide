@@ -63,7 +63,7 @@ export default function ImportProgress({
           {needsReview && (
             <p className="mt-1 text-sm text-amber-900">
               {reviewSummary || "Something didn't add up in this import."}{" "}
-              {reviewExit || "Discard the import to unblock publishing."}
+              {reviewExit || "Discard the import to clear this review."}
             </p>
           )}
         </div>

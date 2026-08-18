@@ -33,7 +33,7 @@ export async function POST(request: Request, context: Context) {
       const run = activeRun as { id: string; status: string; review?: { summary?: string; exit?: string } | null };
       if (run.status === "needs_review") {
         const why = run.review?.summary?.trim();
-        const exit = run.review?.exit?.trim() || "Discard the import to unblock publishing.";
+        const exit = run.review?.exit?.trim() || "Discard the import to clear this review.";
         return NextResponse.json({
           error: "import_needs_review",
           runId: run.id,
