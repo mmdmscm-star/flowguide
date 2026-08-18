@@ -7,7 +7,7 @@
 // Run: node --test src/lib/item-content.test.mts
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { applyItemContentUpdate } from "./item-content.ts";
+import { applyItemContentUpdate, normalizeItemContent } from "./item-content.ts";
 
 // Mock that records the single rpc(name, params) call.
 function mockSupabase(error: { message: string } | null = null) {
@@ -84,4 +84,43 @@ test("RPC error is surfaced as { error }", async () => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const res = await applyItemContentUpdate(supabase as any, { itemId: "i", ownerId: "u" }, { contacts: [] });
   assert.equal(res.error, "item content: contacts must be a JSON array");
+});
+
+// ---------------------------------------------------------------------------
+// normalizeItemContent — the coercion the packet routes and the Library share.
+//
+// Sharing the persistence function would be wrong: applyItemContentUpdate exists
+// to make a multi-table write atomic, which a single-row Library record does not
+// need. Sharing the SHAPE and its coercion is what stops the two drifting.
+// ---------------------------------------------------------------------------
+test("an absent key stays absent, so a partial save leaves fields unchanged", () => {
+  // Presence-aware, matching the RPC: undefined -> null -> untouched.
+  const out = normalizeItemContent({ title: "Alpha" });
+  assert.deepEqual(out, { title: "Alpha" });
+  assert.equal("details" in out, false, "an omitted collection must not become []");
+});
+
+test("a present-but-malformed collection becomes [], not undefined", () => {
+  // The difference matters: [] REPLACES with nothing, undefined leaves as-is.
+  // Silently dropping a malformed array would leave stale content in place while
+  // reporting success.
+  const out = normalizeItemContent({ details: "not an array", photos: null });
+  assert.deepEqual(out.details, []);
+  assert.deepEqual(out.photos, []);
+});
+
+test("empty string is a real value and is preserved", () => {
+  const out = normalizeItemContent({ notes: "", title: "Alpha" });
+  assert.equal(out.notes, "");
+});
+
+test("non-string scalars are rejected rather than coerced", () => {
+  const out = normalizeItemContent({ title: 42, address: { city: "x" } });
+  assert.equal("title" in out, false);
+  assert.equal("address" in out, false);
+});
+
+test("array ORDER is preserved — it is the display order", () => {
+  const details = [{ label: "b", value: "2" }, { label: "a", value: "1" }];
+  assert.deepEqual(normalizeItemContent({ details }).details, details);
 });

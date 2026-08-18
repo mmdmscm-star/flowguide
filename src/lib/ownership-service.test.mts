@@ -351,14 +351,19 @@ test("a packet with no sections or no items short-circuits without touching runs
   }
 });
 
-test("items with no provenance at all are clean rather than undecidable", async () => {
-  // Hand-built packets, and everything imported before 0014.
+test("items with no provenance are NOT APPLICABLE, which is not the same as clean", async () => {
+  // Hand-built packets, everything imported before 0014, and every all-Library
+  // packet once that ships. Nothing blocks — but the absence of an applicable
+  // check must not read as evidence the content was verified.
   const tables = incidentTables();
   tables.items = tables.items.map((i) => ({ ...i, origin_run_id: null }));
   const o = await loadPacketOwnership(PACKET, fakeDb(tables));
   assert.deepEqual(o.findings, []);
   assert.deepEqual(o.blocking, []);
-  assert.equal(o.checkedAnyRun, false);
+  assert.equal(o.checkedAnyRun, false, "nothing was verified");
+  assert.equal(o.declines.length, 1, "and the reason is recorded, not left silent");
+  assert.equal(o.declines[0].reason, "no_ingestion_provenance");
+  assert.equal(o.unavailable, null, "this is an answer, not an outage");
 });
 
 // ---------------------------------------------------------------------------
@@ -419,13 +424,13 @@ test("a Library item's photos are never judged against a source that never menti
   assert.equal(o.blocking.length, 7, "and it changes nothing about the real findings");
 });
 
-test("a packet of ONLY provenance-free items is clean, not undecidable", async () => {
-  // The all-Library packet: nothing to prove, nothing to accuse, publishes.
+test("an all-Library packet publishes, and is recorded as NOT CHECKED rather than clean", async () => {
   const tables = incidentTables();
   tables.items = tables.items.map((i) => ({ ...i, origin_run_id: null, origin_chunk_ordinal: null, origin_emit_index: null }));
   const o = await loadPacketOwnership(PACKET, fakeDb(tables));
+  assert.deepEqual(o.blocking, [], "nothing blocks — it publishes normally");
   assert.deepEqual(o.findings, []);
-  assert.deepEqual(o.blocking, []);
-  assert.deepEqual(o.declines, []);
-  assert.equal(o.unavailable, null);
+  assert.equal(o.checkedAnyRun, false);
+  assert.equal(o.declines[0]?.reason, "no_ingestion_provenance",
+    "absence of an applicable check is stated, never implied to be a pass");
 });

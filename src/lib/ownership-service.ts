@@ -43,7 +43,8 @@ type Db = ReturnType<typeof createServerClient>;
  *  pure layer's vocabulary with the one condition only the data layer can see. */
 export type PacketDeclineReason =
   | DeclineReason
-  | "run_row_missing";   // items cite a run whose row is gone
+  | "run_row_missing"          // items cite a run whose row is gone
+  | "no_ingestion_provenance"; // nothing here came from an import at all
 
 /** Which read failed. Named so an operator reading a log knows where to look,
  *  and so "the migration is not applied" stays distinguishable from "the
@@ -147,7 +148,20 @@ export async function loadPacketOwnership(packetId: string, db?: Db): Promise<Pa
   };
 
   const runIds = [...new Set(items.map((i) => i.origin_run_id).filter((r): r is string => !!r))];
-  if (runIds.length === 0) return EMPTY;
+  if (runIds.length === 0) {
+    // NOT "clean". An all-manual or all-Library packet has no ingestion claim to
+    // check, which is a different fact from having been checked and found
+    // correct. Returning a bare empty result would let "no applicable check"
+    // read downstream as "verified" — the same collapse the decline/unavailable
+    // split exists to prevent, one level further out. Recorded so a packet that
+    // was never subject to the check is distinguishable in a log from one that
+    // passed it.
+    out.declines.push({
+      runId: null, reason: "no_ingestion_provenance",
+      detail: "no item in this packet came from an import, so ownership is not defined for it",
+    });
+    return out;
+  }
 
   const { data: runRows, error: runErr } = await supabase
     .from("ingestion_runs")

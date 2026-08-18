@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase";
-import { applyItemContentUpdate } from "@/lib/item-content";
+import { applyItemContentUpdate, normalizeItemContent } from "@/lib/item-content";
 
 type Context = { params: Promise<{ id: string; itemId: string }> };
 
@@ -24,21 +24,20 @@ export async function PATCH(request: Request, context: Context) {
 
   const { id, itemId } = await context.params;
   const body = await request.json();
-  const { title, description, notes, address, links, details, photos, contacts } = body;
 
+  // FULL REPLACE, unchanged: the block editor always sends the whole set, and an
+  // omitted field here has always meant "clear it". The defaults below state
+  // that intent explicitly; normalizeItemContent supplies the COERCION, shared
+  // with every other item writer including the Library, so the rules for what
+  // counts as a valid string or collection cannot drift between them.
   const supabase = createServerClient();
   const { error } = await applyItemContentUpdate(
     supabase,
     { itemId, ownerId: session.userId, packetId: id, requireMode: "blocks" },
     {
-      title: typeof title === "string" ? title : "",
-      description: typeof description === "string" ? description : "",
-      notes: typeof notes === "string" ? notes : "",
-      address: typeof address === "string" ? address : "",
-      details: Array.isArray(details) ? details : [],
-      links: Array.isArray(links) ? links : [],
-      photos: Array.isArray(photos) ? photos : [],
-      contacts: Array.isArray(contacts) ? contacts : [],
+      title: "", description: "", notes: "", address: "",
+      details: [], links: [], photos: [], contacts: [],
+      ...normalizeItemContent(body),
     }
   );
   if (error) return NextResponse.json({ error }, { status: 400 });

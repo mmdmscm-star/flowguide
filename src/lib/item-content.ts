@@ -41,6 +41,41 @@ export interface ItemContentContext {
   requireMode?: "legacy" | "blocks" | null;
 }
 
+/**
+ * Coerce an untrusted body into an ItemContentPayload.
+ *
+ * Extracted so the Library writes through the SAME coercion as the packet
+ * routes. Sharing the persistence function would be wrong — that exists to make
+ * a multi-table write atomic, which a single-row Library record does not need —
+ * but sharing the SHAPE and its coercion is what stops the two drifting.
+ *
+ * Presence-aware, matching the RPC: an absent key stays absent (leave
+ * unchanged), while a present-but-malformed collection becomes [] (replace with
+ * nothing) rather than being silently dropped.
+ */
+export function normalizeItemContent(body: Record<string, unknown>): ItemContentPayload {
+  const str = (v: unknown) => (typeof v === "string" ? v : undefined);
+  const rows = <T>(v: unknown): T[] | undefined =>
+    v === undefined ? undefined : (Array.isArray(v) ? (v as T[]) : []);
+
+  const out: ItemContentPayload = {};
+  const title = str(body.title);             if (title !== undefined) out.title = title;
+  const description = str(body.description); if (description !== undefined) out.description = description;
+  const notes = str(body.notes);             if (notes !== undefined) out.notes = notes;
+  const address = str(body.address);         if (address !== undefined) out.address = address;
+
+  const details = rows<{ label: string; value: string }>(body.details);
+  if (details !== undefined) out.details = details;
+  const links = rows<{ url: string; label?: string }>(body.links);
+  if (links !== undefined) out.links = links;
+  const photos = rows<{ url: string }>(body.photos);
+  if (photos !== undefined) out.photos = photos;
+  const contacts = rows<ItemContentPayload["contacts"] extends (infer U)[] | undefined ? U : never>(body.contacts);
+  if (contacts !== undefined) out.contacts = contacts;
+
+  return out;
+}
+
 export async function applyItemContentUpdate(
   supabase: ReturnType<typeof createServerClient>,
   ctx: ItemContentContext,
