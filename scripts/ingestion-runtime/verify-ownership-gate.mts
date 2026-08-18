@@ -9,7 +9,14 @@
 // coaxed into producing. Everything downstream of that state — the gate, the
 // RPCs, the recompute — is exercised through the actual HTTP routes.
 //
-//   npx tsx scripts/ingestion-runtime/verify-ownership-gate.mts
+//   FLOWGUIDE_RT_CONFIRM=1 npx tsx scripts/ingestion-runtime/verify-ownership-gate.mts
+//
+// The opt-in is enforced by lib.mts, which refuses to run without it: this
+// harness writes to whatever database .env.local points at, and a test-runner
+// glob must never pick it up by accident. lib.mts also loads .env.local itself,
+// so no --env-file is needed. The dev server must be running and serving the
+// code that matches this migration, because the whole point is to exercise the
+// real routes.
 //
 // RUN IT TWICE. It detects whether 0016 is applied and asserts the behaviour
 // that is correct for that state:

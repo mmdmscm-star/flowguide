@@ -667,8 +667,19 @@ reports them clean will keep doing so.
 
 `scripts/ingestion-runtime/verify-ownership-gate.mts`
 
+**Prerequisites**, both of which the script cannot supply for itself:
+
+1. **The dev server is running** on `http://localhost:3000`, serving the code
+   that matches this migration. The script drives the real HTTP routes; a stale
+   server proves nothing about the current gate. Override with
+   `FLOWGUIDE_BASE_URL`.
+2. **`FLOWGUIDE_RT_CONFIRM=1`** — `lib.mts` refuses to run without it, because
+   this harness writes to whatever database `.env.local` points at and must
+   never be picked up by a test-runner glob. `lib.mts` loads `.env.local`
+   itself, so no `--env-file` is needed.
+
 ```bash
-npx tsx scripts/ingestion-runtime/verify-ownership-gate.mts
+FLOWGUIDE_RT_CONFIRM=1 npx tsx scripts/ingestion-runtime/verify-ownership-gate.mts
 ```
 
 Real routes, real database, **no model credits** — the misplacement is
