@@ -397,17 +397,32 @@ select 'relation (' || c.relkind::text || ')', c.relname, '', pg_get_userbyid(c.
 from pg_class c join pg_namespace n on n.oid = c.relnamespace
 where n.nspname = 'public' and c.relname = 'item_media_decisions';
 
--- (e) What THIS project's default privileges will do to a newly created table
---     in public. Informational, not pass/fail — the migration revokes and
---     grants explicitly and does not depend on the answer. Worth reading once,
---     because it tells you what the revokes are actually undoing.
-select d.defaclobjtype as obj_type,
+-- (e) The roles this migration names must exist. It REVOKES from anon and
+--     authenticated and GRANTS to service_role; a grant to a role that does not
+--     exist is a hard failure, and a revoke from a missing role is too.
+--     SAFE = three rows.
+select rolname, rolsuper, rolbypassrls
+from pg_roles
+where rolname in ('anon','authenticated','service_role')
+order by rolname;
+
+-- (f) What THIS project's default privileges do to a newly created table in
+--     public. INFORMATIONAL, not pass/fail — the migration revokes and grants
+--     explicitly and does not depend on the answer. Worth reading once, because
+--     it shows what the revokes are actually undoing, and whether a future table
+--     added without those revokes would be born reachable.
+select case d.defaclobjtype
+         when 'r' then 'table'    when 'S' then 'sequence'
+         when 'f' then 'function' when 'T' then 'type'
+         when 'n' then 'schema'   else d.defaclobjtype::text
+       end as obj_type,
        pg_get_userbyid(d.defaclrole) as granting_role,
-       n.nspname as schema,
-       d.defaclacl as default_acl
+       coalesce(n.nspname, '(all schemas)') as schema,
+       d.defaclacl::text as default_acl
 from pg_default_acl d
 left join pg_namespace n on n.oid = d.defaclnamespace
-where n.nspname = 'public' or n.nspname is null;
+where n.nspname = 'public' or n.nspname is null
+order by obj_type, granting_role;
 ```
 
 Also confirm the app is running the code that matches this migration — the gate
