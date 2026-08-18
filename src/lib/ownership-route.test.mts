@@ -315,3 +315,49 @@ test("the verify block proves the legitimate caller still works", () => {
   const verify = MIGRATION.slice(MIGRATION.indexOf("do $verify$"));
   assert.match(verify, /has_table_privilege\('service_role'/);
 });
+
+// ---------------------------------------------------------------------------
+// The acceptance script's own reads.
+//
+// Its three fixture packets deliberately share one photo url — that is what
+// makes "the Move did not reach into the other packets" a real check. The cost
+// is that any read of item_photos BY URL alone sees all three at once. That is
+// not a hypothetical: it produced a FAIL on a correct Move, whose detail showed
+// three rows on three item_ids that turned out to be one per packet.
+//
+// A false failure on a correct system is worse than no check. It burns the
+// run it appears in, and the next person to see it is likelier to loosen the
+// assertion than to find the scoping bug.
+// ---------------------------------------------------------------------------
+test("every photo read in the acceptance script is scoped to known items", () => {
+  const script = read("scripts/ingestion-runtime/verify-ownership-gate.mts");
+  const reads = script.match(/from\("item_photos"\)[\s\S]{0,240}?;/g) ?? [];
+  assert.ok(reads.length > 0, "the script must read item_photos at all");
+
+  for (const r of reads) {
+    if (!r.includes(".select(")) continue;   // the fixture INSERT is not a read
+    assert.match(r, /\.in\("item_id"/,
+      `a photo read scoped only by url spans all three fixture packets:\n${r}`);
+  }
+});
+
+test("the acceptance script proves the Move stayed inside its own packet", () => {
+  // move_item_photos asserts same-packet internally. This is the end-to-end
+  // version of that claim, and it is only meaningful because the fixture url is
+  // shared — so if someone makes the urls unique per packet to "fix" a scoping
+  // bug, this check quietly stops testing anything.
+  const script = read("scripts/ingestion-runtime/verify-ownership-gate.mts");
+  assert.match(script, /did not reach into the other packets/,
+    "the cross-packet non-interference check must exist");
+  assert.match(script, /const SOURCE = GATE_SOURCE;/,
+    "and it depends on all fixtures sharing one source, hence one photo url");
+});
+
+
+test("the scoping guard would have caught the read that failed", () => {
+  // A guard that cannot fail is decoration. This is the exact expression that
+  // shipped, checked against the same rule.
+  const shipped = 'await svc.from("item_photos")\n      .select("item_id, url").eq("url", PHOTO_A);';
+  assert.doesNotMatch(shipped, /\.in\("item_id"/,
+    "the original read had no item scoping — the guard must reject it");
+});

@@ -244,11 +244,28 @@ try {
       mv.data.blockingCount === 0 && (mv.data.kept ?? []).length === 0,
       `blocking ${mv.data.blockingCount} kept ${JSON.stringify(mv.data.kept)}`);
 
+    // SCOPED to this packet's items. All three fixture packets carry the same
+    // photo url on purpose — that is what makes the cross-packet check below
+    // meaningful — so an unscoped read by url returns one row per packet and
+    // says nothing at all about where anything moved.
     const { data: photos } = await svc.from("item_photos")
-      .select("item_id, url").eq("url", PHOTO_A);
+      .select("item_id, url").in("item_id", moved.itemIds).eq("url", PHOTO_A);
     check("the photo really moved to the item the source names",
       (photos ?? []).length === 1 && (photos as { item_id: string }[])[0].item_id === moved.itemIds[0],
       JSON.stringify(photos));
+
+    // move_item_photos asserts both items belong to the same packet. Proving
+    // that end to end matters more than trusting the assertion inside the RPC:
+    // the same url is sitting on two OTHER packets at this moment, and a move
+    // that reached them would be silent corruption of unrelated client data —
+    // which is the family the original incident belongs to.
+    const others = [clean.itemIds[0], wrong.itemIds[1]];
+    const { data: elsewhere } = await svc.from("item_photos")
+      .select("item_id").eq("url", PHOTO_A).in("item_id", others);
+    const placed = new Set((elsewhere ?? []).map((r) => (r as { item_id: string }).item_id));
+    check("the Move did not reach into the other packets",
+      placed.size === 2 && others.every((i) => placed.has(i)),
+      `expected ${JSON.stringify(others)}, found ${JSON.stringify([...placed])}`);
 
     const pub4 = await publish(moved.packetId);
     check("and the moved packet publishes", pub4.status === 200, `status ${pub4.status}`);
