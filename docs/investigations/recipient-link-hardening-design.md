@@ -435,6 +435,64 @@ application to revert.
 
 ---
 
+# PART 1 — IMPLEMENTED AND PROVEN (Log mode)
+
+**2026-08-18.** The protection is a Vercel WAF rule. No application code was
+added to the recipient path, and no link was touched.
+
+## The live rule
+
+| Field | Value |
+|---|---|
+| Name | `Recipient packet rate limit` |
+| Condition | Request Path **starts with** `/p/` |
+| Algorithm | Fixed Window |
+| Window / Limit | `60s` / `60` requests |
+| Key | IP Address |
+| Action | **Log** (observation period) |
+
+## Proof that it matches
+
+| Evidence | Result |
+|---|---|
+| Probe burst | 180 requests in 48.3s, single IP |
+| Window validity | 61 requests inside 19.3s — comfortably within one 60s window |
+| Routing | every request `sfo1 → iad1`, so per-region counting did not dilute it |
+| Blocking | none — correct for Log mode |
+| **Firewall Traffic → Rules** | **111 requests attributed to the rule** |
+
+**This is the proof.** The probe alone could never establish it: in Log mode a
+logged request and an unmatched request are byte-identical from outside, both a
+plain 404 with no distinguishing header. The dashboard attribution is what
+closes the gap between "we generated enough traffic" and "the rule saw it".
+
+### One number worth understanding before enforcing
+
+180 requests were sent; **111** were attributed. The gap is not alarming — the
+rule demonstrably matched `/p/` traffic and counted it, which is what needed
+proving — but the arithmetic is not yet fully explained. Plausible causes, in
+rough order:
+
+- **Window alignment.** The burst spanned 19:03:45–19:04:34Z, crossing the
+  19:04:00 boundary, so it fell across two fixed windows rather than one.
+- **The Rules view may count only requests the rule would have acted on** (those
+  over the limit) rather than every request matching the condition.
+- **Dashboard time bucketing** may have excluded the burst's edges.
+
+Worth resolving during the observation period, because it determines whether the
+*effective* threshold equals the configured one. It does not affect the
+conclusion that the rule is live and matching.
+
+## Status
+
+**The active implementation portion of `/p/[slug]` hardening is complete.**
+Remaining work is observation and a one-field action change — no code, no deploy.
+
+Baseline for comparison, measured before the rule existed: 75 consecutive
+requests to `/p/*`, all served, none throttled.
+
+---
+
 ## Out of scope, deliberately
 
 Login-gated packets, per-recipient tokens, link expiry, watermarking, view
