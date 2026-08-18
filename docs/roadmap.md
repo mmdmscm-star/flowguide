@@ -161,6 +161,40 @@ the "real-world use is the primary driver" section of
 
 ---
 
+## Reliability & ownership stack — SHIPPED AND CLOSED
+
+**Closed 2026-08-18.** Deployed as commit `3bc03e8`; see
+[2026-08-18-production-deploy.md](migrations/2026-08-18-production-deploy.md).
+
+seg-v4 record-atomic segmentation, media accounting, item provenance (0014),
+ownership recomputation, and the publish-time ownership gate with Move/Keep
+resolution (0016). Proven end to end against the live model and database before
+and after deploy: 0016 at 25/25, seg-v4 at 21/21 locally and 21/21 in
+production, plus a 10/10 post-deploy smoke on disposable data.
+
+**This line of work is finished.** It is not a standing programme, and further
+reliability work needs its own justification rather than inheriting this one's.
+
+### Available, not scheduled — historical ownership recovery where provable
+
+The gate binds to `SEGMENTER_VERSION`, so every packet imported before
+2026-08-18 declines on a version mismatch. Nonblocking by design and verified in
+production: those packets publish exactly as before. The consequence is that the
+gate protects **future imports, not the existing library**.
+
+Recovering ownership for historical packets is therefore an **available
+capability, deliberately unscheduled**. If it is ever taken up, the framing is
+**recovery where provable** — establish ownership only where the surviving
+source and provenance prove it (`source_hash` still matching `raw_input` at the
+recorded `source_offset_base`, chunk and emit indices present), and leave it
+unknown everywhere else. A guessed provenance is worse than an absent one:
+`recomputeOwnership` refusing to answer is exactly what makes a finding
+trustworthy.
+
+**Not a backfill. Never a backfill.**
+
+---
+
 ## Recipient Text-Size Control (A / A+ / A++)
 
 **Status:** Deferred. Watching whether the larger default is enough.
