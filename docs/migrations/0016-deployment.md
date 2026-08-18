@@ -862,29 +862,33 @@ That is the intended behaviour and it is why declines are nonblocking. It also
 means **0016 protects future imports, not the existing library** — worth being
 clear about, because the incident that motivated it is in the existing library.
 
-### The genuine open question
+### seg-v4 — proven 2026-08-18
 
-0016 has now completed its end-to-end proof (§12). **seg-v4 has not been proven
-in this session.** It carries its own unit tests and incident fixtures, and
-`scripts/ingestion-runtime/` holds a seg-v3 verifier, but nothing here
-established that seg-v4 segments real sources correctly end to end against the
-live model.
+The open question here is now closed. **seg-v4 passed its production-runtime
+proof, 21/21**, against the real routes, the live model and the real database,
+using the sanitized incident fixture. Full record:
+[seg-v4-runtime-proof.md](../investigations/seg-v4-runtime-proof.md).
 
-Deploying changes how every future import is chunked — the exact layer the
-original incident's root cause lived in ("Segmentation — **root cause.** Detector
-declined on a technicality and fell back silently").
+It establishes, through the runtime rather than through unit tests: records
+survive the cosmetic separator rows; no chunk boundary falls inside a record; all
+24 media occurrences stay with their record; no media-only chunk exists to
+fabricate an item from; one item per record with complete provenance and dense
+emit indices; `source_offset_base` locates the exact hashed slice; ownership
+recomputes as **answered and clean**; and the packet publishes.
 
-So the honest framing: **this deploy ships a proven safety net over an unproven
-change to the thing the net catches.** That may well be the right trade — the net
-exists precisely because segmentation can fail — but it is a decision, not a
-formality.
+The first run scored 19/20 and surfaced a real defect — in the media ledger, not
+in segmentation. A source repeating one photo inside a single record parked a
+correct import in `needs_review` and reported "1 photo is missing" about a packet
+holding every distinct photo it had. Fixed by changing the consequence, not the
+evidence; see the proof record.
+
+So the trade is no longer "a proven net over an unproven change". Both halves are
+proven, and they deploy together because they cannot be split.
 
 ### Recommended sequence
 
-1. **Prove seg-v4 end to end first**, with a real import through the live model,
-   the way 0014/0015/0016 were each proven. `scripts/ingestion-runtime/` already
-   has the harness.
-2. **Then push and deploy**, both halves together, since they cannot be split.
+1. ~~Prove seg-v4 end to end first~~ — **done, 21/21.**
+2. **Push and deploy**, both halves together.
 3. **Watch the logs after the first real import** for
    `[publish] ownership not establishable` (expected on every pre-existing
    packet) versus `[publish] blocked by ownership` (the gate doing its job) and
