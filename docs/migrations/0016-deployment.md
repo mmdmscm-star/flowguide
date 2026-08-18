@@ -300,9 +300,9 @@ tail -1 supabase/migrations/0016_ownership_resolution.sql
 
 | Property | Expected |
 |---|---|
-| sha256 | `33b59b701530af991c5054403c8b540b241fad834110aeb29ce83cffb2340c47` |
+| sha256 | `0fca20806c6c3fe4736bd89056430eeda839b30e3c89158e1e6b6cc46213ef29` |
 | lines | `375` |
-| bytes | `18697` |
+| bytes | `18765` |
 | first line | `-- 0016 — ownership resolution: atomic Move, intentional Keep.` |
 | last line | `notify pgrst, 'reload schema';` |
 

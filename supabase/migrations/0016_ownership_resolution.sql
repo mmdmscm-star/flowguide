@@ -277,7 +277,7 @@ begin
   -- A SECURITY DEFINER function without a pinned search_path is a privilege
   -- escalation waiting for a schema it did not expect. This is asserted rather
   -- than assumed, so a later edit that drops the setting fails the migration.
-  select string_agg(p.proname, ', ') into v_left
+  select string_agg(p.proname::text, ', ') into v_left
   from pg_proc p join pg_namespace n on n.oid = p.pronamespace
   where n.nspname = 'public'
     and p.proname in ('move_item_photos','set_item_media_decision','clear_item_media_decision')
@@ -296,7 +296,7 @@ begin
   -- PUBLIC is deliberately NOT passed to has_function_privilege: it is a
   -- pseudo-role, not a row in pg_roles, and the function raises on it. It gets
   -- its own ACL check below instead.
-  select string_agg(distinct r.rolname || ' -> ' || p.proname, ', ') into v_left
+  select string_agg(distinct r.rolname::text || ' -> ' || p.proname::text, ', ') into v_left
   from pg_proc p
   join pg_namespace n on n.oid = p.pronamespace
   cross join (values ('anon'),('authenticated')) as r(rolname)
@@ -311,7 +311,7 @@ begin
   -- Grantee OID 0 is PUBLIC. A NULL proacl is NOT "no privileges": it means
   -- DEFAULT privileges, and functions default to EXECUTE for PUBLIC — so a
   -- missing revoke reads as an empty ACL while the whole world can call it.
-  select string_agg(p.proname, ', ') into v_left
+  select string_agg(p.proname::text, ', ') into v_left
   from pg_proc p join pg_namespace n on n.oid = p.pronamespace
   where n.nspname = 'public'
     and p.proname in ('move_item_photos','set_item_media_decision','clear_item_media_decision')
@@ -326,7 +326,7 @@ begin
   -- check read information_schema.role_table_grants for grantee in
   -- ('anon','authenticated') and would have passed while both roles held
   -- everything through PUBLIC.
-  select string_agg(distinct r.rolname || ':' || pr.priv, ', ') into v_left
+  select string_agg(distinct r.rolname::text || ':' || pr.priv::text, ', ') into v_left
   from (values ('anon'),('authenticated')) as r(rolname)
   cross join (values ('SELECT'),('INSERT'),('UPDATE'),('DELETE'),
                      ('TRUNCATE'),('REFERENCES'),('TRIGGER')) as pr(priv)
@@ -347,8 +347,8 @@ begin
   -- ---- RLS is on, with no policy ------------------------------------------
   -- The second layer. Even if a privilege were somehow granted, no policy means
   -- no row is visible to a non-bypassrls role.
-  if not (select c.relrowsecurity from pg_class c join pg_namespace n on n.oid = c.relnamespace
-          where n.nspname = 'public' and c.relname = 'item_media_decisions') then
+  if not coalesce((select c.relrowsecurity from pg_class c join pg_namespace n on n.oid = c.relnamespace
+                   where n.nspname = 'public' and c.relname = 'item_media_decisions'), false) then
     raise exception '0016: row level security is not enabled on item_media_decisions';
   end if;
   if (select count(*) from pg_policies
@@ -359,7 +359,7 @@ begin
   -- ---- the legitimate caller CAN still work -------------------------------
   -- A lockdown that also locks out the only intended caller is not a success;
   -- it is a 503 discovered in production.
-  select string_agg(pr.priv, ', ') into v_left
+  select string_agg(pr.priv::text, ', ') into v_left
   from (values ('SELECT'),('INSERT'),('DELETE')) as pr(priv)
   where not has_table_privilege('service_role', 'public.item_media_decisions', pr.priv);
   if v_left is not null then
