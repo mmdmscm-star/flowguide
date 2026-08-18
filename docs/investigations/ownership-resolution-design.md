@@ -1,4 +1,4 @@
-# Ownership resolution — design (NOT yet implemented)
+# Ownership resolution — design (IMPLEMENTED; migration 0016 not yet applied)
 
 > **Superseded numbering:** the resolution migration is now **0016**. Number 0015
 > was taken by an urgent, unrelated security fix found during this design's
@@ -132,14 +132,23 @@ visible, both are reversible, and publishing unblocks when none remain.
 `ownership_unverifiable` findings offer only Keep, because no single destination
 is resolvable — the whole point of that code is that proposing one would be a guess.
 
-## Open questions for review
+## Open questions — as resolved in build
 
-1. Should Keep be per-photo or offer "keep all on this item"? Per-photo is
-   narrower and I lean to it; batch is additive later.
-2. Should a Keep decision be surfaced anywhere after the fact, or is the review
-   panel enough?
-3. `move_item_photos` moves *all* copies of a URL. Correct for every case a Move
-   is offered (see above), but worth confirming against the fixtures.
+1. **Per-photo, as leaned to.** "Keep all on this item" stays additive; nothing
+   in the schema or the RPC signature has to change to add it.
+2. **Surfaced for the session that made them, not durably.** The panel lists
+   every Keep made on screen with an Undo, and stays mounted after the last
+   finding clears so the undo does not vanish at the moment a misclick is
+   noticed. What does NOT exist is a durable "show me everything I ever kept"
+   view: once the panel is dismissed, a Keep is only reachable through the API.
+   That needs a home outside the publish-409 path — an editor-level surface —
+   and is deliberately deferred rather than half-built. **This is the one part
+   of the design that is not finished.**
+3. **Confirmed, and one case corrected.** Moving all copies is right, but the
+   destination may already hold the url — a model duplicating a photo rather
+   than misfiling one copy. `item_photos` has no unique `(item_id, url)`, so the
+   original SQL would have given the destination the same photo twice. It now
+   deletes the misplaced copies in that case instead.
 
 
 ## Review outcomes (five lenses, 9 objections confirmed of 38 raised)
@@ -181,3 +190,26 @@ stopped being checked must not look identical to a clean one), and name the
 surface explicitly — an editor-level panel driven by the publish 409, **not**
 `ImportProgress`, which only mounts on run status and will not be mounted when a
 finalized run's finding fires.
+
+
+## Build outcomes (a second review, of the implementation)
+
+Six defects in the first implementation, one of them a publish trap:
+
+1. **The overrides read failed CLOSED while every other read failed open.** A
+   missing `item_media_decisions` — the state on ship day, before 0016 is
+   applied — silently meant "no Keeps", blocking every affected packet, with the
+   one action that clears the block writing to the absent table. A failed
+   decisions read now withdraws blocking for the whole packet.
+2. **Move could duplicate** — see open question 3 above.
+3. **A missing run row was silently skipped**, so a run's items went unchecked
+   while the packet reported itself as checked.
+4. **`ownership-service.ts` was binary to git** — two raw NUL bytes used as
+   composite-key delimiters. Now an escape.
+5. **It was also unimportable by the test runner** (missing `.ts` extensions),
+   which is why it had no tests. It now has 13, plus 9 route invariants.
+6. **Review outcome #5 had never landed** — `describeReviewExit` still promised
+   "Discard the import to unblock publishing."
+
+The gate is inert until 0016 is applied, in either deploy order — see
+[docs/migrations/0016-deployment.md](../migrations/0016-deployment.md).

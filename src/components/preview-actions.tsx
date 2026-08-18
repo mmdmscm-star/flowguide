@@ -120,10 +120,16 @@ export function PreviewActions({ packetId, slug, initialStatus }: Props) {
             state={ownership}
             onState={(next) => {
               setOwnership(next);
-              if (next.blockingCount > 0) setError("");
+              if (next.blockingCount > 0) {
+                setError("");
+                setResolved(false);   // an undo puts the block back
+              }
             }}
+            // NOT unmounted. The panel still holds the undo for anything just
+            // kept, and taking that away the instant the last finding clears
+            // would make every Keep final at exactly the moment a misclick gets
+            // noticed. It renders itself away when there is nothing left to say.
             onResolved={() => {
-              setOwnership(null);
               setError("");
               setResolved(true);
             }}

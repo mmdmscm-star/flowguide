@@ -47,9 +47,18 @@ export default function OwnershipResolution({
 }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState("");
+  // Keeps made on this screen, so they can be taken back on this screen.
+  //
+  // A Keep SUPPRESSES its finding — that is what a Keep is — so the row simply
+  // vanishes, and nothing that recomputes findings can ever show it again. The
+  // undo RPC exists precisely because a resolution the professional cannot
+  // reverse is a trap, but an undo with nothing to press is the same trap. This
+  // holds the row for the moment a misclick is actually noticed: immediately
+  // after making it.
+  const [kept, setKept] = useState<OwnershipFinding[]>([]);
 
   const act = useCallback(
-    async (f: OwnershipFinding, action: "move" | "keep") => {
+    async (f: OwnershipFinding, action: "move" | "keep" | "unkeep") => {
       setError("");
       setBusy(`${rowKey(f)}:${action}`);
       try {
@@ -77,6 +86,8 @@ export default function OwnershipResolution({
           return;
         }
         if (Array.isArray(data.findings)) {
+          if (action === "keep") setKept((prev) => [...prev, f]);
+          if (action === "unkeep") setKept((prev) => prev.filter((k) => rowKey(k) !== rowKey(f)));
           onState(data as OwnershipState);
           if (data.blockingCount === 0) onResolved?.();
         }
@@ -92,21 +103,25 @@ export default function OwnershipResolution({
   const blocking = state.findings.filter((f) => f.code === "media_on_wrong_record");
   const advisory = state.findings.filter((f) => f.code !== "media_on_wrong_record");
 
-  if (blocking.length === 0 && advisory.length === 0) return null;
+  if (blocking.length === 0 && advisory.length === 0 && kept.length === 0) return null;
 
   return (
     <div className="rounded-xl border border-amber-300 bg-amber-50/70 p-4 mb-5 text-left">
       <p className="text-sm font-medium text-foreground">
         {blocking.length > 0
           ? `Check ${blocking.length === 1 ? "this photo" : `these ${blocking.length} photos`} before publishing`
-          : "Worth a look before publishing"}
+          : kept.length > 0
+            ? "Photos sorted"
+            : "Worth a look before publishing"}
       </p>
-      <p className="mt-1 text-xs text-amber-900">
-        Your original source puts {blocking.length === 1 ? "this photo" : "these photos"} on a
-        different item than {blocking.length === 1 ? "it is" : "they are"} on now. Move
-        {blocking.length === 1 ? " it" : " them"}, or keep {blocking.length === 1 ? "it" : "them"} where
-        {blocking.length === 1 ? " it is" : " they are"} if that was deliberate.
-      </p>
+      {blocking.length > 0 && (
+        <p className="mt-1 text-xs text-amber-900">
+          Your original source puts {blocking.length === 1 ? "this photo" : "these photos"} on a
+          different item than {blocking.length === 1 ? "it is" : "they are"} on now. Move
+          {blocking.length === 1 ? " it" : " them"}, or keep {blocking.length === 1 ? "it" : "them"} where
+          {blocking.length === 1 ? " it is" : " they are"} if that was deliberate.
+        </p>
+      )}
 
       {error && <p className="mt-2 text-xs text-red-700">{error}</p>}
 
@@ -158,6 +173,34 @@ export default function OwnershipResolution({
           );
         })}
       </ul>
+
+      {kept.length > 0 && (
+        <div className="mt-3 border-t border-amber-200 pt-3">
+          <p className="text-xs font-medium text-amber-900">
+            Kept where {kept.length === 1 ? "it is" : "they are"}
+          </p>
+          <ul className="mt-1 space-y-1">
+            {kept.map((f) => {
+              const undoing = busy === `${rowKey(f)}:unkeep`;
+              return (
+                <li key={rowKey(f)} className="flex items-center justify-between gap-3 text-xs">
+                  <span className="min-w-0 truncate text-muted">
+                    <span className="font-medium text-foreground">{f.itemTitle}</span>
+                    {f.proposedItemTitle ? ` — your source lists it under ${f.proposedItemTitle}` : ""}
+                  </span>
+                  <button
+                    onClick={() => act(f, "unkeep")}
+                    disabled={busy !== null}
+                    className="flex-none underline text-muted hover:text-foreground disabled:opacity-60"
+                  >
+                    {undoing ? "Undoing…" : "Undo"}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
 
       {/* Advisory findings carry no url and resolve to no single destination, so
           they get no buttons — offering one would be a guess. They are shown
