@@ -71,15 +71,28 @@ const CONTACTS = [
   { name: "Sam Ortiz", role: "Concierge", phone: "555-0111", email: "", website: "" },
 ];
 
-async function fillItem(itemId: string, packetId: string, over: Record<string, unknown> = {}) {
-  const r = await api(`/api/packets/${packetId}/items/${itemId}`, {
+/**
+ * Edit a packet item, through the route that MATCHES the packet's composition
+ * mode. These packets are legacy, so this is /api/items — the block route
+ * passes requireMode:"blocks" and update_item_content raises on a legacy packet.
+ *
+ * ASSERTS ITS OWN SUCCESS. The first version returned the response and every
+ * caller discarded it, so a 400 here was invisible and surfaced later as two
+ * failures in the assertions that depended on it. A proof whose SETUP can fail
+ * silently does not prove what it claims — it misattributes its own broken
+ * arrangement to the thing under test.
+ */
+async function fillItem(label: string, itemId: string, over: Record<string, unknown> = {}) {
+  const r = await api(`/api/items`, {
     method: "PATCH",
     body: JSON.stringify({
+      id: itemId,
       title: "Brookdale Chanate", address: "3800 Chanate Rd",
       description: "Assisted living and memory care.", notes: "",
       details: DETAILS, links: LINKS, photos: PHOTOS, contacts: CONTACTS, ...over,
     }),
   });
+  check(`setup: ${label}`, r.status === 200, `status ${r.status} ${JSON.stringify(r.data).slice(0, 160)}`);
   return r;
 }
 
@@ -186,10 +199,18 @@ try {
 
   // ---- 3. atomic save-back ------------------------------------------------
   // Improve the descendant, then push. Both writes must land together.
-  await fillItem(insertedItemId, target.packetId, {
+  await fillItem("improve the descendant before pushing", insertedItemId, {
     description: "Assisted living, memory care, and respite.",
     details: [...DETAILS, { label: "Respite", value: "$300/day" }],
   });
+
+  // Prove the SETUP landed before asserting anything about the push. This is
+  // what was missing: 3c and 5d were reporting a failed arrangement as a
+  // product defect.
+  const { data: improved } = await svc.from("items").select("description").eq("id", insertedItemId).single();
+  check("setup: the descendant really holds the improved description",
+    String((improved as Record<string, unknown>).description).includes("respite"),
+    String((improved as Record<string, unknown>).description));
   const pushed = await api(`/api/library/${libId}/update-from-item`, {
     method: "POST", body: JSON.stringify({ itemId: insertedItemId, expectedRevision: 1, action: "update" }),
   });
@@ -235,7 +256,7 @@ try {
 
   // ---- 4. atomic save as new ---------------------------------------------
   // Prune the descendant, then save as new rather than replacing the base.
-  await fillItem(insertedItemId, target.packetId, {
+  await fillItem("prune the descendant for one recipient", insertedItemId, {
     details: [{ label: "AL 2BR", value: "$6,100" }, { label: "Pet fee", value: "$500" }],
   });
   const asNew = await api(`/api/library/${libId}/update-from-item`, {
