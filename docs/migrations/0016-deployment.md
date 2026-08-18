@@ -369,11 +369,30 @@ from information_schema.columns
 where table_schema = 'public' and table_name = 'item_photos'
   and column_name in ('sort_order','url');
 
--- (d) No name collision with anything already present.
+-- (d) No name collision — INCLUDING an overload.
+--
+--     This is not a repeat of (b). `create or replace function` replaces only
+--     when the whole SIGNATURE matches; a same-named function with different
+--     argument types becomes a SECOND function. The revokes in §3 name exact
+--     signatures, so they would lock down the new one and leave the pre-existing
+--     overload executable — a privilege hole created by the very migration that
+--     is supposed to close one.
+--
+--     Also catches a non-table relation squatting on the table name, which
+--     would make `create table if not exists` fail rather than skip.
 --     SAFE = zero rows.
-select proname, pronargs from pg_proc p
-join pg_namespace n on n.oid = p.pronamespace
-where n.nspname = 'public' and proname like '%item_media%';
+select 'function' as kind,
+       p.proname as name,
+       pg_get_function_identity_arguments(p.oid) as signature,
+       pg_get_userbyid(p.proowner) as owner
+from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+where n.nspname = 'public'
+  and (p.proname in ('move_item_photos','set_item_media_decision','clear_item_media_decision')
+    or p.proname like '%item_media%')
+union all
+select 'relation ' || c.relkind, c.relname, '', pg_get_userbyid(c.relowner)
+from pg_class c join pg_namespace n on n.oid = c.relnamespace
+where n.nspname = 'public' and c.relname = 'item_media_decisions';
 
 -- (e) What THIS project's default privileges will do to a newly created table
 --     in public. Informational, not pass/fail — the migration revokes and
