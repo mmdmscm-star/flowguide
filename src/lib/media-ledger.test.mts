@@ -2,7 +2,7 @@
 // Run: node --test src/lib/media-ledger.test.mts
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { isMediaUrl, extractSourceMedia, buildMediaLedger } from "./media-ledger.ts";
+import { isMediaUrl, extractSourceMedia, buildMediaLedger, describeMediaFailures } from "./media-ledger.ts";
 
 const P = "https://cdn.example.com/a1.jpg";
 const Q = "https://cdn.example.com/a2.png";
@@ -120,4 +120,115 @@ test("a URL the source lists twice must be stored twice", () => {
 test("trailing prose punctuation is not part of the URL", () => {
   const found = extractSourceMedia(`See ${P}, and also ${Q}.`);
   assert.deepEqual(found.map((f) => f.url), [P, Q]);
+});
+
+// ---------------------------------------------------------------------------
+// Consolidation vs loss.
+//
+// The ledger stays OCCURRENCE-aware — it must still be able to say "the source
+// listed this twice and the packet holds it once", and it must keep catching
+// duplication FlowGuide introduced. What changed is the CONSEQUENCE: a shortfall
+// is only harmless when every occurrence lived in ONE record, so the copy that
+// went missing was a repeat of a photo the packet still holds.
+//
+// This came out of the seg-v4 runtime proof, where a correct import was parked
+// in needs_review and told the professional "1 photo is missing" about a packet
+// containing every distinct photo in its source. The only exit from that state
+// is discarding the import.
+// ---------------------------------------------------------------------------
+const P1 = "https://cdn.example.com/a1.jpg";
+const P2 = "https://cdn.example.com/b1.jpg";
+
+/** Two tabular records, so detectSourceRecords sees real record boundaries. */
+const twoRecords = (aCell: string, bCell: string) =>
+  `Alpha\t101 First St\t${aCell}\nBravo\t202 Second St\t${bCell}\n`;
+
+test("1. a url listed once and stored zero times is real loss — BLOCKING", () => {
+  const led = buildMediaLedger({ source: twoRecords(P1, P2), stored: [{ url: P2, itemId: "i2" }] });
+  assert.equal(led.ok, false);
+  assert.equal(led.failures.length, 1);
+  assert.equal(led.failures[0].code, "media_missing");
+  assert.equal(led.failures[0].url, P1);
+  assert.deepEqual(led.advisories, []);
+});
+
+test("2. a url repeated in ONE record and stored once is advisory — NOT blocking", () => {
+  // Alpha's cell lists the same photo twice, which authors do by accident and
+  // on purpose. The packet holds it once; nothing a client sees is absent.
+  const led = buildMediaLedger({
+    source: twoRecords(`${P1} ${P1}`, P2),
+    stored: [{ url: P1, itemId: "i1" }, { url: P2, itemId: "i2" }],
+  });
+  assert.equal(led.ok, true, "a consolidation must not park the run");
+  assert.deepEqual(led.failures, []);
+  assert.equal(led.advisories.length, 1);
+  assert.equal(led.advisories[0].code, "media_consolidated");
+  // The evidence is preserved, which is the half that must not change.
+  assert.equal(led.advisories[0].sourceOccurrences, 2);
+  assert.equal(led.advisories[0].storedRows, 1);
+  assert.equal(led.advisories[0].sourceRecords, 1);
+});
+
+test("3. a url repeated in one record and stored ZERO times is loss — BLOCKING", () => {
+  // The photo is gone entirely. Repetition in the source does not make its total
+  // absence harmless, which is why the rule requires a surviving copy.
+  const led = buildMediaLedger({
+    source: twoRecords(`${P1} ${P1}`, P2),
+    stored: [{ url: P2, itemId: "i2" }],
+  });
+  assert.equal(led.ok, false);
+  assert.equal(led.failures.length, 1);
+  assert.equal(led.failures[0].code, "media_missing");
+  assert.equal(led.failures[0].storedRows, 0);
+  assert.deepEqual(led.advisories, []);
+});
+
+test("4. stored MORE often than the source lists it is still duplication", () => {
+  // Occurrence-awareness is what makes this detectable at all, and it is
+  // untouched: this is FlowGuide inventing a copy, not an author repeating one.
+  const led = buildMediaLedger({
+    source: twoRecords(P1, P2),
+    stored: [{ url: P1, itemId: "i1" }, { url: P1, itemId: "i2" }, { url: P2, itemId: "i2" }],
+  });
+  assert.equal(led.ok, false);
+  assert.equal(led.failures.length, 1);
+  assert.equal(led.failures[0].code, "media_duplicated");
+  assert.equal(led.failures[0].sourceOccurrences, 1);
+  assert.equal(led.failures[0].storedRows, 2);
+});
+
+test("5. the SAME url in DIFFERENT records is two placements, not a consolidation", () => {
+  // The dangerous case. Alpha and Bravo both list this photo, so the packet
+  // should hold two rows. Storing one means a record lost its photo entirely —
+  // and calling that "consolidated" would hide exactly the class of loss the
+  // ledger exists to catch.
+  const led = buildMediaLedger({
+    source: twoRecords(P1, P1),
+    stored: [{ url: P1, itemId: "i1" }],
+  });
+  assert.equal(led.ok, false, "a cross-record shortfall must still block");
+  assert.equal(led.failures.length, 1);
+  assert.equal(led.failures[0].code, "media_missing");
+  assert.equal(led.failures[0].sourceRecords, 2, "two records list it");
+  assert.deepEqual(led.advisories, []);
+});
+
+test("prose with no detectable records never downgrades a shortfall", () => {
+  // Nothing to prove containment against, so nothing may be called harmless.
+  const prose = `We toured two places last week. The first had ${P1} and we liked it. ` +
+                `They sent ${P1} again in a follow-up email, same picture.`;
+  const led = buildMediaLedger({ source: prose, stored: [{ url: P1, itemId: "i1" }] });
+  assert.equal(led.ok, false, "without records, a shortfall stays blocking");
+  assert.equal(led.failures[0].code, "media_missing");
+});
+
+test("the advisory sentence does not claim anything is missing", () => {
+  const led = buildMediaLedger({
+    source: twoRecords(`${P1} ${P1}`, P2),
+    stored: [{ url: P1, itemId: "i1" }, { url: P2, itemId: "i2" }],
+  });
+  const sentence = describeMediaFailures(led.advisories);
+  assert.match(sentence, /consolidated/i);
+  assert.doesNotMatch(sentence, /missing/i,
+    "the whole point is that nothing a client can see is absent");
 });

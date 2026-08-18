@@ -14,6 +14,8 @@
 
 // Structural, not domain-specific: an extension, never a host or a CDN. Video
 // and document URLs are links, not media, and are out of scope for now.
+import { detectSourceRecords } from "./segmentation.ts";
+
 const MEDIA_EXTENSIONS = ["jpg", "jpeg", "png", "gif", "webp", "avif", "heic"];
 
 const URL_RE = /https?:\/\/[^\s"'<>)\]]+/gi;
@@ -54,9 +56,16 @@ export function extractSourceMedia(source: string): SourceMedia[] {
 }
 
 export type MediaFailureCode =
-  | "media_missing"        // stored fewer times than the source lists it
+  | "media_missing"        // NO copy stored, or a copy lost from a DIFFERENT record
+  | "media_consolidated"   // advisory: one record listed it twice, one copy stored
   | "media_duplicated"     // stored MORE times than the source lists it
   | "media_not_in_source"; // stored but absent from the source
+
+/** Codes that stop a run finishing. `media_consolidated` is deliberately absent:
+ *  every distinct source photo is present, so the packet is not missing anything
+ *  a client could see. */
+export const BLOCKING_MEDIA_CODES: ReadonlySet<MediaFailureCode> =
+  new Set<MediaFailureCode>(["media_missing", "media_duplicated", "media_not_in_source"]);
 
 export interface MediaFailure {
   code: MediaFailureCode;
@@ -69,6 +78,10 @@ export interface MediaFailure {
   offset?: number;
   /** Item ids holding this URL — for duplicated/not-in-source. */
   itemIds?: string[];
+  /** How many DISTINCT source records list this URL. 1 means every occurrence
+   *  sits in one record, which is what makes a shortfall a consolidation rather
+   *  than a loss. Absent when the source has no detectable records. */
+  sourceRecords?: number;
 }
 
 export interface StoredMedia {
@@ -85,6 +98,10 @@ export interface MediaLedger {
   /** Objective accounting failures. Non-empty ⇒ the run needs review and
    *  publishing is blocked. These are facts, not heuristics. */
   failures: MediaFailure[];
+  /** Discrepancies worth recording that do NOT block. Today this is exactly
+   *  `media_consolidated`. The evidence is preserved; only the consequence
+   *  changes. */
+  advisories: MediaFailure[];
   ok: boolean;
 }
 
@@ -130,14 +147,42 @@ export function buildMediaLedger(opts: {
   }
 
   const failures: MediaFailure[] = [];
+  const advisories: MediaFailure[] = [];
+
+  // How many DISTINCT records list each url. This is the whole basis for
+  // separating "consolidated" from "lost": a shortfall is only harmless when
+  // every occurrence of the url lived in ONE record, so the copy that went
+  // missing was a repeat of a photo the packet still holds. The same url in two
+  // records is two different placements, and losing one loses a placement.
+  //
+  // When the detector declines — prose, no record structure — there is nothing
+  // to prove containment against, so nothing is downgraded.
+  const records = detectSourceRecords(opts.source || "")?.records ?? null;
+  const recordSpread = new Map<string, number>();
+  if (records) {
+    const seen = new Map<string, Set<number>>();
+    for (const m of sourceMedia) {
+      const idx = records.findIndex((r) => m.offset >= r.start && m.offset < r.end);
+      const set = seen.get(m.url) ?? new Set<number>();
+      set.add(idx);                       // -1 = outside every record, its own bucket
+      seen.set(m.url, set);
+    }
+    for (const [url, set] of seen) recordSpread.set(url, set.size);
+  }
 
   for (const [url, expected] of sourceCounts) {
     if (rejected.has(url)) continue;
     const holders = storedByUrl.get(url) ?? [];
     if (holders.length < expected) {
-      failures.push({
-        code: "media_missing", url, offset: firstOffset.get(url),
+      const spread = recordSpread.get(url);
+      // ADVISORY only when all three hold: at least one copy survived, the
+      // source repeated it, and every occurrence was inside the SAME record.
+      const consolidated = holders.length > 0 && expected > 1 && spread === 1;
+      (consolidated ? advisories : failures).push({
+        code: consolidated ? "media_consolidated" : "media_missing",
+        url, offset: firstOffset.get(url),
         sourceOccurrences: expected, storedRows: holders.length,
+        ...(spread !== undefined ? { sourceRecords: spread } : {}),
         ...(holders.length ? { itemIds: holders } : {}),
       });
     } else if (holders.length > expected) {
@@ -162,6 +207,10 @@ export function buildMediaLedger(opts: {
     sourceOccurrences: sourceMedia.length,
     storedCount: stored.length,
     failures,
+    advisories,
+    // Advisories deliberately do NOT affect this. Every distinct source photo is
+    // in the packet; there is nothing for the professional to fix and nothing a
+    // client would fail to see.
     ok: failures.length === 0,
   };
 }
@@ -174,7 +223,11 @@ export function describeMediaFailures(failures: MediaFailure[]): string {
   const missing = n("media_missing");
   const dup = n("media_duplicated");
   const extra = n("media_not_in_source");
+  const cons = n("media_consolidated");
   if (missing) parts.push(`${missing} ${missing === 1 ? "photo is" : "photos are"} missing`);
+  // Said plainly, because the old sentence — "1 photo is missing" — described a
+  // packet that was holding every distinct photo in the source.
+  if (cons) parts.push(`${cons === 1 ? "A repeated source photo was" : `${cons} repeated source photos were`} consolidated`);
   if (dup) parts.push(`${dup} ${dup === 1 ? "photo appears" : "photos appear"} on more than one item`);
   if (extra) parts.push(`${extra} stored ${extra === 1 ? "photo isn't" : "photos aren't"} in the pasted source`);
   return parts.join(", ");

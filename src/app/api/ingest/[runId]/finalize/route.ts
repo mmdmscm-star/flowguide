@@ -102,6 +102,18 @@ export async function POST(_request: Request, context: Context) {
       const failures: unknown[] = [...ledger.failures];
       const summaries = ledger.failures.length ? [describeMediaFailures(ledger.failures)] : [];
 
+      // Advisories are RECORDED but never block. Today that is exactly
+      // media_consolidated: the source listed one url twice inside a single
+      // record and the packet holds one copy, so every distinct photo a client
+      // could see is present. Keeping them out of `failures` is what stops
+      // "1 photo is missing" from parking a run whose only exit is discarding
+      // the import — while keeping them in the payload preserves the evidence.
+      if (ledger.advisories.length) {
+        console.warn("[finalize] media advisories (not blocking)", {
+          runId, packetId, advisories: ledger.advisories,
+        });
+      }
+
       // Run-level outcome. Per-chunk validation cannot see this: every chunk can
       // report success while the run as a whole produced nothing. Mode-aware —
       // an append run may legitimately add no NEW item. Skipped on an idempotent
@@ -145,7 +157,12 @@ export async function POST(_request: Request, context: Context) {
       // Mirrors discard_ingestion_run's own predicate, so the sentence promises
       // exactly what the SQL will do.
       const exit = describeReviewExit({ ...disposition, isOriginRun: willRemovePacket });
-      review = { ok, summary: summaries.join(" "), exit, failures };
+      review = {
+        ok, summary: summaries.join(" "), exit, failures,
+        ...(ledger.advisories.length
+          ? { advisories: ledger.advisories, advisorySummary: describeMediaFailures(ledger.advisories) }
+          : {}),
+      };
 
       if (!ok) {
         console.error("[finalize] run needs review", { runId, packetId, failures });
