@@ -275,6 +275,166 @@ risk to the recipient experience:
 
 ---
 
+# RESOLVED — the two open questions, and a changed recommendation
+
+**2026-08-18, second pass.** The founder caught a real contradiction and asked
+two questions before implementation. Answering them honestly reverses the
+recommendation: **do not build an application-level limiter.**
+
+## The contradiction was real
+
+The first design claimed both of these:
+
+> "A successful packet view never touches the limiter."
+> "cooldown check — one indexed read on hashed IP → 404 before any lookup"
+
+These cannot both be true. Work it through:
+
+- If the cooldown is checked **only on misses**, an attacker already in cooldown
+  still has every packet lookup executed, still enumerates at full speed, and
+  still wins the moment they hit a valid slug. The limiter denies nothing.
+- Therefore the gate **must** run before the lookup, on **every** request.
+- Therefore **every successful request pays a limiter read.** The claim was false.
+
+So the real cost of the application-level design is: **one indexed database read
+on every recipient page view, forever** — on the single page that must feel
+instant — to defend against an attack requiring ~5.6 × 10¹⁰ requests. Even
+issuing it in parallel with the packet query (hiding the latency behind work
+already happening) does not remove the query, the cost, or the failure mode.
+
+That is a bad trade, and it only became visible once the path was written out
+honestly instead of described.
+
+## Q1 — the trusted source of client IP on Vercel
+
+From [Vercel's request-headers documentation](https://vercel.com/docs/headers/request-headers):
+
+> **`x-forwarded-for`** — "The public IP address of the client that made the
+> request. If you are trying to use Vercel behind a proxy, we currently
+> **overwrite** the `X-Forwarded-For` header and **do not forward external IPs**.
+> **This restriction is in place to prevent IP spoofing.**"
+
+> **`x-vercel-forwarded-for`** — "identical to the `x-forwarded-for` header.
+> However, `x-forwarded-for` could be overwritten if you're using a proxy on top
+> of Vercel."
+
+So, precisely:
+
+- On Vercel, `x-forwarded-for` is **written by Vercel's proxy, not by the
+  caller** — a client-supplied value is discarded. It is not spoofable.
+- `x-vercel-forwarded-for` is **strictly safer**, because it survives even if a
+  proxy is ever placed in front of Vercel. It is the correct primary, with
+  `x-forwarded-for` as fallback.
+- Overriding `X-Forwarded-For` requires the Enterprise **Trusted Proxy** add-on,
+  which this project does not have — so no caller can inject one.
+
+**Conclusion:** a trustworthy client IP is available. The IP was never the
+blocker; the per-request cost was.
+
+## Q2 — does the platform give a cleaner option? Yes.
+
+From [Vercel's WAF rate-limiting documentation](https://vercel.com/docs/vercel-firewall/vercel-waf/rate-limiting):
+
+| Resource | Hobby | Pro |
+|---|---|---|
+| Included counting keys | **IP**, JA4 Digest | **IP**, JA4 Digest |
+| Counting algorithm | Fixed window | Fixed window |
+| Counting window | min 10s, max 10 min | min 10s, max 10 min |
+| Number of rules | 1 per project | 40 per project |
+| Included requests | 1,000,000 allowed | usage-based |
+
+Actions: `429` (default), **Log**, **Deny**, **Challenge**. Rules are matched on
+request conditions including path.
+
+**Rate limiting is available on every plan, including Hobby.** It runs at the
+edge, before a function is invoked, so it costs:
+
+| | application limiter | Vercel WAF |
+|---|---|---|
+| DB read on a successful view | **yes, every time** | none |
+| added latency for recipients | real | none |
+| new table / schema / migration | yes | none |
+| code to maintain and test | yes | none |
+| blocks before function invocation | no | **yes** |
+| survives repo/code changes | yes | needs documenting |
+
+The platform option is better on every axis that matters here except visibility.
+
+### The two honest weaknesses
+
+1. **Per-region counters.** Vercel: *"Rate limit counters are tracked on a
+   per-region basis; traffic matching a given rate limit key in multiple regions
+   can exceed the limit you configure for any single region."* A geographically
+   distributed attacker multiplies their effective ceiling by the number of
+   regions they reach. This is a real weakening — but distributing across
+   regions is strictly harder than rotating IPs, which already defeats any
+   per-IP limiter including the application-level one.
+2. **The WAF cannot tell a hit from a miss.** It sees the request before the app
+   knows whether the slug exists, so the rule throttles all `/p/*` traffic rather
+   than only 404s. This is why the limit must be generous: a recipient loading a
+   packet makes a handful of requests; the rule only needs to stop a machine
+   making thousands.
+
+Neither weakness justifies putting a database read on every recipient page load.
+
+## Final recommendation
+
+**Build no application-level limiter.** Configure a WAF rule instead.
+
+### The rule
+
+| Field | Value |
+|---|---|
+| Name | `recipient-link-enumeration` |
+| Condition | Request Path **starts with** `/p/` |
+| Action | **Rate Limit** |
+| Algorithm | Fixed Window |
+| Window | `60s` |
+| Limit | `60` requests |
+| Key | **IP** |
+| Then | **Log** for the first few days → then **Deny** |
+
+**Why 60/60s:** a human opening a packet makes a handful of requests to `/p/*`;
+sixty is roughly an order of magnitude of headroom, including a recipient who
+reloads, shares, and reopens. An enumerator is capped at 60/min/IP/region —
+against a ~5.6 × 10¹⁰ expected search, that is ~1.8 million IP-days per region.
+
+**Why Log first:** it costs nothing, and it converts "I believe this is generous"
+into "no legitimate traffic tripped this in N days." Flip to Deny once that is
+observed. This is the same discipline as decline-vs-unavailable: do not act on a
+belief you can cheaply turn into evidence.
+
+### What goes in the repository
+
+A dashboard setting is invisible to code review, untested, and lost if the
+project is recreated. So two things are committed:
+
+1. **This rule specification**, exactly as above, so it can be restored or
+   audited without access to the dashboard.
+2. **`scripts/security/verify-recipient-throttle.mts`** — sends N+ requests to a
+   nonexistent slug and asserts the rule actually engages. This converts an
+   invisible dashboard toggle into a tested, provable invariant, and it is the
+   only reason to write any code at all for Part 1.
+
+### What is explicitly NOT built, and why
+
+- No `recipient_probe_attempts` table.
+- No hashed-IP storage.
+- No middleware.
+- No limiter module, and no change to `/p/[slug]/page.tsx` whatsoever.
+
+The recipient page keeps exactly today's behaviour and today's latency. The
+narrowest coherent solution here turned out to be **less code than the first
+design, not more** — which is what checking the platform first was for.
+
+### Rollback
+
+Set the WAF rule's action to **Log**, or delete the rule. Takes seconds, needs no
+deploy, and cannot affect packets, slugs, or links. There is nothing in the
+application to revert.
+
+---
+
 ## Out of scope, deliberately
 
 Login-gated packets, per-recipient tokens, link expiry, watermarking, view
