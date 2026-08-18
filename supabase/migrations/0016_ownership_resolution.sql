@@ -62,7 +62,22 @@ create index if not exists item_media_decisions_item_idx
 -- bumping the revision would falsely trip an in-flight run's
 -- baseline_content_rev assertion in finalize_ingestion_run.
 alter table public.item_media_decisions enable row level security;
+
+-- ACL, stated in full rather than inherited.
+--
+-- REVOKING FROM anon AND authenticated IS NOT ENOUGH ON ITS OWN. A privilege
+-- held by PUBLIC is held by every role, and never appears as a grant to either
+-- of those two — which is exactly the shape a default-privilege surprise takes.
+-- 0015 existed because access was reachable that nobody had granted on purpose.
+revoke all on table public.item_media_decisions from public;
 revoke all on table public.item_media_decisions from anon, authenticated;
+
+-- And the converse: do not depend on ALTER DEFAULT PRIVILEGES to have granted
+-- the service role anything. bypassrls skips POLICIES, not GRANTS, so without
+-- this the ownership route's reads fail on a project whose defaults differ, and
+-- the gate reports 503 forever. Insert and delete only — a decision is created
+-- or removed, never edited.
+grant select, insert, delete on table public.item_media_decisions to service_role;
 
 -- ---------------------------------------------------------------------------
 -- 2. Atomic Move.
@@ -242,29 +257,116 @@ revoke all on function public.clear_item_media_decision(uuid, uuid, text) from a
 -- 5. Prove it.
 -- ---------------------------------------------------------------------------
 do $verify$
-declare v_left text;
+declare v_left text; v_count int;
 begin
+  -- ---- the table exists ---------------------------------------------------
   if to_regclass('public.item_media_decisions') is null then
     raise exception '0016: item_media_decisions was not created';
   end if;
 
+  -- ---- all three functions exist ------------------------------------------
+  select count(*) into v_count
+  from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public'
+    and p.proname in ('move_item_photos','set_item_media_decision','clear_item_media_decision');
+  if v_count <> 3 then
+    raise exception '0016: expected 3 functions, found %', v_count;
+  end if;
+
+  -- ---- they are SECURITY DEFINER with a pinned search_path ----------------
+  -- A SECURITY DEFINER function without a pinned search_path is a privilege
+  -- escalation waiting for a schema it did not expect. This is asserted rather
+  -- than assumed, so a later edit that drops the setting fails the migration.
   select string_agg(p.proname, ', ') into v_left
   from pg_proc p join pg_namespace n on n.oid = p.pronamespace
   where n.nspname = 'public'
     and p.proname in ('move_item_photos','set_item_media_decision','clear_item_media_decision')
-    and (has_function_privilege('anon', p.oid, 'execute')
-      or has_function_privilege('authenticated', p.oid, 'execute'));
+    and (not p.prosecdef
+      or coalesce(array_to_string(p.proconfig, ','), '') not like '%search_path=%');
   if v_left is not null then
-    raise exception '0016: functions still executable by anon/authenticated: %', v_left;
+    raise exception '0016: not SECURITY DEFINER with a pinned search_path: %', v_left;
   end if;
 
-  if (select count(*) from information_schema.role_table_grants
-      where table_schema='public' and table_name='item_media_decisions'
-        and grantee in ('anon','authenticated')) > 0 then
-    raise exception '0016: anon/authenticated still hold privileges on item_media_decisions';
+  -- ---- no role can EXECUTE them -------------------------------------------
+  -- has_function_privilege answers "can this role actually do it", which
+  -- already accounts for privileges held through PUBLIC and through role
+  -- inheritance. A search of grant ROWS would not, which is how a default-grant
+  -- surprise stays invisible.
+  --
+  -- PUBLIC is deliberately NOT passed to has_function_privilege: it is a
+  -- pseudo-role, not a row in pg_roles, and the function raises on it. It gets
+  -- its own ACL check below instead.
+  select string_agg(distinct r.rolname || ' -> ' || p.proname, ', ') into v_left
+  from pg_proc p
+  join pg_namespace n on n.oid = p.pronamespace
+  cross join (values ('anon'),('authenticated')) as r(rolname)
+  where n.nspname = 'public'
+    and p.proname in ('move_item_photos','set_item_media_decision','clear_item_media_decision')
+    and has_function_privilege(r.rolname, p.oid, 'execute');
+  if v_left is not null then
+    raise exception '0016: functions still executable: %', v_left;
   end if;
 
-  raise notice '0016: table created, three RPCs installed, none reachable by anon';
+  -- ---- and PUBLIC holds nothing on them, explicitly -----------------------
+  -- Grantee OID 0 is PUBLIC. A NULL proacl is NOT "no privileges": it means
+  -- DEFAULT privileges, and functions default to EXECUTE for PUBLIC — so a
+  -- missing revoke reads as an empty ACL while the whole world can call it.
+  select string_agg(p.proname, ', ') into v_left
+  from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public'
+    and p.proname in ('move_item_photos','set_item_media_decision','clear_item_media_decision')
+    and (p.proacl is null
+      or exists (select 1 from aclexplode(p.proacl) a where a.grantee = 0));
+  if v_left is not null then
+    raise exception '0016: PUBLIC can still execute: %', v_left;
+  end if;
+
+  -- ---- no role can reach the TABLE either ---------------------------------
+  -- Tested by effect, across every privilege type. The earlier draft of this
+  -- check read information_schema.role_table_grants for grantee in
+  -- ('anon','authenticated') and would have passed while both roles held
+  -- everything through PUBLIC.
+  select string_agg(distinct r.rolname || ':' || pr.priv, ', ') into v_left
+  from (values ('anon'),('authenticated')) as r(rolname)
+  cross join (values ('SELECT'),('INSERT'),('UPDATE'),('DELETE'),
+                     ('TRUNCATE'),('REFERENCES'),('TRIGGER')) as pr(priv)
+  where has_table_privilege(r.rolname, 'public.item_media_decisions', pr.priv);
+  if v_left is not null then
+    raise exception '0016: item_media_decisions still reachable: %', v_left;
+  end if;
+
+  -- ---- and PUBLIC holds nothing on the table ------------------------------
+  if exists (select 1 from pg_class c
+             join pg_namespace n on n.oid = c.relnamespace
+             cross join lateral aclexplode(c.relacl) a
+             where n.nspname = 'public' and c.relname = 'item_media_decisions'
+               and a.grantee = 0) then
+    raise exception '0016: PUBLIC still holds privileges on item_media_decisions';
+  end if;
+
+  -- ---- RLS is on, with no policy ------------------------------------------
+  -- The second layer. Even if a privilege were somehow granted, no policy means
+  -- no row is visible to a non-bypassrls role.
+  if not (select c.relrowsecurity from pg_class c join pg_namespace n on n.oid = c.relnamespace
+          where n.nspname = 'public' and c.relname = 'item_media_decisions') then
+    raise exception '0016: row level security is not enabled on item_media_decisions';
+  end if;
+  if (select count(*) from pg_policies
+      where schemaname = 'public' and tablename = 'item_media_decisions') > 0 then
+    raise exception '0016: item_media_decisions must carry no policy';
+  end if;
+
+  -- ---- the legitimate caller CAN still work -------------------------------
+  -- A lockdown that also locks out the only intended caller is not a success;
+  -- it is a 503 discovered in production.
+  select string_agg(pr.priv, ', ') into v_left
+  from (values ('SELECT'),('INSERT'),('DELETE')) as pr(priv)
+  where not has_table_privilege('service_role', 'public.item_media_decisions', pr.priv);
+  if v_left is not null then
+    raise exception '0016: service_role lacks % on item_media_decisions', v_left;
+  end if;
+
+  raise notice '0016: table + 3 RPCs installed; anon/authenticated/PUBLIC hold nothing; service_role can read and write; RLS on with no policy';
 end
 $verify$;
 

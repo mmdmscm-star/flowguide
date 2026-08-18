@@ -227,3 +227,91 @@ test("both editors mount it, so reversibility does not depend on composition mod
     assert.match(src, /<OwnershipDecisions packetId=\{packetId\} \/>/, `${editor} must mount it`);
   }
 });
+// ---------------------------------------------------------------------------
+// 0016's privilege boundary, asserted against the migration source.
+//
+// 0015 existed because access was reachable that nobody had granted on purpose.
+// A new table and three SECURITY DEFINER functions are exactly the shape that
+// reintroduces it, so these are pinned here as well as inside the migration's
+// own verify block — the migration catches it at apply time, this catches it at
+// edit time, before anyone pastes anything into a SQL editor.
+// ---------------------------------------------------------------------------
+const MIGRATION = read("supabase/migrations/0016_ownership_resolution.sql");
+const RPCS = ["move_item_photos", "set_item_media_decision", "clear_item_media_decision"];
+
+test("the table is revoked from PUBLIC, not just from anon and authenticated", () => {
+  // A privilege held by PUBLIC is held by every role and appears as a grant to
+  // neither of those two. Revoking only from them leaves the door open.
+  assert.match(MIGRATION, /revoke all on table public\.item_media_decisions from public;/);
+  assert.match(MIGRATION, /revoke all on table public\.item_media_decisions from anon, authenticated;/);
+});
+
+test("the service role is granted explicitly, not left to default privileges", () => {
+  // bypassrls skips POLICIES, not GRANTS. Depending on ALTER DEFAULT PRIVILEGES
+  // means the only legitimate caller works or does not depending on how the
+  // project was set up — and under the new trust policy that failure is a
+  // permanent 503 rather than a visible error.
+  assert.match(MIGRATION, /grant select, insert, delete on table public\.item_media_decisions to service_role;/);
+});
+
+test("RLS is enabled and the migration adds no policy", () => {
+  assert.match(MIGRATION, /alter table public\.item_media_decisions enable row level security;/);
+  assert.doesNotMatch(MIGRATION, /create policy/i, "a policy would make rows reachable without a grant");
+});
+
+test("every function is revoked from PUBLIC, anon and authenticated", () => {
+  // Functions DEFAULT to EXECUTE for PUBLIC. Omitting the revoke does not leave
+  // them locked; it leaves them open.
+  for (const rpc of RPCS) {
+    assert.match(MIGRATION, new RegExp(`revoke all on function public\\.${rpc}\\([^)]*\\) from public;`),
+      `${rpc} must be revoked from PUBLIC`);
+    assert.match(MIGRATION, new RegExp(`revoke all on function public\\.${rpc}\\([^)]*\\) from anon, authenticated;`),
+      `${rpc} must be revoked from anon and authenticated`);
+  }
+});
+
+test("every function is SECURITY DEFINER with a pinned, empty search_path", () => {
+  // An unpinned search_path on a SECURITY DEFINER function is privilege
+  // escalation waiting for a schema it did not expect.
+  for (const rpc of RPCS) {
+    const at = MIGRATION.indexOf(`create or replace function public.${rpc}(`);
+    assert.ok(at > 0, `${rpc} must be defined`);
+    const body = MIGRATION.slice(at, MIGRATION.indexOf("as $$", at));
+    assert.match(body, /security definer/, `${rpc} must be SECURITY DEFINER`);
+    assert.match(body, /set search_path = ''/, `${rpc} must pin an empty search_path`);
+  }
+});
+
+test("the verify block tests privileges by EFFECT, not by grant rows", () => {
+  const verify = MIGRATION.slice(MIGRATION.indexOf("do $verify$"));
+  assert.match(verify, /has_function_privilege\(/, "function reachability must be tested by effect");
+  assert.match(verify, /has_table_privilege\(/, "table reachability must be tested by effect");
+
+  // The original draft read grant rows for anon/authenticated, which passes
+  // while both hold everything through PUBLIC. Checked against executable SQL
+  // only — the comment explaining that mistake is allowed to name it.
+  const sql = verify.split("\n").filter((l) => !l.trim().startsWith("--")).join("\n");
+  assert.doesNotMatch(sql, /role_table_grants/,
+    "a grant-row search cannot see a privilege held through PUBLIC");
+});
+
+test("the verify block checks PUBLIC through the ACL, since it is not a real role", () => {
+  // has_*_privilege('public', ...) raises: PUBLIC is a pseudo-role with no
+  // pg_roles entry. Grantee OID 0 is how it appears in an ACL.
+  const verify = MIGRATION.slice(MIGRATION.indexOf("do $verify$"));
+  assert.doesNotMatch(verify, /has_(function|table)_privilege\('public'/,
+    "passing 'public' to has_*_privilege makes the migration fail on itself");
+  assert.match(verify, /aclexplode/, "PUBLIC must be checked through the ACL");
+  assert.match(verify, /grantee = 0/, "grantee 0 is PUBLIC");
+  // A NULL proacl means DEFAULT privileges, and functions default to EXECUTE
+  // for PUBLIC — so an empty ACL is the dangerous case, not the safe one.
+  assert.match(verify, /proacl is null/,
+    "a NULL function ACL means PUBLIC can execute, and must fail the check");
+});
+
+test("the verify block proves the legitimate caller still works", () => {
+  // A lockdown that also locks out the only intended caller is not a success;
+  // it is a 503 discovered in production.
+  const verify = MIGRATION.slice(MIGRATION.indexOf("do $verify$"));
+  assert.match(verify, /has_table_privilege\('service_role'/);
+});

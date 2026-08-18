@@ -153,7 +153,114 @@ leaves packets with genuine findings unpublishable-but-retryable until it lands.
 
 ---
 
-## 3. No bypass
+## 3. Privilege boundary
+
+0015 existed because access was reachable that nobody had granted on purpose. A
+new table plus three `SECURITY DEFINER` functions is exactly the shape that
+reintroduces it, so the boundary is stated in the migration and asserted twice —
+by the migration's own verify block at apply time, and by
+`src/lib/ownership-route.test.mts` at edit time.
+
+### What the migration does to the ACL
+
+```sql
+alter table public.item_media_decisions enable row level security;
+revoke all on table public.item_media_decisions from public;
+revoke all on table public.item_media_decisions from anon, authenticated;
+grant select, insert, delete on table public.item_media_decisions to service_role;
+
+revoke all on function public.move_item_photos(uuid, uuid, uuid, text, uuid) from public;
+revoke all on function public.move_item_photos(uuid, uuid, uuid, text, uuid) from anon, authenticated;
+revoke all on function public.set_item_media_decision(uuid, uuid, text) from public;
+revoke all on function public.set_item_media_decision(uuid, uuid, text) from anon, authenticated;
+revoke all on function public.clear_item_media_decision(uuid, uuid, text) from public;
+revoke all on function public.clear_item_media_decision(uuid, uuid, text) from anon, authenticated;
+```
+
+Three things here are load-bearing and were **not** in the first draft:
+
+1. **`revoke … from public` on the table.** A privilege held by PUBLIC is held by
+   every role and shows up as a grant to neither `anon` nor `authenticated`.
+   Revoking only from those two leaves it open.
+2. **Functions default to `EXECUTE` for PUBLIC.** Omitting their revoke does not
+   leave them locked down; it leaves them world-callable. A NULL `proacl` is the
+   dangerous state, not the safe one.
+3. **An explicit grant to `service_role`.** `bypassrls` skips *policies*, not
+   *grants*. Relying on `ALTER DEFAULT PRIVILEGES` means the only legitimate
+   caller works or does not depending on how the project was configured — and
+   under the trust policy in §2 that failure is a permanent 503, not a loud
+   error.
+
+### How the verify block tests it
+
+**By effect, not by grant rows.** `has_table_privilege` / `has_function_privilege`
+answer "can this role actually do this", which accounts for privileges held
+through PUBLIC and through role inheritance. The first draft searched
+`information_schema.role_table_grants` for `grantee in ('anon','authenticated')`
+— which would have passed while both roles held everything via PUBLIC. That was
+the exact class of miss 0015 was about.
+
+**PUBLIC is checked through the ACL, not through `has_*_privilege`.** PUBLIC is a
+pseudo-role with no `pg_roles` entry, so `has_function_privilege('public', …)`
+raises rather than returning false. It is checked as grantee OID `0` via
+`aclexplode`, with a NULL `proacl` treated as a failure.
+
+The block raises — rolling the whole transaction back — unless **all** of:
+
+- the table exists, and all three functions exist (exactly 3);
+- every function is `SECURITY DEFINER` **and** pins `search_path`;
+- neither `anon` nor `authenticated` can `EXECUTE` any of the three;
+- PUBLIC holds no `EXECUTE` on any of the three, and no ACL is NULL;
+- neither `anon` nor `authenticated` holds `SELECT/INSERT/UPDATE/DELETE/TRUNCATE/REFERENCES/TRIGGER` on the table;
+- PUBLIC holds nothing on the table;
+- RLS is enabled and there are **no policies**;
+- `service_role` **can** `SELECT`, `INSERT` and `DELETE` — a lockdown that also
+  locks out the intended caller is a 503 discovered in production, not a success.
+
+### The SECURITY DEFINER functions, checked explicitly
+
+| | `move_item_photos` | `set_item_media_decision` | `clear_item_media_decision` |
+|---|---|---|---|
+| `search_path` pinned to `''` | yes | yes | yes |
+| fully-qualified `public.` refs | yes | yes | yes |
+| caller owns the packet | yes, under `for update` | yes | yes |
+| items belong to one packet | yes | n/a (single item) | n/a |
+| optional `p_packet_id` cross-check | yes | no | no |
+| draft-only | yes | yes | **no — deliberate** |
+| refuses during an import | yes | no | no |
+
+Two of those cells are deliberate and worth stating rather than discovering:
+
+- **`clear_item_media_decision` is not draft-gated.** It is the undo. Gating it
+  on draft would make a Keep irreversible the moment a packet is published,
+  which is the trap the whole feature exists to remove. It still verifies
+  ownership.
+- **Only `move_item_photos` refuses during an import,** because only it mutates
+  packet content and would break an in-flight run's `baseline_content_rev`
+  assertion. It reads `ingestion_runs` **without** `for update`, because
+  `finalize_ingestion_run` locks `ingestion_runs` before `packets` and the
+  opposite order here would be a deadlock class.
+
+`p_owner` is supplied by the server from the session, never by the browser. That
+is safe **because** the functions are unreachable except through the service
+role — which is what the checks above exist to guarantee.
+
+### The route is server-side, and the browser cannot reach these RPCs
+
+Verified across `src/`, not assumed:
+
+- every `.rpc(` call site lives under `src/app/api/` or `src/lib/` — no client
+  component calls one;
+- **no file marked `"use client"` imports supabase at all**;
+- the panel talks to `/api/packets/[id]/ownership`, a server route, which uses
+  `createServerClient()` (service-role key, server-only env var);
+- `createPublicClient()` — the anon-key client — is imported once in
+  `src/lib/queries.ts` and **never called**, so the anon key has no call path in
+  application code.
+
+---
+
+## 4. No bypass
 
 Asserted in `src/lib/ownership-route.test.mts`, not claimed by hand:
 
@@ -180,7 +287,7 @@ run *status* and is untouched.
 
 ---
 
-## 4. Integrity check
+## 5. Integrity check
 
 Verify the file you are about to paste is the file that was reviewed.
 
@@ -193,25 +300,26 @@ tail -1 supabase/migrations/0016_ownership_resolution.sql
 
 | Property | Expected |
 |---|---|
-| sha256 | `928a7c028014f24c61ea177fa0f73a69ddd3ebe2d950e9698fcf5f821660657e` |
-| lines | `273` |
-| bytes | `13034` |
+| sha256 | `33b59b701530af991c5054403c8b540b241fad834110aeb29ce83cffb2340c47` |
+| lines | `375` |
+| bytes | `18697` |
 | first line | `-- 0016 — ownership resolution: atomic Move, intentional Keep.` |
 | last line | `notify pgrst, 'reload schema';` |
 
 Structural census — the file contains exactly:
 
-- `begin;` at line 39, `commit;` at line 271, `notify pgrst` at line 273
+- `begin;` at line 39, `commit;` at line 373, `notify pgrst` at line 375
 - 1 × `create table if not exists`, 1 × `create index if not exists`
 - 3 × `create or replace function`
-- 7 × `revoke` (1 table, 6 function)
+- 8 × `revoke` (2 table, 6 function)
+- 1 × `grant` (service_role only)
 - 1 × `do $verify$` block
 
 **If the hash does not match, stop.** Do not reconcile by eye.
 
 ---
 
-## 5. Preflight
+## 6. Preflight
 
 Run **before** applying. Each says what result means "safe to proceed".
 
@@ -247,6 +355,18 @@ order by table_name, ordinal_position;
 select proname, pronargs from pg_proc p
 join pg_namespace n on n.oid = p.pronamespace
 where n.nspname = 'public' and proname like '%item_media%';
+
+-- (e) What THIS project's default privileges will do to a newly created table
+--     in public. Informational, not pass/fail — the migration revokes and
+--     grants explicitly and does not depend on the answer. Worth reading once,
+--     because it tells you what the revokes are actually undoing.
+select d.defaclobjtype as obj_type,
+       pg_get_userbyid(d.defaclrole) as granting_role,
+       n.nspname as schema,
+       d.defaclacl as default_acl
+from pg_default_acl d
+left join pg_namespace n on n.oid = d.defaclnamespace
+where n.nspname = 'public' or n.nspname is null;
 ```
 
 Also confirm the app is running the code that matches this migration — the gate
@@ -254,7 +374,7 @@ and the three RPC call sites ship together.
 
 ---
 
-## 6. Apply
+## 7. Apply
 
 Paste the file whole. It runs inside `begin; … commit;` with
 `lock_timeout = '3s'` and `statement_timeout = '60s'`.
@@ -270,7 +390,7 @@ cause and re-run; the migration is idempotent.
 
 ---
 
-## 7. Post-apply verification
+## 8. Post-apply verification
 
 ```sql
 -- (a) Three functions, SECURITY DEFINER, pinned search_path.
@@ -280,7 +400,8 @@ from pg_proc p join pg_namespace n on n.oid = p.pronamespace
 where n.nspname = 'public'
   and proname in ('move_item_photos','set_item_media_decision','clear_item_media_decision');
 
--- (b) Not reachable as PostgREST endpoints.
+-- (b) Functions not EXECUTABLE by anon or authenticated — tested by EFFECT, so
+--     a privilege held through PUBLIC is caught.
 --     SAFE = zero rows.
 select p.proname, r.rolname
 from pg_proc p
@@ -290,23 +411,62 @@ where n.nspname = 'public'
   and p.proname in ('move_item_photos','set_item_media_decision','clear_item_media_decision')
   and has_function_privilege(r.rolname, p.oid, 'execute');
 
--- (c) RLS on, no policy, no anon/authenticated table grants.
---     SAFE = relrowsecurity = t, policies = 0, grants = 0.
+-- (c) PUBLIC holds no EXECUTE. PUBLIC is a pseudo-role, so it is checked as
+--     grantee 0 in the ACL — and a NULL proacl means DEFAULT privileges, under
+--     which functions ARE executable by PUBLIC.
+--     SAFE = zero rows.
+select p.proname,
+       case when p.proacl is null then 'NULL acl — PUBLIC CAN EXECUTE'
+            else 'explicit PUBLIC grant' end as why
+from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+where n.nspname = 'public'
+  and p.proname in ('move_item_photos','set_item_media_decision','clear_item_media_decision')
+  and (p.proacl is null or exists (select 1 from aclexplode(p.proacl) a where a.grantee = 0));
+
+-- (d) The TABLE is unreachable by anon/authenticated, across every privilege
+--     type, by effect.
+--     SAFE = zero rows.
+select r.rolname, pr.priv
+from (values ('anon'),('authenticated')) as r(rolname)
+cross join (values ('SELECT'),('INSERT'),('UPDATE'),('DELETE'),
+                   ('TRUNCATE'),('REFERENCES'),('TRIGGER')) as pr(priv)
+where has_table_privilege(r.rolname, 'public.item_media_decisions', pr.priv);
+
+-- (e) PUBLIC holds nothing on the table.
+--     SAFE = zero rows.
+select a.privilege_type
+from pg_class c
+join pg_namespace n on n.oid = c.relnamespace
+cross join lateral aclexplode(c.relacl) a
+where n.nspname='public' and c.relname='item_media_decisions' and a.grantee = 0;
+
+-- (f) RLS on, no policy.
+--     SAFE = relrowsecurity = t, policies = 0.
 select c.relrowsecurity,
        (select count(*) from pg_policies
-         where schemaname='public' and tablename='item_media_decisions') as policies,
-       (select count(*) from information_schema.role_table_grants
-         where table_schema='public' and table_name='item_media_decisions'
-           and grantee in ('anon','authenticated')) as grants
+         where schemaname='public' and tablename='item_media_decisions') as policies
 from pg_class c join pg_namespace n on n.oid = c.relnamespace
 where n.nspname='public' and c.relname='item_media_decisions';
 
--- (d) The unique key that makes a Keep idempotent.
+-- (g) The legitimate caller still works. A lockdown that locks out the intended
+--     caller is a permanent 503, not a success.
+--     SAFE = three rows, all true.
+select pr.priv, has_table_privilege('service_role', 'public.item_media_decisions', pr.priv) as allowed
+from (values ('SELECT'),('INSERT'),('DELETE')) as pr(priv);
+
+-- (h) Every function is SECURITY DEFINER with a pinned search_path.
+--     SAFE = 3 rows, prosecdef = t, proconfig contains search_path=
+select proname, prosecdef, proconfig
+from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+where n.nspname='public'
+  and proname in ('move_item_photos','set_item_media_decision','clear_item_media_decision');
+
+-- (i) The unique key that makes a Keep idempotent.
 --     SAFE = one unique index on (item_id, url).
 select indexname, indexdef from pg_indexes
 where schemaname='public' and tablename='item_media_decisions';
 
--- (e) The cascade, so a deleted item cannot strand a decision.
+-- (j) The cascade, so a deleted item cannot strand a decision.
 --     SAFE = delete_rule = CASCADE.
 select rc.delete_rule
 from information_schema.referential_constraints rc
@@ -314,11 +474,11 @@ join information_schema.table_constraints tc on tc.constraint_name = rc.constrai
 where tc.table_schema='public' and tc.table_name='item_media_decisions';
 ```
 
-Then run the E2E proof (§9).
+Then run the E2E proof (§10).
 
 ---
 
-## 8. Rollback
+## 9. Rollback
 
 **Deterministic, and lossless only while the table is empty** — which is the
 case immediately after applying. `item_media_decisions` is the sole store of a
@@ -359,6 +519,31 @@ where n.nspname='public'
   and proname in ('move_item_photos','set_item_media_decision','clear_item_media_decision');
 ```
 
+### ACL exactness
+
+0016 alters no existing table, column or function, and **grants nothing to any
+pre-existing object**. Every ACL change it makes lives on objects it created:
+
+| Change | Undone by |
+|---|---|
+| `revoke` on `item_media_decisions` from PUBLIC / anon / authenticated | `drop table` — the ACL is dropped with the object |
+| `grant … to service_role` on that table | `drop table` |
+| `revoke` on the three functions from PUBLIC / anon / authenticated | `drop function` |
+
+So there is no `grant`/`revoke` to replay in reverse: dropping the objects
+removes their ACLs entirely, and no other object's privileges were touched. That
+is what makes this rollback exact rather than approximate.
+
+Confirm no ACL residue outside those objects — this should return the same rows
+before 0016 and after rollback:
+
+```sql
+select c.relname, c.relacl
+from pg_class c join pg_namespace n on n.oid = c.relnamespace
+where n.nspname = 'public' and c.relkind = 'r'
+order by c.relname;
+```
+
 0016 alters no existing table, column or function, so there is nothing else to
 restore. **After rollback the gate does not go quiet** — a packet with a genuine
 blocking finding returns 503 rather than publishing, because that is the trust
@@ -371,7 +556,7 @@ reports them clean will keep doing so.
 
 ---
 
-## 9. E2E proof — disposable
+## 10. E2E proof — disposable
 
 `scripts/ingestion-runtime/verify-ownership-gate.mts`
 
@@ -413,7 +598,7 @@ correct for that state.
 
 ---
 
-## 10. What this does not do
+## 11. What this does not do
 
 - **No backfill.** Packets imported before 0014 carry no provenance, recompute
   declines, and the gate lets them publish. Blocking there would trap every
@@ -421,4 +606,4 @@ correct for that state.
 - **No durable audit of decisions beyond the table itself.** There is no history
   of who kept what and when, beyond `created_at`.
 - **No hard database guard for ownership.** It is application-layer by
-  necessity, standing in the single door proven in §3.
+  necessity, standing in the single door proven in §4.
