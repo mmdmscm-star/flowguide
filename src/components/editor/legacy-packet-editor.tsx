@@ -7,6 +7,7 @@ import ImportProgress from "@/components/ImportProgress";
 import OwnershipDecisions from "@/components/OwnershipDecisions";
 import { LibraryPicker } from "@/components/library/library-picker";
 import { BulkPromote } from "@/components/library/bulk-promote";
+import { ItemLibraryActions } from "@/components/library/item-library-actions";
 import {
   DndContext,
   closestCenter,
@@ -62,6 +63,7 @@ interface EditorItem {
   description: string;
   notes: string;
   sortOrder: number;
+  libraryItemId?: string | null;
   photos: EditorPhoto[];
   links: EditorLink[];
   details: EditorDetail[];
@@ -253,6 +255,9 @@ export function LegacyPacketEditor() {
       description: i.description || "",
       notes: i.notes || "",
       sortOrder: i.sort_order,
+      // Inert lineage. Nothing renders differently because of it — it only
+      // decides WHICH Library action this item is offered.
+      libraryItemId: (i.library_item_id as string | null) ?? null,
       photos: (data.photos || [])
         .filter((ph: Record<string, unknown>) => ph.item_id === i.id)
         .map((ph: Record<string, unknown>) => ({ id: ph.id, url: ph.url })),
@@ -1116,6 +1121,7 @@ export function LegacyPacketEditor() {
                       onMove={moveItemToSection}
                       onUpdateField={updateItem}
                       onDelete={deleteItem}
+                      onLibraryChanged={setLibraryNotice}
                       onAddDetail={addDetail}
                       onUpdateDetail={updateDetail}
                       onRemoveDetail={removeDetail}
@@ -1649,6 +1655,7 @@ function ItemEditor({
   onMove,
   onUpdateField,
   onDelete,
+  onLibraryChanged,
   onAddDetail,
   onUpdateDetail,
   onRemoveDetail,
@@ -1667,6 +1674,7 @@ function ItemEditor({
   onMove: (itemId: string, targetSectionId: string) => void;
   onUpdateField: (id: string, field: string, value: string) => void;
   onDelete: (id: string) => void;
+  onLibraryChanged: (message: string) => void;
   onAddDetail: (itemId: string) => void;
   onUpdateDetail: (itemId: string, detailId: string, field: "label" | "value", value: string) => void;
   onRemoveDetail: (itemId: string, detailId: string) => void;
@@ -1756,6 +1764,15 @@ function ItemEditor({
 
       {expanded && (
         <div className="mt-3 space-y-3">
+          {/* Library: which action is offered is decided by lineage, not a menu
+              that always shows everything. */}
+          <ItemLibraryActions
+            packetItemId={item.id}
+            itemTitle={item.title}
+            libraryItemId={item.libraryItemId ?? null}
+            onChanged={onLibraryChanged}
+          />
+
           {/* Address */}
           <div className="flex items-center gap-2">
             <span className="text-gray-400 text-sm flex-shrink-0">📍</span>
