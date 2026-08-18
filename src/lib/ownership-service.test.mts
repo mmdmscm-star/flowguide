@@ -360,3 +360,72 @@ test("items with no provenance at all are clean rather than undecidable", async 
   assert.deepEqual(o.blocking, []);
   assert.equal(o.checkedAnyRun, false);
 });
+
+// ---------------------------------------------------------------------------
+// MIXED-ORIGIN PACKETS — the Library precondition.
+//
+// A Library insertion carries no ingestion provenance, and it must not. But
+// "no provenance" has to be local to that ITEM. If one provenance-free item
+// made the whole packet undecidable, then adding a single Library or manual
+// item would silently switch OFF ownership verification for the imported items
+// beside it — turning a feature into a bypass, and doing it invisibly.
+//
+// recomputeOwnership DOES decline a run on `incomplete_provenance`. The question
+// this pins is whether a null-origin item can ever reach that check. It cannot:
+// loadPacketOwnership partitions items by origin_run_id first, so an item with
+// no run is never a member of any run's slice.
+// ---------------------------------------------------------------------------
+test("a manual or Library item does not disable checking for the imported items beside it", async () => {
+  const tables = incidentTables();
+
+  // Three provenance-free items, as a Library insertion or manual add produces:
+  // a run, chunk ordinal and emit index that are all null.
+  for (const n of [0, 1, 2]) {
+    tables.items.push({
+      id: `library-${n}`, section_id: "sec-1", title: `Inserted from Library ${n}`,
+      origin_run_id: null, origin_chunk_ordinal: null, origin_emit_index: null,
+    });
+    tables.item_photos.push({ item_id: `library-${n}`, url: `https://cdn.example.invalid/lib-${n}.jpg` });
+  }
+
+  const o = await loadPacketOwnership(PACKET, fakeDb(tables));
+
+  assert.equal(o.checkedAnyRun, true, "the imported run must still be CHECKED");
+  assert.equal(o.unavailable, null);
+  assert.deepEqual(o.declines, [], "a provenance-free item is not a decline");
+  assert.equal(o.blocking.length, 7,
+    "all seven real findings must survive — the same count as the packet without the inserted items");
+  assert.ok(o.blocking.every((f) => !f.itemId.startsWith("library-")),
+    "and none of them may accuse an item that has no source to be wrong against");
+});
+
+test("a Library item's photos are never judged against a source that never mentioned them", async () => {
+  // The inverse risk: a provenance-free item holding photos must not be reported
+  // as holding them on the "wrong record", because no record ever claimed it.
+  const tables = incidentTables();
+  const someSourceUrl = (tables.item_photos[0] as { url: string }).url;
+
+  tables.items.push({
+    id: "library-x", section_id: "sec-1", title: "Inserted from Library",
+    origin_run_id: null, origin_chunk_ordinal: null, origin_emit_index: null,
+  });
+  // Deliberately the SAME url the source lists for an imported item.
+  tables.item_photos.push({ item_id: "library-x", url: someSourceUrl });
+
+  const o = await loadPacketOwnership(PACKET, fakeDb(tables));
+  assert.equal(o.checkedAnyRun, true);
+  assert.equal(o.findings.filter((f) => f.itemId === "library-x").length, 0,
+    "an item with no provenance can be neither right nor wrong about ownership");
+  assert.equal(o.blocking.length, 7, "and it changes nothing about the real findings");
+});
+
+test("a packet of ONLY provenance-free items is clean, not undecidable", async () => {
+  // The all-Library packet: nothing to prove, nothing to accuse, publishes.
+  const tables = incidentTables();
+  tables.items = tables.items.map((i) => ({ ...i, origin_run_id: null, origin_chunk_ordinal: null, origin_emit_index: null }));
+  const o = await loadPacketOwnership(PACKET, fakeDb(tables));
+  assert.deepEqual(o.findings, []);
+  assert.deepEqual(o.blocking, []);
+  assert.deepEqual(o.declines, []);
+  assert.equal(o.unavailable, null);
+});
