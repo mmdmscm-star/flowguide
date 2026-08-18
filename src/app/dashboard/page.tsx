@@ -119,6 +119,14 @@ export default function DashboardPage() {
           <p className="text-sm text-muted mt-0.5">{userEmail}</p>
         </div>
         <div className="flex items-center gap-3">
+          {/* The Library is authoring-side and packet-independent, so it belongs
+              at the top level rather than inside a packet. */}
+          <button
+            onClick={() => router.push("/library")}
+            className="px-3 py-2 rounded-lg border border-border text-sm font-medium text-muted hover:text-foreground transition-colors"
+          >
+            Library
+          </button>
           <div className="relative">
             <button
               onClick={() => setShowNewMenu(!showNewMenu)}
