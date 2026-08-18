@@ -1,7 +1,12 @@
 # Migration 0016 — application package
 
 Applied **by hand** in the Supabase SQL Editor. Nothing in CI applies it.
-Nothing in this document has been run against Supabase.
+
+> **STATUS: APPLIED AND PROVEN — 2026-08-17.**
+> Preflight 1-5 clean, migration applied on the first attempt, post-apply
+> verification 12/12 PASS after two corrections to the *verification queries*,
+> and the disposable E2E 25/25 with clean teardown. See §12 for the record.
+> The runtime code that uses it is **not yet deployed** — see §13.
 
 File: `supabase/migrations/0016_ownership_resolution.sql`
 
@@ -725,3 +730,171 @@ correct for that state.
   of who kept what and when, beyond `created_at`.
 - **No hard database guard for ownership.** It is application-layer by
   necessity, standing in the single door proven in §4.
+
+---
+
+## 12. Result — what actually happened
+
+Applied **2026-08-17**, one step at a time, against the production database.
+
+### Preflight
+
+| Step | Check | Result |
+|---|---|---|
+| 1 | no run mid-flight | 0 rows |
+| 2 | not already applied | 0 rows |
+| 3 | all 14 referenced columns exist; `sort_order` integer, `url` text | 0 rows / correct |
+| 4 | no name collision, including overloads | 0 rows |
+| 5a | `anon`, `authenticated`, `service_role` all exist | 3 rows; `service_role` has `bypassrls` |
+| 5b | this project's default privileges | **6 rows — defaults DO grant to anon/authenticated on tables, sequences AND functions** |
+
+**5b is the one worth remembering.** It confirmed the revokes in §3 are
+load-bearing rather than defensive: without them the table and all three
+functions would have been born reachable by the anon key — the same shape as the
+exposure 0015 closed.
+
+### Apply
+
+Succeeded on the first attempt. The whole transaction committed, so the
+`do $verify$` block passed. Supabase's SQL Editor does not surface `NOTICE`
+output, which is why §8 verifies from outside rather than trusting the notice.
+
+### Post-apply verification — and two defects in the CHECKS
+
+12/12 PASS, but only after correcting two rows. **Both defects were in the
+verification queries; neither was in the migration.**
+
+- **Row 11 asserted the opposite of the truth.** It counted unique *indexes* and
+  required exactly one. A correct schema has two — `id uuid primary key` creates
+  `item_media_decisions_pkey`, and `unique (item_id, url)` creates
+  `item_media_decisions_item_id_url_key`. The check would have failed on every
+  correct application and passed only on a schema *missing its primary key*. Now
+  counts unique **constraints** (`contype='u'`), comparing the column set.
+
+- **Row 3 asserted too little.** It required `proconfig` to contain
+  `search_path=`, which `search_path=public` satisfies — a `SECURITY DEFINER`
+  function still resolving unqualified names against a schema a caller can
+  shadow, i.e. exactly the escalation the check exists to rule out. Now requires
+  the value to be **empty**, and prints it on pass as well as fail. Confirmed
+  live as `search_path=""` on all three functions.
+
+Ground truth confirmed alongside: primary key on `id`, `unique (item_id, url)`,
+FK to `items(id)` `ON DELETE CASCADE`, three indexes, all three functions
+`SECURITY DEFINER`.
+
+### E2E — 25/25, teardown clean
+
+First run: 23 passed, 1 failed. **The failure was the assertion, not the Move.**
+
+`the photo really moved to the item the source names` read `item_photos` by url
+with no scoping. All three fixture packets carry the same photo url on purpose,
+so it returned one row per packet — three rows on three `item_id`s — and said
+nothing about where anything moved. Like row 11, it was inverted: it would have
+failed on every correct run and passed only if two packets had *lost* the photo.
+
+The Move was correct, on three independent lines of evidence: the row count
+matches the fixture exactly; a duplicate would have produced four rows, not
+three; and `blockingCount === 0` plus a successful publish both come from a fresh
+recompute over live rows, which is precisely what would still report a copy left
+on the source item.
+
+Fixed by scoping the read, and the shared url was **kept** rather than made
+unique per packet — it is what makes the new *cross-packet isolation* assertion
+meaningful. `move_item_photos` asserts same-packet internally; that assertion is
+the end-to-end version, ruling out a move reaching unrelated client data.
+
+Rerun: **25 passed, 0 failed. Cleanup: 0 packets, 0 users, 0 runs remaining.**
+
+### Scoreboard
+
+Four defects surfaced by executing rather than trusting — two in preflight
+(`unknown || "char"`; a collision check blind to overloads), one in post-apply
+verification (rows 3 and 11), one in the E2E assertion. **None was in the
+migration.** Every one was in something written to *check* the migration, which
+is an argument for running verification step by step rather than in a batch.
+
+---
+
+## 13. Deploying the runtime code
+
+**The database is done. The application code that uses it is not deployed**, and
+this is the part that needs a decision rather than a command.
+
+### The coupling, stated first
+
+`origin/main` is the production branch and its tip is `aa87636`, which
+deliberately synced the repo to the production *database* **without deploying
+runtime code**. It excluded, in its own words, "seg-v4 record detection,
+media-ownership verification, ownership recomputation… because none of it has
+completed its end-to-end proof."
+
+0016's gate is built on that excluded work and **cannot be separated from it**:
+
+```
+ownership-recompute.ts  ->  detectSourceRecords()  ->  segmentation.ts (seg-v4)
+```
+
+`detectSourceRecords` **does not exist** in `origin/main`'s `segmentation.ts`.
+There is no version of "ship the 0016 code only". Deploying it means deploying
+**seg-v3 → seg-v4** as well.
+
+### What that changes for existing data
+
+`SEGMENTER_VERSION` moves `seg-v3` → `seg-v4`, and `recomputeOwnership` declines
+when a run's recorded version differs from the build's. So:
+
+- **Every packet imported before this deploy declines** — its ownership is
+  reported as not establishable, which is **nonblocking by design**. Those
+  packets publish exactly as they do today. The gate is inert for them, and
+  their declines are logged.
+- **The gate becomes live only for imports made after the deploy**, which are
+  the ones recorded as seg-v4.
+
+That is the intended behaviour and it is why declines are nonblocking. It also
+means **0016 protects future imports, not the existing library** — worth being
+clear about, because the incident that motivated it is in the existing library.
+
+### The genuine open question
+
+0016 has now completed its end-to-end proof (§12). **seg-v4 has not been proven
+in this session.** It carries its own unit tests and incident fixtures, and
+`scripts/ingestion-runtime/` holds a seg-v3 verifier, but nothing here
+established that seg-v4 segments real sources correctly end to end against the
+live model.
+
+Deploying changes how every future import is chunked — the exact layer the
+original incident's root cause lived in ("Segmentation — **root cause.** Detector
+declined on a technicality and fell back silently").
+
+So the honest framing: **this deploy ships a proven safety net over an unproven
+change to the thing the net catches.** That may well be the right trade — the net
+exists precisely because segmentation can fail — but it is a decision, not a
+formality.
+
+### Recommended sequence
+
+1. **Prove seg-v4 end to end first**, with a real import through the live model,
+   the way 0014/0015/0016 were each proven. `scripts/ingestion-runtime/` already
+   has the harness.
+2. **Then push and deploy**, both halves together, since they cannot be split.
+3. **Watch the logs after the first real import** for
+   `[publish] ownership not establishable` (expected on every pre-existing
+   packet) versus `[publish] blocked by ownership` (the gate doing its job) and
+   `[publish] ownership verification unavailable` (which should never appear now
+   that 0016 is applied — if it does, the service-role grant is the first thing
+   to check).
+
+### The push itself
+
+Nothing is force-pushed and nothing is rebased; this is a fast-forward.
+
+```bash
+git push origin main
+```
+
+Vercel deploys from this project (`.vercel/project.json`, project `flowguide`).
+Confirm the deployment picks up the commit you pushed before treating it as live.
+
+**Rollback** is a redeploy of `aa87636` from the Vercel dashboard. The database
+needs no rollback: 0016 is additive, and `aa87636`'s code neither reads
+`item_media_decisions` nor calls the three RPCs, so the table simply sits unused.
