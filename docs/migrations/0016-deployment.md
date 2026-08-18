@@ -390,7 +390,10 @@ where n.nspname = 'public'
   and (p.proname in ('move_item_photos','set_item_media_decision','clear_item_media_decision')
     or p.proname like '%item_media%')
 union all
-select 'relation ' || c.relkind, c.relname, '', pg_get_userbyid(c.relowner)
+-- relkind is Postgres's internal "char" type, NOT text. Concatenating it with an
+-- untyped literal is ambiguous ("operator is not unique: unknown || char"), so
+-- the cast is required rather than cosmetic.
+select 'relation (' || c.relkind::text || ')', c.relname, '', pg_get_userbyid(c.relowner)
 from pg_class c join pg_namespace n on n.oid = c.relnamespace
 where n.nspname = 'public' and c.relname = 'item_media_decisions';
 
