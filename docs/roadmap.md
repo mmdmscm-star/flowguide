@@ -1,5 +1,22 @@
 # FlowGuide Roadmap
 
+
+> **PRIORITISATION POSTURE — corrected 2026-08-18.**
+>
+> Several entries below were written under a retired rule: that a feature had to
+> wait for real observed friction, with a "validation gate" before any code. That
+> rule is **no longer how work here is prioritised**, per `AGENTS.md`.
+>
+> Items are prioritised against **the FlowGuide product we intend to sell,
+> architectural coherence, and business value**. A prior complaint is not a
+> precondition — friction is *evidence, not permission*.
+>
+> The gates below are preserved as the historical record of how each item was
+> originally deferred, and because several describe genuinely useful **validation
+> work** (e.g. checking Street View coverage against real addresses) that is worth
+> doing before building. Read them as "what to find out first", never as
+> "wait until a client complains".
+
 Ideas that have been **thought through and documented**, but are **intentionally
 waiting for additional evidence from real-world use** before becoming active
 development. Presence on this roadmap is not a commitment to build — it means the
@@ -24,7 +41,7 @@ small board-and-care homes, where we rarely have photos (large senior communitie
 usually do). Generalizes to other location-based verticals: real estate, travel,
 schools, clinics.
 
-### Validation gate (do this before any code)
+### What to find out first (validation, not a gate on permission)
 
 Matthew and Ramona will manually review **~20 real board-and-care addresses** in
 Google Street View and answer one question:
@@ -159,19 +176,20 @@ default type scale, which we already raised for everyone. It's about giving the
 
 We just lifted the default recipient reading tier (16px body, 18px item titles,
 20px section titles, higher-contrast labels). That may be enough on its own.
-Adding a control before we know would be pre-building flexibility with no observed
-friction — against our evidence-first principle.
+It was deferred on that basis. Under the current posture it is prioritised on
+product value like anything else; the open question is whether it earns its place
+in the recipient UI, not whether someone has complained.
 
-### Validation gate (before any code)
+### What to find out first (validation, not a gate on permission)
 
-Build only if, at the new larger default, a **real recipient still struggles with
-size** — a concrete signal, not a hunch:
+Worth confirming, at the new larger default, whether readers still struggle with
+size — useful evidence for sizing the work, NOT a precondition for doing it:
 
 - a client says the text is hard to read, or
 - you watch someone pinch-zoom, hold the phone close, or ask you to make it
   bigger while reading a real packet.
 
-One such observation is the trigger. Until then, leave it.
+Such an observation would be strong evidence. Its absence is not a veto.
 
 ### Shape if the gate passes
 

@@ -723,9 +723,17 @@ correct for that state.
 
 ## 11. What this does not do
 
-- **No backfill.** Packets imported before 0014 carry no provenance, recompute
-  declines, and the gate lets them publish. Blocking there would trap every
-  historical packet behind a check it can never satisfy.
+- **No backfill, and none is planned.** Packets imported before 0014 carry no
+  provenance, recompute declines, and the gate lets them publish. Blocking there
+  would trap every historical packet behind a check it can never satisfy.
+
+  If historical packets are ever revisited, the framing is **historical ownership
+  recovery where provable** — never a backfill. Ownership may be established only
+  where the surviving source and provenance PROVE it: the run's `source_hash`
+  still matches `raw_input` at the recorded `source_offset_base`, and the chunk
+  and emit indices are present. Everywhere else it stays **unknown**. A guessed
+  provenance is worse than an absent one, because `recomputeOwnership` refusing
+  to answer is the property that makes a finding trustworthy at all.
 - **No durable audit of decisions beyond the table itself.** There is no history
   of who kept what and when, beyond `created_at`.
 - **No hard database guard for ownership.** It is application-layer by
