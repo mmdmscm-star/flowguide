@@ -214,7 +214,7 @@ $create$;
 
 -- ---- D2. structural equivalence with the ordinary blank create -------------
 do $equiv$
-declare a uuid; blank uuid; made uuid; sig_blank text; sig_made text;
+declare a uuid; blank uuid; made uuid; sig_blank jsonb; sig_made jsonb;
 begin
   select v into a from fx where k='a'; select v into made from fx where k='packet';
   -- EXACTLY the columns POST /api/packets sets. Everything else is a column
@@ -223,21 +223,34 @@ begin
   values (a, '0023-verify-blank', 'Reyes family', 'The Reyes family', 'general')
   returning id into blank;
 
-  select status || '|' || composition_mode || '|' || packet_type || '|' || identity_mode || '|' ||
-         coalesce(custom_identity,'~') || '|' || map_url || '|' || personal_note || '|' ||
-         coalesce(raw_input,'~') || '|' || content_rev || '|' || viewed || '|' ||
-         coalesce(published_at::text,'~') || '|' || coalesce(professional_snapshot::text,'~') || '|' ||
-         coalesce(origin_ingestion_run_id::text,'~')
-    into sig_blank from public.packets where id = blank;
-  select status || '|' || composition_mode || '|' || packet_type || '|' || identity_mode || '|' ||
-         coalesce(custom_identity,'~') || '|' || map_url || '|' || personal_note || '|' ||
-         coalesce(raw_input,'~') || '|' || content_rev || '|' || viewed || '|' ||
-         coalesce(published_at::text,'~') || '|' || coalesce(professional_snapshot::text,'~') || '|' ||
-         coalesce(origin_ingestion_run_id::text,'~')
-    into sig_made from public.packets where id = made;
+  -- THE WHOLE ROW AS JSONB, MINUS THE KEYS EXPECTED TO DIFFER.
+  --
+  -- The first version of this built a signature by concatenating a hand-picked
+  -- list of columns with a '~' sentinel for nulls. That failed on
+  -- custom_identity, which is jsonb: coalesce(custom_identity, '~') asks
+  -- Postgres to parse '~' as json. Casting that one column would have fixed the
+  -- error and left the CLASS of error in place — every other column's type was
+  -- still being assumed, and any column added later would be silently omitted
+  -- from the comparison entirely.
+  --
+  -- to_jsonb(row) needs no casts, cannot mis-resolve a type, and covers every
+  -- column there is. Subtracting a key is how a difference gets excluded, so the
+  -- exclusions are explicit and few: identity and the content actually passed in.
+  select to_jsonb(pk) - 'id' - 'slug' - 'created_at' - 'updated_at' - 'title' - 'client_name'
+    into sig_blank from public.packets pk where pk.id = blank;
+  select to_jsonb(pk) - 'id' - 'slug' - 'created_at' - 'updated_at' - 'title' - 'client_name'
+    into sig_made from public.packets pk where pk.id = made;
 
-  insert into v23 values (37, 'blank-create and Create-from-Library share every structural default',
-    sig_blank, sig_made, sig_blank = sig_made);
+  insert into v23 values (37, 'blank-create and Create-from-Library share EVERY structural column',
+    sig_blank::text, sig_made::text, sig_blank = sig_made);
+
+  -- And prove the comparison is not vacuous: an empty or tiny signature would
+  -- compare equal to another empty one and assert nothing at all.
+  insert into v23 values (43, 'companion to row 37 — the comparison covers a real set of columns',
+    'at least 10 columns compared',
+    (select count(*)::text from jsonb_object_keys(sig_made)) || ' columns: ' ||
+    (select string_agg(k, ', ' order by k) from jsonb_object_keys(sig_made) as k),
+    (select count(*) from jsonb_object_keys(sig_made)) >= 10);
 
   insert into v23 select 38, 'and the initial section matches an ordinary one',
     'title="" description="" sort_order=0',
