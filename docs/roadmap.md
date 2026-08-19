@@ -195,6 +195,39 @@ trustworthy.
 
 ---
 
+## Library v1 — SHIPPED AND CLOSED
+
+**Closed 2026-08-19. Commit `e8abbad`.** Production smoke 20/20, cleanup clean.
+Record: [2026-08-19-library-v1-deploy.md](migrations/2026-08-19-library-v1-deploy.md).
+
+Reusable items in the working editor. The loop is **Save → Find → Insert → Edit
+freely → explicitly update the saved version**, with no synchronization anywhere:
+insertion is a disconnected snapshot, because a FlowGuide is a record of what was
+said to one audience and must not change because a saved item later did.
+
+Shipped: `/library` with full-text search over titles, addresses, descriptions
+and detail labels · Save to Library with a duplicate warning that never merges ·
+user-initiated bulk promotion, nothing preselected · Add from Library, appearing
+immediately · direct editing reusing the existing item editor · Update saved
+version with the tailored-descendant safeguard · optimistic concurrency on both
+write paths.
+
+**This workstream is closed.** The next Library iteration should be decided from
+using the live feature, not from the backlog this release generated. Ideas that
+came up during the build — groups/categories, reordering, undo and version
+history, AI import straight into the Library, a side-by-side assembly workspace —
+are informed directions, deliberately unscheduled, and none is a commitment.
+
+### Still open, no current priority
+
+- **Block-mode Library insertion** — see its own entry. A composition project.
+- **`/p/[slug]` rate limit** — the WAF rule stays in **Log**, collecting
+  observation data. The decision point is whether any legitimate source
+  approaches 60 requests per 60s; if not, switch the action to Deny and re-run
+  `scripts/security/verify-recipient-throttle.mts`.
+
+---
+
 ## Block-mode Library insertion — NEXT LIBRARY FOLLOW-UP
 
 **A composition project, not a Library patch. Not solved in this release.**
