@@ -105,7 +105,7 @@ select 10, 'library one-active index is keyed on user_id',
 --     the value here and re-run; do not adjust the comparison.
 create temp table expected_fn_hash (proname text primary key, md5 text) on commit drop;
 insert into expected_fn_hash values
-  ('block_publish_during_ingest', '81bd995264f693b970a0dae47e5ba2c'),
+  ('block_publish_during_ingest', '81bbd995264f693b970a0dae47e5ba2c'),
   ('ingest_invalidate_offsets',   'f7b2581ca96bb9c6d9fe22eef6cb6231'),
   ('move_item_photos',            '3ac9142b7a5868c60cb5b984b55f8010');
 -- <<<
