@@ -144,15 +144,44 @@ language plpgsql
 security definer
 set search_path = ''
 as $cpf$
-declare v_packet uuid; v_section uuid; v_ids uuid[];
+declare v_packet uuid; v_section uuid; v_ids uuid[]; v_status text; v_mode text; v_type text;
 begin
   if not exists (select 1 from public.users where id = p_owner) then
     raise exception 'library: unknown owner';
   end if;
 
-  insert into public.packets (user_id, slug, title, client_name, status, composition_mode)
-  values (p_owner, p_slug, coalesce(p_title, ''), coalesce(p_client_name, ''), 'draft', 'legacy')
-  returning id into v_packet;
+  -- THE SAME COLUMNS THE ORDINARY BLANK CREATE SETS, AND NO OTHERS.
+  --
+  -- status, composition_mode, packet_type, identity_mode, map_url, personal_note,
+  -- raw_input, content_rev and viewed all come from column defaults here exactly
+  -- as they do for a FlowGuide made with "Start blank". Restating any of them
+  -- would be a second declaration of what a new FlowGuide is, free to drift from
+  -- the first the next time a default changes.
+  begin
+    insert into public.packets (user_id, slug, title, client_name)
+    values (p_owner, p_slug, coalesce(p_title, ''), coalesce(p_client_name, ''))
+    returning id into v_packet;
+  exception when unique_violation then
+    -- Same surface as the blank path, which retries a taken slug: the caller
+    -- picks another and calls again. Nothing partial exists to clean up.
+    raise exception 'library: slug % is taken', p_slug using errcode = 'unique_violation';
+  end;
+
+  -- ...but this operation inserts SECTIONS AND ITEMS, which trg_freeze_items and
+  -- trg_freeze_sections forbid in block mode. Relying on the default is correct;
+  -- relying on it SILENTLY is not. If the default ever moves, this must fail
+  -- loudly here rather than produce a FlowGuide whose items cannot be written.
+  select status, composition_mode, packet_type into v_status, v_mode, v_type
+    from public.packets where id = v_packet;
+  if v_status <> 'draft' then
+    raise exception 'library: new FlowGuide defaulted to status %, expected draft', v_status;
+  end if;
+  if v_mode <> 'legacy' then
+    raise exception 'library: new FlowGuide defaulted to composition_mode %, which freezes items', v_mode;
+  end if;
+  if coalesce(v_type, '') = '' then
+    raise exception 'library: new FlowGuide has no packet_type';
+  end if;
 
   insert into public.sections (packet_id, title, sort_order)
   values (v_packet, '', 0)
@@ -190,10 +219,14 @@ do $verify$
 declare v_name text; v_acl text;
 begin
   foreach v_name in array array['library_canonical_photos','library_copy_into_section','create_packet_from_library'] loop
+    -- PINNED AND EMPTY. `like 'search_path=%'` would also accept
+    -- search_path=public, which is not a pinned search path at all — it is the
+    -- resolution behaviour these functions exist to avoid.
     if not exists (select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
                     where n.nspname = 'public' and p.proname = v_name
-                      and coalesce(array_to_string(p.proconfig, ','), '') like 'search_path=%') then
-      raise exception '0023 verify: % missing or without a pinned search_path', v_name;
+                      and coalesce(array_to_string(p.proconfig, ','), '')
+                          in ('search_path=', 'search_path=""')) then
+      raise exception '0023 verify: % is missing, or its search_path is not pinned EMPTY', v_name;
     end if;
     select coalesce(array_to_string(p.proacl, ' '), 'DEFAULT') into v_acl
       from pg_proc p join pg_namespace n on n.oid = p.pronamespace

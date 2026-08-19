@@ -60,12 +60,25 @@ ok(/library_item_id, library_item_revision/.test(copy) && /src\.id, src\.revisio
    "lineage is written as both columns together");
 ok(!/origin_run_id|origin_chunk_ordinal|emit_index/.test(BODIES),
    "no ingestion provenance is fabricated");
+ok(/search_path=', 'search_path=""/.test(VERIFY),
+   "the migration asserts an EMPTY search_path at apply time, not merely a present one");
 ok(/origin_run_id/.test(VERIFY) && /update_item_content/.test(VERIFY),
    "and the migration's own verify block still guards both at apply time");
 ok(/unnest\(p_library_item_ids\) with ordinality/.test(copy),
    "the professional's selection ORDER is preserved");
-ok(/status, composition_mode/.test(create) && /'draft', 'legacy'/.test(create),
-   "the new FlowGuide is an unpublished legacy draft");
+// EQUIVALENCE WITH THE ORDINARY BLANK CREATE. Both set exactly user_id, slug,
+// title and client_name; everything else comes from column defaults. Restating a
+// default would be a second declaration of what a new FlowGuide is.
+const insert = create.slice(create.indexOf("insert into public.packets"), create.indexOf("returning id into v_packet"));
+ok(/\(user_id, slug, title, client_name\)/.test(insert),
+   "the packet insert sets the same columns as the blank-create path");
+for (const col of ["status", "composition_mode", "packet_type", "identity_mode", "content_rev", "raw_input"]) {
+  ok(!new RegExp(`\\b${col}\\b`).test(insert), `${col} is left to its column default, not restated`);
+}
+ok(/v_status <> 'draft'/.test(create) && /v_mode <> 'legacy'/.test(create),
+   "but the resulting defaults are ASSERTED, so a changed default fails loudly");
+ok(/unique_violation/.test(create),
+   "a taken slug surfaces as a collision the caller can retry, as the blank path does");
 ok(!/publish/i.test(BODIES), "nothing publishes");
 
 for (const n of EXPECTED) {
@@ -73,7 +86,12 @@ for (const n of EXPECTED) {
     : n === "library_copy_into_section" ? "uuid, uuid, uuid, uuid\\[\\]" : "uuid, text, text, text, uuid\\[\\]";
   ok(new RegExp(`revoke all on function public\\.${n}\\(${sig}\\) from public, anon, authenticated, service_role;`).test(M)
      && new RegExp(`grant execute on function public\\.${n}\\(${sig}\\) to service_role;`).test(M),
-     `${n}: service_role only`);
+     `${n}: revoked from all, granted only to service_role`);
+  const head = M.slice(M.indexOf(`create or replace function public.${n}(`));
+  const decl = head.slice(0, head.indexOf("as $"));
+  ok(/set search_path = ''/.test(decl), `${n}: search_path pinned EMPTY`);
+  ok(n === "library_canonical_photos" ? /immutable/.test(decl) : /security definer/.test(decl),
+     `${n}: ${n === "library_canonical_photos" ? "immutable pure coercion" : "security definer"}`);
 }
 console.log(`\n${failed === 0 ? "INTEGRITY OK" : `${failed} FAILED`}\n`);
 process.exit(failed === 0 ? 0 : 1);
