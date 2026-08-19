@@ -1,9 +1,16 @@
 -- 0019 — drop library_insert_item_block, applied in 0018 and found unreachable.
 --
--- NOT a rewrite of history. 0018 was genuinely applied to production on
--- 2026-08-18 and its file stays exactly as it was, header amended to record what
--- happened. This migration records the correction, so the repository and the
--- database continue to agree.
+-- 0018 IS NOT AMENDED. It remains byte-for-byte the file that was integrity-
+-- checked and applied on 2026-08-18:
+--
+--   sha256  027d6399f3dbd6afb1550b2f5f07e72bca19baf3eff2cba8d6510258d089ec6e
+--   158 lines, 7654 bytes
+--
+-- An applied migration is a record of what was run. Editing one after the fact
+-- — even only its comments — breaks the chain that made the hash worth checking,
+-- and leaves the repository unable to prove what production actually received.
+-- So the entire explanation lives HERE, in the migration that corrects it, and
+-- in docs/roadmap.md. This file is the amendment.
 --
 -- WHY IT IS GOING. The function is correct in every respect except that it can
 -- never succeed. trg_freeze_items (0007) rejects INSERT for any item whose
@@ -21,6 +28,18 @@
 -- stay exactly as they are. They are not the defect — they are the invariant,
 -- and the reason this function cannot work. Revisiting them is a composition
 -- project, recorded as the first Library follow-up.
+--
+-- HOW IT WAS ESTABLISHED, preserved here since 0018 cannot carry it. The design
+-- traced where packet_blocks item rows are created — exactly one place,
+-- convert_packet_to_blocks (0007) — and concluded the only gap was a missing
+-- block row. It never asked the prior question: may an ITEM row be created in a
+-- block packet at all? It may not. 0018's runtime proof failed on its first
+-- write with the freeze error above.
+--
+-- Two things held even as it failed, and both are worth keeping: the packet was
+-- left completely untouched — no orphan item, no orphan block,
+-- assert_packet_block_consistency still passing — and cleanup was clean. The
+-- atomicity 0018 was written for held while the function itself could not run.
 --
 -- Nothing calls this function: the route refuses block-mode packets before any
 -- write, and no Library affordance is offered in the block editor.
