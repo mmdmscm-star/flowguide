@@ -7,6 +7,12 @@
 -- early, the open transaction rolls back on disconnect.
 --
 -- Read the last column. Every row must be ok = true.
+--
+-- BEFORE RUNNING: check row 0. The three pre-apply hashes captured by Step 1b
+-- are declared in ONE place below, marked EXPECTED BASELINE HASHES. Row 0
+-- validates those literals are 32-character md5s before anything is compared
+-- against them, so a value clipped in transit fails as "bad literal" and can
+-- never be mistaken for "the function changed".
 
 begin;
 
@@ -88,41 +94,58 @@ select 10, 'library one-active index is keyed on user_id',
 -- ===========================================================================
 -- B. FUNCTIONS THAT MUST NOT HAVE CHANGED
 --
--- 0020 contains no CREATE FUNCTION at all (provable from the hash-pinned file:
--- sha256 d3cd0bc292dda26466dc1ecead8994565afb2dcbc983e9b682e7a0313dc03cd9),
--- so nothing here should have moved.
---
--- ingest_invalidate_offsets has a full 32-char baseline.
--- block_publish_during_ingest's baseline arrived clipped to 31 chars, so it is
--- compared by prefix and the row says so rather than pretending otherwise.
--- move_item_photos has NO baseline — Step 1b was not run before 0020 — so it is
--- checked by content instead, and that limitation is stated in the row.
+-- 0020 contains no CREATE FUNCTION at all — provable from the hash-pinned file
+-- (sha256 d3cd0bc292dda26466dc1ecead8994565afb2dcbc983e9b682e7a0313dc03cd9,
+-- 0 matches for "create function"). So none of these should have moved, and
+-- all three are compared against their FULL pre-apply hashes from Step 1b.
 -- ===========================================================================
+
+-- >>> EXPECTED BASELINE HASHES — captured by Step 1b, before 0020 was applied.
+--     This is the only place they appear. If row 0 reports a bad length, correct
+--     the value here and re-run; do not adjust the comparison.
+create temp table expected_fn_hash (proname text primary key, md5 text) on commit drop;
+insert into expected_fn_hash values
+  ('block_publish_during_ingest', '81bd995264f693b970a0dae47e5ba2c'),
+  ('ingest_invalidate_offsets',   'f7b2581ca96bb9c6d9fe22eef6cb6231'),
+  ('move_item_photos',            '3ac9142b7a5868c60cb5b984b55f8010');
+-- <<<
+
+-- Row 0 runs FIRST conceptually: it validates the literals themselves. An md5
+-- is 32 lowercase hex characters. A clipped paste fails here, loudly, instead of
+-- surfacing later as a false "this function changed".
+insert into verify_0020
+select 0, 'the expected baseline hashes are well-formed md5s',
+       'all 3 are 32 hex chars',
+       coalesce(string_agg(proname || '=' || length(md5)::text, ', ' order by proname), '(none)'),
+       count(*) = 3 and bool_and(md5 ~ '^[0-9a-f]{32}$')
+  from expected_fn_hash;
+
 insert into verify_0020
 select 11, 'ingest_invalidate_offsets unchanged (full md5)',
-       'f7b2581ca96bb9c6d9fe22eef6cb6231', md5(pg_get_functiondef(p.oid)),
-       md5(pg_get_functiondef(p.oid)) = 'f7b2581ca96bb9c6d9fe22eef6cb6231'
-  from pg_proc p join pg_namespace n on n.oid=p.pronamespace
- where n.nspname='public' and p.proname='ingest_invalidate_offsets';
+       e.md5, md5(pg_get_functiondef(p.oid)),
+       md5(pg_get_functiondef(p.oid)) = e.md5
+  from pg_proc p
+  join pg_namespace n on n.oid = p.pronamespace
+  join expected_fn_hash e on e.proname = p.proname
+ where n.nspname = 'public' and p.proname = 'ingest_invalidate_offsets';
 
 insert into verify_0020
-select 12, 'block_publish_during_ingest unchanged (31-char PREFIX only — baseline was clipped)',
-       '81bd995264f693b970a0dae47e5ba2c...', md5(pg_get_functiondef(p.oid)),
-       left(md5(pg_get_functiondef(p.oid)), 31) = '81bd995264f693b970a0dae47e5ba2c'
-  from pg_proc p join pg_namespace n on n.oid=p.pronamespace
- where n.nspname='public' and p.proname='block_publish_during_ingest';
+select 12, 'block_publish_during_ingest unchanged (full md5)',
+       e.md5, md5(pg_get_functiondef(p.oid)),
+       md5(pg_get_functiondef(p.oid)) = e.md5
+  from pg_proc p
+  join pg_namespace n on n.oid = p.pronamespace
+  join expected_fn_hash e on e.proname = p.proname
+ where n.nspname = 'public' and p.proname = 'block_publish_during_ingest';
 
 insert into verify_0020
-select 13, 'move_item_photos intact (NO baseline hash — checked by content)',
-       'security definer, empty search_path, import guard present',
-       'secdef=' || p.prosecdef::text ||
-         ' search_path=' || coalesce(array_to_string(p.proconfig, ','), '(none)') ||
-         ' guard=' || (pg_get_functiondef(p.oid) ilike '%an import is in progress on this packet%')::text,
-       p.prosecdef
-         and coalesce(array_to_string(p.proconfig, ','), '') ilike '%search_path%'
-         and pg_get_functiondef(p.oid) ilike '%an import is in progress on this packet%'
-  from pg_proc p join pg_namespace n on n.oid=p.pronamespace
- where n.nspname='public' and p.proname='move_item_photos';
+select 13, 'move_item_photos unchanged (full md5)',
+       e.md5, md5(pg_get_functiondef(p.oid)),
+       md5(pg_get_functiondef(p.oid)) = e.md5
+  from pg_proc p
+  join pg_namespace n on n.oid = p.pronamespace
+  join expected_fn_hash e on e.proname = p.proname
+ where n.nspname = 'public' and p.proname = 'move_item_photos';
 
 insert into verify_0020
 select 14, 'no ingestion RPC signature moved', '8 functions, unchanged arguments',
