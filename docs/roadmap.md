@@ -228,6 +228,43 @@ are informed directions, deliberately unscheduled, and none is a commitment.
 
 ---
 
+## Library first-use fix — SHIPPED AND CLOSED
+
+Shipped 2026-08-19 (`d3e29f9`), proven in production 21/21.
+
+First real use of Library v1 exposed it: a professional created a FlowGuide,
+added items, published it, and never found how to fill an empty Library.
+Nothing was broken — every control was present and every route worked. The
+affordances that could populate an empty Library were the visually subordinate
+ones, and none of them were where the work ends. Reproduced end to end against
+production before anything changed.
+
+Shipped: state-aware precedence in the Library bar (an unknown lookup stays
+reuse-first rather than claiming the Library is empty) · the same bulk save
+offered again after the last section · "Save to Library" styled as an action
+instead of inheriting the muted treatment chosen for ancestry · entries written
+straight into the Library with no FlowGuide involved · an empty state that names
+both ways to fill it and says draft-or-published is irrelevant · creator
+navigation between Dashboard, Library and New · an owner-only return path on a
+published FlowGuide, with recipients unaffected · `viewed` no longer set by the
+author opening their own link.
+
+**Closed.** The next Library work is the AI import below.
+
+## Library AI import — PLANNED, NOT STARTED
+
+Plan: [docs/investigations/library-ai-import-plan.md](investigations/library-ai-import-plan.md).
+
+Designed for realistic scale — 20–40+ items per import, not a handful. The
+claim/lease/stage/split engine is already destination-agnostic (it authorizes on
+`ingestion_runs.user_id` and touches no packet table), so the recommendation is
+to widen the run row with a `destination` discriminator rather than fork the
+engine into duplicate tables. The Library gets **no finalize RPC that writes
+content**: entries are still written only through `createLibraryItem`.
+
+One decision is open and needs a call before implementation — whether review
+selections/edits persist in a small proposals table or live client-side.
+
 ## Block-mode Library insertion — NEXT LIBRARY FOLLOW-UP
 
 **A composition project, not a Library patch. Not solved in this release.**
