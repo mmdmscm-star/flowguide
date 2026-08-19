@@ -173,14 +173,14 @@ function LibraryBar({ packetId, sectionId, disabled, itemCount, refreshKey, onSa
     <button key="add" onClick={() => setPicker(true)} disabled={disabled || empty}
       title={empty ? "You have not saved anything yet" : undefined}
       className={empty ? SECONDARY : PRIMARY}>
-      Add from Library
+      Choose from Library
     </button>
   );
   const saveBtn = (
     <button key="save" onClick={onSaveItems} disabled={disabled || itemCount === 0}
-      title={itemCount === 0 ? "Add an item first" : undefined}
+      title={itemCount === 0 ? "Add something first" : undefined}
       className={empty ? PRIMARY : SECONDARY}>
-      Save items
+      Save to Library
     </button>
   );
 
@@ -190,8 +190,8 @@ function LibraryBar({ packetId, sectionId, disabled, itemCount, refreshKey, onSa
         <p className="text-sm font-medium text-foreground">Library</p>
         <p className="text-xs text-muted">
           {empty
-            ? "Nothing saved yet. Save an item here to reuse it in your next FlowGuide."
-            : "Reuse a saved item, or save one from here to use again later."}
+            ? "Nothing saved yet. Save something here to reuse it in your next FlowGuide."
+            : "Reuse something you saved, or save one of these for next time."}
         </p>
       </div>
       {empty ? [saveBtn, addBtn] : [addBtn, saveBtn]}
@@ -201,7 +201,7 @@ function LibraryBar({ packetId, sectionId, disabled, itemCount, refreshKey, onSa
           onInserted={(n) => {
             setPicker(false);
             onRefresh();
-            onNotice(`${n} item${n === 1 ? "" : "s"} added from your Library.`);
+            onNotice(`${n === 1 ? "1 thing" : `${n} things`} added from your Library.`);
           }} />
       )}
     </div>
@@ -885,7 +885,7 @@ export function LegacyPacketEditor() {
     if (!res.ok) {
       if (res.status === 422 && (data.error === "no_profile" || data.error === "no_contact")) {
         const proceed = confirm(
-          "This packet does not include professional contact information. You can still publish it, but the contact footer will not appear."
+          "This FlowGuide does not include professional contact information. You can still publish it, but the contact footer will not appear."
         );
         if (proceed) {
           publishPacket(true);
@@ -902,7 +902,7 @@ export function LegacyPacketEditor() {
   }
 
   async function handleUnpublish() {
-    if (!confirm("Unpublish this packet? The link will stop working.")) return;
+    if (!confirm("Unpublish this FlowGuide? The link will stop working.")) return;
     await fetch(`/api/packets/${packetId}/publish`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1261,15 +1261,14 @@ export function LegacyPacketEditor() {
         <div className="mb-8 rounded-xl border border-border bg-white p-4">
           <p className="text-sm font-medium text-foreground">Reuse any of these next time?</p>
           <p className="mt-1 text-xs text-muted">
-            Save items to your Library and drop them into your next FlowGuide. Saving
-            makes a copy — this FlowGuide is not changed, and you do not have to publish
-            it first. Your Library is private to you.
+            Save any of these to your Library and use them in your next FlowGuide. You
+            do not have to publish this one first.
           </p>
           <button
             onClick={() => setPromoting(true)}
             className="mt-3 px-3 py-1.5 rounded-lg bg-accent hover:bg-accent-hover text-white text-xs font-medium"
           >
-            Save items to Library
+            Save to Library
           </button>
         </div>
       )}
@@ -1306,7 +1305,7 @@ export function LegacyPacketEditor() {
                   {" "}— it won&apos;t create new sections or change existing content.
                 </>
               ) : (
-                "Paste new information below. AI will organize it into one or more new sections and add them to this packet without changing existing content."
+                "Paste new information below. AI will organize it into one or more new sections and add them to this FlowGuide without changing existing content."
               )}
             </p>
             <textarea
@@ -1349,7 +1348,7 @@ export function LegacyPacketEditor() {
             Your Default Profile
           </label>
           <p className="text-xs text-muted mb-3">
-            Editing these updates your profile on <strong>every</strong> packet set to “My default profile.”
+            Editing these updates your profile on <strong>every</strong> FlowGuide set to “My default profile.”
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <input
@@ -1487,7 +1486,7 @@ export function LegacyPacketEditor() {
             Custom Organization
           </label>
           <p className="text-xs text-muted mb-3">
-            These details apply to this packet only. Editing them does <strong>not</strong> change your default profile.
+            These details apply to this FlowGuide only. Editing them does <strong>not</strong> change your default profile.
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <input
@@ -1527,7 +1526,7 @@ export function LegacyPacketEditor() {
               placeholder="Footer label (optional)"
               className="w-full px-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:ring-2 focus:ring-accent"
             />
-            <p className="mt-1 text-xs text-muted">Shown above the name on the packet. Leave blank to hide it.</p>
+            <p className="mt-1 text-xs text-muted">Shown above the name on the FlowGuide. Leave blank to hide it.</p>
           </div>
           <div className="mt-3 flex items-center gap-3">
             {packet.customIdentity?.logoUrl && (
@@ -1617,9 +1616,9 @@ export function LegacyPacketEditor() {
         </p>
         <div className="space-y-2">
           {([
-            { value: "default", title: "My default profile", desc: "Show your saved default contact information on this packet." },
+            { value: "default", title: "My default profile", desc: "Show your saved default contact information on this FlowGuide." },
             { value: "none", title: "No sender", desc: "No sender shown — no name, logo, or contact footer." },
-            { value: "custom", title: "Custom organization", desc: "Enter a name, logo, and contact info just for this packet." },
+            { value: "custom", title: "Custom organization", desc: "Enter a name, logo, and contact info just for this FlowGuide." },
           ] as { value: IdentityMode; title: string; desc: string }[]).map((opt) => (
             <label
               key={opt.value}
@@ -1693,7 +1692,7 @@ export function LegacyPacketEditor() {
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-5">
           <div className="bg-white rounded-2xl p-6 max-w-sm w-full text-center">
             <div className="text-4xl mb-3">🎉</div>
-            <h2 className="text-xl font-bold text-foreground mb-2">Your packet is live!</h2>
+            <h2 className="text-xl font-bold text-foreground mb-2">Your FlowGuide is live!</h2>
             <p className="text-sm text-muted mb-4">Share this link with your client:</p>
             <div className="bg-surface border border-border rounded-lg px-3 py-2 text-sm text-foreground mb-4 break-all">
               {typeof window !== "undefined" ? `${window.location.origin}/p/${packet.slug}` : ""}

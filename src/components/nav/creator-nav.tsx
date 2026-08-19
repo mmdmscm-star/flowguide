@@ -13,9 +13,9 @@ import Link from "next/link";
 // else, which meant that from inside an editor — where saving to the Library
 // actually happens — there was no way to go look at it.
 const TABS = [
-  { key: "packets", href: "/dashboard", label: "My Packets" },
+  { key: "packets", href: "/dashboard", label: "My FlowGuides" },
   { key: "library", href: "/library", label: "Library" },
-  { key: "new", href: "/new", label: "+ New" },
+  { key: "new", href: "/new", label: "New FlowGuide" },
 ] as const;
 
 export type CreatorNavTab = (typeof TABS)[number]["key"];

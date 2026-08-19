@@ -37,10 +37,10 @@ export function BulkPromote({
         const res = await fetch(`/api/packets/${packetId}/library-candidates`);
         const data = await res.json();
         if (!live) return;
-        if (!res.ok) { setError(data.message || data.error || "Could not load this packet's items."); return; }
+        if (!res.ok) { setError(data.message || data.error || "Could not load this FlowGuide."); return; }
         setItems(data.items ?? []);
       } catch {
-        if (live) setError("Could not load this packet's items.");
+        if (live) setError("Could not load this FlowGuide.");
       } finally {
         if (live) setLoading(false);
       }
@@ -81,10 +81,10 @@ export function BulkPromote({
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/30 p-4" onClick={onClose}>
       <div className="w-full max-w-md max-h-[80vh] overflow-y-auto rounded-xl border border-border bg-white p-4"
            onClick={(e) => e.stopPropagation()}>
-        <p className="text-sm font-medium text-foreground">Save items to your Library</p>
+        <p className="text-base font-semibold text-foreground">Save to Library</p>
         <p className="mt-1 mb-3 text-xs text-muted">
-          Choose what you would reuse in another FlowGuide. Each one is saved as a copy —
-          this packet is not changed.
+          Choose what you would use again. Each one is saved as a copy, so this FlowGuide
+          is not changed.
         </p>
 
         {error && <p className="mb-2 text-xs text-red-700">{error}</p>}
@@ -92,7 +92,7 @@ export function BulkPromote({
 
         {!loading && available.length === 0 && (
           <p className="text-sm text-muted">
-            {items.length === 0 ? "This FlowGuide has no items yet." : "Every item here is already in your Library."}
+            {items.length === 0 ? "There is nothing here yet." : "Everything here is already in your Library."}
           </p>
         )}
 

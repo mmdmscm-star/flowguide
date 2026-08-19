@@ -79,7 +79,7 @@ export default function DashboardPage() {
       router.push(`/edit/${data.packet.id}`);
     } catch (err) {
       setDuplicatingId(null);
-      alert(err instanceof Error ? err.message : "Could not duplicate this packet. Please try again.");
+      alert(err instanceof Error ? err.message : "Could not duplicate this FlowGuide. Please try again.");
     }
   }
 
@@ -118,7 +118,7 @@ export default function DashboardPage() {
       {/* Header */}
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">My Packets</h1>
+          <h1 className="text-2xl font-bold text-foreground">My FlowGuides</h1>
           <p className="text-sm text-muted mt-0.5">{userEmail}</p>
         </div>
         <div className="flex items-center gap-3">
@@ -144,14 +144,14 @@ export default function DashboardPage() {
                   className="w-full text-left px-4 py-3 hover:bg-gray-50 transition-colors border-b border-border"
                 >
                   <div className="font-medium text-sm text-foreground">Use my Library</div>
-                  <div className="text-sm text-muted mt-0.5">Start from things you have saved</div>
+                  <div className="text-sm text-muted mt-0.5">Choose things you’ve already saved</div>
                 </button>
                 <button
                   onClick={() => { setShowNewMenu(false); router.push("/new"); }}
                   className="w-full text-left px-4 py-3 hover:bg-gray-50 transition-colors border-b border-border"
                 >
                   <div className="font-medium text-sm text-foreground">Paste &amp; organize with AI</div>
-                  <div className="text-sm text-muted mt-0.5">Paste notes, AI structures them</div>
+                  <div className="text-sm text-muted mt-0.5">Start with information you already have</div>
                 </button>
                 <button
                   onClick={() => { setShowNewMenu(false); createPacket(); }}
@@ -177,16 +177,16 @@ export default function DashboardPage() {
         <div className="text-center py-16">
           <div className="text-4xl mb-4">📦</div>
           <h2 className="text-lg font-semibold text-foreground mb-2">
-            No packets yet
+            No FlowGuides yet
           </h2>
           <p className="text-sm text-muted mb-6 max-w-xs mx-auto">
-            Create your first packet to share recommendations with a client.
+            Create your first FlowGuide to share recommendations with a client.
           </p>
           <button
             onClick={() => router.push("/new")}
             className="px-6 py-2.5 rounded-lg bg-accent hover:bg-accent-hover text-white text-sm font-medium transition-colors"
           >
-            Create Your First Packet
+            Create your first FlowGuide
           </button>
         </div>
       ) : (

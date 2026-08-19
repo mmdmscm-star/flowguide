@@ -148,10 +148,13 @@ export default function LibraryWorkspace() {
       <div className="max-w-lg mx-auto px-5 pb-24">
         <header className="pt-6 pb-4">
           <h1 className="text-2xl font-bold text-foreground">Your Library</h1>
-          <p className="mt-2 text-xs text-muted">
-            Items you can reuse in any FlowGuide. Inserting one makes a copy — editing that
-            copy never changes what is saved here, and editing here never changes a
-            FlowGuide you have already sent.
+          {/* ONE SENTENCE. The independence rule — that inserting makes a copy —
+              is explained where it is actually needed: at the moment of
+              insertion, and again in the update and delete confirmations.
+              Repeating it here made the Library open with a paragraph about
+              semantics before saying what it is for. */}
+          <p className="mt-2 text-sm text-muted">
+            Save things you use often and add them to any FlowGuide.
           </p>
         </header>
 
@@ -170,7 +173,7 @@ export default function LibraryWorkspace() {
               className="px-3 py-2 rounded-lg border border-border bg-white text-sm font-medium
                          text-foreground hover:border-accent hover:text-accent"
             >
-              + Create an item
+              Add manually
             </button>
             <button
               onClick={() => { setNotice(""); setChosen([]); setSelecting(true); }}
@@ -251,7 +254,7 @@ export default function LibraryWorkspace() {
 
         {creating ? (
           <div className="rounded-xl border border-border bg-white p-4">
-            <p className="mb-3 text-sm font-medium text-foreground">New Library item</p>
+            <p className="mb-3 text-base font-semibold text-foreground">Add to Library</p>
             <BlockItemEditor
               item={BLANK}
               busy={busy}
@@ -262,7 +265,7 @@ export default function LibraryWorkspace() {
         ) : editing ? (
           <div className="rounded-xl border border-border bg-white p-4">
             <div className="mb-3 flex items-center justify-between">
-              <p className="text-sm font-medium text-foreground">Editing a Library item</p>
+              <p className="text-base font-semibold text-foreground">Editing</p>
               <button
                 onClick={() => remove(editing)}
                 disabled={busy}
@@ -286,47 +289,17 @@ export default function LibraryWorkspace() {
             onToggle={(id) => setChosen((c) => c.includes(id) ? c.filter((x) => x !== id) : [...c, id])}
             onOpen={selecting ? undefined : (s) => { setNotice(""); setEditing(s); }}
             emptyHint={
-              // AN EMPTY LIBRARY IS THE FIRST THING A NEW PROFESSIONAL SEES, and
-              // it used to be one grey sentence. It has to say what this is for
-              // and name both ways to fill it — including the one that needs no
-              // FlowGuide at all.
+              // SAY IT ONCE. The previous version explained the same idea three
+              // times — the page description, a paragraph on what a Library
+              // holds, and a list of ways to fill it. A professional opening an
+              // empty Library needs to know what goes in it and how to start,
+              // not a short manual.
               <div className="rounded-xl border border-border bg-white p-4">
-                <p className="text-sm font-medium text-foreground">Nothing saved yet</p>
-                <p className="mt-1 text-xs text-muted">
-                  Your Library holds the things you use again — a community, a service, a
-                  person — so you are not rebuilding them for every client. Each one is
-                  private to you, and inserting one into a FlowGuide makes a copy.
+                <p className="text-base font-semibold text-foreground">Nothing saved yet</p>
+                <p className="mt-1 text-sm text-muted">
+                  Import information you already have, add something manually, or save
+                  things while building a FlowGuide.
                 </p>
-                <p className="mt-3 text-xs font-medium text-foreground">Three ways to fill it</p>
-                <ul className="mt-1 space-y-1 text-xs text-muted">
-                  <li>
-                    <span className="text-foreground">Save from a FlowGuide.</span> Open any
-                    FlowGuide — draft or published, it makes no difference — and use{" "}
-                    <span className="text-foreground">Save to Library</span> on an item, or{" "}
-                    <span className="text-foreground">Save items</span> to pick several at once.
-                  </li>
-                  <li>
-                    <span className="text-foreground">Import with AI.</span> Paste what you already
-                    have and review what it finds — no FlowGuide required.
-                  </li>
-                  <li>
-                    <span className="text-foreground">Write one here.</span> Also no FlowGuide required.
-                  </li>
-                </ul>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <button
-                    onClick={() => { setNotice(""); setImporting(true); }}
-                    className="px-3 py-1.5 rounded-lg bg-accent hover:bg-accent-hover text-white text-xs font-medium"
-                  >
-                    Import with AI
-                  </button>
-                  <button
-                    onClick={() => { setNotice(""); setCreating(true); }}
-                    className="px-3 py-1.5 rounded-lg border border-border bg-white text-xs font-medium text-foreground hover:border-accent"
-                  >
-                    Create an item
-                  </button>
-                </div>
               </div>
             }
           />

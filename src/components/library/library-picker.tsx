@@ -51,7 +51,7 @@ export function LibraryPicker({
           selectable
           selected={selected}
           onToggle={(id) => setSelected((s) => s.includes(id) ? s.filter((x) => x !== id) : [...s, id])}
-          emptyHint="Your Library is empty. Save an item from a packet first, then you can reuse it here."
+          emptyHint="Your Library is empty. Save something from a FlowGuide first, then you can reuse it here."
         />
 
         <div className="mt-4 flex items-center gap-2">

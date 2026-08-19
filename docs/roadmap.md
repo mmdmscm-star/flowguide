@@ -302,6 +302,36 @@ the next iteration.
 
 ---
 
+## Create a FlowGuide from the Library — SHIPPED AND CLOSED
+
+Shipped 2026-08-19. Migration 0023 applied and verified (38/38). Production
+proof 26/26; post-deploy smoke 10/10; Library v1 smoke 20/20.
+
+`New FlowGuide` offers **Use my Library · Paste & organize with AI · Start
+blank**; the Library offers the same action inline against the list already on
+screen. Choose saved material, get one new draft with independent copies, land
+in the editor.
+
+**One transaction, not compensating cleanup.** The first implementation created
+the FlowGuide, its section and the copies as three writes and deleted the draft
+if a later step failed — which a process that dies never gets to do. 0023 does
+all of it inside one plpgsql body, reusing `update_item_content` as the content
+writer and coercing photos through the single `library_canonical_photos`. Proven
+by injecting a failure on the third of four copies: zero packet, zero section,
+zero items survive.
+
+Structural equivalence with an ordinary blank create is pinned by comparing every
+column except identity and `content_rev`, with `content_rev` asserted directly
+as 0 and greater-than-0 either side — a stronger statement than the equality it
+replaced.
+
+**Three verifier defects surfaced during this work, none of them migration
+defects:** a `LIKE` pattern where `_` is a wildcard matched a comment that
+promised the opposite of what it asserted; a text sentinel could not coalesce
+with a jsonb column; and `content_rev` was compared between two packets with
+different content. Each was fixed by making the check stricter, never by
+loosening it.
+
 ## Library evolution — DEFERRED, NO IMPLEMENTATION
 
 Standing directions, none scheduled and none a commitment. **Nothing here is

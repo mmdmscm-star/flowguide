@@ -72,7 +72,10 @@ test("'Add from Library' is not offered as live when there is nothing to add", (
 test("bulk save is reachable both while building and after the last section", () => {
   const bar = EDITOR.indexOf("onSaveItems={() => setPromoting(true)}");
   const sections = EDITOR.indexOf("+ Add Section");
-  const end = EDITOR.indexOf("Save items to Library");
+  // Anchored on the prompt's own heading, which is unique. "Save to Library"
+  // now appears in the Library bar too, so indexOf would find that one and
+  // silently compare the wrong position.
+  const end = EDITOR.indexOf("Reuse any of these next time?");
   assert.ok(bar > 0 && sections > bar, "the Library bar comes before the sections");
   assert.ok(end > sections,
     "and a save affordance must also exist AFTER them — the top bar is off-screen " +
@@ -126,17 +129,43 @@ test("a written entry must carry a title", () => {
 // ---------------------------------------------------------------------------
 // The empty state explains itself
 // ---------------------------------------------------------------------------
-test("the empty Library names BOTH ways to fill it", () => {
+test("the empty Library names every way to fill it, in one sentence", () => {
   const empty = WORKSPACE.slice(WORKSPACE.indexOf("Nothing saved yet"));
-  assert.match(empty, /Save from a FlowGuide/);
-  assert.match(empty, /draft or published/,
-    "the empty state must say publishing is irrelevant, because that is the confusion it exists to fix");
-  assert.match(empty, /Create an item/);
+  const sentence = empty.slice(0, empty.indexOf("</p>", empty.indexOf("</p>") + 4));
+  for (const [what, re] of [["importing", /Import/i], ["adding by hand", /manually/i],
+                            ["saving while building", /while building a FlowGuide/i]] as const) {
+    assert.match(sentence, re, `the empty state must mention ${what}`);
+  }
+  // SAY IT ONCE. The earlier version explained the same idea in the page
+  // description, a paragraph about what a Library holds, and a list — a short
+  // manual in front of an empty screen.
+  assert.ok(sentence.split(".").filter((x) => x.trim()).length <= 2,
+    "one sentence, not a paragraph");
+  assert.doesNotMatch(empty, /never changes|makes a copy/,
+    "the independence rule belongs at insertion and update, not on an empty screen");
 });
 
-test("writing an entry directly is not only a first-run affordance", () => {
-  assert.ok((WORKSPACE.match(/setCreating\(true\)/g) ?? []).length >= 2,
-    "a professional with a full Library must still be able to write a new entry");
+test("publish-independence is stated where saving actually happens", () => {
+  // Dropped from the empty state on purpose: it is the moment of saving that
+  // needs it, and that is where the original confusion arose.
+  const prompt = EDITOR.slice(EDITOR.indexOf("Reuse any of these next time?"));
+  assert.match(prompt.slice(0, 600), /do not have to publish/i);
+});
+
+test("adding by hand is always reachable, not only from the empty state", () => {
+  // It used to appear twice — in the toolbar and again inside the empty-state
+  // card — which is the duplication the simplification removed. What matters is
+  // that the affordance is NOT gated on the Library being empty, so it now lives
+  // once, in the toolbar, which renders whenever nothing is being edited.
+  const toolbar = WORKSPACE.slice(WORKSPACE.indexOf("{!editing && !creating && ("),
+                                 WORKSPACE.indexOf("{importing && ("));
+  assert.match(toolbar, /Add manually/, "the toolbar carries it");
+  assert.match(toolbar, /setCreating\(true\)/);
+
+  const empty = WORKSPACE.slice(WORKSPACE.indexOf("Nothing saved yet"));
+  const card = empty.slice(0, empty.indexOf("</div>"));
+  assert.doesNotMatch(card, /<button/,
+    "and the empty state does not repeat the buttons sitting directly above it");
 });
 
 // ---------------------------------------------------------------------------
