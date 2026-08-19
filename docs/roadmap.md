@@ -195,6 +195,53 @@ trustworthy.
 
 ---
 
+## Block-mode Library insertion — NEXT LIBRARY FOLLOW-UP
+
+**A composition project, not a Library patch. Not solved in this release.**
+
+Library v1 ships legacy-only. Inserting a saved item into a block-mode FlowGuide
+is refused by the application, before any write, and no Library affordance is
+offered in the block editor.
+
+### Why it is refused
+
+Not an unimplemented feature — a deliberate structural invariant:
+
+- `trg_freeze_items` (0007) rejects **INSERT**, **DELETE**, `section_id` and
+  `sort_order` changes for any item whose packet is in block mode.
+- `trg_freeze_sections` (0007) does the same for sections.
+- Only *content* edits (title, address, description, notes) are permitted.
+
+In block mode, composition is owned by `packet_blocks`, and the
+`items`/`sections` substrate is frozen as a base. So the question is not "how do
+we create the block?" — it is "may we create the item?", and the schema's answer
+is a considered no.
+
+### How this was established
+
+0018 added `library_insert_item_block`, creating item and block atomically. It
+was applied 2026-08-18, then its runtime proof showed the first statement raising
+`items are frozen: cannot INSERT an item into a block-mode packet`. The function
+was correct in every respect except that it could never succeed, and was dropped
+in 0019. Both migration files remain; neither history was rewritten.
+
+Worth keeping: even failing, the packet was left completely untouched — no orphan
+item, no orphan block, `assert_packet_block_consistency` still passing.
+
+### What taking this on actually means
+
+**Revisit the block-mode item/section freeze and the composition ownership
+model.** Specifically: whether block mode should permit item creation at all,
+and if so, who owns membership — an authorized-exception path like the
+`app.block_transition_authorized_packet` mechanism conversion already uses, or a
+different arrangement entirely.
+
+That is a decision about how composition works, and it should be scoped and
+argued on its own, not as an extension of the Library.
+
+
+---
+
 ## Recipient Text-Size Control (A / A+ / A++)
 
 **Status:** Deferred. Watching whether the larger default is enough.
