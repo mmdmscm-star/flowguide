@@ -235,19 +235,37 @@ begin
   --
   -- to_jsonb(row) needs no casts, cannot mis-resolve a type, and covers every
   -- column there is. Subtracting a key is how a difference gets excluded, so the
-  -- exclusions are explicit and few: identity and the content actually passed in.
-  select to_jsonb(pk) - 'id' - 'slug' - 'created_at' - 'updated_at' - 'title' - 'client_name'
+  -- exclusions are explicit and few: identity, the content actually passed in,
+  -- and content_rev.
+  --
+  -- CONTENT_REV IS EXCLUDED BECAUSE IT IS NOT A STRUCTURAL DEFAULT. 0012's bump
+  -- triggers increment it on every section, item and child-row write, so a
+  -- FlowGuide built from four Library entries measured 13 against a blank
+  -- FlowGuide's 0 — a difference caused entirely by one having content. Comparing
+  -- it between two packets with different content asserts nothing about defaults.
+  --
+  -- Excluding a field without replacing what it covered would be exactly the
+  -- weakening this whole exercise refuses, so rows 44 and 45 assert the real
+  -- property instead: 0 for the blank one, and greater than 0 for the created
+  -- one, which is what proves the bump triggers actually fired.
+  select to_jsonb(pk) - 'id' - 'slug' - 'created_at' - 'updated_at' - 'title' - 'client_name' - 'content_rev'
     into sig_blank from public.packets pk where pk.id = blank;
-  select to_jsonb(pk) - 'id' - 'slug' - 'created_at' - 'updated_at' - 'title' - 'client_name'
+  select to_jsonb(pk) - 'id' - 'slug' - 'created_at' - 'updated_at' - 'title' - 'client_name' - 'content_rev'
     into sig_made from public.packets pk where pk.id = made;
 
   insert into v23 values (37, 'blank-create and Create-from-Library share EVERY structural column',
     sig_blank::text, sig_made::text, sig_blank = sig_made);
 
+  insert into v23 select 44, 'a blank FlowGuide starts at content_rev = 0', '0',
+    content_rev::text, content_rev = 0 from public.packets where id = blank;
+
+  insert into v23 select 45, 'and Create-from-Library leaves content_rev > 0, proving the bump triggers fired',
+    'greater than 0', content_rev::text, content_rev > 0 from public.packets where id = made;
+
   -- And prove the comparison is not vacuous: an empty or tiny signature would
   -- compare equal to another empty one and assert nothing at all.
   insert into v23 values (43, 'companion to row 37 — the comparison covers a real set of columns',
-    'at least 10 columns compared',
+    'at least 10 columns compared (13 after excluding content_rev)',
     (select count(*)::text from jsonb_object_keys(sig_made)) || ' columns: ' ||
     (select string_agg(k, ', ' order by k) from jsonb_object_keys(sig_made) as k),
     (select count(*) from jsonb_object_keys(sig_made)) >= 10);
