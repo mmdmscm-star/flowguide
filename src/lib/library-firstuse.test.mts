@@ -157,8 +157,10 @@ test("adding by hand is always reachable, not only from the empty state", () => 
   // card — which is the duplication the simplification removed. What matters is
   // that the affordance is NOT gated on the Library being empty, so it now lives
   // once, in the toolbar, which renders whenever nothing is being edited.
-  const toolbar = WORKSPACE.slice(WORKSPACE.indexOf("{!editing && !creating && ("),
-                                 WORKSPACE.indexOf("{importing && ("));
+  // Anchored on the guard's stable head rather than its full condition, which
+  // gains a clause each time another full-screen mode is added.
+  const toolbar = WORKSPACE.slice(WORKSPACE.indexOf("{!editing && !creating"),
+                                  WORKSPACE.indexOf("{importing && ("));
   assert.match(toolbar, /Add manually/, "the toolbar carries it");
   assert.match(toolbar, /setCreating\(true\)/);
 
@@ -182,4 +184,47 @@ test("the creator nav is never rendered on a recipient's page", () => {
   // owner-bar.test.mts for that boundary.
   assert.doesNotMatch(RECIPIENT, /CreatorNav/,
     "/p/[slug] is the client's view of one FlowGuide, not an admin surface");
+});
+
+// ---------------------------------------------------------------------------
+// Viewing is not editing
+// ---------------------------------------------------------------------------
+test("selecting and opening are different elements, so a click is never ambiguous", () => {
+  const LIST = read("src/components/library/library-list.tsx");
+  // One behaviour per mode, chosen by which element renders — not by a branch
+  // inside a shared handler, which is where "did that select or open it?" lives.
+  assert.match(LIST, /return selectable \? \(/);
+  const rows = LIST.slice(LIST.indexOf("return selectable ? ("));
+  const label = rows.slice(0, rows.indexOf(") : ("));
+  const button = rows.slice(rows.indexOf(") : ("));
+  assert.match(label, /<input type="checkbox"/, "selection mode is a labelled checkbox");
+  assert.doesNotMatch(label, /onOpen/, "and cannot open the detail view");
+  assert.match(button, /onClick=\{\(\) => onOpen\?\.\(s\)\}/, "normal mode opens on click");
+  assert.doesNotMatch(button, /checkbox/, "and has no checkbox");
+});
+
+test("the list no longer offers Edit per row — reading comes first", () => {
+  const LIST = read("src/components/library/library-list.tsx");
+  assert.doesNotMatch(LIST, />\s*Edit\s*</,
+    "Edit is an explicit action from the detail view, not the only way to see content");
+});
+
+test("the read-only detail renders content, not disabled form controls", () => {
+  const DETAIL = read("src/components/library/library-detail.tsx");
+  assert.doesNotMatch(DETAIL, /<input|<textarea|<select/,
+    "a form of greyed-out inputs reads as broken rather than as read-only");
+  assert.doesNotMatch(DETAIL, /disabled=\{true\}/);
+  // Empty sections are omitted rather than shown as blank rows.
+  for (const g of [/details\.length > 0/, /links\.length > 0/, /photos\.length > 0/, /contacts\.length > 0/]) {
+    assert.match(DETAIL, g, "each section is rendered only when it has content");
+  }
+  assert.match(DETAIL, /onEdit/, "and Edit is offered explicitly");
+});
+
+test("opening an entry cannot start an edit by itself", () => {
+  const openHandler = WORKSPACE.slice(WORKSPACE.indexOf("onOpen={selecting ? undefined"),
+                                      WORKSPACE.indexOf("emptyHint="));
+  assert.match(openHandler, /setViewing\(s\)/);
+  assert.doesNotMatch(openHandler, /setEditing\(/,
+    "clicking a row must not put the professional in an editor");
 });

@@ -14,6 +14,7 @@ export function LibraryList({
   onOpen,
   refreshKey = 0,
   emptyHint,
+  onLoaded,
 }: {
   selectable?: boolean;
   selected?: string[];
@@ -24,6 +25,10 @@ export function LibraryList({
    *  A node rather than a string: an empty Library is a professional's first
    *  encounter with the feature, and one grey sentence is not an explanation. */
   emptyHint?: React.ReactNode;
+  /** Reports what a load found. `filtered` distinguishes "the Library is empty"
+   *  from "this search matched nothing" — an action that needs saved material
+   *  must not disappear just because a search came back empty. */
+  onLoaded?: (info: { count: number; filtered: boolean }) => void;
 }) {
   const [q, setQ] = useState("");
   const [items, setItems] = useState<LibrarySnapshot[]>([]);
@@ -42,12 +47,13 @@ export function LibraryList({
       if (mine !== seq.current) return;
       if (!res.ok) { setError(data.message || data.error || "Could not load your Library."); return; }
       setItems(data.items ?? []);
+      onLoaded?.({ count: (data.items ?? []).length, filtered: query.trim().length > 0 });
     } catch {
       if (mine === seq.current) setError("Could not load your Library. Check your connection.");
     } finally {
       if (mine === seq.current) setLoading(false);
     }
-  }, []);
+  }, [onLoaded]);
 
   useEffect(() => {
     const t = setTimeout(() => load(q), q ? 200 : 0);
@@ -85,25 +91,17 @@ export function LibraryList({
         {items.map((s) => {
           const photo = heroPhoto(s);
           const isSelected = selected.includes(s.id);
-          const Row = selectable ? "label" : "div";
-          return (
-            <Row
-              key={s.id}
-              className={`flex items-center gap-3 rounded-lg border p-3 ${
-                isSelected ? "border-accent bg-accent/5" : "border-border bg-white"
-              } ${selectable ? "cursor-pointer" : ""}`}
-            >
-              {selectable && (
-                <input
-                  type="checkbox"
-                  checked={isSelected}
-                  onChange={() => onToggle?.(s.id)}
-                  className="flex-none"
-                />
-              )}
-              {/* The item's own photo when it has one. The fallback is a quiet
-                  neutral tile rather than anything derived from the title —
-                  a coloured word-swatch reads as data the item does not have. */}
+
+          // ONE BEHAVIOUR PER MODE, and they are different elements rather than
+          // one element with a branch inside its handler. In selection mode a
+          // row is a label wrapping a checkbox and clicking it selects; in
+          // normal mode a row is a button and clicking it opens the entry to
+          // read. Neither can fire in the other's mode, so a click never has to
+          // be interpreted.
+          const body = (
+            <>
+              {/* The item's own photo when it has one; otherwise a quiet
+                  neutral tile rather than anything derived from the title. */}
               {photo
                 /* eslint-disable-next-line @next/next/no-img-element */
                 ? <img src={photo} alt="" className="h-10 w-10 flex-none rounded object-cover bg-gray-100" />
@@ -114,19 +112,32 @@ export function LibraryList({
                       <path d="M21 16l-5-5-4 4-2-2-4 4" />
                     </svg>
                   </div>}
-              <div className="min-w-0 flex-1">
+              <div className="min-w-0 flex-1 text-left">
                 <p className="text-sm font-medium text-foreground truncate">{s.title || "Untitled"}</p>
-                <p className="text-xs text-muted truncate">{subtitleFor(s)}</p>
+                <p className="text-sm text-muted truncate">{subtitleFor(s)}</p>
               </div>
-              {!selectable && onOpen && (
-                <button
-                  onClick={() => onOpen(s)}
-                  className="flex-none text-xs font-medium text-accent hover:text-accent-hover"
-                >
-                  Edit
-                </button>
-              )}
-            </Row>
+            </>
+          );
+
+          const shell = `flex w-full items-center gap-3 rounded-lg border p-3 ${
+            isSelected ? "border-accent bg-accent/5" : "border-border bg-white"
+          }`;
+
+          return selectable ? (
+            <li key={s.id}>
+              <label className={`${shell} cursor-pointer`}>
+                <input type="checkbox" checked={isSelected}
+                       onChange={() => onToggle?.(s.id)} className="flex-none" />
+                {body}
+              </label>
+            </li>
+          ) : (
+            <li key={s.id}>
+              <button type="button" onClick={() => onOpen?.(s)} disabled={!onOpen}
+                      className={`${shell} ${onOpen ? "cursor-pointer hover:border-accent" : ""}`}>
+                {body}
+              </button>
+            </li>
           );
         })}
       </ul>

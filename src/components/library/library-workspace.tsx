@@ -2,6 +2,7 @@
 import { useCallback, useState } from "react";
 import { BlockItemEditor } from "@/components/editor/block-item-editor";
 import { LibraryList } from "@/components/library/library-list";
+import { LibraryDetail } from "@/components/library/library-detail";
 import { CreatorNav } from "@/components/nav/creator-nav";
 import { ImportWithAI } from "@/components/library/import-with-ai";
 import { createFromLibrary } from "@/lib/create-from-library";
@@ -30,6 +31,9 @@ const BLANK: Item = {
 
 export default function LibraryWorkspace() {
   const [editing, setEditing] = useState<LibrarySnapshot | null>(null);
+  // Reading is the default; editing is a deliberate second step from here.
+  const [viewing, setViewing] = useState<LibrarySnapshot | null>(null);
+  const [usedIn, setUsedIn] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const [notice, setNotice] = useState("");
@@ -39,6 +43,10 @@ export default function LibraryWorkspace() {
   // Choosing saved material to start a FlowGuide with. Offered INLINE here
   // rather than in a dialog: the list is already on screen, and putting a second
   // copy of it in a modal would be a worse version of what is already there.
+  // Whether anything is saved at all. Distinct from "the current search found
+  // nothing": an action that needs saved material must not vanish because a
+  // search came back empty.
+  const [hasAny, setHasAny] = useState<boolean | null>(null);
   const [selecting, setSelecting] = useState(false);
   const [chosen, setChosen] = useState<string[]>([]);
   const router = useRouter();
@@ -130,6 +138,7 @@ export default function LibraryWorkspace() {
       const res = await fetch(`/api/library/${s.id}`, { method: "DELETE" });
       if (!res.ok) { setNotice("Could not delete."); return; }
       setEditing(null);
+      setViewing(null);
       setRefreshKey((k) => k + 1);
       setNotice("Removed from your Library.");
     } finally {
@@ -160,7 +169,7 @@ export default function LibraryWorkspace() {
 
         {/* Also here, not only in the empty state: writing an entry directly is a
             permanent way to use the Library, not a first-run bootstrap. */}
-        {!editing && !creating && (
+        {!editing && !creating && !viewing && (
           <div className="mb-4 flex flex-wrap items-center gap-2">
             <button
               onClick={() => { setNotice(""); setImporting(true); }}
@@ -175,13 +184,22 @@ export default function LibraryWorkspace() {
             >
               Add manually
             </button>
-            <button
-              onClick={() => { setNotice(""); setChosen([]); setSelecting(true); }}
-              className="px-3 py-2 rounded-lg border border-border bg-white text-sm font-medium
-                         text-foreground hover:border-accent hover:text-accent"
-            >
-              Create a FlowGuide
-            </button>
+            {/* OFFERED ONLY WHEN THERE IS SOMETHING TO CHOOSE. On an empty
+                Library this opened selection mode over an empty list — an
+                action that looks live and leads nowhere. Hidden rather than
+                disabled: a disabled control on a first-run screen is one more
+                thing to wonder about, and Import with AI and Add manually are
+                the useful actions in that state. Unknown (null) keeps it
+                hidden, so a failed load never offers a dead end either. */}
+            {hasAny === true && (
+              <button
+                onClick={() => { setNotice(""); setChosen([]); setSelecting(true); }}
+                className="px-3 py-2 rounded-lg border border-border bg-white text-sm font-medium
+                           text-foreground hover:border-accent hover:text-accent"
+              >
+                Create a FlowGuide
+              </button>
+            )}
           </div>
         )}
 
@@ -252,7 +270,16 @@ export default function LibraryWorkspace() {
           </div>
         )}
 
-        {creating ? (
+        {viewing ? (
+          <LibraryDetail
+            item={viewing}
+            usedIn={usedIn}
+            busy={busy}
+            onEdit={() => { setEditing(viewing); setViewing(null); }}
+            onDelete={() => remove(viewing)}
+            onClose={() => setViewing(null)}
+          />
+        ) : creating ? (
           <div className="rounded-xl border border-border bg-white p-4">
             <p className="mb-3 text-base font-semibold text-foreground">Add to Library</p>
             <BlockItemEditor
@@ -284,10 +311,21 @@ export default function LibraryWorkspace() {
         ) : (
           <LibraryList
             refreshKey={refreshKey}
+            onLoaded={({ count, filtered }) => { if (!filtered) setHasAny(count > 0); }}
             selectable={selecting}
             selected={chosen}
             onToggle={(id) => setChosen((c) => c.includes(id) ? c.filter((x) => x !== id) : [...c, id])}
-            onOpen={selecting ? undefined : (s) => { setNotice(""); setEditing(s); }}
+            onOpen={selecting ? undefined : (s) => {
+              setNotice("");
+              setViewing(s);
+              // How many FlowGuides hold a copy — context for deleting. Fetched
+              // here rather than shipped with every row in the list.
+              setUsedIn(null);
+              fetch(`/api/library/${s.id}`)
+                .then((r) => r.json())
+                .then((d) => setUsedIn(typeof d.usedIn === "number" ? d.usedIn : null))
+                .catch(() => setUsedIn(null));
+            }}
             emptyHint={
               // SAY IT ONCE. The previous version explained the same idea three
               // times — the page description, a paragraph on what a Library
