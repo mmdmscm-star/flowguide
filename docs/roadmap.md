@@ -213,10 +213,9 @@ version with the tailored-descendant safeguard · optimistic concurrency on both
 write paths.
 
 **This workstream is closed.** The next Library iteration should be decided from
-using the live feature, not from the backlog this release generated. Ideas that
-came up during the build — groups/categories, reordering, undo and version
-history, AI import straight into the Library, a side-by-side assembly workspace —
-are informed directions, deliberately unscheduled, and none is a commitment.
+using the live feature, not from the backlog this release generated. Of the ideas
+that came up during this build, **AI import straight into the Library shipped**
+on 2026-08-19; the rest are collected under *Library evolution* below.
 
 ### Still open, no current priority
 
@@ -277,8 +276,49 @@ both would have shipped otherwise:
 Neither was reachable by reasoning. Both needed a real oversized record through a
 real provider.
 
-**This workstream is closed.** Use it before deciding what earns the next
-iteration.
+### Final state, verified after deploy
+
+| | |
+|---|---|
+| Rollback point | `3e95889` — redeploy from the Vercel dashboard |
+| Schema | none in this deploy; 0020/0021/0022 applied and verified beforehand |
+| Non-terminal ingestion runs | **0** (all runs `finalized`) |
+| Orphan `library_import_proposals` | **0** |
+| Stray disposable users | **0** |
+| `SEGMENTER_VERSION` | deliberately not bumped — it versions the chunk *plan*, which `splitRange` does not affect, and nothing was in flight at deploy |
+
+Every proof and smoke cleaned up its own disposable data and verified the removal
+by re-query. No live FlowGuide and no live Library entry was read or written at
+any point.
+
+One caveat recorded honestly: the seg-v4 incident proof reported `splits=0`, so it
+does not exercise `splitRange` directly. It proves the hardened class of failure
+is intact — record alignment, media ownership, provenance, publish. The split path
+itself is proven by the Library import proof, which forces a real presplit.
+Neither proof covers it alone.
+
+**This workstream is closed.** Use it on real material before deciding what earns
+the next iteration.
+
+---
+
+## Library evolution — DEFERRED, NO IMPLEMENTATION
+
+Standing directions, none scheduled and none a commitment. **Nothing here is
+built until real use of the live Library produces a concrete finding that names
+the problem.** They are recorded so they are not rediscovered, not so they are
+worked through in order.
+
+- **Groups / categories / ordering** — how a Library with a hundred entries is
+  navigated. Deliberately absent from v1: search plus recency has not yet been
+  shown to fail.
+- **A larger assembly experience** — building a FlowGuide from Library entries
+  side by side rather than one insertion at a time.
+- **Undo / version history** — `library_items.revision` already exists and is
+  monotonic, so the substrate is there; the product question is not.
+- **Block-mode Library insertion** — see its own entry. A composition project,
+  argued on its own merits rather than as a Library extension.
+- **Item reuse and profile-per-packet** — older deferred questions, unchanged.
 
 ## Library AI import — original plan (superseded by the entry above)
 
