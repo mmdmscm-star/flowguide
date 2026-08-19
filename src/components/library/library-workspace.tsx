@@ -63,7 +63,7 @@ export default function LibraryWorkspace() {
     // professional delete without hesitating.
     if (!confirm(
       `Delete "${s.title || "Untitled"}" from your Library?\n\n` +
-      `Packets that already use it are NOT affected — they hold their own copies.`
+      `Any FlowGuide that already uses it is NOT affected — each holds its own copy.`
     )) return;
     setBusy(true);
     try {
@@ -92,9 +92,9 @@ export default function LibraryWorkspace() {
         <header className="pt-6 pb-4">
           <h1 className="text-2xl font-bold text-foreground">Your Library</h1>
           <p className="mt-2 text-xs text-muted">
-            Items you can reuse in any packet. Inserting one makes a copy — editing that
-            copy never changes what is saved here, and editing here never changes packets
-            you have already sent.
+            Items you can reuse in any FlowGuide. Inserting one makes a copy — editing that
+            copy never changes what is saved here, and editing here never changes a
+            FlowGuide you have already sent.
           </p>
         </header>
 

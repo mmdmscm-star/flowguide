@@ -124,8 +124,13 @@ interface PacketData {
 // Library actions for a whole packet, shown in BOTH editors so reuse does not
 // depend on composition mode. Both are explicitly user-initiated: nothing is
 // saved or inserted without the professional opening one of these and choosing.
-function LibraryBar({ packetId, sectionId, disabled, onNotice }: {
-  packetId: string; sectionId?: string; disabled?: boolean; onNotice: (m: string) => void;
+function LibraryBar({ packetId, sectionId, disabled, onNotice, onRefresh }: {
+  packetId: string; sectionId?: string; disabled?: boolean;
+  onNotice: (m: string) => void;
+  /** Reload packet content. Inserted items are real rows the editor has not read
+   *  yet, so without this the professional is told something was added and sees
+   *  nothing — the worst possible pairing. */
+  onRefresh: () => void;
 }) {
   const [picker, setPicker] = useState(false);
   const [promote, setPromote] = useState(false);
@@ -133,7 +138,7 @@ function LibraryBar({ packetId, sectionId, disabled, onNotice }: {
     <div className="mb-4 flex items-center gap-3 p-3 rounded-lg border border-border bg-white">
       <div className="min-w-0 flex-1">
         <p className="text-sm font-medium text-foreground">Library</p>
-        <p className="text-xs text-muted">Reuse saved items, or save this packet&apos;s items for later.</p>
+        <p className="text-xs text-muted">Reuse saved items, or save these for another FlowGuide.</p>
       </div>
       <button onClick={() => setPicker(true)} disabled={disabled}
         className="flex-none px-3 py-1.5 rounded-lg bg-accent hover:bg-accent-hover text-white text-xs font-medium disabled:opacity-60">
@@ -146,7 +151,11 @@ function LibraryBar({ packetId, sectionId, disabled, onNotice }: {
       {picker && (
         <LibraryPicker packetId={packetId} sectionId={sectionId}
           onClose={() => setPicker(false)}
-          onInserted={(n) => { setPicker(false); onNotice(`${n} item${n === 1 ? "" : "s"} added from your Library.`); }} />
+          onInserted={(n) => {
+            setPicker(false);
+            onRefresh();
+            onNotice(`${n} item${n === 1 ? "" : "s"} added from your Library.`);
+          }} />
       )}
       {promote && (
         <BulkPromote packetId={packetId}
@@ -960,11 +969,6 @@ export function LegacyPacketEditor() {
         </div>
       )}
 
-      {/* Photos deliberately kept where the source does not put them. Renders
-          itself away unless a decision actually exists. */}
-      <LibraryBar packetId={packetId} onNotice={setLibraryNotice} />
-      {libraryNotice && <p className="mb-4 text-xs text-green-700">{libraryNotice}</p>}
-
       <OwnershipDecisions packetId={packetId} />
 
       {/* Resilient import in progress (Organize / Add with AI) */}
@@ -1012,6 +1016,12 @@ export function LegacyPacketEditor() {
           className="w-full mt-1 text-sm text-muted bg-transparent border-none outline-none placeholder:text-gray-300"
         />
       </div>
+
+      {/* Library. BELOW the title and identity on purpose: the FlowGuide being
+          created is the primary thing on this screen, and reuse is a tool for
+          building it rather than the headline. */}
+      <LibraryBar packetId={packetId} onNotice={setLibraryNotice} onRefresh={loadPacket} />
+      {libraryNotice && <p className="mb-4 text-xs text-green-700">{libraryNotice}</p>}
 
       {/* Personal note */}
       <div className="mb-8">

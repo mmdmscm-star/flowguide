@@ -70,7 +70,7 @@ export function LibraryList({
         <p className="mt-4 text-sm text-muted">
           {q
             ? `Nothing in your Library matches “${q}”.`
-            : emptyHint ?? "Your Library is empty. Save an item from a packet to reuse it later."}
+            : emptyHint ?? "Your Library is empty. Save an item from a FlowGuide to reuse it later."}
         </p>
       )}
 
@@ -94,10 +94,19 @@ export function LibraryList({
                   className="flex-none"
                 />
               )}
+              {/* The item's own photo when it has one. The fallback is a quiet
+                  neutral tile rather than anything derived from the title —
+                  a coloured word-swatch reads as data the item does not have. */}
               {photo
                 /* eslint-disable-next-line @next/next/no-img-element */
                 ? <img src={photo} alt="" className="h-10 w-10 flex-none rounded object-cover bg-gray-100" />
-                : <div className="h-10 w-10 flex-none rounded bg-gray-100" />}
+                : <div className="h-10 w-10 flex-none rounded bg-gray-100 flex items-center justify-center">
+                    <svg viewBox="0 0 24 24" className="h-4 w-4 text-gray-300" fill="none" stroke="currentColor" strokeWidth="1.5">
+                      <rect x="3" y="4" width="18" height="16" rx="2" />
+                      <circle cx="8.5" cy="9.5" r="1.5" />
+                      <path d="M21 16l-5-5-4 4-2-2-4 4" />
+                    </svg>
+                  </div>}
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-medium text-foreground truncate">{s.title || "Untitled"}</p>
                 <p className="text-xs text-muted truncate">{subtitleFor(s)}</p>

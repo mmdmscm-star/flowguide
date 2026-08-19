@@ -42,7 +42,7 @@ export function LibraryPicker({
            onClick={(e) => e.stopPropagation()}>
         <p className="text-sm font-medium text-foreground">Add from your Library</p>
         <p className="mt-1 mb-3 text-xs text-muted">
-          Each one is added as a copy. Editing it here will not change your Library version.
+          Each one is added as a copy. Editing it here will not change your saved version.
         </p>
 
         {error && <p className="mb-2 text-xs text-red-700">{error}</p>}

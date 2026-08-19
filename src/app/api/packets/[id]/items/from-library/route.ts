@@ -41,8 +41,23 @@ export async function POST(request: Request, context: Context) {
   const supabase = createServerClient();
 
   const { data: packet } = await supabase
-    .from("packets").select("id, status").eq("id", id).eq("user_id", session.userId).maybeSingle();
+    .from("packets").select("id, status, composition_mode").eq("id", id).eq("user_id", session.userId).maybeSingle();
   if (!packet) return NextResponse.json({ error: "not_found" }, { status: 404 });
+
+  // BLOCK PACKETS ARE REFUSED, deliberately. A block packet requires a
+  // packet_blocks row per item — assert_packet_block_consistency enforces a
+  // strict bijection — and there is no item-block creation path anywhere in the
+  // codebase yet: items reach a block packet only through conversion or AI
+  // import. Inserting here would create an item with no block, which is
+  // invisible in the editor and then fails publish with an opaque consistency
+  // error. Refusing is the honest outcome until item blocks can be created.
+  if ((packet as { composition_mode?: string }).composition_mode === "blocks") {
+    return NextResponse.json({
+      error: "unsupported_composition",
+      message: "Adding from your Library isn't available in the block editor yet.",
+    }, { status: 409 });
+  }
+
   if ((packet as { status: string }).status !== "draft") {
     return NextResponse.json(
       { error: "not_draft", message: "Unpublish this packet before adding items." }, { status: 409 });

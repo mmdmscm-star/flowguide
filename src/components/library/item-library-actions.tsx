@@ -53,15 +53,23 @@ export function ItemLibraryActions({
 
   return (
     <>
-      <div className="flex items-center gap-2">
+      {/* QUIET BY DESIGN. An item inserted from the Library is an ordinary item
+          once it is here — its ancestry is context, not a status. So this reads
+          as muted secondary text rather than a coloured call to action
+          competing with the item's own content. */}
+      <div className="flex items-center gap-2 text-xs text-muted">
         {libraryItemId ? (
-          <button onClick={() => setDialog(true)} disabled={busy}
-            className="text-xs font-medium text-accent hover:text-accent-hover disabled:opacity-60">
-            Update Library version
-          </button>
+          <>
+            <span>From your Library</span>
+            <span aria-hidden>·</span>
+            <button onClick={() => setDialog(true)} disabled={busy}
+              className="underline underline-offset-2 hover:text-foreground disabled:opacity-60">
+              Update saved version
+            </button>
+          </>
         ) : (
           <button onClick={() => saveToLibrary()} disabled={busy}
-            className="text-xs font-medium text-accent hover:text-accent-hover disabled:opacity-60">
+            className="underline underline-offset-2 hover:text-foreground disabled:opacity-60">
             {busy ? "Saving…" : "Save to Library"}
           </button>
         )}

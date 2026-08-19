@@ -87,7 +87,7 @@ export function SaveBackDialog({
         // Show the RECOMPUTED comparison. They decide again with what is true
         // now, instead of retrying against something stale.
         setState({ diff: data.diff, decision: data.decision, ancestor: state?.ancestor ? { ...state.ancestor, revision: data.currentRevision } : null });
-        setError("This Library item changed while you were reviewing. Here's what it looks like now.");
+        setError("Your saved version changed while you were reviewing. This is how it compares now.");
         return;
       }
       if (!res.ok) { setError(data.message || data.error || "That didn't go through."); return; }
@@ -119,12 +119,12 @@ export function SaveBackDialog({
       <Shell onCancel={onCancel}>
         <p className="text-sm font-medium text-foreground">This item is no longer in your Library</p>
         <p className="mt-1 text-xs text-muted">
-          The Library entry “{itemTitle}” was deleted. You can save this item as a new
-          Library entry — the deleted one is not brought back.
+          “{itemTitle}” was removed from your Library. You can save this version as a new
+          Library item.
         </p>
         {error && <p className="mt-2 text-xs text-red-700">{error}</p>}
         <Actions
-          primary={{ label: busy ? "Saving…" : "Save as new Library item", onClick: () => act("save_as_new") }}
+          primary={{ label: busy ? "Saving…" : "Save to Library", onClick: () => act("save_as_new") }}
           busy={busy} onCancel={onCancel}
         />
       </Shell>
@@ -136,7 +136,7 @@ export function SaveBackDialog({
       <Shell onCancel={onCancel}>
         <p className="text-sm font-medium text-foreground">Nothing to update</p>
         <p className="mt-1 text-xs text-muted">
-          This item matches your Library version{decision.ancestorMovedOn ? ", though the Library version has changed since you inserted it" : ""}.
+          This item matches your saved version{decision.ancestorMovedOn ? ", though your saved version has changed since you added this one" : ""}.
         </p>
         <Actions busy={busy} onCancel={onCancel} cancelLabel="Close" />
       </Shell>
@@ -147,21 +147,28 @@ export function SaveBackDialog({
 
   return (
     <Shell onCancel={onCancel}>
+      {/* A TAILORED COPY IS NORMAL, not a mistake. This FlowGuide's version is
+          shorter because it was written for one audience; the saved version is
+          the fuller base. So the choice is framed as keeping both versus
+          replacing the saved one — the safeguard is unchanged, the alarm is
+          gone. */}
       {removalsFirst ? (
         <>
-          <p className="text-sm font-medium text-foreground">This would remove content from your Library version</p>
-          <p className="mt-1 text-xs text-amber-900">
-            This packet&apos;s copy is missing {removals.join(", ")} that your Library version has
-            {removedLabels.length > 0 && <>: <span className="font-medium text-foreground">{removedLabels.join(" · ")}</span></>}.
+          <p className="text-sm font-medium text-foreground">This version is shorter than the one you saved</p>
+          <p className="mt-1 text-xs text-muted">
+            You trimmed {removals.join(", ")} here
+            {removedLabels.length > 0 && <>: <span className="text-foreground">{removedLabels.join(" · ")}</span></>}.
+            Your saved version still has {removedLabels.length === 1 ? "it" : "them"}.
           </p>
-          <p className="mt-1 text-xs text-amber-900">
-            Replacing would delete {removals.length === 1 && removedLabels.length === 1 ? "it" : "them"} from
-            your Library, so future packets would not have {removedLabels.length === 1 ? "it" : "them"} either.
+          <p className="mt-2 text-xs text-muted">
+            <span className="font-medium text-foreground">Keep both</span> to save this shorter version
+            alongside the fuller one, or <span className="font-medium text-foreground">replace</span> if the
+            trimmed version is the one you want to reuse from now on.
           </p>
         </>
       ) : (
         <>
-          <p className="text-sm font-medium text-foreground">Update your Library copy of “{itemTitle}”?</p>
+          <p className="text-sm font-medium text-foreground">Update your saved version of “{itemTitle}”?</p>
           <p className="mt-1 text-xs text-muted">
             {[...additions.map((a) => `${a} added`), ...changes.map((c) => `${c} changed`)].join(" · ") || "Text changed"}.
           </p>
@@ -169,14 +176,14 @@ export function SaveBackDialog({
       )}
 
       {decision.ancestorMovedOn && (
-        <p className="mt-2 text-xs text-amber-900">
-          <span className="font-medium">Note:</span> the Library version has changed since you inserted
-          this item. Replacing it will overwrite those newer changes.
+        <p className="mt-2 text-xs text-muted">
+          Your saved version has also changed since you added this one. Replacing will
+          use this version instead.
         </p>
       )}
 
       <p className="mt-2 text-xs text-muted">
-        Packets that already use this item will not change.
+        Any FlowGuide already using this item stays as it is.
       </p>
 
       {error && <p className="mt-2 text-xs text-red-700">{error}</p>}
@@ -185,11 +192,11 @@ export function SaveBackDialog({
         busy={busy}
         onCancel={onCancel}
         primary={removalsFirst
-          ? { label: busy ? "Saving…" : "Save as new Library item", onClick: () => act("save_as_new") }
-          : { label: busy ? "Updating…" : "Update Library version", onClick: () => act("update") }}
+          ? { label: busy ? "Saving…" : "Keep both", onClick: () => act("save_as_new") }
+          : { label: busy ? "Updating…" : "Update saved version", onClick: () => act("update") }}
         secondary={removalsFirst
-          ? { label: "Replace anyway", onClick: () => act("update"), destructive: true }
-          : { label: "Save as new instead", onClick: () => act("save_as_new") }}
+          ? { label: "Replace saved version", onClick: () => act("update") }
+          : { label: "Keep both instead", onClick: () => act("save_as_new") }}
       />
     </Shell>
   );
@@ -209,7 +216,7 @@ function Actions({
   primary, secondary, busy, onCancel, cancelLabel = "Cancel",
 }: {
   primary?: { label: string; onClick: () => void };
-  secondary?: { label: string; onClick: () => void; destructive?: boolean };
+  secondary?: { label: string; onClick: () => void };
   busy: boolean;
   onCancel: () => void;
   cancelLabel?: string;
@@ -224,11 +231,7 @@ function Actions({
       )}
       {secondary && (
         <button onClick={secondary.onClick} disabled={busy}
-          className={`px-3 py-1.5 rounded-lg border text-xs font-medium disabled:opacity-60 ${
-            secondary.destructive
-              ? "border-red-200 text-red-700 hover:bg-red-50"
-              : "border-border text-muted hover:text-foreground"
-          }`}>
+          className="px-3 py-1.5 rounded-lg border border-border text-xs font-medium text-muted hover:text-foreground disabled:opacity-60">
           {secondary.label}
         </button>
       )}

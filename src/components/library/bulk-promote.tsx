@@ -83,7 +83,7 @@ export function BulkPromote({
            onClick={(e) => e.stopPropagation()}>
         <p className="text-sm font-medium text-foreground">Save items to your Library</p>
         <p className="mt-1 mb-3 text-xs text-muted">
-          Choose what you would reuse for another client. Each one is saved as a copy —
+          Choose what you would reuse in another FlowGuide. Each one is saved as a copy —
           this packet is not changed.
         </p>
 
@@ -92,7 +92,7 @@ export function BulkPromote({
 
         {!loading && available.length === 0 && (
           <p className="text-sm text-muted">
-            {items.length === 0 ? "This packet has no items yet." : "Every item here is already in your Library."}
+            {items.length === 0 ? "This FlowGuide has no items yet." : "Every item here is already in your Library."}
           </p>
         )}
 
