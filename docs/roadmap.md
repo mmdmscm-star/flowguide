@@ -251,7 +251,36 @@ author opening their own link.
 
 **Closed.** The next Library work is the AI import below.
 
-## Library AI import — PLANNED, NOT STARTED
+## Library AI import — SHIPPED AND CLOSED
+
+Shipped 2026-08-19 (`fec04b4`). Migrations 0020, 0021, 0022 applied and verified
+one step at a time. Production proof 35/35; post-deploy smoke 10/10; Library v1
+smoke 20/20; first-use smoke 21/21; seg-v4 incident proof 21/21.
+
+Library → Import with AI → chunked resumable extraction → durable proposals →
+review/edit/select → save selected → finish or abandon. No FlowGuide is created.
+The claim/lease/stage/split engine is shared with packet ingestion unchanged;
+`library_import` reuses the items-only prompt and result shape `section_append`
+already had. `library_save_proposal` creates the entry and consumes the proposal
+in one transaction, and remains the only writer.
+
+**Two defects in existing shared code surfaced only in the runtime proof**, and
+both would have shipped otherwise:
+
+- `splitRange` could cut a range into itself plus a one-character tail, because
+  boundary preference outranked placement and the blank line separating records
+  sits at the range edge. Any record over `PRESPLIT_CHARS` in an ordinary paste
+  hit it, in packet imports too, presumably since 0012.
+- Both drive loops treated a transient provider failure as terminal, discarding
+  the server's own retry tagging. The rule now lives once in `chunk-outcome.ts`.
+
+Neither was reachable by reasoning. Both needed a real oversized record through a
+real provider.
+
+**This workstream is closed.** Use it before deciding what earns the next
+iteration.
+
+## Library AI import — original plan (superseded by the entry above)
 
 Plan: [docs/investigations/library-ai-import-plan.md](investigations/library-ai-import-plan.md).
 
