@@ -171,7 +171,19 @@ create unique index idx_ingestion_runs_one_active_library
 commit;
 ```
 
-### The guard strategy: refuse, do not adapt
+### The guard strategy: refuse, do not adapt — but in 0021, not 0020
+
+**Corrected after writing 0020.** The guards below belong with the RPCs that make
+a library run creatable, not with the schema widening.
+
+Until 0021 and the app code exist, no library run can be created at all, and a
+manually inserted one already fails closed in `finalize_ingestion_run`: the
+lookup `from public.packets where id = v_run.packet_id` returns no row for a null
+and it raises `ingestion: packet not found`. So 0020 buys nothing by re-issuing a
+167-line function to insert four lines, and pays a real transcription risk on the
+most consequential function in the system. Keeping 0020 to schema alone makes it
+small enough to verify completely, which is the whole point of treating it as
+consequential.
 
 `finalize_ingestion_run` and `discard_ingestion_run` gain, immediately after the
 ownership check:
@@ -189,9 +201,23 @@ This is deliberately stronger than tolerating a null. A library run must be
 deleted packet; the explicit guard is the difference between a safe accident and
 a stated rule.
 
-Two objects need **no** change, and the verification asserts that rather than
-assuming it: `block_publish_during_ingest` and `ingest_invalidate_offsets` both
-match `where packet_id = new.id`, which never matches a null.
+Three objects need **no** change, and the verification asserts that rather than
+assuming it. `block_publish_during_ingest` and `ingest_invalidate_offsets` match
+`where packet_id = new.id`; `move_item_photos` (0016) matches
+`where packet_id = v_from_packet`, a value derived from a real item. None can
+match a null, so no library run is visible to any of them.
+
+**`move_item_photos` was missing from the first inventory** and was found by the
+preflight's "every function whose body mentions ingestion_runs" query — the row
+that existed precisely because an inventory taken from migration files is a claim
+about the files, not about production.
+
+Its import check reads `status in ('active','finalizing')` and, unlike the
+publish block, does **not** include `needs_review`. That appears deliberate
+rather than an oversight: 0016 is the ownership-resolution migration and Move is
+one of the resolution actions a professional takes on a run that needs review, so
+blocking it in that state would block the fix. Either way it is out of scope
+here, and 0020 leaves it untouched.
 
 ## 2. Migration 0021 — the review layer
 
@@ -327,6 +353,7 @@ mistake would hide.
 | `create_ingestion_run`, `create_organize_run` | take `p_packet_id` | write `destination='packet'` explicitly |
 | `block_publish_during_ingest` | `where packet_id = new.id` | **unchanged** — never matches null |
 | `ingest_invalidate_offsets` | `where packet_id = new.id` | **unchanged** — never matches null |
+| `move_item_photos` (0016) | `where packet_id = v_from_packet` | **unchanged** — `v_from_packet` is derived from a real item and is never null, so a library run can never match |
 | `api/ingest/[runId]/route.ts:33` | returns `packetId` | also returns `destination`; `packetId` null for library |
 | `api/ingest/[runId]/chunks/[ordinal]/route.ts:119` | `packets.packet_type` lookup | skipped when `destination='library'` |
 | `api/ingest/[runId]/finalize/route.ts:26,68` | pre-reads `packet_id` | refuses a library run early, pointing at `…/finish` |
