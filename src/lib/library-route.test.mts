@@ -163,10 +163,15 @@ test("the freeze that makes block-mode insertion impossible still exists", () =>
 test("the route refuses block packets rather than failing at the database", () => {
   assert.match(FROMLIB, /composition_mode === "blocks"/);
   assert.match(FROMLIB, /unsupported_composition/);
-  // The refusal must come BEFORE any write is attempted.
+  // The refusal must come BEFORE any write is attempted. The write itself now
+  // lives in insertLibraryEntries, shared with the create-a-FlowGuide route, so
+  // the thing to order against is the CALL — and the route must not have
+  // regained a write of its own.
   const guard = FROMLIB.indexOf('composition_mode === "blocks"');
-  const insert = FROMLIB.indexOf('from("items").insert');
-  assert.ok(guard > 0 && guard < insert, "refuse before writing, not after");
+  const write = FROMLIB.indexOf("insertLibraryEntries(");
+  assert.ok(guard > 0 && write > 0 && guard < write, "refuse before writing, not after");
+  assert.doesNotMatch(FROMLIB, /from\("items"\)\.insert/,
+    "content writing belongs to the shared insert, so both entry points cannot drift");
 });
 
 test("the refusal explains that this is structural, not unimplemented", () => {

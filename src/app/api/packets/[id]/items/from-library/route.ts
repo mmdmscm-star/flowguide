@@ -1,9 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase";
-import { applyItemContentUpdate } from "@/lib/item-content";
-import { lineageForInsert } from "@/lib/library";
-import { getLibraryItem } from "@/lib/library-service";
+import { insertLibraryEntries } from "@/lib/library-insert";
 
 type Context = { params: Promise<{ id: string }> };
 
@@ -80,43 +78,9 @@ export async function POST(request: Request, context: Context) {
     targetSection = (first as { id: string }).id;
   }
 
-  const { data: last } = await supabase
-    .from("items").select("sort_order").eq("section_id", targetSection)
-    .order("sort_order", { ascending: false }).limit(1).maybeSingle();
-  let nextOrder = last ? (last as { sort_order: number }).sort_order + 1 : 0;
-
-  const created: string[] = [];
-  for (const libraryItemId of libraryItemIds) {
-    const source = await getLibraryItem(supabase, session.userId, libraryItemId);
-    if (!source) continue;   // deleted between picking and inserting; skip quietly
-
-    const { data: row, error: insErr } = await supabase.from("items").insert({
-      section_id: targetSection, title: source.title ?? "", sort_order: nextOrder++,
-      // Both lineage columns together — 0017's CHECK makes a half state
-      // unrepresentable, and this is where one would otherwise be created.
-      ...lineageForInsert(source.id, source.revision),
-    }).select("id").single();
-    if (insErr || !row) continue;
-    const itemId = (row as { id: string }).id;
-
-    const { error: contentErr } = await applyItemContentUpdate(
-      supabase,
-      { itemId, ownerId: session.userId, packetId: id, requireMode: "legacy" },
-      {
-        title: source.title ?? "", description: source.description ?? "",
-        notes: source.notes ?? "", address: source.address ?? "",
-        details: source.details ?? [], links: source.links ?? [],
-        photos: source.photos ?? [], contacts: source.contacts ?? [],
-      },
-    );
-    if (contentErr) {
-      // The row exists but its content did not land. Remove it rather than
-      // leaving a titled husk the professional has to notice and delete.
-      await supabase.from("items").delete().eq("id", itemId);
-      return NextResponse.json({ error: contentErr }, { status: 400 });
-    }
-    created.push(itemId);
-  }
+  const { itemIds: created, error: insertErr } = await insertLibraryEntries(
+    supabase, session.userId, id, targetSection, libraryItemIds);
+  if (insertErr) return NextResponse.json({ error: insertErr }, { status: 400 });
 
   if (created.length === 0) {
     return NextResponse.json({ error: "nothing_inserted" }, { status: 400 });

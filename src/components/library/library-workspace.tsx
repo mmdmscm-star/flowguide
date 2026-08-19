@@ -4,6 +4,8 @@ import { BlockItemEditor } from "@/components/editor/block-item-editor";
 import { LibraryList } from "@/components/library/library-list";
 import { CreatorNav } from "@/components/nav/creator-nav";
 import { ImportWithAI } from "@/components/library/import-with-ai";
+import { createFromLibrary } from "@/lib/create-from-library";
+import { useRouter } from "next/navigation";
 import { snapshotToItem, type LibrarySnapshot } from "@/lib/library-adapter";
 import type { Item } from "@/lib/types";
 import type { ItemContentPayload } from "@/lib/item-content";
@@ -34,6 +36,12 @@ export default function LibraryWorkspace() {
   const [conflict, setConflict] = useState<LibrarySnapshot | null>(null);
   const [creating, setCreating] = useState(false);
   const [importing, setImporting] = useState(false);
+  // Choosing saved material to start a FlowGuide with. Offered INLINE here
+  // rather than in a dialog: the list is already on screen, and putting a second
+  // copy of it in a modal would be a worse version of what is already there.
+  const [selecting, setSelecting] = useState(false);
+  const [chosen, setChosen] = useState<string[]>([]);
+  const router = useRouter();
 
   const save = useCallback(async (payload: ItemContentPayload): Promise<MutationResult> => {
     if (!editing) return "failed";
@@ -159,11 +167,52 @@ export default function LibraryWorkspace() {
             </button>
             <button
               onClick={() => { setNotice(""); setCreating(true); }}
-              className="px-3 py-1.5 rounded-lg border border-border bg-white text-xs font-medium
+              className="px-3 py-2 rounded-lg border border-border bg-white text-sm font-medium
                          text-foreground hover:border-accent hover:text-accent"
             >
               + Create an item
             </button>
+            <button
+              onClick={() => { setNotice(""); setChosen([]); setSelecting(true); }}
+              className="px-3 py-2 rounded-lg border border-border bg-white text-sm font-medium
+                         text-foreground hover:border-accent hover:text-accent"
+            >
+              Create a FlowGuide
+            </button>
+          </div>
+        )}
+
+        {selecting && (
+          <div className="mb-4 rounded-xl border border-accent/40 bg-accent/5 p-3">
+            <p className="text-sm font-medium text-foreground">
+              Choose what to start a FlowGuide with
+            </p>
+            <p className="mt-1 text-sm text-muted">
+              Each one is copied in. Changing it there never changes what is saved here.
+            </p>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <button
+                onClick={async () => {
+                  setBusy(true); setNotice("");
+                  const { packetId, message } = await createFromLibrary(chosen);
+                  if (!packetId) { setNotice(message ?? "Could not create it."); setBusy(false); return; }
+                  router.push(`/edit/${packetId}`);
+                }}
+                disabled={busy || chosen.length === 0}
+                className="px-3 py-2 rounded-lg bg-accent hover:bg-accent-hover text-white text-sm font-medium disabled:opacity-60"
+              >
+                {busy ? "Creating…" : chosen.length
+                  ? `Create FlowGuide with ${chosen.length}`
+                  : "Create FlowGuide"}
+              </button>
+              <button
+                onClick={() => { setSelecting(false); setChosen([]); }}
+                disabled={busy}
+                className="ml-auto text-sm font-medium text-muted hover:text-foreground"
+              >
+                Cancel
+              </button>
+            </div>
           </div>
         )}
 
@@ -232,7 +281,10 @@ export default function LibraryWorkspace() {
         ) : (
           <LibraryList
             refreshKey={refreshKey}
-            onOpen={(s) => { setNotice(""); setEditing(s); }}
+            selectable={selecting}
+            selected={chosen}
+            onToggle={(id) => setChosen((c) => c.includes(id) ? c.filter((x) => x !== id) : [...c, id])}
+            onOpen={selecting ? undefined : (s) => { setNotice(""); setEditing(s); }}
             emptyHint={
               // AN EMPTY LIBRARY IS THE FIRST THING A NEW PROFESSIONAL SEES, and
               // it used to be one grey sentence. It has to say what this is for

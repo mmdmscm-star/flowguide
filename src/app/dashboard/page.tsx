@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import { UseLibraryPicker } from "@/components/library/use-library-picker";
 
 interface PacketSummary {
   id: string;
@@ -22,6 +23,7 @@ export default function DashboardPage() {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [duplicatingId, setDuplicatingId] = useState<string | null>(null);
   const [showNewMenu, setShowNewMenu] = useState(false);
+  const [useLibrary, setUseLibrary] = useState(false);
 
   const loadPackets = useCallback(async () => {
     const res = await fetch("/api/packets");
@@ -112,6 +114,7 @@ export default function DashboardPage() {
 
   return (
     <main className="max-w-2xl mx-auto px-5 py-8">
+      {useLibrary && <UseLibraryPicker onClose={() => setUseLibrary(false)} />}
       {/* Header */}
       <div className="flex items-center justify-between mb-8">
         <div>
@@ -132,23 +135,30 @@ export default function DashboardPage() {
               onClick={() => setShowNewMenu(!showNewMenu)}
               className="px-4 py-2 rounded-lg bg-accent hover:bg-accent-hover text-white text-sm font-medium transition-colors"
             >
-              New Packet
+              New FlowGuide
             </button>
             {showNewMenu && (
               <div className="absolute right-0 top-full mt-2 w-56 bg-white rounded-xl border border-border shadow-lg z-10 overflow-hidden">
+                <button
+                  onClick={() => { setShowNewMenu(false); setUseLibrary(true); }}
+                  className="w-full text-left px-4 py-3 hover:bg-gray-50 transition-colors border-b border-border"
+                >
+                  <div className="font-medium text-sm text-foreground">Use my Library</div>
+                  <div className="text-sm text-muted mt-0.5">Start from things you have saved</div>
+                </button>
                 <button
                   onClick={() => { setShowNewMenu(false); router.push("/new"); }}
                   className="w-full text-left px-4 py-3 hover:bg-gray-50 transition-colors border-b border-border"
                 >
                   <div className="font-medium text-sm text-foreground">Paste &amp; organize with AI</div>
-                  <div className="text-xs text-muted mt-0.5">Paste notes, AI structures them</div>
+                  <div className="text-sm text-muted mt-0.5">Paste notes, AI structures them</div>
                 </button>
                 <button
                   onClick={() => { setShowNewMenu(false); createPacket(); }}
                   className="w-full text-left px-4 py-3 hover:bg-gray-50 transition-colors"
                 >
                   <div className="font-medium text-sm text-foreground">Start blank</div>
-                  <div className="text-xs text-muted mt-0.5">Build from scratch</div>
+                  <div className="text-sm text-muted mt-0.5">Build from scratch</div>
                 </button>
               </div>
             )}
