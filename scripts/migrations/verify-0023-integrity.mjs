@@ -60,6 +60,18 @@ ok(/library_item_id, library_item_revision/.test(copy) && /src\.id, src\.revisio
    "lineage is written as both columns together");
 ok(!/origin_run_id|origin_chunk_ordinal|emit_index/.test(BODIES),
    "no ingestion provenance is fabricated");
+// THE DEFECT THAT FAILED THE FIRST APPLY, pinned so it cannot come back.
+// prosrc includes comments, and LIKE treats _ as a single-character wildcard —
+// so `ilike '%emit_index%'` matched the words "emit index" in the comment that
+// promises no provenance is written.
+ok(/regexp_replace\(p\.prosrc, '--\[\^\\n\]\*', '', 'g'\)/.test(VERIFY),
+   "source assertions run against code with comments STRIPPED");
+ok(!/i?like '%[^']*_[^']*%'/.test(VERIFY),
+   "no LIKE pattern contains an underscore — _ is a wildcard there, not a literal");
+ok(/~ '\(origin_run_id\|origin_chunk_ordinal\|emit_index\)'/.test(VERIFY),
+   "the provenance guard matches identifiers by regex, where _ is literal");
+ok(/NO INGESTION PROVENANCE IS WRITTEN/.test(VERIFY),
+   "and an independent assertion proves the stripper works and the guard comment survives");
 ok(/search_path=', 'search_path=""/.test(VERIFY),
    "the migration asserts an EMPTY search_path at apply time, not merely a present one");
 ok(/origin_run_id/.test(VERIFY) && /update_item_content/.test(VERIFY),

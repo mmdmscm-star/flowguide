@@ -236,16 +236,42 @@ begin
     end if;
   end loop;
 
-  -- Content must go through the canonical writer, not a second one.
+  -- TWO THINGS THIS BLOCK GOT WRONG THE FIRST TIME, both worth stating because
+  -- either alone makes an assertion lie:
+  --
+  --   1. prosrc INCLUDES COMMENTS. The provenance check matched the comment
+  --      inside library_copy_into_section that explains it does NOT write
+  --      provenance — an assertion firing on the sentence promising the thing it
+  --      forbids.
+  --   2. LIKE TREATS _ AS A WILDCARD. '%emit_index%' matches the words
+  --      "emit index", so the pattern never needed the literal identifier to be
+  --      present at all. Every check below uses a regex, where _ is literal.
+  --
+  -- So: match against EXECUTABLE code with comments stripped, and separately
+  -- prove the stripper works and the guard comment is still there — otherwise a
+  -- change to how comments are written would make this silently vacuous.
   if not exists (select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
                   where n.nspname = 'public' and p.proname = 'library_copy_into_section'
-                    and p.prosrc ilike '%update_item_content%') then
+                    and regexp_replace(p.prosrc, '--[^\n]*', '', 'g') ~ 'update_item_content') then
     raise exception '0023 verify: library_copy_into_section does not use the canonical content writer';
   end if;
+
   if exists (select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
               where n.nspname = 'public' and p.proname in ('library_copy_into_section','create_packet_from_library')
-                and (p.prosrc ilike '%origin_run_id%' or p.prosrc ilike '%emit_index%')) then
-    raise exception '0023 verify: a copy path fabricates ingestion provenance';
+                and regexp_replace(p.prosrc, '--[^\n]*', '', 'g')
+                    ~ '(origin_run_id|origin_chunk_ordinal|emit_index)') then
+    raise exception '0023 verify: a copy path WRITES ingestion provenance';
+  end if;
+
+  -- The stripper is load-bearing, so prove it: the guard comment must still be
+  -- present in the raw source AND absent once comments are removed. If stripping
+  -- ever stops working, the first half fails; if the comment is deleted, so does
+  -- the explanation of why no provenance is written.
+  if not exists (select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+                  where n.nspname = 'public' and p.proname = 'library_copy_into_section'
+                    and p.prosrc ~ 'NO INGESTION PROVENANCE IS WRITTEN'
+                    and regexp_replace(p.prosrc, '--[^\n]*', '', 'g') !~ 'NO INGESTION PROVENANCE IS WRITTEN') then
+    raise exception '0023 verify: the provenance guard comment is missing, or comment stripping is not working';
   end if;
 
   -- The coercion actually coerces.
