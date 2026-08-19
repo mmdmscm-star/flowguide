@@ -1,7 +1,7 @@
 // Wiring invariants for "create a FlowGuide from saved material".
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -13,77 +13,85 @@ const code = (p: string) => read(p)
   .split("\n").filter((l) => !l.trim().startsWith("//") && !l.trim().startsWith("*") && !l.trim().startsWith("/*"))
   .join("\n");
 const ROUTE = read("src/app/api/packets/from-library/route.ts");
-const INSERT = read("src/lib/library-insert.ts");
 const EXISTING = read("src/app/api/packets/[id]/items/from-library/route.ts");
 const PICKER = read("src/components/library/use-library-picker.tsx");
 const WORKSPACE = read("src/components/library/library-workspace.tsx");
 const DASHBOARD = read("src/app/dashboard/page.tsx");
 
 // ---------------------------------------------------------------------------
-// A failure must not leave an orphan draft
+// Atomicity is the DATABASE's, not the route's
+//
+// The route used to create the packet, then the section, then the items, and
+// delete the packet if a later step failed. That is compensating cleanup: a
+// process that dies between the write and the cleanup leaves an orphan. These
+// pin that the route can no longer be written that way.
 // ---------------------------------------------------------------------------
-test("every failure path after the packet insert removes the draft", () => {
-  // Everything AFTER abandon() is defined — abandon's own return is the one
-  // bare NextResponse.json that is allowed to exist in this region, so the scan
-  // starts past it rather than counting it as a violation.
-  const body = ROUTE.slice(ROUTE.indexOf("const { data: section,"));
-  const returns = [...body.matchAll(/return (NextResponse\.json|abandon)\(/g)].map((m) => m[1]);
-  assert.ok(returns.length >= 4, `expected several exits, saw ${returns.length}`);
-  const bare = returns.filter((r) => r === "NextResponse.json");
-  assert.equal(bare.length, 1,
-    `exactly one bare return is allowed here — the SUCCESS one; every failure must abandon(). Saw ${bare.length}`);
-  assert.ok(returns.filter((r) => r === "abandon").length >= 3,
-    "each failure after creation must undo it");
-});
-
-test("abandon actually deletes the packet", () => {
-  const fn = ROUTE.slice(ROUTE.indexOf("async function abandon"), ROUTE.indexOf("const { data: section,"));
-  assert.match(fn, /from\("packets"\)\s*\.delete\(\)\s*\.eq\("id", packetId\)/);
-});
-
-test("a section that fails to create takes the packet with it", () => {
-  assert.match(ROUTE, /if \(sectionErr \|\| !section\) \{\s*\n\s*return abandon\(/);
-});
-
-test("finding none of the chosen entries is a failure, not an empty FlowGuide", () => {
-  assert.match(ROUTE, /itemIds\.length === 0[\s\S]{0,120}abandon\(/,
-    "an empty draft is exactly the orphan this route exists to avoid");
-});
-
-// ---------------------------------------------------------------------------
-// One insert implementation
-// ---------------------------------------------------------------------------
-test("both entry points share one insert implementation", () => {
-  assert.match(ROUTE, /insertLibraryEntries\(/);
-  assert.match(EXISTING, /insertLibraryEntries\(/);
-  for (const [name, src] of [["create route", ROUTE], ["add-to-packet route", EXISTING]] as const) {
-    assert.doesNotMatch(src, /applyItemContentUpdate\(/,
-      `${name} must not write item content itself`);
-    assert.doesNotMatch(src, /lineageForInsert\(/,
-      `${name} must not compose lineage itself — 0017's CHECK makes a half state unrepresentable`);
+test("the whole creation is ONE rpc call", () => {
+  assert.match(ROUTE, /rpc\("create_packet_from_library"/);
+  for (const p of ["p_owner", "p_slug", "p_title", "p_client_name", "p_library_item_ids"]) {
+    assert.ok(ROUTE.includes(p), `create_packet_from_library needs ${p}`);
   }
 });
 
-test("the shared insert normalises content rather than passing it through", () => {
-  assert.match(INSERT, /normalizeItemContent\(/,
-    "an entry stored with bare photo urls must not carry that shape into the packet's photo rows");
-  assert.ok(INSERT.indexOf("normalizeItemContent(") < INSERT.indexOf("applyItemContentUpdate") ||
-            /applyItemContentUpdate\([\s\S]{0,400}normalizeItemContent\(/.test(INSERT));
+test("the route performs no writes of its own", () => {
+  const body = code("src/app/api/packets/from-library/route.ts");
+  for (const t of ["packets", "sections", "items"]) {
+    assert.doesNotMatch(body, new RegExp(`from\\("${t}"\\)\\s*\\.insert`),
+      `creating ${t} outside the transaction is the orphan this replaced`);
+  }
 });
 
-test("the insert writes lineage but never fabricates ingestion provenance", () => {
-  assert.match(INSERT, /lineageForInsert\(source\.id, source\.revision\)/);
-  assert.doesNotMatch(INSERT, /origin_run_id|origin_chunk_ordinal|emit_index/,
-    "a Library copy has no ingestion origin; inventing one would corrupt the 0016 gate");
+test("and no compensating cleanup remains", () => {
+  const body = code("src/app/api/packets/from-library/route.ts");
+  assert.doesNotMatch(body, /abandon\(/, "compensating cleanup is gone");
+  assert.doesNotMatch(body, /\.delete\(\)/,
+    "a route that deletes what it just created is the pattern this replaced");
+});
+
+test("the old multi-write helper is deleted, not merely unused", () => {
+  // existsSync, not assert.throws: a string second argument to assert.throws is
+  // an expected ERROR MESSAGE, not a description, so the obvious spelling
+  // compares the description against ENOENT and fails for the wrong reason.
+  assert.ok(!existsSync(join(ROOT, "src/lib/library-insert.ts")),
+    "library-insert.ts must not exist — a second copy path would drift from the RPC");
+});
+
+test("both entry points copy through the SAME sql", () => {
+  assert.match(ROUTE, /rpc\("create_packet_from_library"/);
+  assert.match(EXISTING, /rpc\("library_copy_into_section"/);
+  for (const [name, src] of [["create route", ROUTE], ["add-to-packet route", EXISTING]] as const) {
+    assert.doesNotMatch(src, /applyItemContentUpdate\(/, `${name} must not write item content itself`);
+    assert.doesNotMatch(src, /lineageForInsert\(/, `${name} must not compose lineage itself`);
+    assert.doesNotMatch(src, /from\("items"\)\s*\.insert/, `${name} must not insert items itself`);
+  }
+});
+
+test("a slug collision is retried, as the ordinary blank create retries it", () => {
+  assert.match(ROUTE, /slug .\* is taken/);
+  assert.match(ROUTE, /for \(let attempt = 0; attempt < 5; attempt\+\+\)/);
+});
+
+test("a missing or foreign entry is reported as unavailable, not as a partial success", () => {
+  for (const [name, src] of [["create", ROUTE], ["add-to-packet", EXISTING]] as const) {
+    assert.match(src, /missing or not yours/, `${name} must recognise the all-or-nothing refusal`);
+    assert.match(src, /entries_unavailable/, `${name} must surface it as such`);
+  }
 });
 
 // ---------------------------------------------------------------------------
 // Product shape
 // ---------------------------------------------------------------------------
 test("the new FlowGuide is a legacy-composition draft, and nothing publishes", () => {
-  assert.match(ROUTE, /composition_mode: "legacy"/,
-    "the Library inserts into sections and items, which block mode freezes");
+  // The invariant moved into SQL with the transaction. 0023 does not RESTATE
+  // these values — the ordinary blank create relies on the same column defaults —
+  // it ASSERTS the row it produced, so a changed default fails loudly instead of
+  // yielding a FlowGuide whose items cannot be written.
+  const m = read("supabase/migrations/0023_create_packet_from_library.sql");
+  assert.match(m, /v_status <> 'draft'/);
+  assert.match(m, /v_mode <> 'legacy'/);
   assert.doesNotMatch(code("src/app/api/packets/from-library/route.ts"), /status: "published"|publish/i);
+  assert.doesNotMatch(code("src/app/api/packets/from-library/route.ts"), /composition_mode/,
+    "the route must not set composition mode behind the transaction's back");
 });
 
 test("creation lands the professional inside the new FlowGuide", () => {

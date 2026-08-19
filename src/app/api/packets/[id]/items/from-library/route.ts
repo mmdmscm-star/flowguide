@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase";
-import { insertLibraryEntries } from "@/lib/library-insert";
 
 type Context = { params: Promise<{ id: string }> };
 
@@ -78,9 +77,27 @@ export async function POST(request: Request, context: Context) {
     targetSection = (first as { id: string }).id;
   }
 
-  const { itemIds: created, error: insertErr } = await insertLibraryEntries(
-    supabase, session.userId, id, targetSection, libraryItemIds);
-  if (insertErr) return NextResponse.json({ error: insertErr }, { status: 400 });
+  // THE SAME TRANSACTIONAL COPY the create-a-FlowGuide path uses. One
+  // implementation, in SQL, so the two entry points cannot drift on lineage,
+  // photo normalisation or the content writer — and so a failure part-way
+  // through leaves no half-inserted subset here either.
+  const { data, error: rpcErr } = await supabase.rpc("library_copy_into_section", {
+    p_owner: session.userId,
+    p_packet_id: id,
+    p_section_id: targetSection,
+    p_library_item_ids: libraryItemIds,
+  });
+  if (rpcErr) {
+    // All-or-nothing on the input side, as when creating a new FlowGuide.
+    if (/missing or not yours/i.test(rpcErr.message)) {
+      return NextResponse.json({
+        error: "entries_unavailable",
+        message: "Some of those Library items are no longer available. Refresh and try again.",
+      }, { status: 409 });
+    }
+    return NextResponse.json({ error: "insert_failed", message: rpcErr.message }, { status: 400 });
+  }
+  const created = (data ?? []) as string[];
 
   if (created.length === 0) {
     return NextResponse.json({ error: "nothing_inserted" }, { status: 400 });

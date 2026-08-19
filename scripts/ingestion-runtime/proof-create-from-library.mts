@@ -127,26 +127,89 @@ try {
     (itemAfter as { title: string }).title === "Oakmont of Villa Capri", JSON.stringify(itemAfter));
 
   // ---- no orphan on failure -------------------------------------------------
-  const countBefore = (await svc.from("packets").select("id").eq("user_id", pro.id)).data?.length ?? 0;
+  const mine = async () => (await svc.from("packets").select("id").eq("user_id", pro.id)).data?.length ?? 0;
+  // Scoped to THIS professional. The first version counted every section in the
+  // database whose packet was not in the local array — which is every other
+  // account's, and reported 132.
+  const sectionsOfMine = async () => {
+    const { data: ps } = await svc.from("packets").select("id").eq("user_id", pro.id);
+    const ids = (ps ?? []).map((x: { id: string }) => x.id);
+    if (ids.length === 0) return 0;
+    const { data: ss } = await svc.from("sections").select("id").in("packet_id", ids);
+    return (ss ?? []).length;
+  };
+  const beforeBogus = await mine();
   const bogus = await api("/api/packets/from-library", pro.cookie, {
     method: "POST", body: JSON.stringify({ libraryItemIds: [crypto.randomUUID()] }) });
-  const countAfter = (await svc.from("packets").select("id").eq("user_id", pro.id)).data?.length ?? 0;
-  check("a create that finds nothing FAILS", bogus.status === 400 && bogus.data.error === "nothing_inserted",
-    `status ${bogus.status} ${JSON.stringify(bogus.data).slice(0, 120)}`);
-  check("and leaves NO orphan draft behind", countAfter === countBefore,
-    `${countBefore} -> ${countAfter} packets`);
+  check("a create naming an unknown entry is REFUSED, not partially fulfilled",
+    bogus.status === 409 && bogus.data.error === "entries_unavailable",
+    `status ${bogus.status} ${JSON.stringify(bogus.data).slice(0, 140)}`);
+  check("and leaves NO orphan draft behind", (await mine()) === beforeBogus,
+    `${beforeBogus} packets before`);
+
+  // ---- STRUCTURAL EQUIVALENCE with the ordinary blank create -----------------
+  const blank = await api("/api/packets", pro.cookie, {
+    method: "POST", body: JSON.stringify({ title: "Reyes family" }) });
+  const blankId = blank.data?.packet?.id as string;
+  if (blankId) packets.push(blankId);
+  const { data: blankRow } = await svc.from("packets").select("*").eq("id", blankId).single();
+  const { data: madeRow } = await svc.from("packets").select("*").eq("id", PID).single();
+  const br = blankRow as Record<string, unknown>, mr = madeRow as Record<string, unknown>;
+  // Identity, the content passed in, and content_rev — which counts content
+  // mutations, so two packets with different content necessarily differ. It is
+  // asserted directly below instead.
+  const EXCLUDE = new Set(["id", "slug", "created_at", "updated_at", "title", "client_name", "content_rev"]);
+  const keys = [...new Set([...Object.keys(br), ...Object.keys(mr)])].filter((k) => !EXCLUDE.has(k));
+  const differing = keys.filter((k) => JSON.stringify(br[k]) !== JSON.stringify(mr[k]));
+  check("a FlowGuide made from the Library has the same structural defaults as a blank one",
+    differing.length === 0 && keys.length >= 10,
+    `${keys.length} columns compared; differing: ${JSON.stringify(differing.map((k) => [k, br[k], mr[k]]))}`);
+  check("a blank FlowGuide starts at content_rev 0", Number(br.content_rev) === 0, `${br.content_rev}`);
+  check("and one built from the Library has content_rev > 0 — the bump triggers fired",
+    Number(mr.content_rev) > 0, `${mr.content_rev}`);
+
+  // ---- DELIBERATE MID-OPERATION FAILURE --------------------------------------
+  //
+  // The third of four entries is given a contacts value that is an OBJECT rather
+  // than an array. update_item_content iterates it, so the raise happens inside
+  // the copy loop — after the packet, the section and two items already exist.
+  // Compensating cleanup could not have guaranteed their removal; the
+  // transaction does. No DDL and no fault-injection hook: this is a real data
+  // condition reached through the real route.
+  const { data: victim } = await svc.from("library_items")
+    .insert({ user_id: pro.id, title: "Third of four", contacts: { not: "an array" } })
+    .select("id").single();
+  const victimId = (victim as { id: string }).id;
+
+  const pBefore = await mine();
+  const sBefore = await sectionsOfMine();
+  const midFail = await api("/api/packets/from-library", pro.cookie, {
+    method: "POST",
+    body: JSON.stringify({ libraryItemIds: [libIds[0], libIds[1], victimId, libIds[2]] }) });
+  const pAfter = await mine();
+
+  check("a failure on the THIRD copy fails the whole request",
+    !midFail.ok, `status ${midFail.status} ${JSON.stringify(midFail.data).slice(0, 140)}`);
+  check("and leaves ZERO new packet behind", pAfter === pBefore, `${pBefore} -> ${pAfter}`);
+  check("and no new section survives it either", (await sectionsOfMine()) === sBefore,
+    `${sBefore} sections before`);
+  await svc.from("library_items").delete().eq("id", victimId);
 
   // ---- someone else's Library entry is not reachable -------------------------
   const other = await makeUser("other");
   const { data: theirs } = await svc.from("library_items")
     .insert({ user_id: other.id, title: "Not yours" }).select("id").single();
+  // Baseline taken immediately before the attempt. The earlier version reused a
+  // count captured further up, which had legitimately grown by the blank
+  // FlowGuide created for the equivalence comparison.
+  const beforeCross = await mine();
   const cross = await api("/api/packets/from-library", pro.cookie, {
     method: "POST", body: JSON.stringify({ libraryItemIds: [(theirs as { id: string }).id] }) });
-  const countCross = (await svc.from("packets").select("id").eq("user_id", pro.id)).data?.length ?? 0;
-  check("another professional's Library entry cannot be used", cross.status === 400,
-    `status ${cross.status}`);
-  check("and that attempt leaves no draft either", countCross === countBefore,
-    `${countBefore} -> ${countCross}`);
+  check("another professional's Library entry cannot be used",
+    cross.status === 409 && cross.data.error === "entries_unavailable",
+    `status ${cross.status} ${JSON.stringify(cross.data).slice(0, 120)}`);
+  check("and that attempt leaves no draft either", (await mine()) === beforeCross,
+    `${beforeCross} packets before`);
 
   check("the FlowGuide is still unpublished — nothing here publishes",
     ((await svc.from("packets").select("status").eq("id", PID).single()).data as { status: string }).status === "draft");

@@ -168,10 +168,10 @@ test("the route refuses block packets rather than failing at the database", () =
   // the thing to order against is the CALL — and the route must not have
   // regained a write of its own.
   const guard = FROMLIB.indexOf('composition_mode === "blocks"');
-  const write = FROMLIB.indexOf("insertLibraryEntries(");
+  const write = FROMLIB.indexOf('rpc("library_copy_into_section"');
   assert.ok(guard > 0 && write > 0 && guard < write, "refuse before writing, not after");
   assert.doesNotMatch(FROMLIB, /from\("items"\)\.insert/,
-    "content writing belongs to the shared insert, so both entry points cannot drift");
+    "copying belongs to library_copy_into_section, shared with the create path, so the two cannot drift");
 });
 
 test("the refusal explains that this is structural, not unimplemented", () => {

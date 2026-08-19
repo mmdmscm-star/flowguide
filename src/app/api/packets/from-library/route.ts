@@ -2,21 +2,23 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase";
 import { generateSlug } from "@/lib/slug";
-import { insertLibraryEntries } from "@/lib/library-insert";
+
+export const maxDuration = 30;
 
 // POST /api/packets/from-library — start a new FlowGuide from saved material.
 //
 // { libraryItemIds: string[], title?, clientName? } -> { packetId }
 //
-// ATOMIC FROM THE PROFESSIONAL'S POINT OF VIEW. Creating the FlowGuide, its
-// first section and the copied items is three writes, and there is no single RPC
-// for it. What matters is the outcome a failure leaves behind: if any step
-// fails, the draft is REMOVED, so a half-built FlowGuide never appears in My
-// Packets for someone to find and wonder about. A brand-new empty draft is safe
-// to delete precisely because nothing else can have touched it yet.
+// ONE TRANSACTION, not three writes and a cleanup. create_packet_from_library
+// (0023) creates the FlowGuide, its first section and every copy inside a single
+// plpgsql body, so any failure — including one raised by update_item_content deep
+// inside the loop — rolls all of it back together.
 //
-// Nothing here publishes, and nothing stays connected: each item is an
-// independent copy from the moment it lands.
+// The previous implementation deleted the draft it had just made when a later
+// step failed. That is compensating cleanup, not atomicity: if the process,
+// connection or instance died in between, the cleanup never ran and an orphan
+// draft survived. Proven by fault injection on the third of four copies, which
+// now leaves zero packet, zero section and zero items.
 export async function POST(request: Request) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -32,53 +34,41 @@ export async function POST(request: Request) {
 
   const supabase = createServerClient();
 
-  let slug = generateSlug();
-  for (let i = 0; i < 5; i++) {
-    const { data: taken } = await supabase.from("packets").select("id").eq("slug", slug).maybeSingle();
-    if (!taken) break;
-    slug = generateSlug();
-  }
-
-  const { data: packet, error: packetErr } = await supabase.from("packets").insert({
-    user_id: session.userId, slug,
-    title: typeof title === "string" ? title : "",
-    client_name: typeof clientName === "string" ? clientName : "",
-    // Legacy composition: the Library inserts into sections and items, which
-    // block mode freezes. Choosing it here is not a default to drift — it is the
-    // only mode this operation can produce.
-    composition_mode: "legacy",
-  }).select("id").single();
-  if (packetErr || !packet) {
-    return NextResponse.json({ error: "create_failed", message: packetErr?.message }, { status: 400 });
-  }
-  const packetId = (packet as { id: string }).id;
-
-  /** Undo the whole thing. See the note above: a draft that was never finished
-   *  must not survive as something the professional has to clean up. */
-  async function abandon(status: number, payload: Record<string, unknown>) {
-    await supabase.from("packets").delete().eq("id", packetId);
-    return NextResponse.json(payload, { status });
-  }
-
-  const { data: section, error: sectionErr } = await supabase.from("sections").insert({
-    packet_id: packetId, title: "", sort_order: 0,
-  }).select("id").single();
-  if (sectionErr || !section) {
-    return abandon(400, { error: "create_failed", message: sectionErr?.message });
-  }
-
-  const { itemIds, error: insertErr } = await insertLibraryEntries(
-    supabase, session.userId, packetId, (section as { id: string }).id, libraryItemIds);
-
-  if (insertErr) return abandon(400, { error: "insert_failed", message: insertErr });
-  if (itemIds.length === 0) {
-    return abandon(400, {
-      error: "nothing_inserted",
-      message: "Those Library entries could not be found. They may have been deleted.",
+  // Slug collisions are retried here exactly as the ordinary blank create
+  // retries them. Each attempt is a whole transaction that either happened or
+  // did not, so a losing attempt leaves nothing behind to tidy up.
+  let lastError = "";
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const { data, error } = await supabase.rpc("create_packet_from_library", {
+      p_owner: session.userId,
+      p_slug: generateSlug(),
+      p_title: typeof title === "string" ? title : "",
+      p_client_name: typeof clientName === "string" ? clientName : "",
+      p_library_item_ids: libraryItemIds,
     });
+
+    if (!error) {
+      const res = data as { packet_id: string; section_id: string; item_ids: string[]; count: number };
+      return NextResponse.json(
+        { packetId: res.packet_id, sectionId: res.section_id, itemIds: res.item_ids, count: res.count },
+        { status: 201 });
+    }
+
+    lastError = error.message;
+    if (/slug .* is taken/i.test(error.message)) continue;
+
+    // ALL OR NOTHING on the input side: a missing or foreign entry aborts the
+    // whole creation rather than quietly producing a partial subset. Someone who
+    // picked four things gets four or an error, never three without explanation.
+    if (/missing or not yours/i.test(error.message)) {
+      return NextResponse.json({
+        error: "entries_unavailable",
+        message: "Some of those Library items are no longer available. Refresh and try again.",
+      }, { status: 409 });
+    }
+    return NextResponse.json({ error: "create_failed", message: error.message }, { status: 400 });
   }
 
   return NextResponse.json(
-    { packetId, itemIds, count: itemIds.length, sectionId: (section as { id: string }).id },
-    { status: 201 });
+    { error: "create_failed", message: lastError || "Could not create it. Try again." }, { status: 400 });
 }
