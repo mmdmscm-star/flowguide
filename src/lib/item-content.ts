@@ -68,8 +68,24 @@ export function normalizeItemContent(body: Record<string, unknown>): ItemContent
   if (details !== undefined) out.details = details;
   const links = rows<{ url: string; label?: string }>(body.links);
   if (links !== undefined) out.links = links;
-  const photos = rows<{ url: string }>(body.photos);
-  if (photos !== undefined) out.photos = photos;
+  // PHOTOS ARRIVE IN TWO SHAPES, and pretending otherwise broke Library editing
+  // in production.
+  //
+  // The canonical payload shape is {url}. But the model's contract for an
+  // extracted item is a bare string[] (see ingest-validate.ts), and the Library
+  // import stored that verbatim — so an imported entry read back as
+  // [{url: undefined}], and the editor's `p.url.trim()` threw inside the click
+  // handler. No request was sent and no error was shown: the Save button simply
+  // did nothing.
+  //
+  // Coercing here is the fix rather than a patch, because this function is
+  // exactly the boundary where untrusted content becomes an ItemContentPayload.
+  const photos = rows<unknown>(body.photos);
+  if (photos !== undefined) {
+    out.photos = photos
+      .map((p) => (typeof p === "string" ? { url: p } : p as { url?: unknown }))
+      .filter((p): p is { url: string } => typeof p?.url === "string" && p.url.trim().length > 0);
+  }
   const contacts = rows<ItemContentPayload["contacts"] extends (infer U)[] | undefined ? U : never>(body.contacts);
   if (contacts !== undefined) out.contacts = contacts;
 

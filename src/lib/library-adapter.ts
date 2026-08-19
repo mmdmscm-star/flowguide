@@ -27,8 +27,11 @@ export function snapshotToItem(s: LibrarySnapshot): Item {
     address: s.address ?? "",
     description: s.description ?? "",
     notes: s.notes ?? "",
-    // Item carries photos as bare urls; the payload carries {url}.
-    photos: (s.photos ?? []).map((p) => p.url),
+    // Item carries photos as bare urls; the payload carries {url}. An entry
+    // written before the import normaliser existed may still hold bare strings,
+    // so both are read — a row that has not been re-saved must not break the
+    // editor that would fix it.
+    photos: photoUrls(s),
     details: (s.details ?? []).map((d) => ({ label: d.label, value: d.value })),
     links: (s.links ?? []).map((l) => ({ url: l.url, label: l.label ?? "" })),
     contacts: (s.contacts ?? []).map((c) => ({
@@ -47,5 +50,13 @@ export function subtitleFor(s: LibrarySnapshot): string {
   return d.length > 80 ? `${d.slice(0, 80)}…` : d;
 }
 
+/** Photo urls, tolerating both the canonical {url} shape and the bare strings an
+ *  AI import used to store. */
+export function photoUrls(s: { photos?: unknown }): string[] {
+  return (Array.isArray(s.photos) ? s.photos : [])
+    .map((p) => (typeof p === "string" ? p : (p as { url?: unknown })?.url))
+    .filter((u): u is string => typeof u === "string" && u.trim().length > 0);
+}
+
 /** First photo, which is also the hero photo wherever this is rendered. */
-export const heroPhoto = (s: LibrarySnapshot): string | null => s.photos?.[0]?.url ?? null;
+export const heroPhoto = (s: LibrarySnapshot): string | null => photoUrls(s)[0] ?? null;

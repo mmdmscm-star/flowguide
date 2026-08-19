@@ -48,11 +48,25 @@ export function BlockItemEditor({
 
   async function handleSave() {
     setError("");
-    const cleanDetails = details.filter((d) => d.label.trim() || d.value.trim());
-    const cleanLinks = links.filter((l) => l.url.trim());
-    const cleanPhotos = photos.filter((p) => p.url.trim());
+    try {
+      await doSave();
+    } catch (e) {
+      // A THROW HERE USED TO BE INVISIBLE. The click handler rejected, no
+      // request was sent, and the professional saw a Save button that did
+      // nothing. Whatever else is wrong, they must be told.
+      console.error("[item-editor] save threw", e);
+      setError("Save failed — your changes were not applied.");
+    }
+  }
+
+  async function doSave() {
+    const cleanDetails = details.filter((d) => String(d?.label ?? "").trim() || String(d?.value ?? "").trim());
+    const cleanLinks = links.filter((l) => String(l?.url ?? "").trim());
+    // Defensive: no stored shape may make this throw again.
+    const cleanPhotos = photos.filter((p) => String(p?.url ?? "").trim());
     // Drop meaningless completely-blank contact rows; keep order.
-    const cleanContacts = contacts.filter((c) => c.name.trim() || c.phone.trim() || c.email.trim() || c.website.trim());
+    const cleanContacts = contacts.filter((c) => ["name","phone","email","website"]
+      .some((k) => String((c as Record<string, unknown>)?.[k] ?? "").trim()));
 
     const payload: ItemContentPayload = {
       title, description, notes, address,

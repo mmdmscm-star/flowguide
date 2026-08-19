@@ -56,12 +56,19 @@ export interface ContentDiff {
 
 /** The identity a diff compares entries by — stable, human-recognisable, and
  *  the same thing the professional sees in the confirmation. */
-const keyOf = (field: ContentField, row: Record<string, unknown>): string => {
+const keyOf = (field: ContentField, row: Record<string, unknown> | string): string => {
+  // A row is normally an object. Photos are the exception: an entry imported
+  // before the normaliser existed stores urls as bare strings, and the widened
+  // parameter is what lets that be READ rather than silently keyed as "".
+  const obj = (typeof row === "string" ? {} : row) as Record<string, unknown>;
   switch (field) {
-    case "details":  return String(row.label ?? "").trim();
-    case "links":    return String(row.url ?? "").trim();
-    case "photos":   return String(row.url ?? "").trim();
-    case "contacts": return String(row.name ?? "").trim();
+    case "details":  return String(obj.label ?? "").trim();
+    case "links":    return String(obj.url ?? "").trim();
+    // Tolerates a bare string as well as {url}: an entry imported before the
+    // normaliser existed stores urls as strings, and reading those as "" would
+    // make every photo compare equal and hide real removals.
+    case "photos":   return typeof row === "string" ? row.trim() : String(obj.url ?? "").trim();
+    case "contacts": return String(obj.name ?? "").trim();
   }
 };
 
