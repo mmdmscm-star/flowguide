@@ -44,19 +44,7 @@ export async function POST(request: Request, context: Context) {
     .from("packets").select("id, status, composition_mode").eq("id", id).eq("user_id", session.userId).maybeSingle();
   if (!packet) return NextResponse.json({ error: "not_found" }, { status: 404 });
 
-  // BLOCK PACKETS ARE REFUSED, deliberately. A block packet requires a
-  // packet_blocks row per item — assert_packet_block_consistency enforces a
-  // strict bijection — and there is no item-block creation path anywhere in the
-  // codebase yet: items reach a block packet only through conversion or AI
-  // import. Inserting here would create an item with no block, which is
-  // invisible in the editor and then fails publish with an opaque consistency
-  // error. Refusing is the honest outcome until item blocks can be created.
-  if ((packet as { composition_mode?: string }).composition_mode === "blocks") {
-    return NextResponse.json({
-      error: "unsupported_composition",
-      message: "Adding from your Library isn't available in the block editor yet.",
-    }, { status: 409 });
-  }
+  const isBlocks = (packet as { composition_mode?: string }).composition_mode === "blocks";
 
   if ((packet as { status: string }).status !== "draft") {
     return NextResponse.json(
@@ -87,18 +75,33 @@ export async function POST(request: Request, context: Context) {
     const source = await getLibraryItem(supabase, session.userId, libraryItemId);
     if (!source) continue;   // deleted between picking and inserting; skip quietly
 
-    const { data: row, error: insErr } = await supabase.from("items").insert({
-      section_id: targetSection, title: source.title ?? "", sort_order: nextOrder++,
-      // Both lineage columns together — 0017's CHECK makes a half state
-      // unrepresentable, and this is where one would otherwise be created.
-      ...lineageForInsert(source.id, source.revision),
-    }).select("id").single();
-    if (insErr || !row) continue;
+    let itemId: string;
 
-    const itemId = (row as { id: string }).id;
+    if (isBlocks) {
+      // A block packet needs an item AND its packet_blocks row, and the two are
+      // a bijection the database enforces. They are created together inside
+      // 0018's function because two statements from here could leave the packet
+      // permanently inconsistent and unpublishable with no way to repair it.
+      const { data: newId, error: rpcErr } = await supabase.rpc("library_insert_item_block", {
+        p_owner: session.userId, p_packet_id: id,
+        p_library_item_id: libraryItemId, p_section_id: targetSection,
+      });
+      if (rpcErr || !newId) continue;
+      itemId = String(newId);
+    } else {
+      const { data: row, error: insErr } = await supabase.from("items").insert({
+        section_id: targetSection, title: source.title ?? "", sort_order: nextOrder++,
+        // Both lineage columns together — 0017's CHECK makes a half state
+        // unrepresentable, and this is where one would otherwise be created.
+        ...lineageForInsert(source.id, source.revision),
+      }).select("id").single();
+      if (insErr || !row) continue;
+      itemId = (row as { id: string }).id;
+    }
+
     const { error: contentErr } = await applyItemContentUpdate(
       supabase,
-      { itemId, ownerId: session.userId, packetId: id },
+      { itemId, ownerId: session.userId, packetId: id, requireMode: isBlocks ? "blocks" : "legacy" },
       {
         title: source.title ?? "", description: source.description ?? "",
         notes: source.notes ?? "", address: source.address ?? "",
@@ -109,6 +112,8 @@ export async function POST(request: Request, context: Context) {
     if (contentErr) {
       // The row exists but its content did not land. Remove it rather than
       // leaving a titled husk the professional has to notice and delete.
+      // packet_blocks.item_id cascades on delete, so a block packet's bijection
+      // survives this cleanup rather than being broken by it.
       await supabase.from("items").delete().eq("id", itemId);
       return NextResponse.json({ error: contentErr }, { status: 400 });
     }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   DndContext,
@@ -23,6 +23,8 @@ import { ItemCard } from "@/components/item-card";
 import { BlockItemEditor } from "@/components/editor/block-item-editor";
 import { CompositionModeControl } from "@/components/editor/composition-mode-control";
 import OwnershipDecisions from "@/components/OwnershipDecisions";
+import { LibraryPicker } from "@/components/library/library-picker";
+import { BulkPromote } from "@/components/library/bulk-promote";
 import { SerialMutations, type MutationResult } from "@/lib/serial-mutation";
 
 // ============================================================
@@ -182,6 +184,51 @@ function SortableBlock({
   );
 }
 
+// Library actions for a block FlowGuide. Same two affordances as the legacy
+// editor; insertion goes through 0018's function so the item and its block are
+// created together.
+function LibraryBar({ packetId, disabled, onNotice, onRefresh }: {
+  packetId: string; disabled?: boolean;
+  onNotice: (m: string) => void;
+  /** Re-read the packet. An inserted block is a real row this editor has not
+   *  seen, so without it the professional is told something was added and sees
+   *  nothing. */
+  onRefresh: () => void;
+}) {
+  const [picker, setPicker] = useState(false);
+  const [promote, setPromote] = useState(false);
+  return (
+    <div className="mb-4 flex items-center gap-3 p-3 rounded-lg border border-border bg-white">
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-medium text-foreground">Library</p>
+        <p className="text-xs text-muted">Reuse saved items, or save these for another FlowGuide.</p>
+      </div>
+      <button onClick={() => setPicker(true)} disabled={disabled}
+        className="flex-none px-3 py-1.5 rounded-lg bg-accent hover:bg-accent-hover text-white text-xs font-medium disabled:opacity-60">
+        Add from Library
+      </button>
+      <button onClick={() => setPromote(true)} disabled={disabled}
+        className="flex-none text-xs font-medium text-accent hover:text-accent-hover disabled:opacity-60">
+        Save items
+      </button>
+      {picker && (
+        <LibraryPicker packetId={packetId}
+          onClose={() => setPicker(false)}
+          onInserted={(n) => {
+            setPicker(false);
+            onRefresh();
+            onNotice(`${n} item${n === 1 ? "" : "s"} added from your Library.`);
+          }} />
+      )}
+      {promote && (
+        <BulkPromote packetId={packetId}
+          onClose={() => setPromote(false)}
+          onDone={(m) => { setPromote(false); onNotice(m); }} />
+      )}
+    </div>
+  );
+}
+
 function AddBlockBar({ disabled, onAdd }: { disabled: boolean; onAdd: (role: HeadingKind, defaultText: string) => void }) {
   return (
     <div className="flex items-center justify-center gap-1.5 my-2">
@@ -212,7 +259,18 @@ export function BlockPacketEditor({
   const readOnly = status !== "draft";
   const [blocks, setBlocks] = useState<EditorBlock[]>(() => toEditorBlocks(initialBlocks));
   const [saving, setSaving] = useState(false);
+  // router.refresh() re-runs the server component, but `blocks` was seeded from
+  // props once. This adjusts it during render when fresh props arrive — React's
+  // documented pattern for derived state, rather than an effect that would fire a
+  // second render pass. Skipped while a save is in flight so a running mutation is
+  // never discarded.
+  const [seenBlocks, setSeenBlocks] = useState(initialBlocks);
+  if (initialBlocks !== seenBlocks && !saving) {
+    setSeenBlocks(initialBlocks);
+    setBlocks(toEditorBlocks(initialBlocks));
+  }
   const [errorMsg, setErrorMsg] = useState("");
+  const [libraryNotice, setLibraryNotice] = useState("");
   // The block whose item content is being edited in the modal (null = closed).
   const [editingBlockId, setEditingBlockId] = useState<string | null>(null);
 
@@ -396,6 +454,8 @@ export function BlockPacketEditor({
           </div>
         )}
 
+        {!readOnly && <LibraryBar packetId={packetId} disabled={disabled} onNotice={setLibraryNotice} onRefresh={router.refresh} />}
+        {libraryNotice && <p className="mb-3 text-xs text-green-700">{libraryNotice}</p>}
         {!readOnly && <AddBlockBar disabled={disabled} onAdd={(role, dt) => addBlock(0, role, dt)} />}
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
           <SortableContext items={blocks.map((b) => b.id)} strategy={verticalListSortingStrategy}>
