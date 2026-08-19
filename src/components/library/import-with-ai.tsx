@@ -4,6 +4,7 @@ import { BlockItemEditor } from "@/components/editor/block-item-editor";
 import { snapshotToItem } from "@/lib/library-adapter";
 import type { ItemContentPayload } from "@/lib/item-content";
 import type { Proposal } from "@/lib/library-import";
+import { classifyChunkResponse, CHUNK_NETWORK_FAILURE } from "@/lib/chunk-outcome";
 
 // Library → Import with AI.
 //
@@ -86,11 +87,18 @@ export function ImportWithAI({ onClose, onSaved }: { onClose: () => void; onSave
         setPhase("review");
         return;
       }
-      const r = await json(`/api/ingest/${id}/chunks/${next.ordinal}`, { method: "POST" });
-      if (!r.ok && r.status !== 409) {
-        setError(r.data.message || "That part could not be organized.");
-        return;
+      // The SAME rule the packet driver uses. Treating every non-ok response as
+      // terminal stranded an import on a transient provider hiccup the server
+      // had already marked retryable — see chunk-outcome.ts.
+      let outcome;
+      try {
+        const r = await json(`/api/ingest/${id}/chunks/${next.ordinal}`, { method: "POST" });
+        outcome = classifyChunkResponse(r.status, r.ok, r.data as Record<string, unknown>);
+      } catch {
+        outcome = CHUNK_NETWORK_FAILURE;
       }
+      if (outcome.kind === "fatal") { setError(outcome.message); return; }
+      if (outcome.kind === "retry") await new Promise((r) => setTimeout(r, 6000));
     }
   }, []);
 

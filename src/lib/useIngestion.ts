@@ -1,5 +1,6 @@
 "use client";
 import { useCallback, useRef, useState } from "react";
+import { classifyChunkResponse, CHUNK_NETWORK_FAILURE, type ChunkOutcome } from "./chunk-outcome.ts";
 
 // Client orchestrator for a persisted, resumable ingestion run. Drives chunks
 // sequentially against the persisted plan, shows real progress (completed
@@ -41,24 +42,21 @@ async function postJSON(url: string, body: unknown) {
 // timed-out/oversized segment, subdivides it automatically. A platform 504 or a
 // client-side timeout is transient: we back off and let the drive loop retry,
 // which reclaims after the lease and (on the 2nd attempt) triggers the split.
-async function processChunk(runId: string, ordinal: number): Promise<{ split?: boolean; completed?: boolean; retry?: boolean; error?: string }> {
+async function processChunk(runId: string, ordinal: number): Promise<ChunkOutcome> {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), CHUNK_CLIENT_TIMEOUT_MS);
   try {
     const r = await fetch(`/api/ingest/${runId}/chunks/${ordinal}`, { method: "POST", signal: ctrl.signal });
     clearTimeout(t);
-    if (r.status === 504 || r.status === 502 || r.status === 500) return { retry: true };
     const data = await r.json().catch(() => ({}));
-    if (r.ok) {
-      if (data.status === "split") return { split: true };
-      if (data.status === "processing") return { retry: true }; // another attempt holds it
-      if (data.status === "completed") return { completed: true };
-      return { retry: true };
-    }
-    return { error: data.message || data.error || "A part failed. You can retry." };
+    // ONE shared rule, so the packet driver and the Library driver cannot
+    // disagree about what is retryable. The previous inline version treated a
+    // transient provider failure as terminal even though the server had marked
+    // it retryable — see chunk-outcome.ts.
+    return classifyChunkResponse(r.status, r.ok, data as Record<string, unknown>);
   } catch {
     clearTimeout(t);
-    return { retry: true }; // client-side timeout -> reclaim after lease
+    return CHUNK_NETWORK_FAILURE;   // client-side timeout -> reclaim after lease
   }
 }
 
@@ -121,10 +119,10 @@ export function useIngestion(packetId: string, opts?: { onComplete?: () => void;
       }
       const res = await processChunk(runId, next.ordinal);
       if (cancelled.current) return;
-      if (res.split) { setState((s) => ({ ...s, subdividing: true })); continue; }
-      if (res.completed) { setState((s) => ({ ...s, subdividing: false })); continue; }
-      if (res.retry) { await sleep(RETRY_BACKOFF_MS); continue; } // reclaim after lease; server auto-splits on the 2nd attempt
-      if (res.error) { const msg = res.error; setState((s) => ({ ...s, phase: "error", error: msg })); return; }
+      if (res.kind === "split") { setState((s) => ({ ...s, subdividing: true })); continue; }
+      if (res.kind === "completed") { setState((s) => ({ ...s, subdividing: false })); continue; }
+      if (res.kind === "retry") { await sleep(RETRY_BACKOFF_MS); continue; } // reclaim after lease; server auto-splits on the 2nd attempt
+      { const msg = res.message; setState((s) => ({ ...s, phase: "error", error: msg })); return; }
     }
     setState((s) => ({ ...s, phase: "error", error: "Import did not converge." }));
   }, [opts]);

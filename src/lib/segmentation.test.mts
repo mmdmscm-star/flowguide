@@ -140,3 +140,46 @@ test("the default budget keeps a worst-case chunk well under the function ceilin
   // Chars must stay in step with items or prose-dense sources reintroduce the risk.
   assert.ok(DEFAULT_BUDGET.maxChars <= DEFAULT_BUDGET.maxItems * 700, "maxChars scaled to maxItems");
 });
+
+// ---------------------------------------------------------------------------
+// splitRange: a cut must actually divide the range.
+//
+// REGRESSION. Found by the Library import runtime proof, but the defect was in
+// the shared engine and packet ingestion hit it identically.
+// ---------------------------------------------------------------------------
+test("an oversized record followed by a blank line does not split into a one-character tail", () => {
+  const huge = "Sunrise Villa\n" + Array.from({ length: 90 }, (_, i) =>
+    `The community offers assisted living with a staffing ratio of ${i} residents per aide.`).join(" ");
+  // The trailing blank line is what separates this record from the next, so it
+  // is present in every realistic paste — and it used to win the cut outright.
+  const source = huge + "\n\nCommunity 3\n300 Example Rd";
+  const end = huge.length + 2;
+  const parts = splitRange(source, 0, end);
+
+  assert.equal(parts.length, 2);
+  for (const p of parts) {
+    const text = source.slice(p.start, p.end);
+    assert.ok(text.trim().length > 0,
+      `a child must carry content; got ${JSON.stringify(text)} — an empty segment reaches the model as "messages: at least one message is required"`);
+  }
+  const sizes = parts.map((p) => p.end - p.start);
+  assert.ok(Math.min(...sizes) > end / 8,
+    `both sides must be substantial, got ${sizes.join(" / ")}`);
+});
+
+test("splitting still prefers a real boundary over the midpoint when one is well placed", () => {
+  // The floor must not have turned every split into a blind mid cut.
+  const a = "Alpha. ".repeat(60);
+  const b = "Beta. ".repeat(60);
+  const source = `${a}\n\n${b}`;
+  const [first] = splitRange(source, 0, source.length);
+  assert.equal(source.slice(first.end - 2, first.end + 1).includes("\n"), true,
+    "the blank line between the two blocks is the natural cut and is well placed");
+});
+
+test("a range with no usable boundary still divides, rather than failing", () => {
+  const source = "x".repeat(400);
+  const parts = splitRange(source, 0, 400);
+  assert.equal(parts.length, 2);
+  assert.ok(parts[0].end > 0 && parts[0].end < 400);
+});

@@ -385,8 +385,26 @@ export function splitRange(source: string, start: number, end: number): Array<{ 
   pushAll(/\n/, 2, 1); // any newline
   pushAll(/[.!?]\s/, 1, 1); // sentence end
 
+  // A CUT MUST ACTUALLY DIVIDE THE RANGE.
+  //
+  // Preference outranks distance below, which is right — cutting at a record
+  // start beats cutting mid-row. But without a floor it also let a boundary at
+  // the very EDGE of the range win outright, and the trailing blank line that
+  // separates one record from the next is always such a boundary. An oversized
+  // record followed by a blank line therefore split into itself plus a
+  // one-character tail: the tail reached the model as whitespace ("messages: at
+  // least one message is required"), while the head was barely smaller than the
+  // parent and split the same way again.
+  //
+  // Found by the Library import runtime proof, but the defect is in the shared
+  // engine and packet ingestion hit it identically — any single record over
+  // PRESPLIT_CHARS in an ordinary blank-line-separated paste.
+  const len = end - start;
+  const minSide = Math.max(1, Math.min(64, Math.floor(len / 4)));
+  const usable = candidates.filter((c) => c.off - start >= minSide && end - c.off >= minSide);
+
   let best: { off: number; pref: number } | null = null;
-  for (const c of candidates) {
+  for (const c of usable) {
     if (
       best === null ||
       c.pref > best.pref ||
@@ -395,7 +413,9 @@ export function splitRange(source: string, start: number, end: number): Array<{ 
       best = c;
     }
   }
-  const cut = best ? best.off : mid; // hard char cut only if no boundary at all
+  // Falling back to mid is not a defeat: it is a balanced cut, which is exactly
+  // what every rejected candidate failed to be.
+  const cut = best ? best.off : mid;
   return [
     { start, end: cut },
     { start: cut, end },
