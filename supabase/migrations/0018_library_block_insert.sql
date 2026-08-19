@@ -1,3 +1,35 @@
+-- 0018 — SUPERSEDED. APPLIED 2026-08-18, THEN FOUND UNREACHABLE. DO NOT USE.
+--
+-- This function is correct in every respect except that it can never succeed.
+--
+-- WHAT WAS MISSED. The design traced where packet_blocks item rows are created
+-- (convert_packet_to_blocks, 0007) and concluded the only gap was a missing
+-- block row. It did not check whether an ITEM row may be created in block mode
+-- at all. It may not: trg_freeze_items (0007) rejects INSERT, DELETE, section_id
+-- and sort_order changes for any item whose packet is in block mode, and
+-- trg_freeze_sections does the same for sections. In block mode composition is
+-- owned by packet_blocks and the items/sections substrate is deliberately
+-- FROZEN — only content edits are allowed.
+--
+-- So the very first statement in this function raises:
+--   "items are frozen: cannot INSERT an item into a block-mode packet"
+--
+-- Proven at runtime 2026-08-18: the insertion returned nothing_inserted, and
+-- crucially the packet was left completely untouched — no orphan item, no orphan
+-- block, assert_packet_block_consistency still passing. The atomicity this
+-- function was written for held even as it failed.
+--
+-- STATUS. Applied and inert. Nothing calls it; the route refuses block packets
+-- before reaching it, and it is revoked from anon, authenticated and PUBLIC.
+-- Harmless to leave, but recommended to drop, because an unreachable function
+-- that always raises will mislead the next reader:
+--
+--   drop function if exists public.library_insert_item_block(uuid, uuid, uuid, uuid);
+--
+-- Supporting Library insertion in block mode means CHANGING the freeze
+-- invariant, which is a composition decision and not a Library one.
+--
+-- ============================ original header ============================
 -- 0018 — insert a Library snapshot into a BLOCK-mode FlowGuide.
 --
 -- WHY THIS EXISTS. 0017 shipped Library insertion for legacy packets only,

@@ -131,94 +131,55 @@ test("a Library insertion must not fabricate ingestion provenance", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Block-mode insertion (0018).
+// Block mode is refused, and WHY — pinned so this is not re-attempted blind.
 //
-// An item and its packet_blocks row are a bijection the database enforces.
-// Created as two statements from the application, a failure between them leaves
-// the packet permanently inconsistent AND unpublishable, with no affordance
-// anywhere to repair it — strictly worse than the partial states we have already
-// refused elsewhere, because there is no UI that can even see the orphan.
+// The first attempt at supporting it reasoned from the wrong evidence: item
+// blocks are created in exactly one place (convert_packet_to_blocks), so it
+// looked like the only gap was a missing packet_blocks row. It was not.
+//
+// trg_freeze_items (0007) rejects INSERT, DELETE, section_id and sort_order
+// changes for ANY item whose packet is in block mode, and trg_freeze_sections
+// does the same for sections. In block mode composition is owned by
+// packet_blocks and the items/sections substrate is deliberately FROZEN — only
+// content edits are allowed. So the item INSERT itself is rejected by the
+// database, before any question of blocks arises.
+//
+// Supporting Library insertion there means changing that invariant, which is a
+// composition decision rather than a Library one.
 // ---------------------------------------------------------------------------
-const M18 = read("supabase/migrations/0018_library_block_insert.sql");
-/** Executable SQL only. Ordering assertions against the raw file match the
- *  explanatory comments instead of the statements, which is how a correct
- *  function reads as broken. */
-const M18_SQL = M18.split("\n").filter((l) => !l.trim().startsWith("--")).join("\n");
 const FROMLIB = read("src/app/api/packets/[id]/items/from-library/route.ts");
 
-test("item and block are created inside ONE function, never as two statements", () => {
-  const fn = M18.slice(M18.indexOf("function public.library_insert_item_block"));
-  const body = fn.slice(0, fn.indexOf("$$;"));
-  assert.match(body, /insert into public\.items/, "the item is created here");
-  assert.match(body, /insert into public\.packet_blocks/, "and so is its block");
-  assert.match(body, /block_type/, "as an item block");
+test("the freeze that makes block-mode insertion impossible still exists", () => {
+  // If this ever stops being true, the refusal below should be revisited —
+  // deliberately, not by accident.
+  const m7 = read("supabase/migrations/0007_packet_blocks_r1a.sql");
+  assert.match(m7, /create trigger trg_freeze_items/);
+  assert.match(m7, /items are frozen: cannot INSERT an item into a block-mode packet/);
+  assert.match(m7, /create trigger trg_freeze_sections/);
 });
 
-test("the function asserts the bijection before committing", () => {
-  // The same assertion add_heading_block runs. Inside the transaction, so a
-  // broken bijection writes nothing at all rather than being discovered later.
-  const fn = M18_SQL.slice(M18_SQL.indexOf("function public.library_insert_item_block"));
-  const body = fn.slice(0, fn.indexOf("$$;"));
-  assert.match(body, /perform public\.assert_packet_block_consistency/);
-  const insert = body.indexOf("insert into public.packet_blocks");
-  const assertAt = body.indexOf("assert_packet_block_consistency");
-  assert.ok(assertAt > insert, "and asserts AFTER writing, not before");
+test("the route refuses block packets rather than failing at the database", () => {
+  assert.match(FROMLIB, /composition_mode === "blocks"/);
+  assert.match(FROMLIB, /unsupported_composition/);
+  // The refusal must come BEFORE any write is attempted.
+  const guard = FROMLIB.indexOf('composition_mode === "blocks"');
+  const insert = FROMLIB.indexOf('from("items").insert');
+  assert.ok(guard > 0 && guard < insert, "refuse before writing, not after");
 });
 
-test("the packet is locked before a position is chosen", () => {
-  // max(position)+1 read outside a lock lets two concurrent inserts pick the
-  // same position and collide on unique(packet_id, position).
-  const fn = M18_SQL.slice(M18_SQL.indexOf("function public.library_insert_item_block"));
-  const lock = fn.indexOf("for update");
-  const pos = fn.indexOf("max(position)");
-  assert.ok(lock > 0 && pos > lock, "the packet row must be locked first");
+test("the refusal explains that this is structural, not unimplemented", () => {
+  // A future reader who sees only "isn't available yet" will try to add it and
+  // rediscover the freeze the hard way, as I did.
+  assert.match(FROMLIB, /trg_freeze_items/,
+    "the guard's comment must name the trigger that makes this impossible");
 });
 
-test("it APPENDS and cannot place a block at a caller-chosen position", () => {
-  // This is what keeps it a Library insertion rather than a general
-  // "add an arbitrary item block" feature nobody asked for.
-  const fn = M18.slice(M18.indexOf("function public.library_insert_item_block"));
-  const sig = fn.slice(0, fn.indexOf("returns uuid"));
-  assert.doesNotMatch(sig, /p_position/, "no caller-supplied position");
-  assert.match(fn, /coalesce\(max\(position\) \+ 1, 0\)/, "always appended at the end");
+test("no Library affordance is offered in the block editor", () => {
+  const blockEditor = read("src/components/editor/block-packet-editor.tsx");
+  assert.doesNotMatch(blockEditor, /LibraryPicker|BulkPromote/,
+    "offering an action the database will refuse is worse than not offering it");
 });
 
-test("it takes a library item and nothing that could name arbitrary content", () => {
-  const fn = M18.slice(M18.indexOf("function public.library_insert_item_block"));
-  const sig = fn.slice(0, fn.indexOf("returns uuid"));
-  assert.match(sig, /p_library_item_id uuid/);
-  for (const forbidden of ["p_title", "p_description", "p_details", "p_photos"]) {
-    assert.ok(!sig.includes(forbidden), `${forbidden} would make this a general block-item writer`);
-  }
-});
-
-test("owner, draft and block mode are all verified", () => {
-  const fn = M18.slice(M18.indexOf("function public.library_insert_item_block"));
-  const body = fn.slice(0, fn.indexOf("$$;"));
-  assert.match(body, /v_user <> p_owner/, "owner");
-  assert.match(body, /v_status <> 'draft'/, "draft");
-  assert.match(body, /v_mode <> 'blocks'/, "block mode");
-  assert.match(body, /library_items where id = p_library_item_id and user_id = p_owner/,
-    "and the library item must belong to the same owner");
-});
-
-test("the route sends block packets through the function, not through a raw insert", () => {
-  assert.match(FROMLIB, /rpc\("library_insert_item_block"/);
-  const blocksBranch = FROMLIB.slice(FROMLIB.indexOf("if (isBlocks)"), FROMLIB.indexOf("} else {"));
-  assert.doesNotMatch(blocksBranch, /from\("items"\)\s*\.insert/,
-    "a block packet must never get a bare item insert");
-});
-
-test("the route still writes no 0014 provenance on either path", () => {
+test("the route still writes no 0014 provenance", () => {
   assert.doesNotMatch(FROMLIB, /origin_run_id|origin_chunk_ordinal|origin_emit_index/);
-  const fn = M18.slice(M18.indexOf("function public.library_insert_item_block"));
-  assert.doesNotMatch(fn.slice(0, fn.indexOf("$$;")), /origin_run_id/,
-    "and neither does the function — a Library copy has no import origin");
-});
-
-test("content failure cleanup relies on the cascade, keeping the bijection intact", () => {
-  // Deleting the item takes its block with it (packet_blocks.item_id is
-  // ON DELETE CASCADE), so the repair cannot itself break consistency.
-  assert.match(FROMLIB, /cascades on delete/i);
-  assert.match(FROMLIB, /from\("items"\)\.delete\(\)\.eq\("id", itemId\)/);
 });
