@@ -20,7 +20,10 @@ export function LibraryList({
   onToggle?: (id: string) => void;
   onOpen?: (item: LibrarySnapshot) => void;
   refreshKey?: number;
-  emptyHint?: string;
+  /** What to show when the Library holds nothing AND nothing is being searched.
+   *  A node rather than a string: an empty Library is a professional's first
+   *  encounter with the feature, and one grey sentence is not an explanation. */
+  emptyHint?: React.ReactNode;
 }) {
   const [q, setQ] = useState("");
   const [items, setItems] = useState<LibrarySnapshot[]>([]);
@@ -67,11 +70,15 @@ export function LibraryList({
       )}
 
       {!loading && items.length === 0 && (
-        <p className="mt-4 text-sm text-muted">
-          {q
-            ? `Nothing in your Library matches “${q}”.`
-            : emptyHint ?? "Your Library is empty. Save an item from a FlowGuide to reuse it later."}
-        </p>
+        q
+          ? <p className="mt-4 text-sm text-muted">Nothing in your Library matches “{q}”.</p>
+          : <div className="mt-4">
+              {emptyHint ?? (
+                <p className="text-sm text-muted">
+                  Your Library is empty. Save an item from a FlowGuide to reuse it later.
+                </p>
+              )}
+            </div>
       )}
 
       <ul className="mt-3 space-y-2">

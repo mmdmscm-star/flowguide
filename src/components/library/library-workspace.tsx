@@ -1,9 +1,10 @@
 "use client";
 import { useCallback, useState } from "react";
-import { useRouter } from "next/navigation";
 import { BlockItemEditor } from "@/components/editor/block-item-editor";
 import { LibraryList } from "@/components/library/library-list";
+import { CreatorNav } from "@/components/nav/creator-nav";
 import { snapshotToItem, type LibrarySnapshot } from "@/lib/library-adapter";
+import type { Item } from "@/lib/types";
 import type { ItemContentPayload } from "@/lib/item-content";
 import type { MutationResult } from "@/lib/serial-mutation";
 
@@ -16,13 +17,21 @@ import type { MutationResult } from "@/lib/serial-mutation";
 // Saving carries the revision the editor was opened with. If the entry changed
 // underneath (another tab, another device) the write is refused and the current
 // version is shown, rather than one edit silently erasing the other.
+// A Library entry written here rather than promoted from a packet. Same eight
+// fields, same editor, same row — populating the Library has never required a
+// FlowGuide to exist, and the empty state should not imply that it does.
+const BLANK: Item = {
+  id: "new", title: "", address: "", description: "", notes: "",
+  photos: [], details: [], links: [], contacts: [],
+};
+
 export default function LibraryWorkspace() {
-  const router = useRouter();
   const [editing, setEditing] = useState<LibrarySnapshot | null>(null);
   const [busy, setBusy] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const [notice, setNotice] = useState("");
   const [conflict, setConflict] = useState<LibrarySnapshot | null>(null);
+  const [creating, setCreating] = useState(false);
 
   const save = useCallback(async (payload: ItemContentPayload): Promise<MutationResult> => {
     if (!editing) return "failed";
@@ -57,6 +66,47 @@ export default function LibraryWorkspace() {
     }
   }, [editing]);
 
+  const create = useCallback(async (payload: ItemContentPayload): Promise<MutationResult> => {
+    // The retry lives in an INNER function so the duplicate path can call itself
+    // without the callback depending on its own identity.
+    async function attempt(force: boolean): Promise<MutationResult> {
+      try {
+        const res = await fetch("/api/library", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ item: payload, ...(force ? { force: true } : {}) }),
+        });
+        const data = await res.json();
+
+        // Same rule as saving from a packet: warn, never merge. Two genuinely
+        // different things can share a name.
+        if (res.status === 409 && data.error === "duplicate_candidate") {
+          if (confirm(`${data.message}\n\nSave this as a separate Library item anyway?`)) {
+            return await attempt(true);
+          }
+          return "rejected";
+        }
+        if (!res.ok) { setNotice(data.message || data.error || "Could not save."); return "failed"; }
+
+        setCreating(false);
+        setRefreshKey((k) => k + 1);
+        setNotice("Saved to your Library.");
+        return "ok";
+      } catch {
+        setNotice("Could not save. Check your connection.");
+        return "failed";
+      }
+    }
+
+    setBusy(true);
+    setNotice("");
+    try {
+      return await attempt(false);
+    } finally {
+      setBusy(false);
+    }
+  }, []);
+
   async function remove(s: LibrarySnapshot) {
     // Named consequence, not a generic "are you sure": what makes this safe is
     // precisely that packets are unaffected, and saying so is what lets the
@@ -81,10 +131,7 @@ export default function LibraryWorkspace() {
     <div className="min-h-screen bg-background">
       <div className="sticky top-0 z-20 bg-white border-b border-border">
         <div className="max-w-lg mx-auto px-5 py-3 flex items-center gap-3">
-          <button onClick={() => router.push("/dashboard")} className="text-sm text-muted hover:text-foreground">
-            ← Dashboard
-          </button>
-          <span className="ml-auto text-xs font-medium text-muted">Library</span>
+          <CreatorNav current="library" />
         </div>
       </div>
 
@@ -97,6 +144,18 @@ export default function LibraryWorkspace() {
             FlowGuide you have already sent.
           </p>
         </header>
+
+        {/* Also here, not only in the empty state: writing an entry directly is a
+            permanent way to use the Library, not a first-run bootstrap. */}
+        {!editing && !creating && (
+          <button
+            onClick={() => { setNotice(""); setCreating(true); }}
+            className="mb-4 px-3 py-1.5 rounded-lg border border-border bg-white text-xs font-medium
+                       text-foreground hover:border-accent hover:text-accent"
+          >
+            + Create an item
+          </button>
+        )}
 
         {notice && <p className="mb-4 text-xs text-green-700">{notice}</p>}
 
@@ -124,7 +183,17 @@ export default function LibraryWorkspace() {
           </div>
         )}
 
-        {editing ? (
+        {creating ? (
+          <div className="rounded-xl border border-border bg-white p-4">
+            <p className="mb-3 text-sm font-medium text-foreground">New Library item</p>
+            <BlockItemEditor
+              item={BLANK}
+              busy={busy}
+              onSave={(payload) => create(payload)}
+              onClose={() => setCreating(false)}
+            />
+          </div>
+        ) : editing ? (
           <div className="rounded-xl border border-border bg-white p-4">
             <div className="mb-3 flex items-center justify-between">
               <p className="text-sm font-medium text-foreground">Editing a Library item</p>
@@ -144,7 +213,42 @@ export default function LibraryWorkspace() {
             />
           </div>
         ) : (
-          <LibraryList refreshKey={refreshKey} onOpen={(s) => { setNotice(""); setEditing(s); }} />
+          <LibraryList
+            refreshKey={refreshKey}
+            onOpen={(s) => { setNotice(""); setEditing(s); }}
+            emptyHint={
+              // AN EMPTY LIBRARY IS THE FIRST THING A NEW PROFESSIONAL SEES, and
+              // it used to be one grey sentence. It has to say what this is for
+              // and name both ways to fill it — including the one that needs no
+              // FlowGuide at all.
+              <div className="rounded-xl border border-border bg-white p-4">
+                <p className="text-sm font-medium text-foreground">Nothing saved yet</p>
+                <p className="mt-1 text-xs text-muted">
+                  Your Library holds the things you use again — a community, a service, a
+                  person — so you are not rebuilding them for every client. Each one is
+                  private to you, and inserting one into a FlowGuide makes a copy.
+                </p>
+                <p className="mt-3 text-xs font-medium text-foreground">Two ways to fill it</p>
+                <ul className="mt-1 space-y-1 text-xs text-muted">
+                  <li>
+                    <span className="text-foreground">Save from a FlowGuide.</span> Open any
+                    FlowGuide — draft or published, it makes no difference — and use{" "}
+                    <span className="text-foreground">Save to Library</span> on an item, or{" "}
+                    <span className="text-foreground">Save items</span> to pick several at once.
+                  </li>
+                  <li>
+                    <span className="text-foreground">Write one here.</span> No FlowGuide required.
+                  </li>
+                </ul>
+                <button
+                  onClick={() => { setNotice(""); setCreating(true); }}
+                  className="mt-3 px-3 py-1.5 rounded-lg bg-accent hover:bg-accent-hover text-white text-xs font-medium"
+                >
+                  Create an item
+                </button>
+              </div>
+            }
+          />
         )}
       </div>
     </div>

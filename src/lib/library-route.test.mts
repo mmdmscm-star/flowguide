@@ -88,7 +88,9 @@ test("deleting an entry clears BOTH lineage columns, not just the id", () => {
 
 test("every route that sets lineage sets both columns together", () => {
   const save = read("src/app/api/library/route.ts");
-  assert.match(save, /library_item_id: item\.id, library_item_revision: item\.revision/);
+  // Backreferenced on purpose: both columns must come from the SAME entry, so
+  // this keeps holding under a rename and still fails if the two ever diverge.
+  assert.match(save, /library_item_id: (\w+)\.id, library_item_revision: \1\.revision/);
 });
 
 // ---------------------------------------------------------------------------

@@ -8,6 +8,7 @@ import OwnershipDecisions from "@/components/OwnershipDecisions";
 import { LibraryPicker } from "@/components/library/library-picker";
 import { BulkPromote } from "@/components/library/bulk-promote";
 import { ItemLibraryActions } from "@/components/library/item-library-actions";
+import { CreatorNav } from "@/components/nav/creator-nav";
 import {
   DndContext,
   closestCenter,
@@ -124,8 +125,17 @@ interface PacketData {
 // Library actions for a whole packet, shown in BOTH editors so reuse does not
 // depend on composition mode. Both are explicitly user-initiated: nothing is
 // saved or inserted without the professional opening one of these and choosing.
-function LibraryBar({ packetId, sectionId, disabled, onNotice, onRefresh }: {
+function LibraryBar({ packetId, sectionId, disabled, itemCount, refreshKey, onSaveItems, onNotice, onRefresh }: {
   packetId: string; sectionId?: string; disabled?: boolean;
+  /** How many items this FlowGuide has right now. Saving is only meaningful when
+   *  there is something to save, and the bar should say so rather than opening a
+   *  modal that reports the same thing one click later. */
+  itemCount: number;
+  /** Bumped after a save so the bar re-learns whether the Library is still empty. */
+  refreshKey: number;
+  /** Bulk save lives in the editor, because it is offered from two moments —
+   *  here, and again where the work actually finishes. */
+  onSaveItems: () => void;
   onNotice: (m: string) => void;
   /** Reload packet content. Inserted items are real rows the editor has not read
    *  yet, so without this the professional is told something was added and sees
@@ -133,21 +143,58 @@ function LibraryBar({ packetId, sectionId, disabled, onNotice, onRefresh }: {
   onRefresh: () => void;
 }) {
   const [picker, setPicker] = useState(false);
-  const [promote, setPromote] = useState(false);
+  // Whether this professional has saved ANYTHING yet, which decides which action
+  // leads. The first version of this bar always led with "Add from Library" as a
+  // filled accent button — so a professional with an empty Library saw a loud
+  // control that opens an empty list, while the only action that could populate
+  // that list sat beside it as plain text. Precedence now follows the state.
+  const [hasSaved, setHasSaved] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    let live = true;
+    (async () => {
+      try {
+        const res = await fetch("/api/library");
+        const data = await res.json();
+        if (live && res.ok) setHasSaved((data.items ?? []).length > 0);
+      } catch {
+        // Unknown, so the bar stays in its reuse-first default rather than
+        // telling a professional their Library is empty on a failed request.
+      }
+    })();
+    return () => { live = false; };
+  }, [refreshKey]);
+
+  const empty = hasSaved === false;
+  const PRIMARY = "flex-none px-3 py-1.5 rounded-lg bg-accent hover:bg-accent-hover text-white text-xs font-medium disabled:opacity-60";
+  const SECONDARY = "flex-none px-3 py-1.5 rounded-lg border border-border bg-white text-xs font-medium text-foreground hover:border-accent hover:text-accent disabled:opacity-60";
+
+  const addBtn = (
+    <button key="add" onClick={() => setPicker(true)} disabled={disabled || empty}
+      title={empty ? "You have not saved anything yet" : undefined}
+      className={empty ? SECONDARY : PRIMARY}>
+      Add from Library
+    </button>
+  );
+  const saveBtn = (
+    <button key="save" onClick={onSaveItems} disabled={disabled || itemCount === 0}
+      title={itemCount === 0 ? "Add an item first" : undefined}
+      className={empty ? PRIMARY : SECONDARY}>
+      Save items
+    </button>
+  );
+
   return (
-    <div className="mb-4 flex items-center gap-3 p-3 rounded-lg border border-border bg-white">
-      <div className="min-w-0 flex-1">
+    <div className="mb-4 flex flex-wrap items-center gap-3 p-3 rounded-lg border border-border bg-white">
+      <div className="min-w-[12rem] flex-1">
         <p className="text-sm font-medium text-foreground">Library</p>
-        <p className="text-xs text-muted">Reuse saved items, or save these for another FlowGuide.</p>
+        <p className="text-xs text-muted">
+          {empty
+            ? "Nothing saved yet. Save an item here to reuse it in your next FlowGuide."
+            : "Reuse a saved item, or save one from here to use again later."}
+        </p>
       </div>
-      <button onClick={() => setPicker(true)} disabled={disabled}
-        className="flex-none px-3 py-1.5 rounded-lg bg-accent hover:bg-accent-hover text-white text-xs font-medium disabled:opacity-60">
-        Add from Library
-      </button>
-      <button onClick={() => setPromote(true)} disabled={disabled}
-        className="flex-none text-xs font-medium text-accent hover:text-accent-hover disabled:opacity-60">
-        Save items
-      </button>
+      {empty ? [saveBtn, addBtn] : [addBtn, saveBtn]}
       {picker && (
         <LibraryPicker packetId={packetId} sectionId={sectionId}
           onClose={() => setPicker(false)}
@@ -156,11 +203,6 @@ function LibraryBar({ packetId, sectionId, disabled, onNotice, onRefresh }: {
             onRefresh();
             onNotice(`${n} item${n === 1 ? "" : "s"} added from your Library.`);
           }} />
-      )}
-      {promote && (
-        <BulkPromote packetId={packetId}
-          onClose={() => setPromote(false)}
-          onDone={(m) => { setPromote(false); onNotice(m); }} />
       )}
     </div>
   );
@@ -181,6 +223,10 @@ export function LegacyPacketEditor() {
   const [saveStatus, setSaveStatus] = useState<"saved" | "saving" | "error">("saved");
   const [publishError, setPublishError] = useState("");
   const [libraryNotice, setLibraryNotice] = useState("");
+  // Bulk save is owned here rather than by LibraryBar, because it is offered
+  // from two different moments: while building, and again where the work ends.
+  const [promoting, setPromoting] = useState(false);
+  const [libraryKey, setLibraryKey] = useState(0);
   const [showPublishModal, setShowPublishModal] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
   const [showAppendModal, setShowAppendModal] = useState(false);
@@ -922,12 +968,7 @@ export function LegacyPacketEditor() {
     <main className="max-w-2xl mx-auto px-5 py-6 pb-24">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
-        <button
-          onClick={() => router.push("/dashboard")}
-          className="text-sm text-muted hover:text-foreground transition-colors"
-        >
-          &larr; My Packets
-        </button>
+        <CreatorNav />
         <div className="flex items-center gap-2">
           <span className="text-xs text-muted">
             {saveStatus === "saving" ? "Saving..." : saveStatus === "error" ? "Save failed" : "Saved"}
@@ -1020,7 +1061,14 @@ export function LegacyPacketEditor() {
       {/* Library. BELOW the title and identity on purpose: the FlowGuide being
           created is the primary thing on this screen, and reuse is a tool for
           building it rather than the headline. */}
-      <LibraryBar packetId={packetId} onNotice={setLibraryNotice} onRefresh={loadPacket} />
+      <LibraryBar
+        packetId={packetId}
+        itemCount={items.length}
+        refreshKey={libraryKey}
+        onSaveItems={() => setPromoting(true)}
+        onNotice={setLibraryNotice}
+        onRefresh={loadPacket}
+      />
       {libraryNotice && <p className="mb-4 text-xs text-green-700">{libraryNotice}</p>}
 
       {/* Personal note */}
@@ -1131,7 +1179,14 @@ export function LegacyPacketEditor() {
                       onMove={moveItemToSection}
                       onUpdateField={updateItem}
                       onDelete={deleteItem}
-                      onLibraryChanged={setLibraryNotice}
+                      onLibraryChanged={(m) => {
+                        setLibraryNotice(m);
+                        // A per-item save changes both the bar's precedence and
+                        // that card's lineage, so re-read rather than leaving
+                        // the editor showing a state that is no longer true.
+                        setLibraryKey((k) => k + 1);
+                        loadPacket();
+                      }}
                       onAddDetail={addDetail}
                       onUpdateDetail={updateDetail}
                       onRemoveDetail={removeDetail}
@@ -1194,6 +1249,45 @@ export function LegacyPacketEditor() {
           + Add new sections with AI
         </button>
       </div>
+
+      {/* WHERE THE WORK ACTUALLY ENDS. The Library bar sits above the note and
+          every section, which is the right place to REUSE something and the
+          wrong place to be told you can SAVE — by the time the items exist, that
+          bar is far off the top of the screen and the only controls in view are
+          Preview and Publish. This is the same action, offered at the moment a
+          professional is actually finished. Draft or published is irrelevant:
+          saving to the Library has never had anything to do with publishing. */}
+      {items.length > 0 && (
+        <div className="mb-8 rounded-xl border border-border bg-white p-4">
+          <p className="text-sm font-medium text-foreground">Reuse any of these next time?</p>
+          <p className="mt-1 text-xs text-muted">
+            Save items to your Library and drop them into your next FlowGuide. Saving
+            makes a copy — this FlowGuide is not changed, and you do not have to publish
+            it first. Your Library is private to you.
+          </p>
+          <button
+            onClick={() => setPromoting(true)}
+            className="mt-3 px-3 py-1.5 rounded-lg bg-accent hover:bg-accent-hover text-white text-xs font-medium"
+          >
+            Save items to Library
+          </button>
+        </div>
+      )}
+
+      {promoting && (
+        <BulkPromote
+          packetId={packetId}
+          onClose={() => setPromoting(false)}
+          onDone={(m) => {
+            setPromoting(false);
+            setLibraryNotice(m);
+            // The Library is no longer empty; the bar's precedence depends on
+            // that, and the item cards now have lineage to show.
+            setLibraryKey((k) => k + 1);
+            loadPacket();
+          }}
+        />
+      )}
 
       {/* Add with AI modal */}
       {showAppendModal && (

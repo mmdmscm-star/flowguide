@@ -11,6 +11,13 @@ import { SaveBackDialog } from "@/components/library/save-back-dialog";
 //
 // An item whose ancestor was DELETED has null lineage, so it correctly falls
 // back to "Save to Library" — a deleted entry is never silently resurrected.
+//
+// THE TWO BRANCHES ARE STYLED DIFFERENTLY ON PURPOSE, and the first version of
+// this component got that wrong. Ancestry ("From your Library") is context: it
+// describes what an item already is, so it stays muted and out of the way.
+// Saving is an ACTION, and for a professional whose Library is still empty it is
+// the only way to put anything in it — rendering it as the same muted underline
+// made the one affordance that matters read like a caption.
 export function ItemLibraryActions({
   packetItemId, itemTitle, libraryItemId, onChanged,
 }: {
@@ -53,27 +60,29 @@ export function ItemLibraryActions({
 
   return (
     <>
-      {/* QUIET BY DESIGN. An item inserted from the Library is an ordinary item
-          once it is here — its ancestry is context, not a status. So this reads
-          as muted secondary text rather than a coloured call to action
-          competing with the item's own content. */}
-      <div className="flex items-center gap-2 text-xs text-muted">
-        {libraryItemId ? (
-          <>
-            <span>From your Library</span>
-            <span aria-hidden>·</span>
-            <button onClick={() => setDialog(true)} disabled={busy}
-              className="underline underline-offset-2 hover:text-foreground disabled:opacity-60">
-              Update saved version
-            </button>
-          </>
-        ) : (
-          <button onClick={() => saveToLibrary()} disabled={busy}
+      {libraryItemId ? (
+        // CONTEXT. Quiet: an item inserted from the Library is an ordinary item
+        // once it is here, and its ancestry should not compete with its content.
+        <div className="flex items-center gap-2 text-xs text-muted">
+          <span>From your Library</span>
+          <span aria-hidden>·</span>
+          <button onClick={() => setDialog(true)} disabled={busy}
             className="underline underline-offset-2 hover:text-foreground disabled:opacity-60">
-            {busy ? "Saving…" : "Save to Library"}
+            Update saved version
           </button>
-        )}
-      </div>
+        </div>
+      ) : (
+        // ACTION. Reads as a button, because it is one.
+        <button onClick={() => saveToLibrary()} disabled={busy}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-white px-2.5 py-1
+                     text-xs font-medium text-foreground hover:border-accent hover:text-accent
+                     disabled:opacity-60">
+          <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
+            <path d="M6 4h12a1 1 0 011 1v15l-7-4-7 4V5a1 1 0 011-1z" />
+          </svg>
+          {busy ? "Saving…" : "Save to Library"}
+        </button>
+      )}
       {error && <p className="mt-1 text-xs text-red-700">{error}</p>}
 
       {dialog && libraryItemId && (
