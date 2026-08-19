@@ -25,6 +25,108 @@ undone 0013** — letting a second Organize start on a packet awaiting review. T
 migration below carries all three statuses, and the post-apply verification
 asserts the predicate rather than the index's existence.
 
+## 0b. Two invariants, settled explicitly
+
+### One active import — stated separately for each destination
+
+**The hazard is real and correctly identified.** In PostgreSQL a unique index
+treats NULLs as *distinct* by default, so a unique index keyed on `packet_id`
+constrains nothing once `packet_id` is nullable — a hundred library runs all
+carrying `packet_id = null` would each be "unique". Relying on the existing index
+to cover library runs would silently allow unlimited simultaneous imports.
+
+The design therefore never keys a library run by `packet_id`. Two indexes, two
+rules, neither inferring anything from the other:
+
+| Destination | Key | Rule |
+|---|---|---|
+| `packet` | `packet_id` | one non-terminal run **per packet** — unchanged, including `needs_review` |
+| `library` | `user_id` | one non-terminal import **per professional** |
+
+The `where destination = '…'` predicate on each means correctness does not rest
+on NULL semantics at all — the library index would behave identically even if
+`packet_id` were never null.
+
+**One import per professional is the intended rule**, not an incidental
+consequence. An import owns the review layer, and a second concurrent import
+would put a professional in two review sittings at once with no way to tell which
+proposals belong to which paste. There is no product reason to allow it, and the
+Library is not a per-destination resource the way a packet is — so the
+professional is the correct key.
+
+The create RPC catches the unique violation and **returns the existing run**
+(`reused: true`), exactly as `create_organize_run` already does for a retried
+POST, so a double-submit reconnects to the import in progress instead of
+surfacing a constraint error.
+
+Verified by **attempted inserts, not index names** — see §6.
+
+### Per-proposal save atomicity
+
+**This was a real gap in the previous draft.** "Create the Library item, then
+delete the proposal" as two independent writes over PostgREST can split across a
+failure boundary: a crash in between leaves the item created and the proposal
+still present, and a retry creates a second item. The duplicate warning is not a
+guarantee — it is title/address heuristic and advisory by design.
+
+Fixed by making the pair a single transaction inside one function, the pattern
+`library_save_as_new_from_item` (0017) already establishes:
+
+```sql
+create or replace function public.library_save_proposal(
+  p_owner uuid, p_run_id uuid, p_proposal_id uuid
+) returns uuid
+language plpgsql security definer set search_path = ''
+as $$
+declare v_run record; v_p record; v_new uuid;
+begin
+  select * into v_run from public.ingestion_runs where id = p_run_id for update;
+  if v_run.id is null then raise exception 'library: run % not found', p_run_id; end if;
+  if v_run.user_id <> p_owner then raise exception 'library: caller does not own run'; end if;
+  if v_run.destination <> 'library' then raise exception 'library: run % is not a library import', p_run_id; end if;
+
+  select * into v_p from public.library_import_proposals
+    where id = p_proposal_id and run_id = p_run_id for update;
+
+  -- ALREADY SAVED. This is exactly what a retry after a crash looks like, and it
+  -- must be a no-op returning nothing — never a second item.
+  if v_p.id is null then return null; end if;
+
+  insert into public.library_items
+    (user_id, title, address, description, notes, details, links, photos, contacts)
+  values (
+    p_owner,
+    coalesce(v_p.payload->>'title', ''),   coalesce(v_p.payload->>'address', ''),
+    coalesce(v_p.payload->>'description', ''), coalesce(v_p.payload->>'notes', ''),
+    coalesce(v_p.payload->'details',  '[]'::jsonb), coalesce(v_p.payload->'links',    '[]'::jsonb),
+    coalesce(v_p.payload->'photos',   '[]'::jsonb), coalesce(v_p.payload->'contacts', '[]'::jsonb)
+  )
+  returning id into v_new;
+
+  delete from public.library_import_proposals where id = p_proposal_id;
+  return v_new;
+end;
+$$;
+```
+
+A plpgsql function body is one transaction: the insert and the delete commit
+together or not at all. **No crash window exists between them.** The `for update`
+on the proposal row also serialises two concurrent saves of the same proposal —
+the second blocks, then finds the row gone and returns null.
+
+`source_packet_item_id` is deliberately not written: an imported entry has no
+packet item, exactly as a directly-written one does not.
+
+This keeps `library_import_proposals` free of any `library_item_id` column. The
+idempotency comes from the row's *absence*, which is a fact the transaction
+guarantees, rather than from bookkeeping that would itself need to be written
+atomically.
+
+The advisory duplicate scan stays in TypeScript, before the call. It is a
+warning the professional answers, not a constraint, and a read-then-act race on
+it is harmless: the worst outcome is two similar entries, which the Library
+explicitly permits.
+
 ## 1. Migration 0020 — widen the run row
 
 Additive except for one index replacement. No data migration: every existing row
@@ -123,6 +225,10 @@ commit;
 speak. There is no `edited` flag because an edit is just a payload it holds; the
 row's existence means "proposed and not yet saved".
 
+0021 also creates **`library_save_proposal`** (§0b) — the atomic per-proposal
+save — with the same `revoke … from public, anon, authenticated` /
+`grant execute … to service_role` treatment every other Library RPC gets.
+
 **Deliberately absent: any link to `library_items`.** A saved proposal is
 **deleted**, which makes the table self-draining and a partial save idempotent by
 construction — the rows that remain are exactly the ones not yet saved, so a
@@ -130,6 +236,28 @@ retry after a failure at item 25 of 40 saves the other 15 and cannot duplicate
 the first 25.
 
 ## 3. State machine
+
+### What "waiting for human review" is, exactly
+
+**`status = 'active'` with `completed_chunks = total_chunks` and
+`total_chunks > 0`.** No new status is introduced.
+
+Reopening the app during review reads the run row and derives the phase from
+those three values — the same computation the packet drive loop already performs
+before it finalizes. Materialisation is then always safe to call, because it is
+idempotent, which also covers the narrow case of a crash between the last chunk
+completing and the proposals being written.
+
+**Why not a dedicated `awaiting_review` status.** It would have to be added to
+the predicate of *both* one-active indexes, because a run awaiting review is
+emphatically non-terminal — a professional must not be able to start a second
+import while reviewing the first. Forgetting either predicate would silently
+permit exactly that. This is the same failure 0013 had to repair for
+`needs_review`, and the same one this design nearly reintroduced (§0). Deriving
+the phase means there is no new non-terminal value that any predicate can forget.
+
+`active` already appears in both predicates, so a library import holds its
+one-active slot for its entire life — extraction *and* review.
 
 The run reuses the existing statuses. Processing and review are **derived**, not
 new states — `completed_chunks = total_chunks` is what already drives the client
@@ -222,10 +350,28 @@ status, and the count of runs with a null `packet_id` (must be zero).
 3. `idx_ingestion_runs_one_active_packet` carries all three statuses. Asserted by
    comparing the index predicate, and by an aborted insert of a second
    `needs_review` run on one packet — the regression this design nearly shipped.
-4. `idx_ingestion_runs_one_active_library` forbids a second active import per user.
+4. `idx_ingestion_runs_one_active_library` forbids a second active import per
+   user — proven by an aborted insert of a second `active` library run for one
+   professional, and separately by inserting a second run for a DIFFERENT
+   professional and confirming it succeeds, so the index is shown to constrain
+   the right thing rather than everything.
+4b. A unique index keyed on `packet_id` is shown NOT to constrain library rows —
+   two library runs with null `packet_id` inserted under the old-style predicate
+   in a rolled-back transaction — so the separate `user_id` index is proven
+   necessary rather than assumed.
 5. `finalize_ingestion_run` and `discard_ingestion_run` raise on a library run.
 6. `block_publish_during_ingest` and `ingest_invalidate_offsets` are byte-identical
    to their current definitions.
+
+**Post-apply, on 0021.**
+7. `library_save_proposal` is atomic: with a deliberate fault injected between
+   the insert and the delete (a raised exception inside the function), NEITHER
+   the `library_items` row nor the proposal deletion survives — proving they
+   share a transaction rather than merely running in sequence.
+8. Calling it twice for the same proposal yields one Library item and a null on
+   the second call.
+9. It refuses a run whose destination is `packet`, and refuses a caller who does
+   not own the run.
 
 **Runtime proof, on disposable data, before and after.** A full Organize run
 (create → chunks → finalize), an `append` run, and a `section_append` run, each
