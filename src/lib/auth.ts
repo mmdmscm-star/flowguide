@@ -1,7 +1,10 @@
 import { cookies } from "next/headers";
 import { createServerClient } from "./supabase";
 
-const SESSION_COOKIE = "flowguide_session";
+// Exported so nothing else has to repeat the literal. A second copy of a cookie
+// name is a silent drift hazard: rename one and the other keeps "working" by
+// always finding nothing.
+export const SESSION_COOKIE = "flowguide_session";
 const SESSION_DURATION_DAYS = 30;
 
 export async function getSession(): Promise<{ userId: string } | null> {

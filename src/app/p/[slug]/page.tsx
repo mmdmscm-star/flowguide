@@ -8,6 +8,8 @@ import { SectionGroup } from "@/components/section-group";
 import { PacketBlockBody } from "@/components/packet-block-body";
 import { ProfessionalFooter } from "@/components/professional-footer";
 import type { Packet } from "@/lib/types";
+import { ownedPacketId } from "@/lib/packet-owner";
+import { OwnerBar } from "@/components/nav/owner-bar";
 
 // Render on every request — never serve a cached copy. This is what makes
 // unpublish/delete take effect immediately: there is no stored HTML that could
@@ -57,56 +59,70 @@ export default async function PacketPage({ params }: Props) {
   // very next request (getPublishedPacket filters status='published').
   if (!packet) notFound();
 
-  // Track that this packet was opened (fire and forget)
-  if (slug !== "demo" && isSupabaseConfigured) {
+  // Is the person reading this its author? Costs a recipient nothing: with no
+  // session cookie this returns null without a query. Everything below renders
+  // identically either way — the only difference is one bar ABOVE the packet.
+  const ownedId = isSupabaseConfigured && slug !== "demo" ? await ownedPacketId(slug) : null;
+
+  // Track that this packet was opened (fire and forget).
+  //
+  // NOT WHEN THE OWNER OPENS IT. `viewed` means "the client has seen this", and
+  // a professional checking their own link was silently setting it — which turns
+  // a genuinely useful signal into one that cannot be trusted. Only possible to
+  // fix now that the page knows who is looking; no backfill, since there is no
+  // way to tell which past views were the owner's.
+  if (slug !== "demo" && isSupabaseConfigured && !ownedId) {
     markPacketViewed(slug).catch(() => {});
   }
 
   return (
-    <main className="w-full max-w-lg mx-auto pb-12 overflow-x-hidden break-words">
-      <PacketHeader
-        title={packet.title}
-        clientName={packet.clientName}
-        professional={packet.professional}
-      />
+    <>
+      {ownedId && <OwnerBar packetId={ownedId} />}
+      <main className="w-full max-w-lg mx-auto pb-12 overflow-x-hidden break-words">
+        <PacketHeader
+          title={packet.title}
+          clientName={packet.clientName}
+          professional={packet.professional}
+        />
 
-      {packet.personalNote && <PersonalNote note={packet.personalNote} />}
+        {packet.personalNote && <PersonalNote note={packet.personalNote} />}
 
-      {/* Map button */}
-      {packet.mapUrl && (
-        <div className="mx-5 mb-8">
-          <a
-            href={packet.mapUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center justify-center gap-2 w-full py-3 rounded-xl bg-accent hover:bg-accent-hover text-white text-base font-medium transition-colors"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
-            </svg>
-            View Map
-          </a>
-        </div>
-      )}
+        {/* Map button */}
+        {packet.mapUrl && (
+          <div className="mx-5 mb-8">
+            <a
+              href={packet.mapUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center justify-center gap-2 w-full py-3 rounded-xl bg-accent hover:bg-accent-hover text-white text-base font-medium transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+              </svg>
+              View Map
+            </a>
+          </div>
+        )}
 
-      {/* Body renderer selected by composition mode. Legacy packets render the
-          exact section/item path (unchanged); block packets render the ordered
-          block body. Both present the same packet shell, header, and footer. */}
-      {packet.compositionMode === "blocks" ? (
-        <PacketBlockBody blocks={packet.blocks ?? []} />
-      ) : (
-        packet.sections.map((section) => (
-          <SectionGroup key={section.id} section={section} />
-        ))
-      )}
+        {/* Body renderer selected by composition mode. Legacy packets render the
+            exact section/item path (unchanged); block packets render the ordered
+            block body. Both present the same packet shell, header, and footer. */}
+        {packet.compositionMode === "blocks" ? (
+          <PacketBlockBody blocks={packet.blocks ?? []} />
+        ) : (
+          packet.sections.map((section) => (
+            <SectionGroup key={section.id} section={section} />
+          ))
+        )}
 
-      {packet.professional.name && (
-        <ProfessionalFooter professional={packet.professional} />
-      )}
+        {packet.professional.name && (
+          <ProfessionalFooter professional={packet.professional} />
+        )}
 
-      <p className="text-center text-xs text-muted/40 mt-4">
-        Powered by FlowGuide
-      </p>
-    </main>
+        <p className="text-center text-xs text-muted/40 mt-4">
+          Powered by FlowGuide
+        </p>
+      </main>
+    </>
   );
 }
