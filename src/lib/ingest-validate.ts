@@ -27,7 +27,7 @@
 export type ResultShape = "sections" | "items";
 
 export function shapeFor(entryPoint: string): ResultShape {
-  return entryPoint === "section_append" ? "items" : "sections";
+  return entryPoint === "section_append" || entryPoint === "library_import" ? "items" : "sections";
 }
 
 export type ValidationOk = { ok: true; result: Record<string, unknown>; itemCount: number };

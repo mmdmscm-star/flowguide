@@ -23,7 +23,17 @@ export async function POST(_request: Request, context: Context) {
   // way to tell whether this run created the packet. Best-effort: a failure
   // here must never stop a finalize.
   const { data: preRow } = await supabase
-    .from("ingestion_runs").select("packet_id").eq("id", runId).eq("user_id", session.userId).maybeSingle();
+    .from("ingestion_runs").select("packet_id, destination").eq("id", runId).eq("user_id", session.userId).maybeSingle();
+
+  // A LIBRARY IMPORT DOES NOT FINALIZE INTO ANYTHING. finalize_ingestion_run
+  // refuses it at the database, but a professional should never see a raw
+  // database refusal — and the correct next step has a name, so say it.
+  if ((preRow as { destination?: string } | null)?.destination === "library") {
+    return NextResponse.json({
+      error: "wrong_destination",
+      message: "This is a Library import. Finish it from your Library instead.",
+    }, { status: 409 });
+  }
   const prePacketId = (preRow as { packet_id?: string } | null)?.packet_id;
   let createdThisPacket = false;
   if (prePacketId) {

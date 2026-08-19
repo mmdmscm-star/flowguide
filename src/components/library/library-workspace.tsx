@@ -3,6 +3,7 @@ import { useCallback, useState } from "react";
 import { BlockItemEditor } from "@/components/editor/block-item-editor";
 import { LibraryList } from "@/components/library/library-list";
 import { CreatorNav } from "@/components/nav/creator-nav";
+import { ImportWithAI } from "@/components/library/import-with-ai";
 import { snapshotToItem, type LibrarySnapshot } from "@/lib/library-adapter";
 import type { Item } from "@/lib/types";
 import type { ItemContentPayload } from "@/lib/item-content";
@@ -32,6 +33,7 @@ export default function LibraryWorkspace() {
   const [notice, setNotice] = useState("");
   const [conflict, setConflict] = useState<LibrarySnapshot | null>(null);
   const [creating, setCreating] = useState(false);
+  const [importing, setImporting] = useState(false);
 
   const save = useCallback(async (payload: ItemContentPayload): Promise<MutationResult> => {
     if (!editing) return "failed";
@@ -148,13 +150,28 @@ export default function LibraryWorkspace() {
         {/* Also here, not only in the empty state: writing an entry directly is a
             permanent way to use the Library, not a first-run bootstrap. */}
         {!editing && !creating && (
-          <button
-            onClick={() => { setNotice(""); setCreating(true); }}
-            className="mb-4 px-3 py-1.5 rounded-lg border border-border bg-white text-xs font-medium
-                       text-foreground hover:border-accent hover:text-accent"
-          >
-            + Create an item
-          </button>
+          <div className="mb-4 flex flex-wrap items-center gap-2">
+            <button
+              onClick={() => { setNotice(""); setImporting(true); }}
+              className="px-3 py-1.5 rounded-lg bg-accent hover:bg-accent-hover text-white text-xs font-medium"
+            >
+              Import with AI
+            </button>
+            <button
+              onClick={() => { setNotice(""); setCreating(true); }}
+              className="px-3 py-1.5 rounded-lg border border-border bg-white text-xs font-medium
+                         text-foreground hover:border-accent hover:text-accent"
+            >
+              + Create an item
+            </button>
+          </div>
+        )}
+
+        {importing && (
+          <ImportWithAI
+            onClose={() => setImporting(false)}
+            onSaved={() => setRefreshKey((k) => k + 1)}
+          />
         )}
 
         {notice && <p className="mb-4 text-xs text-green-700">{notice}</p>}
@@ -228,7 +245,7 @@ export default function LibraryWorkspace() {
                   person — so you are not rebuilding them for every client. Each one is
                   private to you, and inserting one into a FlowGuide makes a copy.
                 </p>
-                <p className="mt-3 text-xs font-medium text-foreground">Two ways to fill it</p>
+                <p className="mt-3 text-xs font-medium text-foreground">Three ways to fill it</p>
                 <ul className="mt-1 space-y-1 text-xs text-muted">
                   <li>
                     <span className="text-foreground">Save from a FlowGuide.</span> Open any
@@ -237,15 +254,27 @@ export default function LibraryWorkspace() {
                     <span className="text-foreground">Save items</span> to pick several at once.
                   </li>
                   <li>
-                    <span className="text-foreground">Write one here.</span> No FlowGuide required.
+                    <span className="text-foreground">Import with AI.</span> Paste what you already
+                    have and review what it finds — no FlowGuide required.
+                  </li>
+                  <li>
+                    <span className="text-foreground">Write one here.</span> Also no FlowGuide required.
                   </li>
                 </ul>
-                <button
-                  onClick={() => { setNotice(""); setCreating(true); }}
-                  className="mt-3 px-3 py-1.5 rounded-lg bg-accent hover:bg-accent-hover text-white text-xs font-medium"
-                >
-                  Create an item
-                </button>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button
+                    onClick={() => { setNotice(""); setImporting(true); }}
+                    className="px-3 py-1.5 rounded-lg bg-accent hover:bg-accent-hover text-white text-xs font-medium"
+                  >
+                    Import with AI
+                  </button>
+                  <button
+                    onClick={() => { setNotice(""); setCreating(true); }}
+                    className="px-3 py-1.5 rounded-lg border border-border bg-white text-xs font-medium text-foreground hover:border-accent"
+                  >
+                    Create an item
+                  </button>
+                </div>
               </div>
             }
           />

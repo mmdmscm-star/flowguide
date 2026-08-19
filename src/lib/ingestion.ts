@@ -7,7 +7,11 @@ import { organizeLeadPrompt, sectionsPrompt, itemsOnlyPrompt } from "./ai-prompt
 import { validateEntryPointResult } from "./ingest-validate";
 
 export { SEGMENTER_VERSION };
-export type EntryPoint = "organize" | "append" | "section_append";
+// `library_import` reuses the ITEMS-ONLY contract that section_append already
+// has: a bare list of items with the same eight fields as ItemContentPayload.
+// A Library entry has no section to belong to, so there was never a second
+// prompt or a second result shape to invent.
+export type EntryPoint = "organize" | "append" | "section_append" | "library_import";
 
 // A segment noticeably larger than the budget is pre-emptively split before we
 // even spend a model call on it (defends genuinely huge blocks).
@@ -79,7 +83,7 @@ export async function processSegment(opts: {
   const { entryPoint, packetType, isLead, segmentText, apiKey } = opts;
 
   let systemPrompt: string;
-  if (entryPoint === "section_append") systemPrompt = itemsOnlyPrompt();
+  if (entryPoint === "section_append" || entryPoint === "library_import") systemPrompt = itemsOnlyPrompt();
   else if (entryPoint === "organize" && isLead) systemPrompt = organizeLeadPrompt(packetType);
   else systemPrompt = sectionsPrompt(packetType);
 
@@ -99,7 +103,7 @@ export async function processSegment(opts: {
   const valid = validateEntryPointResult(entryPoint, data);
   if (!valid.ok) return { kind: "error", status: 502, message: valid.message };
 
-  if (entryPoint === "section_append") return { kind: "ok", result: valid.result };
+  if (entryPoint === "section_append" || entryPoint === "library_import") return { kind: "ok", result: valid.result };
   const out: ProcessOutcome = { kind: "ok", result: valid.result };
   if (entryPoint === "organize" && isLead) {
     out.title = typeof (data as { title?: unknown }).title === "string" ? (data as { title: string }).title : undefined;

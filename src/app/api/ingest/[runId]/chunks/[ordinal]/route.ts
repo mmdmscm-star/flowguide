@@ -50,7 +50,7 @@ export async function POST(_request: Request, context: Context) {
   const supabase = createServerClient();
   const { data: run } = await supabase
     .from("ingestion_runs")
-    .select("id, user_id, packet_id, entry_point, status, source_text")
+    .select("id, user_id, packet_id, destination, entry_point, status, source_text")
     .eq("id", runId)
     .maybeSingle();
   if (!run || run.user_id !== session.userId) return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -116,7 +116,12 @@ export async function POST(_request: Request, context: Context) {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) return NextResponse.json({ error: "AI service not configured" }, { status: 500 });
 
-  const { data: packet } = await supabase.from("packets").select("packet_type").eq("id", run.packet_id).maybeSingle();
+  // DESTINATION-GUARDED. A library run has no packet, and the items-only prompt
+  // it uses takes no packet type — so this lookup is skipped entirely rather
+  // than issued with a null id and quietly returning nothing.
+  const { data: packet } = run.destination === "library"
+    ? { data: null }
+    : await supabase.from("packets").select("packet_type").eq("id", run.packet_id).maybeSingle();
   const isLead = entryPoint === "organize" && sourceStart === 0;
 
   // Acceptance-test fault injection. Inert unless FLOWGUIDE_TEST_FAULT_FILE is
