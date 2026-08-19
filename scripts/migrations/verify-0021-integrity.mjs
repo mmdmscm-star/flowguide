@@ -101,5 +101,39 @@ ok(/unique \(run_id, ordinal, idx\)/.test(ddl),
 ok(!/create or replace function public\.(claim_chunk|stage_chunk_result|mark_chunk_failed|split_chunk)\(/.test(M21),
    "0021 does not touch the chunk engine");
 
+// ---------------------------------------------------------------------------
+// The preflight's drift check is only as good as the hashes baked into it, and
+// a hand-copied hash is exactly the transcription risk this whole approach
+// exists to remove. So they are RE-DERIVED here from the same source files and
+// required to match what the preflight actually contains.
+//
+// prosrc is what Postgres stores verbatim: the text between the dollar quotes,
+// including the newline immediately after the opening $$. pg_get_functiondef
+// would not do — it rebuilds the header from catalog metadata, so it can never
+// equal a lower-case source file.
+// ---------------------------------------------------------------------------
+function prosrc(text, header) {
+  const i = text.indexOf(header);
+  const open = text.indexOf("as $$", i) + "as $$".length;
+  const close = text.indexOf("\n$$;", i) + 1;   // keep the newline before $$
+  return text.slice(open, close);
+}
+const md5 = (s) => createHash("md5").update(s).digest("hex");
+const PREFLIGHT = read("docs/migrations/0021-step2-preflight.sql");
+
+console.log("");
+for (const s of SOURCES) {
+  const expected = md5(prosrc(read(s.from), s.header));
+  const occurrences = PREFLIGHT.split(expected).length - 1;
+  ok(occurrences >= 2,
+     `preflight carries the live-body hash for ${s.name}`,
+     `${expected} appears ${occurrences}x (expected >= 2: one as expected, one in the comparison)`);
+  console.log(`        live-body md5=${expected}`);
+}
+ok(/md5\(p\.prosrc\)/.test(PREFLIGHT),
+   "the preflight compares prosrc, not pg_get_functiondef");
+ok(!/pg_get_functiondef\(p\.oid\) = /.test(PREFLIGHT),
+   "the preflight does not attempt an exact functiondef comparison");
+
 console.log(`\n${failed === 0 ? "INTEGRITY OK" : `${failed} FAILED`}\n`);
 process.exit(failed === 0 ? 0 : 1);
