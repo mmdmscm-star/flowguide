@@ -154,7 +154,16 @@ try {
   }
 
   // ---- `viewed` means the CLIENT opened it --------------------------------
+  // SETTLE BEFORE RESETTING. The anonymous load above legitimately marks the
+  // packet seen, and that write is fire-and-forget. On production latency it can
+  // land AFTER the reset below — and then reads as "the owner marked it seen",
+  // blaming the owner for a recipient's visit. Observed once as a false failure
+  // in a post-deploy smoke that was otherwise green.
+  await new Promise((r) => setTimeout(r, 2500));
   await svc.from("packets").update({ viewed: false }).eq("id", pubId);
+  const { data: v0 } = await svc.from("packets").select("viewed").eq("id", pubId).single();
+  check("precondition: the packet starts unseen", (v0 as { viewed: boolean }).viewed === false,
+    "a stale write landed after the reset — the check below would be meaningless");
   await page(owner.cookie);
   await new Promise((r) => setTimeout(r, 1500));
   const { data: v1 } = await svc.from("packets").select("viewed").eq("id", pubId).single();
