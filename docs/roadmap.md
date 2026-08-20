@@ -346,7 +346,9 @@ in, not a priority ranking.
    policy, not a redesign. Screens touched during the language and view-vs-edit
    passes already meet the floor; the broad sweep is what remains.
 
-2. **Canonical Library photo normalization, and historical repair.** The
+2. **Canonical Library photo normalization, and historical repair — now 0025.**
+   (0024 is evidence retention; migration numbers follow application order, so
+   the earlier reservation of 0024 for this work is superseded.) The
    application tolerates both the canonical `{url}` shape and the bare strings an
    AI import used to write, and every read and write path handles both — so
    production is protected and this is not urgent. What remains is canonical data
