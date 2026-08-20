@@ -16,6 +16,7 @@ re-issued from already-applied migrations are proven by having run; genuinely
 new plpgsql is not proven by this script.
 """
 import sys, glob, pglast
+from pglast import enums
 
 TARGETS = sorted(glob.glob("scripts/sql/*.sql")) + sorted(glob.glob("supabase/migrations/*.sql"))
 WRITE_KINDS = {"InsertStmt", "UpdateStmt", "DeleteStmt", "AlterTableStmt",
@@ -38,6 +39,21 @@ for f in TARGETS:
             bad += 1
             continue
         print(f"ok    {f}  ({len(stmts)} stmt, read-only)")
+    elif f.startswith("scripts/sql/") and "verify" in f:
+        # A verifier may write, because it tests behaviour — but only inside a
+        # transaction it cannot commit. Checked through the PARSER, not by
+        # grepping for "commit": `on commit drop` is not a COMMIT statement, and
+        # a string match says it is.
+        tx = [s.stmt.kind for s in stmts if type(s.stmt).__name__ == "TransactionStmt"]
+        if enums.TransactionStmtKind.TRANS_STMT_COMMIT in tx:
+            print(f"FAIL  {f}\n        verifier can COMMIT its disposable data")
+            bad += 1
+            continue
+        if not tx or tx[0] != enums.TransactionStmtKind.TRANS_STMT_BEGIN or tx[-1] != enums.TransactionStmtKind.TRANS_STMT_ROLLBACK:
+            print(f"FAIL  {f}\n        verifier is not wrapped BEGIN..ROLLBACK")
+            bad += 1
+            continue
+        print(f"ok    {f}  ({len(stmts)} stmt, BEGIN..ROLLBACK, cannot commit)")
     else:
         print(f"ok    {f}  ({len(stmts)} stmt: {', '.join(kinds)})")
 sys.exit(1 if bad else 0)
