@@ -4,6 +4,7 @@ import { createServerClient } from "@/lib/supabase";
 import { processSegment, buildSplitChildren, shouldPresplit, EntryPoint } from "@/lib/ingestion";
 import { validateEntryPointResult } from "@/lib/ingest-validate";
 import { nextFault } from "@/lib/test-faults";
+import { buildChunkLedger } from "@/lib/fact-ledger";
 
 export const maxDuration = 60;
 type Context = { params: Promise<{ runId: string; ordinal: string }> };
@@ -178,6 +179,37 @@ export async function POST(_request: Request, context: Context) {
     p_run_id: runId, p_owner: session.userId, p_ordinal: ordinal, p_attempt: attempt, p_segment_hash: c.segment_hash, p_result: outcome.result,
   });
   if (stageErr) return NextResponse.json({ error: stageErr.message }, { status: 400 });
+
+  // OBSERVE-ONLY FACT LEDGER. It counts what the segment contained against what
+  // the model returned, and writes the count down. It does not repair, reroute,
+  // strip, surface or re-order anything, and no other code path reads it yet.
+  //
+  // DELIBERATELY AFTER STAGING, AND DELIBERATELY SWALLOWED. The chunk is already
+  // durably complete by this line. A ledger that could fail the request would be
+  // a measuring instrument that breaks the thing it measures — so every failure
+  // here, including a database error, leaves the run exactly as it would have
+  // been if the ledger did not exist.
+  //
+  // THE LEDGER IS EVIDENCE, NOT METADATA: it stores verbatim fragments of the
+  // professional's source text, which may contain contacts, pricing or private
+  // notes. It therefore lives on ingestion_chunks alongside segment_text and is
+  // cleared by the SAME retention window (see 0025's purge re-issue) rather than
+  // outliving the material it quotes.
+  try {
+    const ledger = buildChunkLedger(segmentText, ordinal, outcome.result);
+    // Guarded on the CLAIM GENERATION, exactly as stage/fail/split are. If this
+    // chunk was reclaimed by a newer attempt while the model was working, that
+    // attempt owns the result and this stale claimant must not overwrite its
+    // ledger with a reading of a superseded response.
+    await supabase
+      .from("ingestion_chunks")
+      .update({ fact_ledger: ledger })
+      .eq("run_id", runId)
+      .eq("ordinal", ordinal)
+      .eq("attempt_count", attempt);
+  } catch {
+    // Intentionally silent. See above.
+  }
 
   if (isLead && (outcome.title || outcome.clientName)) {
     await supabase

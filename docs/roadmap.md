@@ -346,7 +346,7 @@ in, not a priority ranking.
    policy, not a redesign. Screens touched during the language and view-vs-edit
    passes already meet the floor; the broad sweep is what remains.
 
-2. **Canonical Library photo normalization, and historical repair — now 0025.**
+2. **Canonical Library photo normalization, and historical repair — next free migration number.** (Was pencilled in as 0025; 0025 became the observe-only fact ledger. Do not pin a number to parked work again — the number is assigned when the migration is written.)
    (0024 is evidence retention; migration numbers follow application order, so
    the earlier reservation of 0024 for this work is superseded.) The
    application tolerates both the canonical `{url}` shape and the bare strings an

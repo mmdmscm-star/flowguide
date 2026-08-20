@@ -157,7 +157,12 @@ function cloneFacts(s: Seed, i: number, drop: string[] = []): Fact[] {
   F.push(f("c1_phone", s.c1[2], "contacts.phone", "yes", "simple", { present: has("phone1") }));
   F.push(f("c1_email", `${s.c1[3]}@${s.host}.example.com`, "contacts.email", "yes", "simple"));
   F.push(f("c2_name", s.c2[0], "contacts.name", "yes", "simple"));
+  F.push(f("c2_role", s.c2[1], "contacts.role", "yes", "simple"));
   F.push(f("c2_phone", s.c2[2], "contacts.phone", "yes", "simple"));
+  // ADDED after the detector found these and the ground truth did not. The
+  // source always contained them; the corpus simply failed to declare them, so
+  // the earlier v2 baseline was computed over an incomplete fact set.
+  F.push(f("c2_email", `${s.c2[3]}@${s.host}.example.com`, "contacts.email", "yes", "simple"));
   F.push(f("website", `https://www.${s.host}.example.com`, "links", "yes", "simple", { present: has("website") }));
   F.push(f("brochure", `https://www.${s.host}.example.com/floorplans.pdf`, "links", "yes", "simple"));
   F.push(f("map", `https://www.google.com/maps/place/${s.host}`, "links", "yes", "simple"));
@@ -215,6 +220,7 @@ https://images.example.com/sonomahomecare-team.jpg`,
       f("note","slow to answer email","notes","packet-prompts-only","prose"),
       f("c1_name","Ivy Chen","contacts.name","yes","simple"),
       f("c1_phone","707-555-0500","contacts.phone","yes","simple"),
+      f("c1_email","ivy@sonomahomecare.example.com","contacts.email","yes","simple"),
       f("website","https://www.sonomahomecare.example.com","links","yes","simple"),
       f("photo","https://images.example.com/sonomahomecare-team.jpg","photos","yes","simple"),
       f("address","","address","packet-prompts-only","simple",{present:false}),
