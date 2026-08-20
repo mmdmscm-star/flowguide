@@ -98,7 +98,10 @@ const isAtomicValue = (value: string) => value.trim().length <= SHORT_VALUE_MAX_
 // ============================================================
 // Item Card
 // ============================================================
-export function ItemCard({ item }: { item: Item }) {
+// AUDIENCE DEFAULTS TO "recipient". A caller that forgets the prop gets the
+// private behaviour, so a new surface cannot leak the professional's note by
+// omission. Only the editor opts in.
+export function ItemCard({ item, audience = "recipient" }: { item: Item; audience?: "recipient" | "professional" }) {
   // One destination, one button — decided in @/lib/item-links, which also picks
   // the hostname fallback when two surviving links would read the same. Item
   // links win placement over a contact website with the same destination,
@@ -205,9 +208,15 @@ export function ItemCard({ item }: { item: Item }) {
           </div>
         )}
 
-        {item.notes && (
-          <div className="mb-4 bg-amber-50 border border-amber-200 rounded-lg px-3.5 py-3">
-            <p className="text-base text-amber-900 leading-relaxed">{item.notes}</p>
+        {/* PRIVATE. Shown only on an explicitly professional surface, and said
+            out loud there, because the Library promises "Only you see this" and
+            that promise has to be true wherever the note appears. The recipient
+            never receives this field — queries.ts drops it before the data
+            reaches the page — so this guard is defence in depth, not the fix. */}
+        {audience === "professional" && item.notes && (
+          <div className="mb-4 rounded-lg border border-border bg-surface px-3.5 py-3">
+            <p className="text-xs font-medium text-muted">Private note · only you see this</p>
+            <p className="mt-1 text-sm text-foreground leading-relaxed whitespace-pre-wrap">{item.notes}</p>
           </div>
         )}
 

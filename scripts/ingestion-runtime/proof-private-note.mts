@@ -25,6 +25,7 @@ const SECRET = `PRIVATENOTE${process.pid}: the family cannot afford this communi
 console.log(`\nPrivate-note privacy check — ${BASE}\n`);
 const users: string[] = [];
 const packets: string[] = [];
+let BLOCK_PACKET: { id: string; slug: string; sectionId: string; itemId: string } | null = null;
 
 async function makeUser(label: string) {
   const { data, error } = await svc.from("users")
@@ -86,52 +87,102 @@ try {
   check("the Library entry holds it in `notes` — the field the UI labels 'Private note / Only you see this'",
     String((lib as { notes: string | null }).notes ?? "").includes(SECRET), "the note did not travel into the Library entry");
 
-  // ---- 2. into a FlowGuide, via Add from Library ---------------------------
-  const target = await makePacket(pro.id, "target");
-  const ins = await api(`/api/packets/${target.id}/items/from-library`, pro.cookie, {
-    method: "POST", body: JSON.stringify({ libraryItemIds: [LIB], sectionId: target.sectionId }),
-  });
-  check("Add from Library inserts it into a FlowGuide", ins.status === 200,
-    `status ${ins.status} ${JSON.stringify(ins.data).slice(0, 140)}`);
-  const NEW = ins.data?.itemIds?.[0] as string;
-  if (!NEW) throw new Error(`no inserted item id: ${JSON.stringify(ins.data).slice(0, 200)}`);
-  const { data: copied, error: cErr } = await svc.from("items").select("notes").eq("id", NEW).maybeSingle();
-  if (cErr) throw new Error(`item read: ${errText(cErr)}`);
-  check("the private note was COPIED into the FlowGuide item",
-    String((copied as { notes: string | null } | null)?.notes ?? "").includes(SECRET),
-    "the note did not travel — nothing further to test");
-
-  // ---- 3. publish ---------------------------------------------------------
-  const pub = await api(`/api/packets/${target.id}/publish`, pro.cookie, {
-    method: "POST", body: JSON.stringify({ action: "publish", skipProfileCheck: true }),
-  });
-  check("the FlowGuide publishes", pub.status === 200, `status ${pub.status} ${JSON.stringify(pub.data).slice(0, 140)}`);
-
-  // ---- 4. THE QUESTION ----------------------------------------------------
-  const anon = await page(target.slug, null);
-  const asOther = await page(target.slug, other.cookie);
-  const asOwner = await page(target.slug, pro.cookie);
-
-  check("the published page loads for a signed-out recipient", anon.status === 200, `status ${anon.status}`);
-  // Guard: if the page did not render the item at all, the two checks below
-  // would pass for the wrong reason.
-  check("precondition: the recipient page really renders this item",
-    anon.html.includes("Fairview Gardens"), "the item is absent — the privacy result below would be meaningless");
-
-  const anonSees = anon.html.includes(SECRET);
-  const otherSees = asOther.html.includes(SECRET);
-  const ownerSees = asOwner.html.includes(SECRET);
-
-  check("PRIVATE NOTE IS NOT VISIBLE TO A SIGNED-OUT RECIPIENT", !anonSees,
-    anonSees ? "EXPOSED — the note is in the recipient's page" : "");
-  check("PRIVATE NOTE IS NOT VISIBLE TO A DIFFERENT SIGNED-IN PROFESSIONAL", !otherSees,
-    otherSees ? "EXPOSED" : "");
-  console.log(`      owner sees it: ${ownerSees}   other professional: ${otherSees}   signed out: ${anonSees}`);
-
-  if (anonSees) {
-    const i = anon.html.indexOf(SECRET);
-    console.log(`\n  VERBATIM, from the signed-out recipient's HTML:\n    …${anon.html.slice(Math.max(0, i - 120), i + SECRET.length + 60).replace(/\s+/g, " ")}…\n`);
+  // ---- 2. BOTH recipient paths: legacy sections AND blocks ----------------
+  //        The two render through different assemblers, so proving one proves
+  //        nothing about the other.
+  async function publishWithNote(label: string, mode: "legacy" | "blocks") {
+    const target = await makePacket(pro.id, label);
+    const ins = await api(`/api/packets/${target.id}/items/from-library`, pro.cookie, {
+      method: "POST", body: JSON.stringify({ libraryItemIds: [LIB], sectionId: target.sectionId }),
+    });
+    check(`[${mode}] Add from Library inserts the entry`, ins.status === 200,
+      `status ${ins.status} ${JSON.stringify(ins.data).slice(0, 140)}`);
+    const itemId = ins.data?.itemIds?.[0] as string;
+    if (!itemId) throw new Error(`[${mode}] no inserted item`);
+    const { data: copied } = await svc.from("items").select("notes").eq("id", itemId).maybeSingle();
+    check(`[${mode}] the private note really is stored on the FlowGuide item`,
+      String((copied as { notes: string | null } | null)?.notes ?? "").includes(SECRET),
+      "the note did not travel — the test below would pass for the wrong reason");
+    await svc.from("item_details").insert([
+      { item_id: itemId, label: "AL Studio", value: "$4,500/mo", sort_order: 0 },
+    ]);
+    if (mode === "blocks") {
+      const { error } = await svc.rpc("convert_packet_to_blocks", { p_packet_id: target.id });
+      if (error) throw new Error(`[${mode}] convert: ${error.message}`);
+    }
+    const pub = await api(`/api/packets/${target.id}/publish`, pro.cookie, {
+      method: "POST", body: JSON.stringify({ action: "publish", skipProfileCheck: true }),
+    });
+    check(`[${mode}] the FlowGuide publishes`, pub.status === 200,
+      `status ${pub.status} ${JSON.stringify(pub.data).slice(0, 140)}`);
+    return { ...target, itemId };
   }
+
+  for (const mode of ["legacy", "blocks"] as const) {
+    const t = await publishWithNote(`t-${mode}`, mode);
+    const anon = await page(t.slug, null);
+    const asOther = await page(t.slug, other.cookie);
+
+    check(`[${mode}] the published page loads signed out`, anon.status === 200, `status ${anon.status}`);
+    // PRECONDITION. Without this, "the note is absent" would also be true of a
+    // blank page, an error page, or a page that rendered no item at all.
+    check(`[${mode}] the item still renders normally for the recipient`,
+      anon.html.includes("Fairview Gardens") && anon.html.includes("1200 Example Rd") &&
+      anon.html.includes("AL Studio") && anon.html.includes("$4,500/mo"),
+      "title, address or details missing — the privacy result would be meaningless");
+
+    // THE WHOLE HTML, not the rendered markup. ItemCard is a client component,
+    // so anything handed to it is serialized into the RSC payload in this same
+    // document. Substring-searching the entire response is what makes the
+    // view-source case impossible to miss.
+    check(`[${mode}] PRIVATE NOTE ABSENT from the signed-out page, RSC payload included`,
+      !anon.html.includes(SECRET),
+      "EXPOSED — the sentinel is somewhere in the recipient's HTML");
+    check(`[${mode}] PRIVATE NOTE ABSENT for a different signed-in professional`,
+      !asOther.html.includes(SECRET), "EXPOSED");
+
+    // A fragment check too: a future change that truncates or reformats the note
+    // must not sneak part of it through.
+    check(`[${mode}] no fragment of the note leaks either`,
+      !anon.html.includes("cannot afford this community"), "a fragment of the private note is present");
+
+    if (mode === "blocks") BLOCK_PACKET = t;
+  }
+
+  // ---- 3. the professional still sees and can edit it ---------------------
+  const edit = await fetch(`${BASE}/edit/${BLOCK_PACKET!.id}`, {
+    headers: { Cookie: pro.cookie }, signal: AbortSignal.timeout(60_000),
+  });
+  const editHtml = await edit.text();
+  check("the professional STILL SEES the private note in their editor",
+    edit.status === 200 && editHtml.includes(SECRET),
+    `status ${edit.status} — the note is not in the editor`);
+
+  // A DRAFT packet in BLOCKS mode. Item-content editing requires both — a
+  // published packet is frozen, and the content route is blocks-only. Neither
+  // rule is something this fix changed; two earlier versions of this check
+  // tripped on them and proved nothing about private notes.
+  const ed = await makePacket(pro.id, "editable");
+  const edIns = await api(`/api/packets/${ed.id}/items/from-library`, pro.cookie, {
+    method: "POST", body: JSON.stringify({ libraryItemIds: [LIB], sectionId: ed.sectionId }),
+  });
+  const edItem = edIns.data?.itemIds?.[0] as string;
+  const { error: convErr } = await svc.rpc("convert_packet_to_blocks", { p_packet_id: ed.id });
+  if (convErr) throw new Error(`convert(editable): ${convErr.message}`);
+
+  const NEWNOTE = SECRET + " [edited]";
+  const patched = await api(`/api/packets/${ed.id}/items/${edItem}`, pro.cookie, {
+    method: "PATCH", body: JSON.stringify({ notes: NEWNOTE }),
+  });
+  const { data: after } = await svc.from("items").select("notes").eq("id", edItem).maybeSingle();
+  check("the professional can still EDIT the private note",
+    patched.ok && String((after as { notes: string | null } | null)?.notes ?? "").includes("[edited]"),
+    `status ${patched.status} ${JSON.stringify(patched.data).slice(0, 120)}`);
+
+  // ...and the edit does not become visible to the recipient either.
+  const anonAfter = await page(BLOCK_PACKET!.slug, null);
+  check("an edited private note is still absent from the recipient page",
+    !anonAfter.html.includes(SECRET), "EXPOSED after edit");
 
   summary("Private-note privacy check");
 } catch (e) {

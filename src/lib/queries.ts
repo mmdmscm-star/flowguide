@@ -171,7 +171,8 @@ export async function getPublishedPacket(slug: string): Promise<Packet | null> {
       title: item.title,
       address: item.address || undefined,
       description: item.description || undefined,
-      notes: item.notes || undefined,
+      // RECIPIENT PATH. The private note is deliberately not assembled here at
+      // all — see the Audience note above assembleItemsByIds.
       photos: itemPhotos.length > 0 ? itemPhotos : undefined,
       links: itemLinks.length > 0 ? itemLinks : undefined,
       details: itemDetails.length > 0 ? itemDetails : undefined,
@@ -287,9 +288,26 @@ async function buildBlockPacket(
 // Assemble full Item content (photos/links/details/contact) for a set of item
 // ids, matching the legacy published assembly exactly. Shared by the block
 // published path and the persisted-block preview so item rendering never drifts.
+// WHO IS THIS DATA FOR.
+//
+// `notes` is the professional's PRIVATE note — the Library calls it "Private
+// note / Only you see this" and the editor calls it "Private notes". It was
+// reaching recipients on /p/[slug], and not only through the rendered markup:
+// ItemCard is a "use client" component, so Next.js serializes whatever it is
+// given into the RSC payload embedded in the HTML. Hiding the JSX would have
+// left the note readable in view-source. So the note is removed HERE, before it
+// can cross into a recipient page at all.
+//
+// THE DEFAULT IS "recipient" ON PURPOSE. A surface added later is private by
+// omission. Getting an opt-in wrong means a professional cannot see their own
+// note in one view — visible, and recoverable. The opposite default fails
+// silently toward exposure, which is exactly how this happened.
+export type Audience = "recipient" | "professional";
+
 export async function assembleItemsByIds(
   supabase: ReturnType<typeof createServerClient>,
-  itemIds: string[]
+  itemIds: string[],
+  audience: Audience = "recipient"
 ): Promise<Record<string, Item>> {
   if (itemIds.length === 0) return {};
   const [itemsRes, photosRes, linksRes, detailsRes, contactsRes] = await Promise.all([
@@ -327,7 +345,9 @@ export async function assembleItemsByIds(
       title: it.title,
       address: it.address || undefined,
       description: it.description || undefined,
-      notes: it.notes || undefined,
+      // Present only for the professional. Absent — not empty — for a recipient,
+      // so the key never reaches the serialized payload.
+      ...(audience === "professional" ? { notes: it.notes || undefined } : {}),
       photos: itemPhotos.length > 0 ? itemPhotos : undefined,
       links: itemLinks.length > 0 ? itemLinks : undefined,
       details: itemDetails.length > 0 ? itemDetails : undefined,

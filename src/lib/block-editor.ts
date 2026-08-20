@@ -37,7 +37,9 @@ export async function getBlockEditorData(packetId: string, userId: string): Prom
   const itemIds = blockRows
     .filter((r) => r.block_type === "item" && r.item_id)
     .map((r) => r.item_id as string);
-  const itemsById = await assembleItemsByIds(supabase, itemIds);
+  // THE ONE DATA-LAYER OPT-IN. /edit/[id] is the professional's own editor, so
+  // it is the only reader that receives private notes.
+  const itemsById = await assembleItemsByIds(supabase, itemIds, "professional");
 
   const blocks: PacketBlock[] = [];
   for (const r of blockRows) {

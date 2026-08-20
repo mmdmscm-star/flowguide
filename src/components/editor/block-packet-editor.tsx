@@ -174,7 +174,7 @@ function SortableBlock({
               className="absolute top-2 right-2 z-10 text-xs font-medium text-white bg-accent/90 hover:bg-accent px-2.5 py-1 rounded-lg shadow-sm disabled:opacity-40">
               Edit item
             </button>
-            <ItemCard item={block.item} />
+            <ItemCard item={block.item} audience="professional" />
           </div>
         ) : null}
       </div>
