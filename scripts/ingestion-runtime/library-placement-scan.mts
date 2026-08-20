@@ -8,7 +8,20 @@ async function rows<T>(l: string, q: PromiseLike<{ data: T[] | null; error: unkn
   const { data, error } = await q; if (error) throw new Error(`${l}: ${errText(error)}`); return data ?? [];
 }
 type E = { id: string; title: string; notes: string | null; details: { label?: string; value?: string }[] | null; created_at: string };
-const all = await rows<E>("library", svc.from("library_items").select("id, title, notes, details, created_at").order("created_at"));
+const every = await rows<E>("library", svc.from("library_items").select("id, title, notes, details, created_at").order("created_at"));
+
+// COHORT SPLIT, established from creation history rather than from titles (see
+// library-provenance.mts). The 65 entries are two separate imports: a 4-record
+// run on 2026-08-19T20:29, and the 61-record bulk run on 2026-08-20T02:30. Only
+// the second describes the failure under investigation, so anything claiming to
+// characterise "the 61-community import" must exclude the earlier four.
+const BULK_CLUSTER = "2026-08-20T02";
+const all = every.filter((e) => e.created_at.startsWith(BULK_CLUSTER));
+const priorRun = every.filter((e) => !e.created_at.startsWith(BULK_CLUSTER));
+console.log(`\nCOHORTS — ${every.length} entries total`);
+console.log(`  bulk import (2026-08-20T02:30) ...... ${all.length}   <- the run under investigation`);
+console.log(`  earlier 4-record import (20:29) ..... ${priorRun.length}   ${priorRun.map((e) => e.title).join(", ")}`);
+console.log(`  EXCLUDED from every figure below: the earlier four.`);
 const arr = (v: unknown[] | null) => (Array.isArray(v) ? v : []);
 
 // Duplicate / near-duplicate titles — 61 communities produced 65 entries.
