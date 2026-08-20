@@ -37,7 +37,7 @@ const FIELDS: Field[] = ["title", "address", "description", "notes", "details", 
 console.log("  FIELD OCCUPANCY");
 for (const f of FIELDS) {
   const n = all.filter((e) => filled(e)[f]).length;
-  console.log(`    ${f.padEnd(12)} ${String(n).padStart(3)}/${all.length}  ${"█".repeat(Math.round(n / all.length * 28)).padEnd(28)} ${isRecipientVisible(f) ? "" : "  ← RECIPIENT NEVER SEES THIS"}`);
+  console.log(`    ${f.padEnd(12)} ${String(n).padStart(3)}/${all.length}  ${"█".repeat(Math.round(n / all.length * 28)).padEnd(28)} ${isRecipientVisible(f) ? "" : "  ← private SINCE 2026-08-20; rendered to recipients before that"}`);
 }
 
 // ---- detail labels: the destination-consistency question -------------------
@@ -66,7 +66,15 @@ for (const e of noted) {
   if (sawKv) kvInNotes++;
   if (MONEY.test(String(e.notes))) moneyInNotes++;
 }
-console.log(`\n  WHAT IS IN \`notes\` — now stripped from every recipient FlowGuide`);
+// TEMPORAL CARE. These entries were produced on 2026-08-20T02:30, BEFORE the
+// private-note fix landed later that day. At the time they were written, a fact
+// in `notes` would still have rendered to a recipient — so for this cohort a
+// note placement is a MISCLASSIFICATION, not an omission. The same placement
+// made today would be an omission, because notes no longer reaches recipients.
+// Do not describe the historical run in the language of the current behaviour.
+console.log(`\n  WHAT IS IN \`notes\``);
+console.log(`    (misclassified at the time — notes still rendered to recipients then;`);
+console.log(`     an identical placement made today would be a recipient-facing omission)`);
 console.log(`    entries with any note ................ ${noted.length}/${all.length}`);
 console.log(`    ...containing a "Label: value" pair ... ${kvInNotes}`);
 console.log(`    ...containing a $ amount ............. ${moneyInNotes}`);

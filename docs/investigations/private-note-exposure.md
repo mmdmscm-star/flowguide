@@ -174,3 +174,22 @@ the model with no stated destination for an ambiguous fact at all.
 carries `hiddenFromRecipient` **independently of its verdict** — because the
 question that matters is not "was this defensible" but "does the client ever see
 it". A fact can sit defensibly in notes and still be an omission.
+
+
+## Temporal care when reading the 61-record cohort
+
+The 61 bulk-import entries were written on **2026-08-20T02:30**, hours *before*
+the private-note fix landed the same day. At the time they were produced, a fact
+in `notes` still rendered to recipients.
+
+So for that cohort a note placement is a **misclassification**, not an omission:
+the fact reached the client as prose in a highlight box instead of as a labelled
+detail. It was wrong, but it was not missing.
+
+The omission framing applies **only from the fix onward**. An identical placement
+made today removes the fact from the recipient's FlowGuide entirely while the
+professional still sees it in the editor.
+
+Both statements are true of different moments, and conflating them would either
+overstate the historical harm or understate the current risk. Analysis of the 61
+uses the first; anything about future ingestion behaviour uses the second.
