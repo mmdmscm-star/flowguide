@@ -52,3 +52,8 @@ scripts/ingestion-runtime/evidence-*.json
 * 2.*
 * 2
 * [0-9].[a-z]*
+
+# Source spreadsheets — real business data, never committed
+*.xlsx
+*.xls
+*.csv
