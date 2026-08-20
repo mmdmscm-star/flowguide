@@ -228,8 +228,16 @@ $verify$;
 -- ===========================================================================
 -- G. SUMMARY
 -- ===========================================================================
+-- LIKE FOR LIKE. The first version compared a computed tally against the
+-- literal 'all PASS', which can never be equal — so the summary rendered FAIL
+-- on a completely green run, and inflated one round's fail count from three
+-- real failures to four. A summary that always reads FAIL trains you to ignore
+-- it. Both sides are now built the same way, so they match exactly when nothing
+-- failed and differ the moment something does.
 insert into v
-select 99, 'SUMMARY', 'all PASS',
+select 99, 'SUMMARY',
+       (select count(*) filter (where expected <> 'report')::text from v)||' pass, 0 fail, '||
+       (select count(*) filter (where expected = 'report')::text from v)||' info',
        (select count(*) filter (where expected <> 'report' and actual = expected)::text from v)||' pass, '||
        (select count(*) filter (where expected <> 'report' and actual <> expected)::text from v)||' fail, '||
        (select count(*) filter (where expected = 'report')::text from v)||' info';
