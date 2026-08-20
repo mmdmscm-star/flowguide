@@ -1,10 +1,16 @@
 -- 0025 PREFLIGHT — READ ONLY. Creates nothing, changes nothing.
 --
+-- The output column is `check_name`, not `check`. `check` is a fully reserved
+-- word: PostgreSQL accepts it as a column label after AS, then rejects it in the
+-- outer select list, so the script parsed halfway and failed at the last
+-- statement. Renamed rather than double-quoted — a quoted reserved word works
+-- but leaves the next reader to rediscover why the quotes are load-bearing.
+--
 -- Identifier matching uses REGEX (~), never LIKE. `fact_ledger` contains an
 -- underscore, and LIKE treats `_` as a single-character wildcard — the exact
 -- mistake that produced a false match during 0023.
 with c as (
-  select 1 as ord, 'column fact_ledger does not exist yet' as check,
+  select 1 as ord, 'column fact_ledger does not exist yet' as check_name,
          'absent' as expected,
          coalesce((select 'present' from information_schema.columns
                     where table_schema='public' and table_name='ingestion_chunks'
@@ -86,7 +92,7 @@ with c as (
   select 18, 'active runs (0025 re-issues functions they may call)', 'report',
          (select count(*)::text from public.ingestion_runs where status='active')
 )
-select ord, check, expected, actual,
+select ord, check_name, expected, actual,
        case when expected='report' then 'INFO'
             when expected=actual then 'PASS' else 'FAIL' end as result
 from c order by ord;
