@@ -32,6 +32,8 @@
 -- existing clearing statement and NOTHING else changed; each body was extracted
 -- programmatically from the migration that last defined it rather than retyped.
 
+begin;
+
 -- ---------------------------------------------------------------------------
 -- 1. The column.
 -- ---------------------------------------------------------------------------
@@ -399,3 +401,5 @@ begin
   return v_runs;
 end;
 $pie$;
+
+commit;
