@@ -332,23 +332,51 @@ with a jsonb column; and `content_rev` was compared between two packets with
 different content. Each was fixed by making the check stricter, never by
 loosening it.
 
-## Library evolution — DEFERRED, NO IMPLEMENTATION
+## POST-REVIEW MUST REVISIT — parked, not dropped
 
-Standing directions, none scheduled and none a commitment. **Nothing here is
-built until real use of the live Library produces a concrete finding that names
-the problem.** They are recorded so they are not rediscovered, not so they are
-worked through in order.
+Recorded 2026-08-19, at the founder's request, so nothing parked disappears while
+the product is reviewed as a whole. **Nothing here is implemented until that
+review produces a concrete finding.** The order below is the order it was given
+in, not a priority ranking.
 
-- **Groups / categories / ordering** — how a Library with a hundred entries is
-  navigated. Deliberately absent from v1: search plus recency has not yet been
-  shown to fail.
-- **A larger assembly experience** — building a FlowGuide from Library entries
-  side by side rather than one insertion at a time.
-- **Undo / version history** — `library_items.revision` already exists and is
-  monotonic, so the substrate is there; the product question is not.
-- **Block-mode Library insertion** — see its own entry. A composition project,
-  argued on its own merits rather than as a Library extension.
-- **Item reuse and profile-per-packet** — older deferred questions, unchanged.
+1. **Creator-side typography and readability.** The creator UI is 12px-heavy
+   while the recipient experience is 16px-led — measured at 141 `text-xs` plus 7
+   `text-[11px]` across creator surfaces. Decision-making text should generally
+   be at least `text-sm`, with `text-xs` reserved for real metadata. A size
+   policy, not a redesign. Screens touched during the language and view-vs-edit
+   passes already meet the floor; the broad sweep is what remains.
+
+2. **Canonical Library photo normalization, and historical repair.** The
+   application tolerates both the canonical `{url}` shape and the bare strings an
+   AI import used to write, and every read and write path handles both — so
+   production is protected and this is not urgent. What remains is canonical data
+   *at rest*: normalising in `library_materialize_proposals` using the existing
+   `library_canonical_photos` (0023), plus a one-time repair of
+   `library_items.photos` and `library_import_proposals.payload->'photos'` where
+   an element is a JSON string. Touches no packet, section, item or `item_photos`
+   row — those were always written through `update_item_content`. Row counts to
+   be reported from a read-only preflight before anything is applied.
+
+3. **`/p/[slug]` rate limit.** The WAF rule stays in **Log**. The decision point
+   is whether any legitimate source approaches 60 requests per 60s; if not,
+   switch the action to Deny and re-run
+   `scripts/security/verify-recipient-throttle.mts`.
+
+4. **Library organization at scale.** Simple groups or categories and manual
+   ordering — *when actual use supports it*. Deliberately absent so far because
+   search plus recency has not yet been shown to fail.
+
+5. **Block-mode Library insertion.** A composition project, low priority. See its
+   own entry: `trg_freeze_items` forbids the item INSERT outright, so this is a
+   change to a composition invariant rather than a Library feature.
+
+**Closed by the 2026-08-19 deploy, and off this list:** view-versus-edit in the
+Library, and the empty-Library dead end where `Create a FlowGuide` opened
+selection mode over nothing.
+
+Older deferred questions — item reuse, profile-per-packet, Street View fallback,
+the Details label/value model, recipient text-size control — keep their own
+entries elsewhere in this file and are unchanged.
 
 ## Library AI import — original plan (superseded by the entry above)
 
