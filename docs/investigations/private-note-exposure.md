@@ -105,3 +105,72 @@ instruction routes facts the model is unsure about into a field the client never
 sees — converting a placement error into silent loss from the recipient's point
 of view. It belongs to the semantic-reliability investigation, not to an
 emergency privacy fix. Recorded there.
+
+---
+
+## CLOSED — fixed and deployed, 2026-08-20
+
+### Production evidence
+
+Verified in a real browser on a published FlowGuide, signed out, reading the
+**raw response body** rather than the rendered DOM:
+
+```
+status 200 · 11,328 bytes · 4 RSC chunks present
+sentinel: false     fragment: false     "notes" key anywhere: false
+Fairview Gardens: true   1200 Example Rd: true   $4,500/mo: true
+```
+
+The field name does not appear in the payload at all, while the item renders
+normally.
+
+- **Both recipient paths protected** — legacy sections and blocks assemble
+  through different code, and each was proven separately.
+- **Professional retains it** — still visible in the editor, still editable.
+- **Privacy proof 21/21**, **source invariants 7/7**, 426/426 suite.
+- **Control test** — with the fix removed the legacy assertions failed, so the
+  proof discriminates. The blocks path stayed green under that control, because
+  the assembler's `audience` default guards it independently: two paths, two
+  guards.
+- **No migration, no data rewrite.** Highest migration is still 0025, asserted
+  by a test. The existing 65 Library entries were never read or written.
+
+### Production smokes: PENDING, not passed
+
+`smoke-post-deploy`, `smoke-library-prod` and `smoke-firstuse-prod` were **not
+re-run**. Scripted traffic from this machine trips Vercel's Attack Challenge
+(`x-vercel-mitigated: challenge`, site-wide 403), and those three refuse a
+non-production origin by design. Real browsers are unaffected — `/login` renders
+normally with no checkpoint interstitial.
+
+They are recorded as **pending**, not green. Each is to be run **once** after the
+challenge lapses naturally. The origin is not to be polled to clear it.
+
+## What this changes for the semantic investigation
+
+**`notes` is now genuinely private, and that inverts the meaning of a note
+placement.**
+
+Earlier in this investigation I corrected dimension 7's premise, arguing that
+facts in `notes` do not disappear from the recipient FlowGuide because they
+rendered in an amber box. That was true of the code at the time. **The privacy
+fix has made the original premise correct**: a fact routed to `notes` is now
+stripped from the recipient's data entirely.
+
+The failure mode is worse than a lost fact, because it is invisible from both
+ends:
+
+- the **recipient** never receives it;
+- the **professional** still sees it in their editor, so nothing looks missing.
+
+`ambiguous -> notes` in the packet prompts therefore stays explicitly in scope.
+An instruction that routes anything the model is unsure about into a private
+field converts uncertainty into silent recipient-facing omission. The Library
+prompt does not carry that line — which is its own asymmetry, since it leaves
+the model with no stated destination for an ambiguous fact at all.
+
+`src/lib/placement.ts` now models this directly: `RECIPIENT_VISIBLE` marks
+`notes` as the only field a recipient never receives, and every judged fact
+carries `hiddenFromRecipient` **independently of its verdict** — because the
+question that matters is not "was this defensible" but "does the client ever see
+it". A fact can sit defensibly in notes and still be an omission.

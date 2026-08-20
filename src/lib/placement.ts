@@ -20,6 +20,26 @@ export const FIELDS: Field[] = ["title", "address", "description", "notes", "det
 
 export type Verdict = "CORRECT" | "MISPLACED" | "NEEDS_JUDGEMENT" | "ABSENT";
 
+// WHICH FIELDS A RECIPIENT ACTUALLY SEES.
+//
+// `notes` is not one of them, as of the 2026-08-20 privacy fix. Before that it
+// rendered to recipients in an amber box while the product promised "only you
+// see this"; now the promise is true and the field is stripped from the
+// recipient's data entirely.
+//
+// That inverts what a note placement MEANS. It used to be a presentation
+// problem — the fact reached the client as prose instead of a labelled detail.
+// It is now an OMISSION: the professional still sees the fact in their editor,
+// so nothing looks lost, and the client never receives it at all. A fact routed
+// to notes by `ambiguous -> notes` is invisible to exactly the person the
+// FlowGuide was prepared for, and invisible to the professional as a loss.
+export const RECIPIENT_VISIBLE: Record<Field, boolean> = {
+  title: true, address: true, description: true, details: true,
+  links: true, photos: true, contacts: true,
+  notes: false,
+};
+export const isRecipientVisible = (f: Field): boolean => RECIPIENT_VISIBLE[f];
+
 /** Where the value appears in this item. More than one field means DUPLICATED. */
 export function locate(item: Record<string, unknown>, value: string): Field[] {
   const p = probe(value);
@@ -93,6 +113,10 @@ export interface Placed {
   duplicated: boolean;
   rule: Rule | null;
   verdict: Verdict;
+  /** Present in the item, but in no field the recipient receives. The
+   *  professional sees it; the client does not. Independent of `verdict` —
+   *  a fact can be defensibly in notes and still be invisible downstream. */
+  hiddenFromRecipient: boolean;
 }
 
 /** Judge one fact against one item. */
@@ -104,5 +128,9 @@ export function judge(item: Record<string, unknown>, fact: { value: string; labe
   else if (!rule) verdict = "NEEDS_JUDGEMENT";
   else if (found.includes(rule.expect)) verdict = "CORRECT";
   else verdict = "MISPLACED";
-  return { value: fact.value, label: fact.label, found, duplicated: found.length > 1, rule, verdict };
+  return {
+    value: fact.value, label: fact.label, found,
+    duplicated: found.length > 1, rule, verdict,
+    hiddenFromRecipient: found.length > 0 && !found.some(isRecipientVisible),
+  };
 }

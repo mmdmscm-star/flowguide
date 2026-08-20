@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { locate, intendedField, judge } from "./placement.ts";
+import { locate, intendedField, judge, isRecipientVisible } from "./placement.ts";
 
 const item = (o: Record<string, unknown>) => o;
 
@@ -62,4 +62,40 @@ test("a fact in the right field is CORRECT, and absence is ABSENT not misplaced"
   const good = item({ details: [{ label: "Community Fee", value: "$3,500" }] });
   assert.equal(judge(good, { value: "$3,500", label: "Community Fee" }).verdict, "CORRECT");
   assert.equal(judge(item({}), { value: "$3,500", label: "Community Fee" }).verdict, "ABSENT");
+});
+
+test("notes is not a recipient-visible field", () => {
+  // Since the 2026-08-20 privacy fix. If this ever flips back, the whole
+  // severity model below flips with it — re-derive it, do not patch the test.
+  assert.equal(isRecipientVisible("notes"), false);
+  for (const f of ["title", "address", "description", "details", "links", "photos", "contacts"] as const)
+    assert.equal(isRecipientVisible(f), true, `${f} should reach the recipient`);
+});
+
+test("a fact that landed ONLY in notes is hidden from the recipient", () => {
+  const p = judge({ notes: "Community fee is $3,500 one time" }, { value: "$3,500", label: "Community Fee" });
+  assert.equal(p.hiddenFromRecipient, true);
+  assert.equal(p.verdict, "MISPLACED");   // and the prompts do state where it belongs
+});
+
+test("hiddenFromRecipient is independent of the verdict", () => {
+  // The severity that matters is not "is this defensible" but "does the client
+  // ever see it". A note the prompts do not rule on is still an omission.
+  const p = judge({ notes: "Capacity is 84 residents" }, { value: "84 residents", label: "Capacity" });
+  assert.equal(p.verdict, "NEEDS_JUDGEMENT");
+  assert.equal(p.hiddenFromRecipient, true);
+});
+
+test("a fact present in a visible field is not hidden, even if also in notes", () => {
+  const p = judge({ notes: "fee $3,500", details: [{ label: "Community Fee", value: "$3,500" }] },
+                  { value: "$3,500", label: "Community Fee" });
+  assert.equal(p.duplicated, true);
+  assert.equal(p.hiddenFromRecipient, false);
+  assert.equal(p.verdict, "CORRECT");
+});
+
+test("an absent fact is not reported as hidden", () => {
+  // ABSENT and hidden are different failures and must not be conflated: one is
+  // a lost fact, the other is a fact the professional can still see and fix.
+  assert.equal(judge({}, { value: "$3,500", label: "Community Fee" }).hiddenFromRecipient, false);
 });
