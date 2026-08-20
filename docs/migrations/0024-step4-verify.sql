@@ -363,9 +363,11 @@ end
 $del$;
 
 -- ===========================================================================
-select n, check_name, expected, actual, ok from v24 order by n;
+-- SUMMARY FIRST, DETAILS LAST. The SQL editor shows only the final result set,
+-- so emitting the summary last hid every individual assertion behind a count.
 select count(*) filter (where ok) || ' passed, ' || count(*) filter (where not ok) || ' failed' as result,
        (count(*) filter (where not ok)) = 0 as all_green from v24;
+select n, check_name, expected, actual, ok from v24 order by n;
 
 -- NOTHING ABOVE IS KEPT.
 rollback;
