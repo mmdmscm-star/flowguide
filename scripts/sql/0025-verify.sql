@@ -85,95 +85,143 @@ do $verify$
 declare
   v_owner uuid; v_run uuid; v_packet uuid;
   v_seg text; v_res jsonb; v_led jsonb; v_exp timestamptz;
+  v_rows int;
   v_led_txt text := '{"counts":{"detected":2,"accounted":1,"unaccounted":1}}';
 begin
   select id into v_owner from public.users order by created_at limit 1;
   if v_owner is null then
-    insert into v values (50,'behaviour tests','ran','SKIPPED - no user row to anchor a foreign key'); return;
+    insert into v values (50,'behaviour tests','ran','FAIL - no user row to anchor a foreign key'); return;
   end if;
+
+  -- EVERY TEST BELOW REPORTS ITS FIXTURE ROW COUNT AS PART OF THE COMPARED
+  -- VALUE. The first version of this verifier did not, and row 52 passed while
+  -- exercising nothing at all: its fixture had failed to build, so `where
+  -- run_id = null` matched no rows, plpgsql set every INTO target to NULL, and
+  -- three NULLs read as "cleared". A check that fires on absence is worse than
+  -- no check. With rows=N inside the comparison, an empty fixture reports
+  -- rows=0 and FAILS.
+  --
+  -- The runs are also built by direct INSERT rather than through
+  -- create_library_import_run(). That RPC takes six arguments and returns
+  -- jsonb; the previous call passed five, in the wrong order, into a uuid. The
+  -- run row is all these tests need, and building it directly removes a
+  -- coupling that verified nothing. A library run needs packet_id NULL and
+  -- entry_point 'library_import' to satisfy the 0020 coherence constraints.
 
   -- F1. A ledger can be stored and read back as jsonb. ----------------------
   begin
-    v_run := public.create_library_import_run(v_owner, 'Community Fee: $3,500', 'verifierhash0025', 'seg-v4', 1);
+    v_run := gen_random_uuid();
+    insert into public.ingestion_runs (id, user_id, packet_id, destination, entry_point, source_text, source_hash, source_len, segmenter_version, status)
+      values (v_run, v_owner, null, 'library', 'library_import', 'Community Fee: $3,500', 'vh0025a', 21, 'seg-v4', 'active');
     insert into public.ingestion_chunks (run_id, ordinal, source_start, source_end, segment_text, segment_hash, status, result, fact_ledger)
       values (v_run, 0, 0, 21, 'Community Fee: $3,500', 'h0', 'completed', '{"items":[]}'::jsonb, v_led_txt::jsonb);
+    select count(*) into v_rows from public.ingestion_chunks where run_id=v_run and ordinal=0 and fact_ledger is not null;
     select fact_ledger into v_led from public.ingestion_chunks where run_id=v_run and ordinal=0;
-    insert into v values (50,'ledger stores and reads back as jsonb','1',
-      (v_led->'counts'->>'unaccounted'));
+    insert into v values (50,'ledger stores and reads back as jsonb','rows=1 unaccounted=1',
+      'rows='||v_rows||' unaccounted='||coalesce(v_led->'counts'->>'unaccounted','NULL'));
   exception when others then
-    insert into v values (50,'ledger stores and reads back as jsonb','1','ERROR: '||SQLERRM);
+    insert into v values (50,'ledger stores and reads back as jsonb','rows=1 unaccounted=1','ERROR: '||SQLERRM);
   end;
 
   -- F2. Library FINALIZE retains the ledger, in step with the evidence. -----
   begin
     perform public.library_close_import_run(v_owner, v_run, 'finalized');
+    select count(*) into v_rows from public.ingestion_chunks where run_id=v_run and ordinal=0;
     select segment_text, result, fact_ledger into v_seg, v_res, v_led
       from public.ingestion_chunks where run_id=v_run and ordinal=0;
     select evidence_purge_after into v_exp from public.ingestion_runs where id=v_run;
-    insert into v values (51,'library finalize RETAINS ledger with the evidence','segment=kept ledger=kept expiry=stamped',
-      'segment='||(case when v_seg is null then 'CLEARED' else 'kept' end)||
+    insert into v values (51,'library finalize RETAINS ledger with the evidence',
+      'rows=1 segment=kept ledger=kept expiry=stamped',
+      'rows='||v_rows||
+      ' segment='||(case when v_seg is null then 'CLEARED' else 'kept' end)||
       ' ledger='||(case when v_led is null then 'CLEARED' else 'kept' end)||
       ' expiry='||(case when v_exp is null then 'MISSING' else 'stamped' end));
   exception when others then
-    insert into v values (51,'library finalize RETAINS ledger with the evidence','kept','ERROR: '||SQLERRM);
+    insert into v values (51,'library finalize RETAINS ledger with the evidence','rows=1 segment=kept ledger=kept expiry=stamped','ERROR: '||SQLERRM);
   end;
 
-  -- F3. purge() clears ledger and evidence TOGETHER. -----------------------
+  -- F3. purge() clears ledger and evidence TOGETHER. ------------------------
+  --     Asserted populated FIRST, so "cleared" can only mean something was
+  --     cleared. This is the check that previously passed on an empty fixture.
   begin
-    update public.ingestion_runs set evidence_purge_after = now() - interval '1 day' where id=v_run;
-    perform public.purge_ingestion_evidence();
-    select segment_text, result, fact_ledger into v_seg, v_res, v_led
-      from public.ingestion_chunks where run_id=v_run and ordinal=0;
-    insert into v values (52,'purge clears ledger IN STEP with the evidence','segment=cleared result=cleared ledger=cleared',
-      'segment='||(case when v_seg is null then 'cleared' else 'KEPT' end)||
-      ' result='||(case when v_res is null then 'cleared' else 'KEPT' end)||
-      ' ledger='||(case when v_led is null then 'cleared' else 'KEPT' end));
+    select count(*) into v_rows from public.ingestion_chunks
+      where run_id=v_run and ordinal=0 and segment_text is not null and fact_ledger is not null;
+    if v_rows <> 1 then
+      insert into v values (52,'purge clears ledger IN STEP with the evidence',
+        'before=1 segment=cleared result=cleared ledger=cleared',
+        'FIXTURE MISSING - nothing to purge (before='||v_rows||')');
+    else
+      update public.ingestion_runs set evidence_purge_after = now() - interval '1 day' where id=v_run;
+      perform public.purge_ingestion_evidence();
+      select segment_text, result, fact_ledger into v_seg, v_res, v_led
+        from public.ingestion_chunks where run_id=v_run and ordinal=0;
+      insert into v values (52,'purge clears ledger IN STEP with the evidence',
+        'before=1 segment=cleared result=cleared ledger=cleared',
+        'before='||v_rows||
+        ' segment='||(case when v_seg is null then 'cleared' else 'KEPT' end)||
+        ' result='||(case when v_res is null then 'cleared' else 'KEPT' end)||
+        ' ledger='||(case when v_led is null then 'cleared' else 'KEPT' end));
+    end if;
   exception when others then
-    insert into v values (52,'purge clears ledger IN STEP with the evidence','cleared','ERROR: '||SQLERRM);
+    insert into v values (52,'purge clears ledger IN STEP with the evidence','before=1 segment=cleared result=cleared ledger=cleared','ERROR: '||SQLERRM);
   end;
 
-  -- F4. Library DISCARD clears the ledger immediately. ---------------------
+  -- F4. Library DISCARD clears the ledger immediately. ----------------------
   begin
-    v_run := public.create_library_import_run(v_owner, 'Community Fee: $3,500', 'verifierhash0025b', 'seg-v4', 1);
+    v_run := gen_random_uuid();
+    insert into public.ingestion_runs (id, user_id, packet_id, destination, entry_point, source_text, source_hash, source_len, segmenter_version, status)
+      values (v_run, v_owner, null, 'library', 'library_import', 'Community Fee: $3,500', 'vh0025b', 21, 'seg-v4', 'active');
     insert into public.ingestion_chunks (run_id, ordinal, source_start, source_end, segment_text, segment_hash, status, result, fact_ledger)
       values (v_run, 0, 0, 21, 'Community Fee: $3,500', 'h0', 'completed', '{"items":[]}'::jsonb, v_led_txt::jsonb);
+    select count(*) into v_rows from public.ingestion_chunks
+      where run_id=v_run and ordinal=0 and segment_text is not null and fact_ledger is not null;
     perform public.library_close_import_run(v_owner, v_run, 'discarded');
     select segment_text, fact_ledger into v_seg, v_led from public.ingestion_chunks where run_id=v_run and ordinal=0;
-    insert into v values (53,'library discard CLEARS ledger with the evidence','segment=cleared ledger=cleared',
-      'segment='||(case when v_seg is null then 'cleared' else 'KEPT' end)||
+    insert into v values (53,'library discard CLEARS ledger with the evidence',
+      'before=1 segment=cleared ledger=cleared',
+      'before='||v_rows||
+      ' segment='||(case when v_seg is null then 'cleared' else 'KEPT' end)||
       ' ledger='||(case when v_led is null then 'cleared' else 'KEPT' end));
   exception when others then
-    insert into v values (53,'library discard CLEARS ledger with the evidence','cleared','ERROR: '||SQLERRM);
+    insert into v values (53,'library discard CLEARS ledger with the evidence','before=1 segment=cleared ledger=cleared','ERROR: '||SQLERRM);
   end;
 
-  -- F5. Packet path. Needs a disposable packet, and `packets` predates 0001,
-  --     so its NOT NULL set is discovered rather than assumed. If the insert
-  --     cannot be satisfied the test SKIPS with the reason, and the packet
-  --     path stays proven structurally by row 20/21 and 22/23 instead.
+  -- F5. Packet path. The previous fixture inserted (user_id, title) and hit a
+  --     NOT NULL violation, because `title` is not required and `slug` is —
+  --     exactly what row 55 reported. Both required columns are now supplied,
+  --     with a unique disposable slug.
   begin
-    insert into public.packets (user_id, title) values (v_owner, 'zz-0025-verifier-disposable')
+    insert into public.packets (user_id, slug)
+      values (v_owner, 'zz-0025-verifier-'||replace(gen_random_uuid()::text,'-',''))
       returning id into v_packet;
     v_run := gen_random_uuid();
-    insert into public.ingestion_runs (id, user_id, packet_id, destination, entry_point, source_text, source_hash, segmenter_version, status)
-      values (v_run, v_owner, v_packet, 'packet', 'organize', 'Community Fee: $3,500', 'vh0025c', 'seg-v4', 'active');
+    insert into public.ingestion_runs (id, user_id, packet_id, destination, entry_point, source_text, source_hash, source_len, segmenter_version, status)
+      values (v_run, v_owner, v_packet, 'packet', 'organize', 'Community Fee: $3,500', 'vh0025c', 21, 'seg-v4', 'active');
     insert into public.ingestion_chunks (run_id, ordinal, source_start, source_end, segment_text, segment_hash, status, result, fact_ledger)
       values (v_run, 0, 0, 21, 'Community Fee: $3,500', 'h0', 'completed', '{"sections":[]}'::jsonb, v_led_txt::jsonb);
+    select count(*) into v_rows from public.ingestion_chunks
+      where run_id=v_run and ordinal=0 and segment_text is not null and fact_ledger is not null;
     perform public.discard_ingestion_run(v_run, v_owner);
     select segment_text, fact_ledger into v_seg, v_led from public.ingestion_chunks where run_id=v_run and ordinal=0;
-    insert into v values (54,'packet discard CLEARS ledger with the evidence','segment=cleared ledger=cleared',
-      'segment='||(case when v_seg is null then 'cleared' else 'KEPT' end)||
+    insert into v values (54,'packet discard CLEARS ledger with the evidence',
+      'before=1 segment=cleared ledger=cleared',
+      'before='||v_rows||
+      ' segment='||(case when v_seg is null then 'cleared' else 'KEPT' end)||
       ' ledger='||(case when v_led is null then 'cleared' else 'KEPT' end));
   exception when others then
-    insert into v values (54,'packet discard CLEARS ledger with the evidence','cleared',
-      'SKIPPED - disposable packet could not be created: '||SQLERRM);
+    insert into v values (54,'packet discard CLEARS ledger with the evidence','before=1 segment=cleared ledger=cleared','ERROR: '||SQLERRM);
   end;
 
-  -- F6. What `packets` actually requires, so a skip above is actionable.
+  -- F6/F7. Context that made the last round diagnosable. Kept.
   insert into v values (55,'packets NOT NULL columns without a default','report',
     coalesce((select string_agg(column_name, ', ' order by ordinal_position)
                 from information_schema.columns
                where table_schema='public' and table_name='packets'
                  and is_nullable='NO' and column_default is null), 'none'));
+  insert into v values (56,'live signature of create_library_import_run','report',
+    coalesce((select pg_get_function_arguments(p.oid)||' -> '||pg_get_function_result(p.oid)
+                from pg_proc p join pg_namespace nn on nn.oid=p.pronamespace
+               where nn.nspname='public' and p.proname='create_library_import_run' limit 1),'ABSENT'));
 end
 $verify$;
 
