@@ -156,3 +156,51 @@ test("buildChunkLedger survives a malformed result instead of throwing", () => {
     assert.equal(l.counts.unaccounted, 1);   // nothing present, so nothing accounted
   }
 });
+
+test("digit-bearing labels are labels, not prose", () => {
+  // Guards against the first version of this rule, which reached 100% precision
+  // on both corpora by banning digits from labels — a score bought by silently
+  // dropping facts no corpus happened to contain.
+  for (const [line, label] of [
+    ["2nd Person Fee: $950/month", "2nd Person Fee"],
+    ["Level 2 Care: $1,400 added to base rate", "Level 2 Care"],
+    ["24-Hour Support: included at all levels", "24-Hour Support"],
+    ["Studio 1: $4,150/month", "Studio 1"],
+    ["Tier 3 Memory Care: $7,900/month", "Tier 3 Memory Care"],
+    ["Room 214 Monthly: $3,300", "Room 214 Monthly"],
+    ["Building B: memory care only", "Building B"],      // capital A/B is not an article
+    ["Care Level A: $600 added", "Care Level A"],
+    ["Community fee: $3,500 one time", "Community fee"],  // sentence case, not title case
+    ["Days of Operation: Monday to Friday", "Days of Operation"],
+    ["Fee for Second Person: $950", "Fee for Second Person"],
+    ["Board and Care Rate: $4,800/month", "Board and Care Rate"],
+  ] as const) {
+    const kv = detectFacts(line, 0).find((d) => d.kind === "keyvalue");
+    assert.ok(kv, `dropped a real label: ${line}`);
+    assert.equal(kv!.label, label);
+  }
+});
+
+test("prose lead-ins are rejected on grammar, not on digits", () => {
+  for (const line of [
+    "Notes from the tour on 4 March: the dining room was busy",
+    "What the family said afterwards: they want a second visit",
+    "The director was candid about pricing: expect an increase",
+    "A quick reminder before you call: ask for the coordinator",
+    "Things I noticed while I was there: staffing looked thin",
+    "This is what the intake nurse told me: bring the POA",
+  ]) {
+    assert.equal(detectFacts(line, 0).find((d) => d.kind === "keyvalue"), undefined, `read prose as a fact: ${line}`);
+  }
+});
+
+test("the known label false positive is still exactly one, and still bounded", () => {
+  // "One thing to remember:" is four words with no determiner and no verb — it
+  // is grammatically a label. It is left detected on purpose: the fix would be
+  // to add "to" to the marker set, which breaks "Fee for Second Person" style
+  // labels for a rarer case. Its cost is a spurious unresolved entry, never a
+  // lost fact. If this ever starts failing, the rule moved — decide deliberately.
+  const kv = detectFacts("One thing to remember: the waitlist moves fast", 0).find((d) => d.kind === "keyvalue");
+  assert.ok(kv, "the known limitation changed — re-derive the label rule deliberately");
+  assert.equal(kv!.detailEligible, true);   // bounded: worst case it is preserved verbatim
+});

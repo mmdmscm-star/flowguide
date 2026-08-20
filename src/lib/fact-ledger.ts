@@ -53,15 +53,42 @@ const PHONE_RE = /(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b/g;
 const EMAIL_RE = /\b[\w.+-]+@[\w-]+\.[\w.]+\b/g;
 const URL_RE = /https?:\/\/[^\s"'<>)\]]+/gi;
 const PERCENT_RE = /\b\d{1,3}(?:\.\d+)?\s?%/g;
-// A LABEL, NOT A SENTENCE LEAD-IN. "Notes from the tour on 4 March:" is prose
-// introducing prose, and reading it as a field label produced nine false
-// positives per corpus run. Real labels are short and carry no digits —
-// "Community Fee", "Assisted Living One Bedroom", "Capacity".
-const KV_RE = /^([A-Za-z][A-Za-z /&()'’-]{1,31}):\s*(\S.*)$/;
+// A LABEL IS A SHORT NOUN PHRASE; A PROSE LEAD-IN IS A CLAUSE.
+//
+// "Notes from the tour on 4 March: the dining room was busy…" is literally
+// `Label: value` shaped, and reading it as a fact produced nine false positives
+// per corpus run. The first fix banned digits from labels — which was
+// overfitting to this corpus, because `2nd Person Fee`, `Level 2 Care`,
+// `24-Hour Support` and `Studio 1` are labels professionals genuinely type.
+//
+// Digits are not the signal. GRAMMAR is. A label is a short noun phrase; a
+// lead-in is a clause, and clauses carry determiners and verbs that labels do
+// not. Two independent cheap tests, either of which is enough to reject:
+//
+//   * more than five words — "Notes from the tour on 4 March" is seven
+//   * a LOWERCASE determiner or auxiliary verb — "the", "was", "is"
+//
+// The lowercase requirement matters: `Care Level A` and `Building B` are real
+// labels, and a case-blind stop-word test would throw them away.
+const MAX_LABEL_WORDS = 5;
+const CLAUSE_MARKERS = new Set([
+  "the", "a", "an", "this", "that", "these", "those", "there",
+  "was", "were", "is", "are", "be", "been", "being",
+  "has", "have", "had", "will", "would", "should", "could",
+]);
+function looksLikeLabel(label: string): boolean {
+  const words = label.trim().split(/\s+/).filter(Boolean);
+  if (!words.length || words.length > MAX_LABEL_WORDS) return false;
+  return !words.some((w) => {
+    const bare = w.replace(/[^A-Za-z]/g, "");
+    // Lowercase-only: "A" in `Studio A` is a label word, "a" in prose is not.
+    return bare.length > 0 && bare === bare.toLowerCase() && CLAUSE_MARKERS.has(bare);
+  });
+}
 
-// Ranges without a currency symbol — "4 to 6 months", "ranges from 4 to 9
-// weeks". Deliberately requires a UNIT word, because a bare "2 to 3" appears in
-// ordinary prose and precision matters more than recall here.
+// Digits are allowed anywhere in a label. looksLikeLabel decides, not the shape.
+const KV_RE = /^([A-Za-z0-9][A-Za-z0-9 /&()'’.+-]{0,47}):\s*(\S.*)$/;
+
 const PLAIN_RANGE_RE =
   /\b\d+\s*(?:to|through|[–—-])\s*\d+\s+(?:month|months|day|days|week|weeks|year|years|hour|hours)\b/gi;
 
@@ -100,7 +127,7 @@ export function detectFacts(segmentText: string, chunkOrdinal: number): Detected
     if (!trimmed) continue;
 
     const kv = KV_RE.exec(trimmed);
-    if (kv) {
+    if (kv && looksLikeLabel(kv[1])) {
       const [, label, value] = kv;
       push("keyvalue", value, lineStart, line, {
         label: label.trim(),

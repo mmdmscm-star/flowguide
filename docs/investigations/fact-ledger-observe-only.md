@@ -38,15 +38,49 @@ detector's**:
    therefore computed over an incomplete fact set.*
 2. **A sentence lead-in was being read as a field label.** `Notes from the tour
    on 4 March: the dining room was busy…` is literally `Label: value` shaped.
-   That is a genuine detector weakness, and it is fixed: a label must now be
-   ≤31 characters and carry no digits. Real labels — `Community Fee`, `Assisted
-   Living One Bedroom`, `Capacity` — are unaffected.
+   A genuine detector weakness — see *The label rule* below, because the first
+   fix for it was wrong.
 3. **Precision was being scored against the in-scope subset.** In-scope
    filtering says what the detector is *required* to find; it says nothing about
    what is *real*. Detections matching genuine out-of-scope prose facts were
    being counted as false positives — the detector was penalised for exceeding
    its own remit. Precision now scores against the whole ground truth; recall
    still scores against the in-scope subset.
+
+### The label rule, and the fix that was overfitted
+
+The first fix banned digits from labels. It reached 100% precision on both
+corpora — by silently dropping facts neither corpus happened to contain.
+`2nd Person Fee`, `Level 2 Care`, `24-Hour Support`, `Studio 1` and `Room 214
+Monthly` are labels professionals genuinely type, and that rule would have lost
+every one of them while reporting a perfect score. A number bought that way is
+worse than a lower number, because it hides the loss it caused.
+
+**Digits are not the signal. Grammar is.** A label is a short noun phrase; a
+lead-in is a clause, and clauses carry determiners and verbs that labels do not.
+Two independent tests, either sufficient to reject: more than five words, or a
+**lowercase** determiner/auxiliary (`the`, `was`, `is`). The lowercase
+requirement is load-bearing — `Care Level A` and `Building B` are real labels,
+and a case-blind stop-word test would eat them.
+
+Proven against `scripts/ingestion-runtime/fixtures/label-shapes.mts`, a fixture
+built for this question and deliberately kept out of v1/v2 (those are joined to
+persisted model runs; adding records would move chunk boundaries and invalidate
+the join):
+
+```
+LABEL SHAPES — 31 lines
+  real labels kept ............ 23/23  (100.0%)
+  digit-bearing labels kept ... 8/8
+  prose lead-ins rejected ..... 7/8  (87.5%)
+```
+
+**The one leak is declared, not curated away.** `One thing to remember:` is four
+words with no determiner and no verb — grammatically it *is* a label. Fixing it
+means adding `to` to the marker set, which breaks `Fee for Second Person` style
+labels for a rarer case. It is left detected, with a test pinning it so the
+tradeoff is revisited deliberately rather than drifted into. Its cost is bounded:
+a spurious unresolved entry, never a lost fact.
 
 **The one honest miss.** A fee written as `six thousand dollars` is not found.
 The detector matches *shapes*, and a number spelled in words has none. This is

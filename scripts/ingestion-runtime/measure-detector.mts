@@ -5,6 +5,7 @@ import { probe, squash } from "../../src/lib/fact-match.ts";
 import { buildRunChunks } from "../../src/lib/ingestion.ts";
 import * as V1 from "./fixtures/semantic-corpus.mts";
 import * as V2 from "./fixtures/semantic-corpus-v2.mts";
+import { LABEL_CASES } from "./fixtures/label-shapes.mts";
 
 /** A ground-truth fact the detector is DESIGNED to find. Names, roles, titles and
  *  free prose are deliberately out of scope — they are judgement, not shape. */
@@ -57,3 +58,33 @@ for (const [name, C] of [["v1", V1], ["v2", V2]] as const) {
     for (const [k, n] of [...shown.entries()].slice(0, 14)) console.log(`      ${String(n).padStart(3)}× ${k}`);
   }
 }
+
+
+// ---------------------------------------------------------------------------
+// LABEL SHAPES — does the label rule keep real digit-bearing labels while still
+// rejecting prose lead-ins? Measured line by line, so a failure names itself.
+// ---------------------------------------------------------------------------
+console.log(`\n${"=".repeat(64)}\nLABEL SHAPES — ${LABEL_CASES.length} lines`);
+let kept = 0, kmiss = 0, wrong = 0, rejected = 0, leaked = 0;
+const notes: string[] = [];
+for (const c of LABEL_CASES) {
+  const kv = detectFacts(c.line, 0).find((d) => d.kind === "keyvalue");
+  if (c.label === null) {
+    if (!kv) { rejected++; continue; }
+    leaked++;
+    if (c.why.startsWith("KNOWN MISS")) { kmiss++; notes.push(`      known  ${c.line.slice(0, 46)}`); }
+    else notes.push(`      LEAK   ${c.line.slice(0, 46)}`);
+  } else if (!kv) {
+    wrong++; notes.push(`      DROP   ${c.line.slice(0, 46)}   (${c.why})`);
+  } else if (kv.label !== c.label) {
+    wrong++; notes.push(`      LABEL  got "${kv.label}" want "${c.label}"`);
+  } else kept++;
+}
+const labels = LABEL_CASES.filter((c) => c.label !== null).length;
+const prose = LABEL_CASES.length - labels;
+console.log(`  real labels kept ............ ${kept}/${labels}  (${(kept / labels * 100).toFixed(1)}%)`);
+console.log(`  prose lead-ins rejected ..... ${rejected}/${prose}  (${(rejected / prose * 100).toFixed(1)}%)`);
+console.log(`  digit-bearing labels kept ... ${LABEL_CASES.filter((c) => c.label && /\d/.test(c.label) && detectFacts(c.line, 0).some((d) => d.kind === "keyvalue")).length}/${LABEL_CASES.filter((c) => c.label && /\d/.test(c.label)).length}`);
+console.log(`  leaked prose ................ ${leaked}  (of which ${kmiss} recorded as a known limitation)`);
+if (notes.length) { console.log(`  detail:`); notes.forEach((n) => console.log(n)); }
+if (wrong) console.log(`  *** ${wrong} real labels lost — the rule is too strict ***`);

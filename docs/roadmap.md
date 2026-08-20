@@ -346,9 +346,12 @@ in, not a priority ranking.
    policy, not a redesign. Screens touched during the language and view-vs-edit
    passes already meet the floor; the broad sweep is what remains.
 
-2. **Canonical Library photo normalization, and historical repair — next free migration number.** (Was pencilled in as 0025; 0025 became the observe-only fact ledger. Do not pin a number to parked work again — the number is assigned when the migration is written.)
-   (0024 is evidence retention; migration numbers follow application order, so
-   the earlier reservation of 0024 for this work is superseded.) The
+2. **Canonical Library photo normalization, and historical repair — 0026.**
+   Migration numbers follow APPLICATION order, so parked work loses its
+   reservation every time something else ships first: this was pencilled in as
+   0024, then 0025, and is now **0026** because 0025 is the observe-only fact
+   ledger. There is exactly one unapplied migration file claiming 0025 and it is
+   the ledger. The
    application tolerates both the canonical `{url}` shape and the bare strings an
    AI import used to write, and every read and write path handles both — so
    production is protected and this is not urgent. What remains is canonical data
@@ -368,7 +371,20 @@ in, not a priority ranking.
    ordering — *when actual use supports it*. Deliberately absent so far because
    search plus recency has not yet been shown to fail.
 
-5. **Block-mode Library insertion.** A composition project, low priority. See its
+5. **Successful packet-path ingestion still destroys its own evidence.**
+   Found while writing 0025, recorded rather than fixed — it is outside the
+   approved scope of the semantic-reliability work and changing it is a
+   production behaviour change. 0024 stopped finalize from wiping source text,
+   segments and results, but only on the **Library** path
+   (`library_close_import_run`). The packet path's `finalize_ingestion_run` still
+   clears every segment and every model result the moment an import succeeds, so
+   a packet import remains undiagnosable after it finishes — the exact condition
+   that made the 61-record Library import impossible to investigate. The fix is
+   the same shape as 0024's: keep the evidence on finalize, stamp
+   `evidence_purge_after`, let the existing pg_cron job expire it. Nothing new
+   has to be designed; the retention machinery already exists and already runs.
+
+6. **Block-mode Library insertion.** A composition project, low priority. See its
    own entry: `trg_freeze_items` forbids the item INSERT outright, so this is a
    change to a composition invariant rather than a Library feature.
 
