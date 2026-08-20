@@ -160,3 +160,55 @@ saved-Library change could slip in, so it is proven rather than asserted.
 result on success. 0024 stopped that for the Library path only. A packet import
 therefore remains undiagnosable after it finishes. This is recorded, not acted
 on: it is outside the approved scope and would be a production behaviour change.
+
+---
+
+## Deployed, and proven at runtime — 2026-08-20
+
+0025 verified clean in Supabase: **33 pass, 0 fail, 2 info**. The application
+wiring is deployed. `scripts/ingestion-runtime/proof-fact-ledger.mts` — real
+routes, real segmentation, real model calls, real database, disposable user,
+cleanup verified by id — passes **15/15 in production**.
+
+```
+ledger totals on a real 2-record import: {"detected":16,"accounted":13,"unaccounted":3}
+```
+
+**How inertness is proven.** Not by re-running and diffing: the model is not
+deterministic, so two runs of the same paste differ for reasons unrelated to the
+ledger. Instead the stored ledger is **recomputed offline from that chunk's own
+`segment_text` and `result`, and must match exactly**. A value reproducible from
+(segment, result) alone cannot have influenced either of them — it observed the
+output, it did not shape it. A cross-chunk control confirms the binding
+discriminates: the same ledger must *fail* to reproduce against a different
+chunk's segment.
+
+Alongside that: every proposal traces to a title in the model's own staged
+result, no ledger field appears in any proposal payload or saved Library entry,
+and finalize retains the ledger unchanged beside the 0024 evidence with the
+expiry stamped.
+
+### Three defects the proof found — all mine
+
+1. **jsonb does not preserve key order** (it sorts by length, then bytewise), so
+   a raw `JSON.stringify` comparison called every chunk a mismatch. Both sides
+   are canonicalised now.
+2. **Proposals materialize on an explicit POST** the proof never made.
+3. **Two selects named columns that do not exist** (`chunk_ordinal`, `content`).
+   PostgREST returns an *error object*, not an exception — so discarding it
+   turned a typo into "zero rows", which surfaced as three phantom failures and
+   would just as easily have been three vacuous passes. Every read now goes
+   through a helper that throws.
+
+That last one is the same shape as the verifier's row 52, which passed while
+exercising nothing. **Absence reads as success unless a check is built to
+notice.** Both are now guarded by asserting the fixture size inside the
+comparison.
+
+### Production smokes
+
+`smoke-post-deploy` 10/10, `smoke-library-prod` 20/20, `smoke-firstuse-prod`
+21/21. The first run of the last one showed one failure — a race in the *smoke*,
+where an earlier anonymous page load's fire-and-forget `viewed` write landed
+after the test's reset. Green twice on re-run; the smoke now settles and asserts
+its precondition. This deploy changed exactly one runtime file, the chunk route.
