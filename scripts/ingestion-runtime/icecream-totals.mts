@@ -1,0 +1,18 @@
+import { svc } from "./lib.mts";
+const PID = "9c564682-8959-44f9-b8ae-eb6a69bfdcae";
+const { data: secs } = await svc.from("sections").select("id").eq("packet_id", PID);
+const ids = (secs ?? []).map((s: any) => s.id);
+const { data: items } = await svc.from("items").select("id, title, notes, description").in("section_id", ids);
+const iids = (items ?? []).map((i: any) => i.id);
+const { data: links } = await svc.from("item_links").select("item_id, url").in("item_id", iids);
+const { data: contacts } = await svc.from("item_contacts").select("item_id, website, phone").in("item_id", iids);
+const { data: details } = await svc.from("item_details").select("item_id, label, value").in("item_id", iids);
+console.log(`items ................ ${(items ?? []).length}`);
+console.log(`with a link .......... ${new Set((links ?? []).map((l: any) => l.item_id)).size}`);
+console.log(`contacts with website  ${(contacts ?? []).filter((c: any) => c.website).length}`);
+console.log(`contacts with phone .. ${(contacts ?? []).filter((c: any) => c.phone).length}`);
+console.log(`details rows ......... ${(details ?? []).length}`);
+console.log(`items with notes ..... ${(items ?? []).filter((i: any) => String(i.notes ?? "").trim()).length}`);
+console.log(`any ".com" anywhere in item text: ${(items ?? []).filter((i: any) => /\.(com|net|org)\b/i.test(`${i.description ?? ""} ${i.notes ?? ""}`)).length} items`);
+const w = (items ?? []).find((i: any) => /\.(com|net|org)\b/i.test(`${i.description ?? ""} ${i.notes ?? ""}`));
+if (w) console.log(`   example: ${String(w.description ?? "").slice(0, 140)}`);
