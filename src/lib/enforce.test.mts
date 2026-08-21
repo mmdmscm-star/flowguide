@@ -233,7 +233,7 @@ test("enforcement is inert when the flag is off", async () => {
   delete process.env.FLOWGUIDE_ENFORCE_CONTRACT;
   const result = { items: [{ title: "A", notes: "should survive when off" }] };
   const out = enforceChunkResult({ segmentText: "Community Fee: $1", chunkOrdinal: 0, sourceStart: 0,
-    sourceText: "Community Fee: $1", result });
+    sourceText: "Community Fee: $1", result, destination: "packet" });
   assert.equal(out.result, result, "the model's own result must be returned untouched");
   assert.equal(out.telemetry.itemsGoverned, 0);
   if (was === undefined) delete process.env.FLOWGUIDE_ENFORCE_CONTRACT; else process.env.FLOWGUIDE_ENFORCE_CONTRACT = was;
@@ -246,7 +246,7 @@ test("FAIL CLOSED: an enforcement failure must not stage the raw model result", 
   process.env.FLOWGUIDE_TEST_ENFORCE_THROW = "1";
   assert.throws(() => enforceChunkResult({
     segmentText: "Community Fee: $1", chunkOrdinal: 0, sourceStart: 0,
-    sourceText: "Community Fee: $1", result: { items: [{ title: "A" }] },
+    sourceText: "Community Fee: $1", result: { items: [{ title: "A" }] }, destination: "packet",
   }), /injected enforcement failure/);
   if (flag === undefined) delete process.env.FLOWGUIDE_ENFORCE_CONTRACT; else process.env.FLOWGUIDE_ENFORCE_CONTRACT = flag;
   if (thr === undefined) delete process.env.FLOWGUIDE_TEST_ENFORCE_THROW; else process.env.FLOWGUIDE_TEST_ENFORCE_THROW = thr;
@@ -269,7 +269,7 @@ test("privacy-rejected prose is preserved as unresolved, never placed", async ()
   process.env.FLOWGUIDE_ENFORCE_CONTRACT = "1";
   const src = "1. Alpha Shop\nWebsite\nalpha.example.com\n\n2. Bravo Shop\nWebsite\nbravo.example.com\n\n3. Cedar Shop\nWebsite\ncedar.example.com\n";
   const out = enforceChunkResult({
-    segmentText: src, chunkOrdinal: 0, sourceStart: 0, sourceText: src,
+    segmentText: src, chunkOrdinal: 0, sourceStart: 0, sourceText: src, destination: "packet",
     result: { items: [
       { title: "Alpha Shop", description: "An overview.", notes: "Why it made the list: a local favourite.",
         links: [{ url: "https://alpha.example.com/" }] },

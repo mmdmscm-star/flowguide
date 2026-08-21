@@ -208,6 +208,11 @@ export async function POST(_request: Request, context: Context) {
         segmentText, chunkOrdinal: ordinal, sourceStart,
         sourceText: (run.source_text as string | null) ?? null, result: outcome.result,
         runId,
+        // The PERSISTED value, straight off the run row read at the top of this
+        // handler. Deriving it here - from packet_id being present, say - would
+        // be a second opinion about a fact the database already holds, and the
+        // two could disagree exactly when it matters.
+        destination: run.destination as string | null,
       });
       staged = e.result;
       enforcement = e.telemetry;

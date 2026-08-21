@@ -88,7 +88,7 @@ try {
   process.env.FLOWGUIDE_ENFORCE_CONTRACT = "1";
   const e = enforceChunkResult({
     segmentText: SOURCE, chunkOrdinal: 0, sourceStart: 0,
-    sourceText: SOURCE, result: MODEL_RESULT,
+    sourceText: SOURCE, result: MODEL_RESULT, destination: "packet",
   });
   const held = e.unresolved.filter((u) => u.kind === "privacy-rejected");
   check("enforcement REJECTS an unauthorized private placement", held.length === 2,
@@ -160,7 +160,7 @@ try {
   // product path would actually have assigned.
   const e2 = enforceChunkResult({
     segmentText: SOURCE, chunkOrdinal: 0, sourceStart: 0,
-    sourceText: SOURCE, result: MODEL_RESULT, runId: RUN,
+    sourceText: SOURCE, result: MODEL_RESULT, runId: RUN, destination: "packet",
   });
   const { error: chErr } = await svc.from("ingestion_chunks").insert({
     run_id: RUN, ordinal: 0, status: "completed", attempt_count: 1,

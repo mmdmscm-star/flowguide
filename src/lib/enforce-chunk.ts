@@ -18,6 +18,45 @@ export interface EnforcementTelemetry {
   accepted: number; repaired: number; stripped: number;
   sourceUnresolved: number; attributionUnresolved: number;
   privacyRejected: number; itemsGoverned: number;
+  /** Why enforcement did or did not run for this chunk. Recorded even when it
+   *  declined, so "we were asked and said no" is a fact in the evidence rather
+   *  than an absence someone has to interpret. */
+  scope?: ScopeVerdict;
+}
+
+// DESTINATION SCOPE — WHERE THE SEMANTIC CONTRACT IS ALLOWED TO ACT.
+//
+// Enforcement strips content it cannot place and holds it as a review-required
+// unit. That is only safe where the held unit is SURFACED to the creator, which
+// today is the packet path alone: a Library import closes through
+// `library_close_import_run`, which clears the transport channel, so a unit held
+// there would be stripped and then discarded without anyone seeing it.
+//
+// The Library is not merely unprotected without enforcement - it is SAFER. A
+// model-placed private note is shown to its owner as "Private note - Only you
+// see this". Enforcing without surfacing would turn a visible note into a
+// deletion, so declining here preserves content rather than risking it.
+//
+// The lists are exhaustive on purpose. A destination added later matches
+// neither, resolves to `unsupported`, and does not run - it cannot inherit
+// packet semantics by being new.
+export const ENFORCED_DESTINATIONS = ["packet"] as const;
+export const KNOWN_DESTINATIONS = ["packet", "library"] as const;
+export type KnownDestination = (typeof KNOWN_DESTINATIONS)[number];
+
+export type ScopeVerdict =
+  /** In scope: held units have somewhere to be seen. */
+  | "enforced"
+  /** Known destination, deliberately outside the contract's reach. */
+  | "out-of-scope"
+  /** Absent, or a destination nobody has decided about. Never guessed. */
+  | "unsupported";
+
+export function enforcementScope(destination: string | null | undefined): ScopeVerdict {
+  const d = typeof destination === "string" ? destination : "";
+  if ((ENFORCED_DESTINATIONS as readonly string[]).includes(d)) return "enforced";
+  if ((KNOWN_DESTINATIONS as readonly string[]).includes(d)) return "out-of-scope";
+  return "unsupported";
 }
 
 /** Source content that survived, attached to its record, awaiting a decision.
@@ -72,9 +111,20 @@ function maybeThrowForTest(): void {
 export function enforceChunkResult(opts: {
   segmentText: string; chunkOrdinal: number; sourceStart: number;
   sourceText: string | null; result: unknown; runId?: string;
+  /** The run's PERSISTED destination. Required: an optional scope argument is
+   *  one forgotten call site away from enforcing somewhere nobody checked. */
+  destination: string | null | undefined;
 }): ChunkEnforcement {
-  const { segmentText, chunkOrdinal, sourceStart, sourceText, result, runId } = opts;
+  const { segmentText, chunkOrdinal, sourceStart, sourceText, result, runId, destination } = opts;
   if (!contractEnforcementEnabled()) return { result, telemetry: empty(), unresolved: [], reviewUnits: [] };
+
+  // SCOPE BEFORE EVERYTHING ELSE, including the fail-closed test hook: a run
+  // outside the contract's reach must return the model's result byte-for-byte,
+  // and must not be capable of failing its chunk either.
+  const scope = enforcementScope(destination);
+  if (scope !== "enforced") {
+    return { result, telemetry: { ...empty(), scope }, unresolved: [], reviewUnits: [] };
+  }
   maybeThrowForTest();
 
   const r = (result ?? {}) as { items?: unknown; sections?: { items?: unknown }[] };
@@ -82,12 +132,12 @@ export function enforceChunkResult(opts: {
     ...(Array.isArray(r.items) ? r.items : []),
     ...(Array.isArray(r.sections) ? r.sections.flatMap((s) => (Array.isArray(s?.items) ? s.items : [])) : []),
   ].filter((x): x is Record<string, unknown> => Boolean(x) && typeof x === "object");
-  if (!items.length || !sourceText) return { result, telemetry: empty(), unresolved: [], reviewUnits: [] };
+  if (!items.length || !sourceText) return { result, telemetry: { ...empty(), scope }, unresolved: [], reviewUnits: [] };
 
   const env = recordEnvelopes(sourceText);
   const parsed = parseClaims(segmentText, chunkOrdinal);
   const a = attributeAll(parsed.claims, parsed.ambiguous, parsed.fragments, env, sourceStart);
-  const t = empty();
+  const t: EnforcementTelemetry = { ...empty(), scope };
   const unresolved: UnresolvedUnit[] = [];
   t.attributionUnresolved = a.unattributedClaims.length + a.unattributedAmbiguous.length;
 

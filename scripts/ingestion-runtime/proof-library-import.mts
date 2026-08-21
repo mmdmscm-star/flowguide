@@ -219,10 +219,17 @@ try {
     finished.ok && finished.data.status === "finished", JSON.stringify(finished.data).slice(0, 160));
 
   const { data: closedRun } = await svc.from("ingestion_runs")
-    .select("status, source_text").eq("id", RUN).single();
-  check("the finished run is finalized and its source text cleared",
-    (closedRun as Record<string, unknown>).status === "finalized" &&
-    (closedRun as Record<string, unknown>).source_text === null, JSON.stringify(closedRun));
+    .select("status, source_text, evidence_purge_after").eq("id", RUN).single();
+  const cr = closedRun as Record<string, unknown>;
+  // 0024 SPLIT FINISHING FROM THROWING AWAY. This assertion predates that: it
+  // still expected finalize to clear the source, which is exactly the evidence
+  // destruction 0024 removed - a completed import used to be impossible to
+  // diagnose afterwards. Finalize now RETAINS the source and stamps a bounded
+  // expiry; discard is what clears it immediately. So the property to check is
+  // "retained AND bounded", not "gone".
+  check("the finished run is finalized, its source RETAINED under a bounded expiry",
+    cr.status === "finalized" && typeof cr.source_text === "string" && cr.evidence_purge_after !== null,
+    `${cr.status}, source ${cr.source_text === null ? "cleared" : "retained"}, expiry ${cr.evidence_purge_after}`);
   const { count: leftover } = await svc.from("library_import_proposals")
     .select("id", { count: "exact", head: true }).eq("run_id", RUN);
   check("and no proposal outlives it", leftover === 0, `${leftover} left`);
