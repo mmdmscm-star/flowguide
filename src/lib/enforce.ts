@@ -219,14 +219,33 @@ export function enforceItem(
   // differently depending on whether the model placed it or FlowGuide did —
   // "707-555-0101" and "(707) 555-0101" are the same fact and must render as
   // one. This normalizes in place and rearranges nothing.
+  // DESTINATION-INTERNAL DEDUPE, applied to every specialized destination.
+  // Contacts already did this; links and photos did not, so one governed URL
+  // emitted twice by the model stayed twice and made the canonical destination
+  // depend on model repetition. The same fact has one canonical home and one
+  // entry in it.
+  const seenUrl = new Set<string>();
   next.links = arr(next.links).map((l) => {
     const o = l as { url?: string };
     return o && typeof o === "object" && o.url ? { ...o, url: canonicalValue(String(o.url), "url") } : l;
+  }).filter((l) => {
+    const u = String((l as { url?: string })?.url ?? "").toLowerCase();
+    if (!u) return true;
+    if (seenUrl.has(`l:${u}`)) return false;
+    seenUrl.add(`l:${u}`);
+    return true;
   });
   next.photos = arr(next.photos).map((ph) =>
     typeof ph === "string" ? canonicalValue(ph, "url")
       : ph && typeof ph === "object" && (ph as { url?: string }).url
-        ? { ...(ph as object), url: canonicalValue(String((ph as { url?: string }).url), "url") } : ph);
+        ? { ...(ph as object), url: canonicalValue(String((ph as { url?: string }).url), "url") } : ph)
+    .filter((ph) => {
+      const u = (typeof ph === "string" ? ph : String((ph as { url?: string })?.url ?? "")).toLowerCase();
+      if (!u) return true;
+      if (seenUrl.has(`p:${u}`)) return false;
+      seenUrl.add(`p:${u}`);
+      return true;
+    });
   next.contacts = arr(next.contacts).map((ct) => {
     const o = ct as Record<string, unknown>;
     if (!o || typeof o !== "object") return ct;

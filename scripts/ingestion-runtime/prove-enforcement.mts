@@ -23,7 +23,10 @@ const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
 type Out = { record: number; name: string; enforced: Record<string, unknown> | null;
              repaired: number; sourceUnresolved: number; applied: string[];
              /** The labels the CONTRACT governs for this record. */
-             governed: string[] };
+             governed: string[];
+             /** The VALUES the contract governs — used so the governed metric
+              *  measures governed content and nothing else. */
+             governedValues: string[] };
 
 function enforceRun(run: any): { out: Map<number, Out>; totals: Record<string, number> } {
   const out = new Map<number, Out>();
@@ -71,6 +74,7 @@ function enforceRun(run: any): { out: Map<number, Out>; totals: Record<string, n
     for (const st of e?.stripped ?? []) STRIPPED.push(`${ENV![rec].name} · ${st.reason}: ${st.text.slice(0, 46)}`);
     out.set(rec, { record: rec, name: ENV![rec].name, enforced: e?.item ?? null,
       governed: g.claims.filter((c: any) => c.kind === "labelled").map((c: any) => String(c.label).toLowerCase()),
+      governedValues: g.claims.map((c: any) => String(c.value).toLowerCase()),
       repaired: r.counts.repaired, sourceUnresolved: r.counts.sourceUnresolved,
       applied: e?.applied.map((x) => x.action) ?? [] });
   }
@@ -87,9 +91,16 @@ function governedSemantic(o: Out | undefined): string {
   const d = ((it.details as any[]) ?? [])
     .filter((x) => gov.has(String(x?.label ?? "").trim().toLowerCase()))
     .map((x) => `${String(x?.label ?? "").trim().toLowerCase()}=${String(x?.value ?? "").trim().toLowerCase()}`).sort();
-  const links = ((it.links as any[]) ?? []).map((x) => String(x?.url ?? x).toLowerCase()).sort();
-  const photos = ((it.photos as any[]) ?? []).map((x) => String(x?.url ?? x).toLowerCase()).sort();
-  const contacts = ((it.contacts as any[]) ?? []).flatMap((c) => [c?.email, c?.phone].filter(Boolean)).map((s: string) => s.toLowerCase()).sort();
+  // ONLY GOVERNED VALUES. Including every photo and link made ungoverned model
+  // variation show up as a governed-convergence failure — Tamalpais Marin was
+  // reported as divergent while all three runs produced identical governed
+  // content. The metric was measuring the wrong set.
+  const gv = new Set(o.governedValues.map((v) => v.replace(/[^a-z0-9]/g, "")));
+  const isGoverned = (x: string) => gv.has(String(x).toLowerCase().replace(/[^a-z0-9]/g, ""));
+  const links = ((it.links as any[]) ?? []).map((x) => String(x?.url ?? x).toLowerCase()).filter(isGoverned).sort();
+  const photos = ((it.photos as any[]) ?? []).map((x) => String(x?.url ?? x).toLowerCase()).filter(isGoverned).sort();
+  const contacts = ((it.contacts as any[]) ?? []).flatMap((c) => [c?.email, c?.phone].filter(Boolean))
+    .map((s: string) => s.toLowerCase()).filter(isGoverned).sort();
   return JSON.stringify({ d, links, photos, contacts, notes: String(it.notes ?? "") });
 }
 
@@ -119,11 +130,20 @@ for (const [n, X] of ALL.map((x, i) => [i + 1, x] as const)) {
 let gSame = 0, gDiff = 0, fSame = 0, fDiff = 0;
 const gDiffer: string[] = [], fDiffer: string[] = [];
 for (const e of ENV) {
+  // ACROSS EVERY RUN, not just the first and last. With three runs a pairwise
+  // check can call a record convergent while run 2 disagreed with both.
   const seen = ALL.map((X) => X.out.get(e.index)).filter(Boolean) as any[];
-  if (seen.length < 2) continue;
+  if (seen.length < ALL.length) {
+    gDiff++; gDiffer.push(`${e.name} (unbound in ${ALL.length - seen.length} run(s))`);
+    fDiff++; continue;
+  }
+  const govSet = new Set(seen.map((x) => governedSemantic(x)));
+  const fullSet = new Set(seen.map((x) => semantic(x.enforced)));
+  if (govSet.size === 1) gSame++; else { gDiff++; gDiffer.push(e.name); }
+  if (fullSet.size === 1) fSame++; else { fDiff++; fDiffer.push(e.name); }
+  continue;
+  // eslint-disable-next-line no-unreachable
   const a = seen[0], b = seen[seen.length - 1];
-  const allGov = new Set(seen.map((x) => governedSemantic(x)));
-  if (allGov.size > 1 && seen.length > 2) { /* reported below via a/b too */ }
   if (governedSemantic(a) === governedSemantic(b)) gSame++;
   else {
     gDiff++; gDiffer.push(e.name);
