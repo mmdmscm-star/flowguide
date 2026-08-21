@@ -54,77 +54,112 @@ fields whose value is not in the segment.
 
 ## The contract
 
-### Class A — deterministic destination. Enforce.
+### The unit is the CLAIM, and the parse decides it — not the value
 
-| claim | destination | note |
+A **claim** is what the source demonstrably asserts: an explicit `Label: value`
+line, or a bare URL, email or phone. That determination is made at parse time,
+deterministically, before the model runs.
+
+**Value shape never decides whether information is preserved.** It may inform
+how something is rendered. It may not decide whether it survives. `Care Costs:
+Prices are all-inclusive (care costs included in price)` is exactly as much a
+claim as `Community Fee: $2,500`, and both must reach the recipient.
+
+The earlier scalar/prose split is withdrawn. It made preservation contingent on
+how a value happened to be phrased, which is the same error the model is making.
+
+### Destination precedence
+
+Every claim resolves down this ladder. The first rung that fits wins.
+
+| | rung | examples |
 |---|---|---|
-| URL, image extension | `photos` | source-backed only |
-| URL, map host | `links`, label "View on Map" | |
-| URL, other | `links` | |
-| email | `contacts.email` | *which* contact stays model's call |
-| phone | `contacts.phone` | same |
-| `Label: value`, value is **scalar** | `details` | ≤6 words, no clause verb |
+| **1** | **specialized source-backed destination** | email → `contacts.email` · phone → `contacts.phone` · image URL → `photos` · map URL → `links` "View on Map" · other URL → `links` · street address → `address` |
+| **2** | **ordinary labelled Detail** | every other `Label: value`, **whatever the value looks like** — `Community Fee: $2,500`, `Care Costs: Prices are all-inclusive…`, `Type: AL, MC` |
+| **3** | **UNRESOLVED** | content that is **not a claim**, or a claim whose specialized destination cannot be satisfied |
 
-97 of the diagnostic's labelled facts are Class A. Replaying enforcement over
-the two captured runs collapses run-to-run destination flips from **8 to 1**,
-and the survivor is a prose value — out of Class A by construction.
+Specialized wins first: a phone number that also appears on a `Phone:` line
+belongs in `contacts`, not as a detail row, and the ladder says so without a
+per-label table.
 
-### Class B — recipient-visible required, destination open.
+**No per-label ontology or configuration.** The ladder is general. If a label
+eventually needs special handling, that is a future decision made on evidence,
+not a system built in advance.
 
-`Label: value` where the value is a **paragraph** (Atria's 989-character
-explanation of why published pricing varies). The contract can state that this
-must reach the recipient. It cannot yet state *where*, because no field fits —
-see *Content model* below. Until that is resolved these are **UNRESOLVED**, not
-forced into `details`.
+### What actually reaches UNRESOLVED
 
-**`details` is not the fallback.** A label/value row renders a paragraph badly,
-and the professional was explicit that another vertical may legitimately want
-narrative carried with the structured facts.
+Rung 3 is narrow by construction. The Atria case shows why it is still needed —
+and why it cannot be solved by a length threshold. Its paragraph is not a
+labelled line at all; it is **glued onto the end of a fee line** in the source
+cell:
 
-### Class C — model judgment. Not enforced.
+```
+- Second Person Fee: $2,095 (2BR) Pricing for apartments at Atria Tamalpais
+  Creek are listed on their website when units are available. The units vary…
+```
+
+The claim on that line is `Second Person Fee: $2,095 (2BR)`, which goes to
+`details` by rung 2. The trailing paragraph is not a claim, has no deterministic
+destination, and must not be guessed at. It becomes UNRESOLVED and the
+professional decides.
+
+That is the honest shape of the boundary: **not "prose versus scalar", but
+"claim versus not-a-claim"**, drawn by the parser rather than by a heuristic
+about how a sentence reads.
+
+### Model judgment — not enforced
 
 Entity boundaries · titles · descriptions · which contact owns which phone ·
-detail ordering · label normalisation (`Community Fee AL` from a merged cell) ·
-recognising that a line is a room type rather than a field. These are the
-reasons the model is here at all.
+detail ordering · label normalisation · recognising a room type versus a field.
+These are why the model is here.
 
-### Class D — requires source authority.
+### The privacy rule
 
 `notes` is populated **only** from source text carrying an explicit privacy
-marker (`private`, `internal`, `do not share`, `confidential`, or a column the
-professional designates). The diagnostic spreadsheet contains **no such marker
-anywhere** — all 53 "private" matches are room types — so under this rule every
-one of the 31 historical notes would have been rejected.
+marker. The diagnostic spreadsheet contains none — all 53 "private" matches are
+room types — so all 31 historical notes would have been rejected.
 
-Two sub-cases:
+- note content matching a **claim** → re-placed by the precedence ladder
+- note content that is **model-generated prose** → not accepted; the accounting
+  guarantee covers source facts, not model inventions
 
-- note content that **matches a source claim** → re-placed per its own class
-- note content that is **model-generated prose** (The Bluffs run 1: *"Designed
-  to foster connection, comfort and purpose…"*) → **not accepted**. The
-  accounting guarantee covers *source facts*; it does not oblige us to keep
-  model inventions in a private field.
+**This rule ultimately applies to packet ingestion too.** Once `notes` means
+genuinely private, no ingestion path may route ordinary or ambiguous
+recipient-relevant information there without source evidence that it is private.
+Library is the first bounded implementation because it is smaller and its
+failure is already characterised — but **packet ingestion must inherit the same
+rule before this reliability work is complete**, and the packet prompt's
+`ambiguous -> notes` cannot remain as it is. It is currently an instruction to
+route uncertainty into a field the client never sees.
 
-## Content model — where reusable narrative lives
+## UNRESOLVED — what it blocks
 
-**Recommendation: a new first-class, recipient-visible item field.** Staged
-*after* the deterministic core is proven, not bundled with it.
+An unresolved claim **blocks silent completion of that exception, not the
+import.**
 
-Why the existing fields do not work:
+- Clean records continue normally and save normally.
+- The unresolved claim is **preserved verbatim** and visibly marked against its
+  record until the professional places it, explicitly ignores it, or otherwise
+  resolves it.
+- It is **never dropped** merely so a proposal can save. Silent disappearance is
+  the failure mode this whole layer exists to end; permitting it at the exception
+  boundary would reintroduce it exactly where the system already knows something
+  is wrong.
 
-- **`description`** is *what this place is*. Atria's paragraph is *how to read
-  the other numbers*. Merging them means no renderer can treat them differently
-  and the professional cannot remove one without the other.
-- **`details`** is `label` + `value`, rendered as a row. A paragraph in a value
-  cell is a layout failure, and forcing it there is exactly the "universal
-  fallback" the professional ruled out.
-- **`notes`** is private. That is now load-bearing.
+## Content model — deliberately unchanged in this patch
 
-Cost, stated honestly: a migration, editor UI, the Library payload, ingestion
-validation, the save-back diff, `library_canonical_*`, and every renderer. It is
-not small, which is why it should follow rather than lead.
+**No narrative field is added here.** Paragraph-like reusable source content
+becomes UNRESOLVED rather than being forced into `details` or `notes`.
 
-**Interim:** Class B claims surface as UNRESOLVED. The review state is the
-honest temporary home — the professional decides, and nothing disappears.
+The reasoning that a paragraph does not belong in a label/value row, in a
+private field, or blended into `description` still stands. What does not follow
+is that the answer is one new rigid column. The longer-term direction is a
+first-class recipient-visible **reusable content concept** — plausibly
+block-oriented, and plausibly the same primitive a more block-oriented Library
+would want — designed on its own terms rather than bolted onto a reliability fix.
+
+Adding a field now would commit the content model to the shape of the first
+example we happened to meet.
 
 ## Care Costs — the separate, deterministic track
 
@@ -154,32 +189,73 @@ review escape, never a silent truncation.
 
 | gate | measurement | threshold |
 |---|---|---|
-| placement stability | 3 runs of the 20-record paste; identical recipient-visible placement for Class A claims | **100%** |
-| no unauthorised privacy | Library-import facts landing in `notes` without a source privacy marker | **0** |
-| accounting completeness | `accepted + repaired + unresolved == detected` for explicit labelled facts | **100%** |
-| fabrication | unbacked source-backed field values | **0** |
-| no regression | corpus v1/v2, seg-v4 proofs, production smokes, full unit suite | all green |
+| **placement determinism** | repeated identical-input runs of the 20-record paste; recipient-visible placement of every claim | **identical across runs** |
+| **detector recall** | explicit `Label: value` fixtures (label-shapes, v1, v2, the 20-record source) | **100%** on controlled explicit-label fixtures |
+| **detector precision** | same three fixtures | **≥98%** |
+| **accounting completeness** | `accepted + repaired + unresolved == detected` | **100%** |
+| **no unauthorised privacy** | facts reaching `notes` without a source privacy marker | **0** |
+| **fabrication** | unbacked source-backed field values | **0** |
+| **no regression** | corpus v1/v2, seg-v4 proofs, production smokes, full unit suite | all green |
 
-Detector precision must also hold at **≥98%** on v1, v2 and the label-shapes
-fixture, or the unresolved list trains professionals to ignore it.
+### Why recall is now its own gate
+
+`accepted + repaired + unresolved == detected` proves only that **detected**
+claims were accounted for. It is silent about a claim the detector never raised —
+which would be counted nowhere, repaired nowhere, and surfaced nowhere. That is
+precisely the silent-loss failure this layer exists to end, reintroduced one
+level up.
+
+So recall is measured separately, and on explicit `Label: value` fixtures the
+target is **100%**, not a percentage that sounds high. A detector that finds 97%
+of clearly-labelled facts is a system that loses three in a hundred without ever
+saying so.
+
+### On the 8 → 1 replay
+
+That figure is **feasibility evidence, not proof**. It was produced by a crude
+offline matcher over captured output, and it says the approach is worth
+building — nothing more.
+
+**The decisive gate remains the flagged Class A implementation, followed by
+repeated identical-input runs demonstrating deterministic semantic output.**
+Until that has been run and reported, the design is a hypothesis.
 
 ## Minimum sequence to prove the approach
 
-Steps 1–2 require **no production change and no model calls** — they replay
-against the preserved run 1 / run 2 evidence.
+Steps 1–2 change no production behaviour and make **no model calls** — they
+replay against the preserved run 1 / run 2 evidence.
 
-1. **Reconciliation ledger, observe-only.** Extend the chunk ledger with
-   placement outcomes. Inert, as 0025 was.
-2. **Encode the contract + tests**, and replay it offline over the captured
-   evidence. Report: flips before/after, repairs, unresolved, and every Class B
-   case by name. **This is the gate. If it does not converge the two runs here,
-   the design is wrong and nothing ships.**
-3. **Enable Class A repair for one class only** — labelled scalar → `details` —
-   behind a flag, proven by three runs against the stability gate.
-4. **Class D notes rule**, with rejected content surfaced rather than dropped.
-5. **Unresolved review state** in the import review screen.
+**1. Reconciliation ledger, observe-only.**
+Extend the chunk ledger with placement outcomes per claim. Inert, exactly as
+0025 was: written, read by nothing, cleared by the same retention paths.
 
-Steps 3–5 each ship separately, each behind its own gate.
+**2. Encode the precedence ladder, and replay it offline.**
+Rungs 1–3 plus the claim parser, with tests. Replay over the captured evidence
+and report: claims detected, placement before and after, run-to-run agreement,
+repairs, and **every UNRESOLVED case by name**.
+**This is the gate before any production change. If it does not converge the two
+captured runs here, the design is wrong and nothing ships.**
+
+**3. Flagged enforcement, Library import only.**
+Rungs 1–2 applied for real, behind a flag. Proven by **repeated identical-input
+runs demonstrating deterministic recipient-visible placement** — the decisive
+gate, not the replay.
+
+**4. The privacy rule, Library import.**
+`notes` requires a source privacy marker. Rejected content is surfaced as
+UNRESOLVED, never dropped.
+
+**5. UNRESOLVED as a real state.**
+Preserved verbatim, visibly marked on its record, resolvable by placing or
+explicitly ignoring. Clean records save normally throughout.
+
+**6. Packet ingestion inherits the privacy rule.**
+Including the removal or replacement of `ambiguous -> notes`. **This work is not
+complete until this step ships** — Library first is a bounded proof, not the
+scope.
+
+Each step ships separately behind its own gate. Steps 3–6 each require the full
+gate table above to be green.
 
 ## Secondary safeguards — roadmap, not substitutes
 
@@ -195,11 +271,26 @@ Steps 3–5 each ship separately, each behind its own gate.
 
 Neither replaces deterministic first-pass guarantees.
 
-## Open questions for review
+## Decisions taken (previously open)
 
-- The scalar/prose boundary threshold, and whether it is per-label configurable.
-- Whether the narrative field is one field or a typed `details` entry with a
-  `prose` kind — the second avoids a migration but constrains rendering.
-- Whether Class D should apply to packet ingestion too, where `ambiguous ->
-  notes` is still in the prompt and `notes` is now genuinely private.
-- Whether UNRESOLVED blocks saving a proposal or merely annotates it.
+- **Scalar vs prose is withdrawn.** Value shape may inform rendering; it never
+  decides preservation. The boundary is claim vs not-a-claim, drawn by the parser.
+- **No per-label ontology or configuration** is built.
+- **No narrative field in this patch.** Paragraph-like content is UNRESOLVED. A
+  first-class reusable public content concept is designed later, on its own
+  terms, plausibly block-oriented.
+- **The privacy rule extends to packet ingestion**, and this work is not complete
+  until it does.
+- **UNRESOLVED blocks the exception, not the import.** Clean records save
+  normally; the unresolved claim is preserved and marked until resolved.
+- **Recall is its own gate**, at 100% on controlled explicit-label fixtures.
+
+## Still open
+
+- Whether `address` belongs on rung 1 as a specialized destination or is left to
+  model judgment — it is legitimately reformatted, which is why `source-backed.ts`
+  deliberately excludes it from fabrication checks. Rung 1 placement and
+  fabrication checking are separable concerns, but the design should say so
+  explicitly rather than leave it implied.
+- How an UNRESOLVED claim is represented in the Library payload once saved — it
+  is not part of the entry's content, but it must survive the review screen.
