@@ -9,7 +9,7 @@
 // (`detectSourceRecords`), which is the same envelope the chunk planner uses.
 // Re-deriving boundaries here would create a second definition of "a record"
 // that could disagree with the one ingestion actually chunked on.
-import { detectSourceRecords } from "./segmentation.ts";
+import { detectSourceRecords, detectListRecords } from "./segmentation.ts";
 import type { Claim, Fragment, AmbiguousUnit } from "./claim-parser.ts";
 
 export interface Envelope {
@@ -24,7 +24,16 @@ export interface Envelope {
 
 export function recordEnvelopes(source: string, delimiterHint?: string): Envelope[] | null {
   const d = detectSourceRecords(source);
-  if (!d) return null;                       // not structurally a table: ownership is not proven
+  if (!d) {
+    // STRATEGY 2. A pasted directory is often not delimited at all; its
+    // structure is a repeated top-level entry marker. Tried only after the
+    // tabular strategy declines, so a real table is never reinterpreted.
+    const list = detectListRecords(source);
+    if (!list) return null;                  // ownership is not structurally provable
+    return list.records.map((r, index) => ({
+      index, start: r.start, end: r.end, name: (list.labels[index] ?? "").slice(0, 120),
+    }));
+  }
   void delimiterHint;
   return d.records.map((r, index) => {
     const row = source.slice(r.start, r.end);

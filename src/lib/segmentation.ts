@@ -421,3 +421,76 @@ export function splitRange(source: string, start: number, end: number): Array<{ 
     { start: cut, end },
   ];
 }
+
+// ---------------------------------------------------------------------------
+// STRATEGY 2 — REPEATED LIST / DIRECTORY RECORDS.
+//
+// A pasted directory often is not delimited at all. The ice-cream source is
+// blank-line prose whose only structure is a repeated top-level entry marker:
+//
+//     1. Mitchell's Ice Cream — San Francisco
+//     …address, phone, website, description, blank lines…
+//     2. Bi-Rite Creamery — San Francisco
+//
+// BLANK LINES ARE NOT RECORD BOUNDARIES. That source has blank lines INSIDE
+// every shop, so reusing the blank-line blocks the chunker works on would
+// confidently fragment each record into several — worse than declining.
+//
+// The boundary is the repeated MARKER LINE, and it is accepted only on
+// structural evidence, never on vocabulary:
+//
+//   * at least three markers, so it is a list rather than a coincidence
+//   * all at the SAME indentation — the shallowest seen — so an indented
+//     sublist inside a description cannot open a top-level record
+//   * for numbers, a CONTIGUOUS run 1,2,3,… — a sublist that restarts at 1, a
+//     duplicated heading, or a missing ordinal all break contiguity, and a
+//     broken sequence means we do not know where records begin, so we decline
+//
+// Anything before the first marker is a preamble and belongs to no record.
+// Anything after the last marker belongs to the last record.
+const NUMBERED = /^([ \t]*)(\d{1,3})[.)]\s+(\S.*)$/;
+const BULLETED = /^([ \t]*)([-•*])\s+(\S.*)$/;
+
+export interface ListDetection {
+  kind: "numbered" | "bulleted";
+  records: SourceRecord[];
+  /** Marker line text with the marker removed — for reference, not identity. */
+  labels: string[];
+}
+
+export function detectListRecords(source: string): ListDetection | null {
+  const src = String(source ?? "");
+  const lines: { start: number; text: string }[] = [];
+  let at = 0;
+  for (const raw of src.split("\n")) { lines.push({ start: at, text: raw }); at += raw.length + 1; }
+
+  for (const kind of ["numbered", "bulleted"] as const) {
+    const re = kind === "numbered" ? NUMBERED : BULLETED;
+    const hits = lines
+      .map((l, i) => ({ i, l, m: re.exec(l.text) }))
+      .filter((x): x is { i: number; l: { start: number; text: string }; m: RegExpExecArray } => x.m !== null);
+    if (hits.length < 3) continue;
+
+    // Same indentation only — the shallowest. A nested list is indented, and a
+    // description's "1. …" inside a paragraph is not at column zero.
+    const minIndent = Math.min(...hits.map((h) => h.m[1].length));
+    const top = hits.filter((h) => h.m[1].length === minIndent);
+    if (top.length < 3) continue;
+
+    if (kind === "numbered") {
+      const nums = top.map((h) => Number(h.m[2]));
+      const contiguous = nums.every((n, k) => n === nums[0] + k) && (nums[0] === 1 || nums[0] === 0);
+      if (!contiguous) continue;              // gap, restart or duplicate -> decline
+    } else {
+      // One bullet character throughout; a mixed set is not one list.
+      if (new Set(top.map((h) => h.m[2])).size !== 1) continue;
+    }
+
+    const records: SourceRecord[] = top.map((h, k) => ({
+      start: h.l.start,
+      end: k + 1 < top.length ? top[k + 1].l.start : src.length,
+    }));
+    return { kind, records, labels: top.map((h) => h.m[3].trim()) };
+  }
+  return null;
+}
