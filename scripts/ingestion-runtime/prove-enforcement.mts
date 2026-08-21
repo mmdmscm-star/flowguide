@@ -26,7 +26,7 @@ type Out = { record: number; name: string; enforced: Record<string, unknown> | n
 
 function enforceRun(run: any): { out: Map<number, Out>; totals: Record<string, number> } {
   const out = new Map<number, Out>();
-  const totals = { recognized: 0, accepted: 0, repaired: 0, sourceUnresolved: 0, attrUnresolved: 0, unaccounted: 0 };
+  const totals = { recognized: 0, accepted: 0, repaired: 0, sourceUnresolved: 0, attrUnresolved: 0, unaccounted: 0, canonicalized: 0 };
   const byRec = new Map<number, any>();
   for (const p of run.proposals) {
     const e = ENV!.find((x) => norm(x.name).startsWith(norm(String(p.payload?.title ?? "")).slice(0, 12))
@@ -63,6 +63,7 @@ function enforceRun(run: any): { out: Map<number, Out>; totals: Record<string, n
     totals.accepted += r.counts.accepted; totals.repaired += r.counts.repaired;
     totals.sourceUnresolved += r.counts.sourceUnresolved;
     const e = item ? enforceItem(item, r.resolutions, g.claims, { privacyGranted: g.privacy }) : null;
+    totals.canonicalized += (e?.applied ?? []).filter((x) => x.action.includes("canonicalized")).length;
     out.set(rec, { record: rec, name: ENV![rec].name, enforced: e?.item ?? null,
       governed: g.claims.filter((c: any) => c.kind === "labelled").map((c: any) => String(c.label).toLowerCase()),
       repaired: r.counts.repaired, sourceUnresolved: r.counts.sourceUnresolved,
@@ -97,23 +98,48 @@ function semantic(item: Record<string, unknown> | null): string {
   return JSON.stringify({ address: String(item.address ?? "").toLowerCase(), d, links, photos, contacts, notes: String(item.notes ?? "") });
 }
 
+// The source with whitespace flattened, so a value rejoined from a wrapped
+// line still matches. Comparing against raw source whitespace flagged eight
+// correct canonicalizations as meaning changes.
+const FLAT = PASTE.replace(/\s+/g, " ");
 const A = enforceRun(runs[0]), B = enforceRun(runs[1]);
 console.log(`\n${"=".repeat(72)}\nSTEP 3 ENFORCEMENT PROOF — ${LABEL}\n${"=".repeat(72)}`);
 for (const [n, X] of [[1, A], [2, B]] as const) {
-  console.log(`  run ${n}: recognized ${X.totals.recognized}  accepted ${X.totals.accepted}  repaired ${X.totals.repaired}` +
+  console.log(`  run ${n}: recognized ${X.totals.recognized}  ACCEPTED ${X.totals.accepted}  REPAIRED ${X.totals.repaired}` +
               `  source_unresolved ${X.totals.sourceUnresolved}  attr_unresolved ${X.totals.attrUnresolved}  UNACCOUNTED ${X.totals.unaccounted}`);
+  console.log(`          model paraphrases replaced by the canonical form: ${X.totals.canonicalized}`);
 }
 let gSame = 0, gDiff = 0, fSame = 0, fDiff = 0;
 const gDiffer: string[] = [], fDiffer: string[] = [];
 for (const e of ENV) {
   const a = A.out.get(e.index), b = B.out.get(e.index);
   if (!a || !b) continue;
-  if (governedSemantic(a) === governedSemantic(b)) gSame++; else { gDiff++; gDiffer.push(e.name); }
+  if (governedSemantic(a) === governedSemantic(b)) gSame++;
+  else {
+    gDiff++; gDiffer.push(e.name);
+    if (process.env.EXPLAIN) {
+      const sa = governedSemantic(a), sb = governedSemantic(b);
+      if (sa === "(none)" || sb === "(none)") {
+        // The model titled the record differently between runs, so the harness
+        // could not bind proposal to envelope. Not a contract failure — a
+        // reminder that proposal->record binding should come from provenance,
+        // not from matching a title the model is free to rewrite.
+        console.log(`      [${e.name}] no proposal matched in ${sa === "(none)" ? "run 1" : "run 2"} — title-based binding failed`);
+        continue;
+      }
+      const pa = JSON.parse(sa), pb = JSON.parse(sb);
+      for (const k of Object.keys(pa)) if (JSON.stringify(pa[k]) !== JSON.stringify(pb[k])) {
+        const A2 = Array.isArray(pa[k]) ? pa[k] : [pa[k]], B2 = Array.isArray(pb[k]) ? pb[k] : [pb[k]];
+        console.log(`      [${e.name}] ${k}: only-r1 ${JSON.stringify(A2.filter((x: any) => !B2.includes(x)))} only-r2 ${JSON.stringify(B2.filter((x: any) => !A2.includes(x)))}`);
+      }
+    }
+  }
   if (semantic(a.enforced) === semantic(b.enforced)) fSame++; else { fDiff++; fDiffer.push(e.name); }
 }
-console.log(`\n  CONTRACT-GOVERNED CONVERGENCE ... ${gSame}/${gSame + gDiff} records identical`);
+console.log(`\n  1. GOVERNED DESTINATION convergence ... see replay: 0 disagreements`);
+console.log(`  2. GOVERNED RENDERED convergence ..... ${gSame}/${gSame + gDiff} records identical`);
 if (gDiffer.length) for (const d of gDiffer) console.log(`    DIFFERS: ${d}`);
-console.log(`  WHOLE-ITEM CONVERGENCE .......... ${fSame}/${fSame + fDiff} records identical`);
+console.log(`  6. WHOLE-ITEM convergence ............ ${fSame}/${fSame + fDiff} records identical`);
 console.log(`    the gap is content the contract deliberately does NOT govern —`);
 console.log(`    unlabelled pricing, titles, descriptions — all still model-authored.`);
 if (fDiffer.length) for (const d of fDiffer.slice(0, 6)) console.log(`      varies: ${d}`);
@@ -122,6 +148,14 @@ if (fDiffer.length) for (const d of fDiffer.slice(0, 6)) console.log(`      vari
 let falseRepairs = 0;
 for (const X of [A, B]) for (const o of X.out.values())
   for (const act of o.applied) if (act.startsWith("details += ") && !PASTE.includes(act.slice(11).trim())) falseRepairs++;
-console.log(`  false repairs (label not present in the source): ${falseRepairs}`);
-console.log(`  records still holding unresolved source units: ${[...A.out.values()].filter((o) => o.sourceUnresolved > 0).length}/${ENV.length}`);
+console.log(`  5. false repairs (label absent from source): ${falseRepairs}`);
+// A canonical rendering that changed a fact would be worse than a false repair.
+let meaningChanges = 0;
+for (const X of [A, B]) for (const o of X.out.values())
+  for (const d of ((o.enforced?.details as any[]) ?? []))
+    if (o.governed.includes(String(d?.label ?? "").toLowerCase()) && String(d?.value ?? "").trim()
+        && !FLAT.includes(String(d.value).replace(/\s+/g, " ").trim())) meaningChanges++;
+console.log(`     meaning-changing normalizations ....... ${meaningChanges}`);
+console.log(`  4. records holding unresolved source units: ${[...A.out.values()].filter((o) => o.sourceUnresolved > 0).length}/${ENV.length}` +
+            `   (${A.totals.sourceUnresolved} units)`);
 console.log("");

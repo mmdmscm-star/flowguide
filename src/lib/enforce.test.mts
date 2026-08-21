@@ -73,3 +73,46 @@ test("enforcement behaves identically across verticals", () => {
   const c = run("Permit Fee: Varies by jurisdiction", { details: [] }).item;
   for (const x of [a, b, c]) assert.equal((x.details as unknown[]).length, 1);
 });
+
+test("ACCEPTED and REPAIRED render the SAME fact", () => {
+  // The whole point. One source claim, two model behaviours, one output.
+  const src = "Care Costs: starting at $6,000 per month";
+  const modelPlacedIt = run(src, { details: [{ label: "Care costs", value: "from $6,000/mo" }] });
+  const modelDroppedIt = run(src, { details: [] });
+  assert.deepEqual(modelPlacedIt.item.details, modelDroppedIt.item.details);
+  // ...and the qualifier survived, rather than the model's paraphrase winning.
+  assert.deepEqual(modelPlacedIt.item.details, [{ label: "Care Costs", value: "starting at $6,000 per month" }]);
+});
+
+test("the model's paraphrase never becomes canonical", () => {
+  const { item, applied } = run("Community Fee: $2,400", { details: [{ label: "Community Fee", value: "approximately $2,400" }] });
+  assert.deepEqual(item.details, [{ label: "Community Fee", value: "$2,400" }]);
+  assert.ok(applied.some((a) => a.action.includes("canonicalized")));
+});
+
+test("ungoverned details the model derived are left alone", () => {
+  // Enso-style elaboration: the source says "Entrance Fee"; the model broke it
+  // into per-floorplan rows. Those are not governed claims and must survive.
+  const { item } = run("Entrance Fee: varies by floor plan", {
+    details: [
+      { label: "1 Bedroom Entrance Fee", value: "$658,255 – $1,015,475" },
+      { label: "2 Bedroom Entrance Fee", value: "$1,076,995 – $1,408,422" },
+    ],
+  });
+  const labels = (item.details as { label: string }[]).map((d) => d.label);
+  assert.ok(labels.includes("1 Bedroom Entrance Fee"), "deleted an ungoverned detail");
+  assert.ok(labels.includes("Entrance Fee"), "governed claim not materialized");
+});
+
+test("canonicalization never drops a unit, range or condition", () => {
+  for (const [src, want] of [
+    ["Live-in Rate: ranges from $520 to $610 per day", "ranges from $520 to $610 per day"],
+    ["Second Person Fee: $950/month", "$950/month"],
+    ["Corkage: $25/bottle", "$25/bottle"],
+    ["Assessment Fee: waived for clients referred by a placement advisor", "waived for clients referred by a placement advisor"],
+    ["Permit Fee: Varies by jurisdiction; owner is billed at cost", "Varies by jurisdiction; owner is billed at cost"],
+  ] as const) {
+    const { item } = run(src, { details: [] });
+    assert.equal((item.details as { value: string }[])[0].value, want, src);
+  }
+});
