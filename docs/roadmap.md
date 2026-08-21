@@ -385,7 +385,7 @@ in, not a priority ranking.
    `evidence_purge_after`, let the existing pg_cron job expire it. Nothing new
    has to be designed; the retention machinery already exists and already runs.
 
-7. **Block-mode Library insertion.** A composition project, low priority. See its
+8. **Block-mode Library insertion.** A composition project, low priority. See its
    own entry: `trg_freeze_items` forbids the item INSERT outright, so this is a
    change to a composition invariant rather than a Library feature.
 
