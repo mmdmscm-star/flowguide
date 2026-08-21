@@ -1,0 +1,170 @@
+// THE CLAIM PARSER — the trust boundary.
+//
+// Reconciliation can only guarantee what this file detects. A fact it misses is
+// counted nowhere, repaired nowhere and surfaced nowhere, which is the exact
+// silent loss the whole layer exists to end. So this parser is deliberately
+// conservative about what it CLAIMS and deliberately loud about what it does
+// not: everything it declines becomes a FRAGMENT with a stated reason, and
+// fragments are reported, never dropped.
+//
+// It is written against the real source, not tidy fixtures — wrapped values,
+// orphaned continuations, repeated labels, digit-bearing labels, and prose
+// glued onto the end of a labelled line.
+import { probe } from "./fact-match.ts";
+
+export type ClaimKind = "labelled" | "url" | "email" | "phone";
+export interface Claim {
+  id: string;
+  kind: ClaimKind;
+  label?: string;
+  value: string;
+  line: number;
+  raw: string;
+}
+export interface Fragment { line: number; text: string; reason: string }
+export interface ParseResult { claims: Claim[]; fragments: Fragment[] }
+
+// A LABEL IS A SHORT NOUN PHRASE, not a clause. Same rule as the fact ledger:
+// grammar, never digits — `2nd Person Fee` and `Level 2 Care` are labels.
+const MAX_LABEL_WORDS = 5;
+const CLAUSE_MARKERS = new Set([
+  "the", "a", "an", "this", "that", "these", "those", "there",
+  "was", "were", "is", "are", "be", "been", "being",
+  "has", "have", "had", "will", "would", "should", "could",
+]);
+function looksLikeLabel(label: string): boolean {
+  // A PARENTHETICAL QUALIFIER IS PART OF THE LABEL, NOT A CLAUSE.
+  // "Memory Care Private Studio (shared bath)" is six words and a perfectly
+  // ordinary label; "A quick reminder before you call" is six words and prose.
+  // Raising the cap would admit both, so the qualifier is excluded from the
+  // count instead — which is what it is: an identity, not a sentence.
+  const counted = label.replace(/\([^)]*\)/g, " ").trim();
+  const words = counted.split(/\s+/).filter(Boolean);
+  if (!words.length || words.length > MAX_LABEL_WORDS) return false;
+  return !label.trim().split(/\s+/).some((w) => {
+    const bare = w.replace(/[^A-Za-z]/g, "");
+    return bare.length > 0 && bare === bare.toLowerCase() && CLAUSE_MARKERS.has(bare);
+  });
+}
+
+const LABEL_RE = /^\s*[-•*]?\s*([A-Za-z0-9][A-Za-z0-9 /&()'’.+-]{0,47}):\s*(.*)$/;
+const URL_RE = /https?:\/\/[^\s"'<>)]+/gi;
+const EMAIL_RE = /[\w.+-]+@[\w-]+\.[\w.]+/g;
+const PHONE_RE = /\+?1?[-.\s(]*\d{3}[-.\s)]*\d{3}[-.\s]*\d{4}/g;
+
+// A value that trails off mid-clause continues on the next line. Vine Ridge:
+//   "Care Costs: Additional monthly fee based on level of care. Maximum care
+//    level fee for"  /  "Assisted Living $3,700."
+const CONTINUES = /[,;:]$|\b(for|of|to|and|or|with|the|a|an|from|per|than|based on|including)$/i;
+
+/** Join wrapped continuation lines onto the value they belong to. */
+function joinWrapped(lines: string[]): { text: string; line: number }[] {
+  const out: { text: string; line: number }[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    const cur = lines[i].trim();
+    if (!cur) continue;
+    let text = cur, n = i;
+    while (n + 1 < lines.length) {
+      const next = (lines[n + 1] ?? "").trim();
+      if (!next) break;
+      const carriesOn = CONTINUES.test(text);
+      const nextStartsSomethingNew = LABEL_RE.test(next) || /^[-•*]/.test(next) || /^https?:/i.test(next);
+      if (!carriesOn || nextStartsSomethingNew) break;
+      text = `${text} ${next}`;
+      n++;
+    }
+    out.push({ text, line: i });
+    i = n;
+  }
+  return out;
+}
+
+// PROSE GLUED ONTO A LABELLED LINE. Atria:
+//   "- Second Person Fee: $2,095 (2BR) Pricing for apartments at Atria … are
+//    listed on their website when units are available."
+// The claim is `$2,095 (2BR)`; the sentence after it is not a claim and must
+// not be silently absorbed into a detail value.
+//
+// Split only where an independent clause plainly begins — a capitalised word
+// followed closely by a finite verb — AND only when a real value already
+// precedes it. That guard is what keeps `Care Costs: Prices are all-inclusive…`
+// intact: its clause starts at position zero, so there is nothing to split off.
+const FINITE = /^(is|are|was|were|vary|varies|will|can|may|reflects|reflect|listed|depends|depend|include|includes|start|starts|range|ranges)$/i;
+function splitTrailingProse(value: string): { value: string; trailing?: string } {
+  const toks = value.split(/\s+/);
+  for (let i = 1; i < toks.length; i++) {
+    if (!/^[A-Z][a-z]/.test(toks[i])) continue;
+    const window = toks.slice(i + 1, i + 11);
+    if (!window.some((t) => FINITE.test(t.replace(/[^A-Za-z]/g, "")))) continue;
+    const head = toks.slice(0, i).join(" ").trim();
+    const tail = toks.slice(i).join(" ").trim();
+    if (!head || tail.split(/\s+/).length < 8) continue;   // need a real value AND a real sentence
+    return { value: head, trailing: tail };
+  }
+  return { value };
+}
+
+// THE SOURCE IS TAB-SEPARATED. A spreadsheet paste puts every column of a
+// record on ONE physical line, with multiline cells quoted. So the first line of
+// a record reads:
+//
+//   Vine Ridge Senior Living⇥Cloverdale⇥"Type: AL, MC
+//
+// A line-oriented parser sees no label there and silently loses `Type: AL, MC`.
+// That is precisely the trust-boundary failure this layer exists to prevent, so
+// cells are separated before anything else happens. Quote state is not tracked
+// across chunk boundaries — a chunk can begin mid-cell — so stray delimiters are
+// trimmed per block rather than parsed as a document.
+function cells(segment: string): string[] {
+  return String(segment ?? "")
+    .split(/[\n\t]/)
+    .map((b) => b.trim().replace(/^"+/, "").replace(/"+$/, "").replace(/""/g, '"').trim());
+}
+
+export function parseClaims(segment: string, chunkOrdinal = 0): ParseResult {
+  const claims: Claim[] = [];
+  const fragments: Fragment[] = [];
+  let seq = 0;
+  const id = (line: number) => `${chunkOrdinal}:${line}:${seq++}`;
+
+  for (const { text, line } of joinWrapped(cells(segment))) {
+    // A URL is not a labelled line. "https://x/a.jpg" otherwise parses as the
+    // label "https" with the value "//x/a.jpg".
+    const isUrlLine = /^\s*[-•*]?\s*https?:\/\//i.test(text);
+    const m = isUrlLine ? null : LABEL_RE.exec(text);
+    if (m && looksLikeLabel(m[1])) {
+      const label = m[1].trim();
+      const rest = m[2].trim();
+      if (!rest) { fragments.push({ line, text, reason: "label with no value" }); continue; }
+      const { value, trailing } = splitTrailingProse(rest);
+      claims.push({ id: id(line), kind: "labelled", label, value, line, raw: text });
+      if (trailing) fragments.push({ line, text: trailing, reason: "prose appended to a labelled line" });
+      continue;
+    }
+    // Unlabelled lines: still claim anything with an unambiguous identity.
+    let claimedHere = false;
+    for (const [re, kind] of [[URL_RE, "url"], [EMAIL_RE, "email"], [PHONE_RE, "phone"]] as const) {
+      re.lastIndex = 0;
+      for (const hit of text.match(re) ?? []) {
+        claims.push({ id: id(line), kind, value: hit, line, raw: text });
+        claimedHere = true;
+      }
+    }
+    if (!claimedHere) {
+      // NOT A CLAIM. Room lists like "- $4,090/month One Bedroom" carry real
+      // pricing but no label, so their structure is the model's judgement to
+      // make. Declining them here is the honest position: the layer cannot
+      // guarantee what it cannot identify, and pretending otherwise would be
+      // the more dangerous error.
+      fragments.push({ line, text, reason: /\$|\d/.test(text) ? "unlabelled content carrying numbers" : "unlabelled prose" });
+    }
+  }
+  return { claims, fragments };
+}
+
+/** Claims whose value is itself a specialized identity (Email Address: x@y.com). */
+export function specializedValueKind(c: Claim): ClaimKind | null {
+  if (c.kind !== "labelled") return c.kind;
+  const k = probe(c.value).kind;
+  return k === "url" || k === "email" || k === "phone" ? k : null;
+}
