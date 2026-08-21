@@ -77,3 +77,35 @@ export function attributeAll(
     record === null ? unattributedFragments.push(item) : bucket(record).fragments.push(item);
   return { byRecord, unattributedClaims, unattributedAmbiguous, unattributedFragments };
 }
+
+/** Which record envelopes does this chunk's source range overlap, in order? */
+export function envelopesInRange(envelopes: Envelope[], start: number, end: number): Envelope[] {
+  return envelopes.filter((e) => e.start < end && e.end > start);
+}
+
+/** BIND PROPOSALS TO SOURCE RECORDS BY PROVENANCE, NEVER BY TITLE.
+ *
+ *  The model authors the title and is entitled to vary it: "Enso Village" and
+ *  "Ensō Village" are the same community, and a diacritic broke reconciliation
+ *  when binding went through the title. Matching on model-authored text makes
+ *  the layer's correctness depend on the model's word choice, which is the thing
+ *  the whole contract exists to stop relying on.
+ *
+ *  Structure decides instead: the records a chunk covers are ordered by source
+ *  offset, the items the model returned for that chunk are ordered as emitted,
+ *  and the i-th item is the i-th record. Where the counts disagree the surplus
+ *  on either side is left UNBOUND rather than guessed — an unbound record's
+ *  claims become ATTRIBUTION_UNRESOLVED, which is a named state, not a loss. */
+export function bindItemsToRecords<T>(
+  envelopes: Envelope[], chunkStart: number, chunkEnd: number, items: T[],
+): { bound: Map<number, T>; unboundRecords: number[]; unboundItems: number } {
+  const covered = envelopesInRange(envelopes, chunkStart, chunkEnd);
+  const bound = new Map<number, T>();
+  const n = Math.min(covered.length, items.length);
+  for (let i = 0; i < n; i++) bound.set(covered[i].index, items[i]);
+  return {
+    bound,
+    unboundRecords: covered.slice(n).map((e) => e.index),
+    unboundItems: Math.max(0, items.length - covered.length),
+  };
+}

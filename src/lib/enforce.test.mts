@@ -116,3 +116,53 @@ test("canonicalization never drops a unit, range or condition", () => {
     assert.equal((item.details as { value: string }[])[0].value, want, src);
   }
 });
+
+test("a duplicate rendering of a specialized claim is stripped from details", () => {
+  const { item, stripped } = run("Community Phone: (707) 723-9250", {
+    details: [{ label: "Community Phone", value: "(707) 723-9250" }], contacts: [],
+  });
+  assert.deepEqual(item.details, [], "the duplicate detail survived");
+  assert.equal(stripped.length, 1);
+  assert.match(stripped[0].reason, /duplicate rendering/);
+  assert.equal((item.contacts as any[])[0].phone, "(707) 723-9250");
+});
+
+test("a CONFLICTING value for the same governed claim is stripped, not shown", () => {
+  // The Ridge at Healdsburg carried two different Community Phone details across
+  // two runs of one source. An unsupported competing fact is worse than a
+  // missing one, so it does not reach the recipient.
+  const { item, stripped } = run("Community Phone: (707) 723-9250", {
+    details: [{ label: "Community Phone", value: "(707) 687-9633" }], contacts: [],
+  });
+  assert.deepEqual(item.details, []);
+  assert.match(stripped[0].reason, /conflicting value/);
+});
+
+test("independent source-backed content in the same detail is preserved", () => {
+  const { item, stripped } = run("Community Phone: (707) 723-9250", {
+    details: [{ label: "Reception", value: "(707) 723-9250 — open 9am to 5pm daily" }], contacts: [],
+  });
+  const d = item.details as { value: string }[];
+  assert.equal(d.length, 1, "the whole detail was deleted");
+  assert.match(d[0].value, /open 9am to 5pm daily/);
+  assert.doesNotMatch(d[0].value, /723-9250/);
+  assert.match(stripped[0].reason, /independent content preserved/);
+});
+
+test("stripping does not touch unrelated model-authored details", () => {
+  const { item, stripped } = run("Community Phone: (707) 723-9250", {
+    details: [
+      { label: "Studio", value: "$4,090/month" },
+      { label: "Pet Policy", value: "cats and dogs under 25lb" },
+    ], contacts: [],
+  });
+  assert.equal((item.details as unknown[]).length, 2, "deleted content it had no claim over");
+  assert.equal(stripped.length, 0);
+});
+
+test("identity that cannot be proven is left alone", () => {
+  // A short numeric coincidence must not license a deletion.
+  const { item, stripped } = run("Capacity: 84", { details: [{ label: "Year Built", value: "1984" }] });
+  assert.ok((item.details as unknown[]).length >= 1);
+  assert.equal(stripped.length, 0);
+});

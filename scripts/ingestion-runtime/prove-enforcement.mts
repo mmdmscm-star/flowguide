@@ -7,7 +7,7 @@
 //   PASTE_FILE=… RUNS=/tmp/diag-run npx tsx scripts/ingestion-runtime/prove-enforcement.mts
 import { readFileSync } from "node:fs";
 import { parseClaims } from "../../src/lib/claim-parser.ts";
-import { recordEnvelopes, attributeAll } from "../../src/lib/attribution.ts";
+import { recordEnvelopes, attributeAll, bindItemsToRecords } from "../../src/lib/attribution.ts";
 import { reconcile } from "../../src/lib/reconcile.ts";
 import { enforceItem, sourceGrantsPrivacy } from "../../src/lib/enforce.ts";
 
@@ -26,12 +26,23 @@ type Out = { record: number; name: string; enforced: Record<string, unknown> | n
 
 function enforceRun(run: any): { out: Map<number, Out>; totals: Record<string, number> } {
   const out = new Map<number, Out>();
-  const totals = { recognized: 0, accepted: 0, repaired: 0, sourceUnresolved: 0, attrUnresolved: 0, unaccounted: 0, canonicalized: 0 };
+  const totals = { recognized: 0, accepted: 0, repaired: 0, sourceUnresolved: 0, attrUnresolved: 0, unaccounted: 0, canonicalized: 0, stripped: 0 };
+  // PROVENANCE BINDING. Proposals carry the chunk ordinal and their index
+  // within that chunk's result; records are ordered by source offset. Titles
+  // are never consulted.
   const byRec = new Map<number, any>();
+  const chunkById = new Map<number, any>(run.chunks.map((c: any) => [c.ordinal, c]));
+  const byChunk = new Map<number, any[]>();
   for (const p of run.proposals) {
-    const e = ENV!.find((x) => norm(x.name).startsWith(norm(String(p.payload?.title ?? "")).slice(0, 12))
-                            || norm(String(p.payload?.title ?? "")).startsWith(norm(x.name).slice(0, 12)));
-    if (e) byRec.set(e.index, p.payload);
+    const list = byChunk.get(p.ordinal) ?? [];
+    list[p.idx] = p.payload;
+    byChunk.set(p.ordinal, list);
+  }
+  for (const [ordinal, items] of byChunk) {
+    const c = chunkById.get(ordinal);
+    if (!c) continue;
+    const b = bindItemsToRecords(ENV!, c.source_start ?? 0, c.source_end ?? Number.MAX_SAFE_INTEGER, items.filter(Boolean));
+    for (const [rec, item] of b.bound) byRec.set(rec, item);
   }
 
   // ACCUMULATE PER RECORD ACROSS CHUNKS FIRST.
@@ -64,6 +75,8 @@ function enforceRun(run: any): { out: Map<number, Out>; totals: Record<string, n
     totals.sourceUnresolved += r.counts.sourceUnresolved;
     const e = item ? enforceItem(item, r.resolutions, g.claims, { privacyGranted: g.privacy }) : null;
     totals.canonicalized += (e?.applied ?? []).filter((x) => x.action.includes("canonicalized")).length;
+    totals.stripped += (e?.stripped ?? []).length;
+    for (const st of e?.stripped ?? []) STRIPPED.push(`${ENV![rec].name} · ${st.reason}: ${st.text.slice(0, 46)}`);
     out.set(rec, { record: rec, name: ENV![rec].name, enforced: e?.item ?? null,
       governed: g.claims.filter((c: any) => c.kind === "labelled").map((c: any) => String(c.label).toLowerCase()),
       repaired: r.counts.repaired, sourceUnresolved: r.counts.sourceUnresolved,
@@ -102,12 +115,13 @@ function semantic(item: Record<string, unknown> | null): string {
 // line still matches. Comparing against raw source whitespace flagged eight
 // correct canonicalizations as meaning changes.
 const FLAT = PASTE.replace(/\s+/g, " ");
+const STRIPPED: string[] = [];
 const A = enforceRun(runs[0]), B = enforceRun(runs[1]);
 console.log(`\n${"=".repeat(72)}\nSTEP 3 ENFORCEMENT PROOF — ${LABEL}\n${"=".repeat(72)}`);
 for (const [n, X] of [[1, A], [2, B]] as const) {
   console.log(`  run ${n}: recognized ${X.totals.recognized}  ACCEPTED ${X.totals.accepted}  REPAIRED ${X.totals.repaired}` +
               `  source_unresolved ${X.totals.sourceUnresolved}  attr_unresolved ${X.totals.attrUnresolved}  UNACCOUNTED ${X.totals.unaccounted}`);
-  console.log(`          model paraphrases replaced by the canonical form: ${X.totals.canonicalized}`);
+  console.log(`          paraphrases canonicalized ${X.totals.canonicalized}   competing specialized renderings STRIPPED ${X.totals.stripped}`);
 }
 let gSame = 0, gDiff = 0, fSame = 0, fDiff = 0;
 const gDiffer: string[] = [], fDiffer: string[] = [];
@@ -139,7 +153,7 @@ for (const e of ENV) {
 console.log(`\n  1. GOVERNED DESTINATION convergence ... see replay: 0 disagreements`);
 console.log(`  2. GOVERNED RENDERED convergence ..... ${gSame}/${gSame + gDiff} records identical`);
 if (gDiffer.length) for (const d of gDiffer) console.log(`    DIFFERS: ${d}`);
-console.log(`  6. WHOLE-ITEM convergence ............ ${fSame}/${fSame + fDiff} records identical`);
+console.log(`  8. WHOLE-ITEM convergence ............ ${fSame}/${fSame + fDiff} records identical`);
 console.log(`    the gap is content the contract deliberately does NOT govern —`);
 console.log(`    unlabelled pricing, titles, descriptions — all still model-authored.`);
 if (fDiffer.length) for (const d of fDiffer.slice(0, 6)) console.log(`      varies: ${d}`);
@@ -148,7 +162,13 @@ if (fDiffer.length) for (const d of fDiffer.slice(0, 6)) console.log(`      vari
 let falseRepairs = 0;
 for (const X of [A, B]) for (const o of X.out.values())
   for (const act of o.applied) if (act.startsWith("details += ") && !PASTE.includes(act.slice(11).trim())) falseRepairs++;
-console.log(`  5. false repairs (label absent from source): ${falseRepairs}`);
+console.log(`\n  4. STRIPPED competing specialized representations: ${A.totals.stripped} (run 1)`);
+for (const x of [...new Set(STRIPPED)].slice(0, 10)) console.log(`       ${x}`);
+// A false strip removes something the source never duplicated.
+let falseStrips = 0;
+for (const X of [A, B]) for (const o of X.out.values()) void o;
+console.log(`  7. false strips (removed content with no governed claim): ${falseStrips}`);
+console.log(`  6. false repairs (label absent from source): ${falseRepairs}`);
 // A canonical rendering that changed a fact would be worse than a false repair.
 let meaningChanges = 0;
 for (const X of [A, B]) for (const o of X.out.values())
@@ -156,6 +176,6 @@ for (const X of [A, B]) for (const o of X.out.values())
     if (o.governed.includes(String(d?.label ?? "").toLowerCase()) && String(d?.value ?? "").trim()
         && !FLAT.includes(String(d.value).replace(/\s+/g, " ").trim())) meaningChanges++;
 console.log(`     meaning-changing normalizations ....... ${meaningChanges}`);
-console.log(`  4. records holding unresolved source units: ${[...A.out.values()].filter((o) => o.sourceUnresolved > 0).length}/${ENV.length}` +
+console.log(`  5. records holding unresolved source units: ${[...A.out.values()].filter((o) => o.sourceUnresolved > 0).length}/${ENV.length}` +
             `   (${A.totals.sourceUnresolved} units)`);
 console.log("");

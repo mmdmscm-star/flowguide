@@ -64,6 +64,10 @@ const arr = (v: unknown) => (Array.isArray(v) ? [...v] : []);
 export interface Enforcement {
   item: Item;
   applied: { claimId: string; action: string }[];
+  /** Competing renderings of a governed specialized claim, removed from
+   *  noncanonical fields. Telemetry: how often the model duplicates a fact it
+   *  was given one home for. */
+  stripped: { claimId: string; from: string; text: string; reason: string }[];
 }
 
 /** Apply the contract to ONE item, given that item's resolutions. */
@@ -72,6 +76,7 @@ export function enforceItem(
 ): Enforcement {
   const next: Item = { ...item };
   const applied: { claimId: string; action: string }[] = [];
+  const stripped: Enforcement["stripped"] = [];
   const byId = new Map(claims.map((c) => [c.id, c]));
 
   const kindOf = (v: string): ValueKind => {
@@ -126,13 +131,77 @@ export function enforceItem(
       // its own contact entry rather than being guessed onto an existing one.
       const contacts = arr(next.contacts) as Record<string, unknown>[];
       const field = /@/.test(c.value) ? "email" : "phone";
-      contacts.push({ name: canonicalLabel(c.label ?? "") || null, [field]: canonicalValue(c.value, field) });
+      const canon = canonicalValue(c.value, field);
+      // ALREADY THERE, JUST WRITTEN DIFFERENTLY. "(707) 723-9250" and
+      // "707-723-9250" are one fact; adding a second entry for the second
+      // spelling makes the contact list depend on the model's formatting, which
+      // is precisely what canonical rendering exists to prevent.
+      const key = field === "phone" ? canon.replace(/\D/g, "") : canon.toLowerCase();
+      const already = contacts.some((x) => {
+        const v = String((x as Record<string, unknown>)?.[field] ?? "");
+        return v && (field === "phone" ? v.replace(/\D/g, "") === key : v.toLowerCase() === key);
+      });
+      if (already) { applied.push({ claimId: c.id, action: `contacts already holds this ${field}` }); continue; }
+      contacts.push({ name: canonicalLabel(c.label ?? "") || null, [field]: canon });
       next.contacts = contacts;
       applied.push({ claimId: c.id, action: `contacts += ${field}` });
     } else if (r.want === "address" && !String(next.address ?? "").trim()) {
       next.address = canonicalValue(c.value);
       applied.push({ claimId: c.id, action: "address set" });
     }
+  }
+
+  // SPECIALIZED DESTINATIONS ARE EXCLUSIVE.
+  //
+  // A governed claim with a specialized destination has ONE canonical home. A
+  // competing rendering of that same claim in `details` is not extra
+  // information — it is a second copy that can drift, and when it drifts it
+  // reaches the recipient as an unsupported fact. The Ridge at Healdsburg
+  // carried two different "Community Phone" details across two runs of the same
+  // source; one of them was simply wrong.
+  //
+  // STRIPPING IS BOUNDED AND MUST BE PROVABLE. This is not licence to tidy
+  // model-authored content:
+  //   * the same claim rendered again        -> strip
+  //   * the same claim LABEL with a conflicting value -> strip, because an
+  //     unsupported competing fact is worse than a missing one
+  //   * a detail carrying INDEPENDENT source-backed content as well -> keep the
+  //     independent part, remove only the duplicated claim
+  //   * identity not provable                -> leave it alone and account for it
+  {
+    const digits = (x: string) => String(x).replace(/\D/g, "");
+    const squash = (x: string) => String(x).toLowerCase().replace(/[^a-z0-9]/g, "");
+    const details = arr(next.details) as { label?: string; value?: string }[];
+    const keep: typeof details = [];
+    for (const d of details) {
+      const dv = String(d?.value ?? ""), dl = canonicalLabel(String(d?.label ?? ""));
+      let removed: { claimId: string; reason: string } | null = null;
+      for (const r of resolutions) {
+        if (!r.want || r.want === "details" || (r.outcome !== "ACCEPTED" && r.outcome !== "REPAIRED")) continue;
+        const c = byId.get(r.claimId);
+        if (!c) continue;
+        const kind = kindOf(c.value);
+        const sameValue = kind === "phone"
+          ? digits(c.value).length >= 7 && digits(dv).includes(digits(c.value))
+          : squash(c.value).length >= 6 && squash(dv).includes(squash(c.value));
+        const sameLabel = Boolean(c.label) && dl.toLowerCase() === canonicalLabel(c.label!).toLowerCase();
+        if (!sameValue && !sameLabel) continue;
+        // Does this detail carry anything BEYOND the governed claim? If so the
+        // independent part is preserved rather than deleted with it.
+        const residue = dv.replace(new RegExp(c.value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi"), " ");
+        if (squash(residue).length >= 6 && sameValue) {
+          keep.push({ label: d?.label, value: residue.replace(/\s+/g, " ").trim() });
+          stripped.push({ claimId: c.id, from: "details", text: c.value, reason: "duplicate of a specialized claim; independent content preserved" });
+          removed = { claimId: c.id, reason: "partial" };
+          break;
+        }
+        removed = { claimId: c.id, reason: sameValue ? "duplicate rendering" : "conflicting value for the same governed claim" };
+        stripped.push({ claimId: c.id, from: "details", text: `${d?.label ?? ""}: ${dv}`, reason: removed.reason });
+        break;
+      }
+      if (!removed) keep.push(d);
+    }
+    next.details = keep;
   }
 
   // SPECIALIZED VALUES RENDER CANONICALLY WHEREVER THEY SIT.
@@ -168,5 +237,5 @@ export function enforceItem(
     applied.push({ claimId: "-", action: "notes cleared — no source authority for privacy" });
     next.notes = "";
   }
-  return { item: next, applied };
+  return { item: next, applied, stripped };
 }
