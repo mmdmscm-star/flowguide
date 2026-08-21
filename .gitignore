@@ -57,3 +57,4 @@ scripts/ingestion-runtime/evidence-*.json
 *.xlsx
 *.xls
 *.csv
+diagnostic-paste.txt

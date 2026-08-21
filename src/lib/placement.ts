@@ -134,3 +134,16 @@ export function judge(item: Record<string, unknown>, fact: { value: string; labe
     hiddenFromRecipient: found.length > 0 && !found.some(isRecipientVisible),
   };
 }
+
+/** Did most of this value's meaningful tokens survive anywhere in the item?
+ *  Exact-string matching called Creekwood's Care Costs LOST when the model had
+ *  written the same fact minus its first two words. Reformatting is not loss. */
+export function survives(item: Record<string, unknown>, value: string): boolean {
+  const stop = new Set(["the","a","an","of","for","and","or","to","in","on","is","are","per","by","with","based"]);
+  const toks = value.toLowerCase().match(/[a-z0-9$.,%-]+/g)?.map((t) => t.replace(/[.,]$/, ""))
+    .filter((t) => t.length > 1 && !stop.has(t)) ?? [];
+  if (!toks.length) return false;
+  const hay = JSON.stringify(item).toLowerCase();
+  const hit = toks.filter((t) => hay.includes(t)).length;
+  return hit / toks.length >= 0.6;
+}
