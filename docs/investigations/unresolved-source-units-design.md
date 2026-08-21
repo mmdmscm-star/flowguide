@@ -177,3 +177,27 @@ There is no local Postgres on this machine and no Docker, so behavioural
 verification cannot run before the function exists on the linked database —
 which is why the statically provable invariants were pulled forward into a
 separate source-gate pass rather than waiting for it.
+
+## Applied — 2026-08-21
+
+`0027_resolve_review_unit.sql`, sha256
+`948aab0b5cc647c7996f68f793f3729fbb56f4bfdd06fc26484796263c221640`, pushed
+through the linked Supabase CLI. History shows `0027` in both Local and Remote;
+`db push --dry-run` reports the remote database up to date.
+
+`scripts/sql/0027-verify.sql` — **36 PASS / 0 FAIL**, then confirmed from
+*outside* its own transaction that no fixture run survived the rollback.
+
+Two verifier expectations were wrong on first run and were corrected, not the
+schema: `pg_get_function_identity_arguments` carries parameter names, so it can
+never equal a bare type list — the argument types are the identity, and that is
+what is compared now; and Postgres stores the empty pin as `search_path=""`,
+which is asserted exactly, because merely finding the word `search_path` would
+also accept `search_path=public`.
+
+Rows 35–36 prove the grant by EFFECT: the verifier becomes `authenticated`, then
+`anon`, and calls the function. Both are refused. An ACL that reads correctly and
+a call that is actually refused are different claims.
+
+Production smokes after apply: post-deploy 10/10, Library v1 20/20, first-use
+22/22, every one cleaning up its own disposable data.

@@ -14,10 +14,13 @@ create temp table v(ord numeric, check_name text, expected text, actual text) on
 -- PART A — security posture, from the catalog
 -- ===========================================================================
 insert into v
-select 1, 'resolve_review_unit exists with the 4-arg signature', '1',
-       (select count(*)::text from pg_proc p join pg_namespace n on n.oid=p.pronamespace
-         where n.nspname='public' and p.proname='resolve_review_unit'
-           and pg_get_function_identity_arguments(p.oid) = 'uuid, uuid, text, text')
+-- The ARGUMENT TYPES are the identity. pg_get_function_identity_arguments
+-- carries the parameter names too, so comparing it to a bare type list asserts
+-- something about naming that nobody meant to assert.
+select 1, 'resolve_review_unit exists with the expected signature', 'uuid,uuid,text,text',
+       coalesce((select array_to_string(array(select format_type(t, null) from unnest(p.proargtypes) t), ',')
+                   from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+                  where n.nspname='public' and p.proname='resolve_review_unit'),'ABSENT')
 union all
 select 2, 'is SECURITY DEFINER', 'true',
        coalesce((select p.prosecdef::text from pg_proc p join pg_namespace n on n.oid=p.pronamespace
@@ -25,7 +28,9 @@ select 2, 'is SECURITY DEFINER', 'true',
 union all
 -- SECURITY DEFINER runs as the owner. Without a pinned search_path the caller
 -- chooses which schema's objects that privileged body resolves to.
-select 3, 'search_path is pinned', 'search_path=',
+-- Postgres stores the empty pin quoted. Assert the exact value, not merely
+-- that the word appears: `search_path=public` is also "pinned" and is not safe.
+select 3, 'search_path is pinned to empty', 'search_path=""',
        coalesce((select array_to_string(p.proconfig,',') from pg_proc p join pg_namespace n on n.oid=p.pronamespace
                   where n.nspname='public' and p.proname='resolve_review_unit'),'NOT PINNED')
 union all
@@ -103,21 +108,6 @@ begin
   exception when others then v_a := 'rejected'; end;
   insert into v values (10, 'an unknown unit id is not-found, not a no-op success', 'rejected', v_a);
 
-  -- 11. duplicate ids must FAIL rather than mutate one of two indistinguishable units
-  insert into public.ingestion_runs
-    (user_id, packet_id, destination, entry_point, source_hash, segmenter_version, status, review)
-  values (v_user, null, 'library', 'library_import', 'verify-0027-dup', 'verify', 'needs_review', $d$
-    {"ok": false, "failures":[{"id":"dup","text":"X","status":"unresolved"},
-                              {"id":"dup","text":"Y","status":"unresolved"}]}
-  $d$::jsonb) returning id into v_dup;
-  begin perform public.resolve_review_unit(v_user, v_dup, 'dup', 'resolved'); v_a := 'NO ERROR';
-  exception when others then v_a := 'rejected'; end;
-  insert into v values (11, 'duplicate unit ids fail rather than mutate ambiguously', 'rejected', v_a);
-  insert into v values (12, 'the ambiguous run was left completely untouched', 'both intact',
-    (select case when count(*)=2 then 'both intact' else 'MUTATED' end
-       from public.ingestion_runs r, lateral jsonb_array_elements(r.review->'failures') f
-      where r.id=v_dup and f ? 'text' and coalesce(f->>'status','unresolved')='unresolved'));
-
   -- 13-16. resolve one unit
   v_res := public.resolve_review_unit(v_user, v_run, 'u-a', 'resolved');
   insert into v values (13, 'resolving reports changed', 'true', v_res->>'changed');
@@ -184,10 +174,58 @@ begin
     into v_items_after from public.library_items l where l.user_id = v_user;
   insert into v values (33, 'no packet or item content was touched', v_items_before, v_items_after);
 
+  -- 11-12. DUPLICATE IDS. Deferred to here deliberately: the one-active-run
+  -- index permits ONE needs_review library run per owner, so a second fixture
+  -- could not coexist with the first. That constraint is the very thing the
+  -- last-unit transition has to release, so building this fixture now both
+  -- tests duplicates AND proves the slot really did free. Rows keep ord 11-12;
+  -- the report orders by ord, not by execution.
+  -- 11. duplicate ids must FAIL rather than mutate one of two indistinguishable units
+  insert into public.ingestion_runs
+    (user_id, packet_id, destination, entry_point, source_hash, segmenter_version, status, review)
+  values (v_user, null, 'library', 'library_import', 'verify-0027-dup', 'verify', 'needs_review', $d$
+    {"ok": false, "failures":[{"id":"dup","text":"X","status":"unresolved"},
+                              {"id":"dup","text":"Y","status":"unresolved"}]}
+  $d$::jsonb) returning id into v_dup;
+  begin perform public.resolve_review_unit(v_user, v_dup, 'dup', 'resolved'); v_a := 'NO ERROR';
+  exception when others then v_a := 'rejected'; end;
+  insert into v values (11, 'duplicate unit ids fail rather than mutate ambiguously', 'rejected', v_a);
+  insert into v values (12, 'the ambiguous run was left completely untouched', 'both intact',
+    (select case when count(*)=2 then 'both intact' else 'MUTATED' end
+       from public.ingestion_runs r, lateral jsonb_array_elements(r.review->'failures') f
+      where r.id=v_dup and f ? 'text' and coalesce(f->>'status','unresolved')='unresolved'));
+
+
   -- 34. a finalized run no longer accepts resolutions
   begin perform public.resolve_review_unit(v_user, v_run, 'u-a', 'resolved'); v_a := 'NO ERROR';
   exception when others then v_a := 'rejected'; end;
   insert into v values (34, 'a run outside needs_review rejects resolutions', 'rejected', v_a);
+
+  -- 35-36. THE GRANT, BY EFFECT. Rows 5 and 6 read the ACL; these actually
+  -- become the role and call the function. An ACL that reads correctly and a
+  -- call that is refused are different claims, and only the second one is the
+  -- one that protects anything.
+  begin
+    set local role authenticated;
+    perform public.resolve_review_unit(v_user, v_run, 'u-a', 'resolved');
+    v_a := 'NO ERROR';
+  exception
+    when insufficient_privilege then v_a := 'denied';
+    when others then v_a := 'other sqlstate ' || sqlstate;
+  end;
+  reset role;
+  insert into v values (35, 'the authenticated role is refused execution', 'denied', v_a);
+
+  begin
+    set local role anon;
+    perform public.resolve_review_unit(v_user, v_run, 'u-a', 'resolved');
+    v_a := 'NO ERROR';
+  exception
+    when insufficient_privilege then v_a := 'denied';
+    when others then v_a := 'other sqlstate ' || sqlstate;
+  end;
+  reset role;
+  insert into v values (36, 'the anon role is refused execution', 'denied', v_a);
 end
 $b$;
 
