@@ -19,10 +19,13 @@ import { createHash } from "node:crypto";
 const BASE = process.env.FLOWGUIDE_BASE_URL ?? "http://localhost:3000";
 if (!process.env.FLOWGUIDE_RT_CONFIRM) { console.error("FLOWGUIDE_RT_CONFIRM=1 required"); process.exit(1); }
 
-const PASTE = readFileSync("diagnostic-paste.txt", "utf8");
+const PASTE_FILE = process.env.PASTE_FILE ?? "diagnostic-paste.txt";
+const PASTE = readFileSync(PASTE_FILE, "utf8");
 const SHA = createHash("sha256").update(PASTE).digest("hex");
-const EXPECT = "7545d19df470480dd6c00b4c283267d7e286ac1c9763eca8d26590f35fdfbb20";
-if (SHA !== EXPECT) { console.error(`paste hash mismatch:\n  got      ${SHA}\n  expected ${EXPECT}`); process.exit(1); }
+const EXPECT = process.env.EXPECT_SHA ?? "7545d19df470480dd6c00b4c283267d7e286ac1c9763eca8d26590f35fdfbb20";
+if (PASTE_FILE === "diagnostic-paste.txt" && SHA !== EXPECT) {
+  console.error(`paste hash mismatch:\n  got      ${SHA}\n  expected ${EXPECT}`); process.exit(1);
+}
 console.log(`\nDIAGNOSTIC — ${BASE}\n  paste sha256 ${SHA}  (${Buffer.byteLength(PASTE)} bytes) — matches the recorded value\n`);
 
 const TAG = "flowguide-diag-" + process.pid;
@@ -86,8 +89,8 @@ async function oneRun(n: number) {
 
   const out = { n, runId: RUN, pasteSha: SHA, base: BASE, run, chunks, proposals,
                 seconds: Math.round((Date.now() - t0) / 1000) };
-  writeFileSync(`/tmp/diag-run${n}.json`, JSON.stringify(out, null, 1));
-  console.log(`  run ${n}: ${chunks.length} chunks, ${proposals.length} proposals, ${out.seconds}s -> /tmp/diag-run${n}.json`);
+  writeFileSync(`${process.env.OUT_PREFIX ?? "/tmp/diag-run"}${n}.json`, JSON.stringify(out, null, 1));
+  console.log(`  run ${n}: ${chunks.length} chunks, ${proposals.length} proposals, ${out.seconds}s -> ${process.env.OUT_PREFIX ?? "/tmp/diag-run"}${n}.json`);
   return out;
 }
 
