@@ -3,7 +3,7 @@
 -- Identifier matching uses REGEX (~), never LIKE: several names here contain
 -- underscores and LIKE treats `_` as a single-character wildcard.
 with c as (
-  select 1 as ord, 'schema is at 0025 — packet_deleted_at does not exist yet' as check_name, 'absent' as expected,
+  select 1::numeric as ord, 'schema is at 0025 — packet_deleted_at does not exist yet' as check_name, 'absent' as expected,
          coalesce((select 'present' from information_schema.columns
                     where table_schema='public' and table_name='ingestion_runs' and column_name='packet_deleted_at'),'absent') as actual
   union all
@@ -70,6 +70,16 @@ with c as (
          (select count(*)::text from pg_proc p join pg_namespace n on n.oid=p.pronamespace
            where n.nspname='public' and p.proname='purge_ingestion_evidence'
              and p.prosrc ~ 'set source_text = null, error')
+  union all
+  select 14.5, 'purge does NOT yet delete orphan runs (0026 adds it)', '0',
+         (select count(*)::text from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+           where n.nspname='public' and p.proname='purge_ingestion_evidence'
+             and p.prosrc ~ 'delete from public\.ingestion_runs')
+  union all
+  select 14.6, 'orphan runs today (packet already gone)', 'report',
+         (select count(*)::text from public.ingestion_runs r
+           where r.destination='packet' and r.packet_id is not null
+             and not exists (select 1 from public.packets p where p.id=r.packet_id))
   union all
   select 15, 'pg_cron purge job exists and is active', 'true',
          coalesce((select active::text from cron.job where jobname='flowguide-purge-ingestion-evidence'),'MISSING')

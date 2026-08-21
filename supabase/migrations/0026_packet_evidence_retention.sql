@@ -382,8 +382,32 @@ language plpgsql
 security definer
 set search_path = ''
 as $pie$
-declare v_runs int := 0;
+declare v_runs int := 0; v_orphans int := 0;
 begin
+  -- 0026: ORPHAN RUNS DO NOT ACCUMULATE FOR EVER.
+  --
+  -- Three lifecycles, deliberately different:
+  --   * a run whose packet still exists keeps operational metadata after its
+  --     evidence is purged — status, timings, chunk counts, hashes. No content.
+  --   * a run whose packet was DELETED keeps full diagnostic evidence for the
+  --     same 30-day window, which is the whole point of 0026.
+  --   * after that window an orphan has no product or provenance reason to
+  --     exist, so the row itself goes rather than leaving permanent metadata
+  --     about a draft nobody can see.
+  --
+  -- Guarded on provenance: a run still referenced by a saved Library entry is
+  -- never deleted, because that reference is a product fact, not diagnostics.
+  -- Chunks and proposals cascade from the run.
+  --
+  -- This runs BEFORE the clearing below: the clearing nulls evidence_purge_after,
+  -- which is the very marker this predicate needs.
+  delete from public.ingestion_runs r
+   where r.packet_deleted_at is not null
+     and r.evidence_purge_after is not null
+     and r.evidence_purge_after <= now()
+     and not exists (select 1 from public.library_items li where li.origin_run_id = r.id);
+  get diagnostics v_orphans = row_count;
+
   update public.ingestion_chunks c
      set result = null, segment_text = null, section_hint = '', error = '', fact_ledger = null, updated_at = now()
    where c.run_id in (
@@ -396,7 +420,8 @@ begin
    where r.evidence_purge_after is not null and r.evidence_purge_after <= now();
   get diagnostics v_runs = row_count;
 
-  return v_runs;
+  -- Both kinds of work, so a scheduled run reports what it actually did.
+  return v_runs + v_orphans;
 end;
 $pie$;
 
