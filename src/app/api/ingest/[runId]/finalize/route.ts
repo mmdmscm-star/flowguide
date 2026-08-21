@@ -4,6 +4,8 @@ import { createServerClient } from "@/lib/supabase";
 import { buildMediaLedger, describeMediaFailures, type StoredMedia } from "@/lib/media-ledger";
 import { describeReviewExit, discardWouldDeletePacket } from "@/lib/review-exit";
 import { checkRunOutcome } from "@/lib/run-guards";
+import { toReviewFailures, type ReviewFailure } from "@/lib/review-units";
+import type { UnresolvedUnit } from "@/lib/enforce-chunk";
 
 export const maxDuration = 60;
 type Context = { params: Promise<{ runId: string }> };
@@ -112,6 +114,41 @@ export async function POST(_request: Request, context: Context) {
       const failures: unknown[] = [...ledger.failures];
       const summaries = ledger.failures.length ? [describeMediaFailures(ledger.failures)] : [];
 
+      // UNRESOLVED SOURCE UNITS.
+      //
+      // Enforcement refused a placement the model proposed and held the prose
+      // rather than choosing a destination for it. Those decisions are gathered
+      // here, once, from the chunk ledgers where they were recorded - the same
+      // place and the same moment as media accounting, because both answer the
+      // one question finalize exists to ask: is anything from the source
+      // unaccounted for.
+      const units: UnresolvedUnit[] = [];
+      const { data: chunkRows } = await supabase
+        .from("ingestion_chunks").select("fact_ledger").eq("run_id", runId);
+      for (const c of (chunkRows ?? []) as Array<{ fact_ledger?: { unresolved?: UnresolvedUnit[] } }>) {
+        for (const u of c.fact_ledger?.unresolved ?? []) units.push(u);
+      }
+      // Title to item id, only where the title names exactly ONE item. A title
+      // shared by two items must not point the professional at whichever one
+      // happened to sort first.
+      const byTitle = new Map<string, string[]>();
+      if (sectionIds.length > 0) {
+        const { data: titled } = await supabase
+          .from("items").select("id, title").in("section_id", sectionIds);
+        for (const it of (titled ?? []) as Array<{ id: string; title: string | null }>) {
+          const k = String(it.title ?? "");
+          if (!k) continue;
+          byTitle.set(k, [...(byTitle.get(k) ?? []), it.id]);
+        }
+      }
+      const unitFailures: ReviewFailure[] = toReviewFailures(runId, units, byTitle);
+      if (unitFailures.length) {
+        failures.push(...unitFailures);
+        summaries.push(unitFailures.length === 1
+          ? "1 piece of information needs a decision before publishing."
+          : `${unitFailures.length} pieces of information need a decision before publishing.`);
+      }
+
       // Advisories are RECORDED but never block. Today that is exactly
       // media_consolidated: the source listed one url twice inside a single
       // record and the packet holds one copy, so every distinct photo a client
@@ -166,7 +203,11 @@ export async function POST(_request: Request, context: Context) {
 
       // Mirrors discard_ingestion_run's own predicate, so the sentence promises
       // exactly what the SQL will do.
-      const exit = describeReviewExit({ ...disposition, isOriginRun: willRemovePacket });
+      // Discard is still the exit for a media loss or an empty run. It stops
+      // being the exit when every blocker is a decision the professional can
+      // make right here.
+      const allResolvable = failures.length > 0 && failures.length === unitFailures.length;
+      const exit = describeReviewExit({ ...disposition, isOriginRun: willRemovePacket }, { allResolvable });
       review = {
         ok, summary: summaries.join(" "), exit, failures,
         ...(ledger.advisories.length

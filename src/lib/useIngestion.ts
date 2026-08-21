@@ -1,6 +1,7 @@
 "use client";
 import { useCallback, useRef, useState } from "react";
 import { classifyChunkResponse, CHUNK_NETWORK_FAILURE, type ChunkOutcome } from "./chunk-outcome.ts";
+import type { ReviewFailure } from "./review-units.ts";
 
 // Client orchestrator for a persisted, resumable ingestion run. Drives chunks
 // sequentially against the persisted plan, shows real progress (completed
@@ -23,6 +24,12 @@ export interface IngestState {
   /** The way out, computed server-side: discard removes an EMPTY packet but
    *  preserves one with content, so the honest sentence differs per case. */
   reviewExit: string;
+  /** The individual blockers. Each resolvable one carries the verbatim source
+   *  excerpt - a professional cannot decide about content they cannot read. */
+  reviewFailures: ReviewFailure[];
+  /** The unit currently being decided, so its buttons can show they are working
+   *  and cannot be pressed twice. "" when idle. */
+  resolving: string;
 }
 
 interface StartArgs { entryPoint: "organize" | "append" | "section_append"; rawText: string; targetSectionId?: string | null; packetType?: string }
@@ -61,7 +68,7 @@ async function processChunk(runId: string, ordinal: number): Promise<ChunkOutcom
 }
 
 export function useIngestion(packetId: string, opts?: { onComplete?: () => void; onNeedsReview?: () => void }) {
-  const [state, setState] = useState<IngestState>({ phase: "idle", runId: null, done: 0, total: 0, subdividing: false, error: "", reviewSummary: "", reviewExit: "" });
+  const [state, setState] = useState<IngestState>({ phase: "idle", runId: null, done: 0, total: 0, subdividing: false, error: "", reviewSummary: "", reviewExit: "", reviewFailures: [], resolving: "" });
   const cancelled = useRef(false);
   const runIdRef = useRef<string | null>(null);
 
@@ -72,14 +79,14 @@ export function useIngestion(packetId: string, opts?: { onComplete?: () => void;
       if (cancelled.current) return;
       const { data: st } = await getJSON(`/api/ingest/${runId}`);
       if (!st?.run) { setState((s) => ({ ...s, phase: "error", error: "Lost track of the import." })); return; }
-      const run = st.run as { status: string; totalChunks: number; review?: { ok?: boolean; summary?: string; exit?: string } };
+      const run = st.run as { status: string; totalChunks: number; review?: { ok?: boolean; summary?: string; exit?: string; failures?: ReviewFailure[] } };
       const leaves = (st.chunks || []) as Array<{ ordinal: number; status: string }>;
       if (run.status === "finalized") { setState((s) => ({ ...s, phase: "done", done: run.totalChunks, total: run.totalChunks })); opts?.onComplete?.(); return; }
       // needs_review is non-terminal and BLOCKS PUBLISHING. Treating it as
       // "finalized" here (or letting it fall through to the processing path)
       // is what left a professional with a blocked packet and no way out.
       if (run.status === "needs_review") {
-        setState((s) => ({ ...s, phase: "needs_review", done: run.totalChunks, total: run.totalChunks, reviewSummary: run.review?.summary || "", reviewExit: run.review?.exit || "" }));
+        setState((s) => ({ ...s, phase: "needs_review", done: run.totalChunks, total: run.totalChunks, reviewSummary: run.review?.summary || "", reviewExit: run.review?.exit || "", reviewFailures: run.review?.failures || [] }));
         opts?.onNeedsReview?.();
         return;
       }
@@ -103,9 +110,9 @@ export function useIngestion(packetId: string, opts?: { onComplete?: () => void;
         if (fin.data?.ok) {
           // `ok` only means the RPC applied. The accounting verdict is
           // review.ok — reading the wrong one reported a blocked run as "Done."
-          const review = fin.data?.review as { ok?: boolean; summary?: string; exit?: string } | undefined;
+          const review = fin.data?.review as { ok?: boolean; summary?: string; exit?: string; failures?: ReviewFailure[] } | undefined;
           if (review && review.ok === false) {
-            setState((s) => ({ ...s, phase: "needs_review", done: run.totalChunks, total: run.totalChunks, reviewSummary: review.summary || "", reviewExit: review.exit || "" }));
+            setState((s) => ({ ...s, phase: "needs_review", done: run.totalChunks, total: run.totalChunks, reviewSummary: review.summary || "", reviewExit: review.exit || "", reviewFailures: review.failures || [] }));
             opts?.onNeedsReview?.();
             return;
           }
@@ -129,7 +136,7 @@ export function useIngestion(packetId: string, opts?: { onComplete?: () => void;
 
   const start = useCallback(async (args: StartArgs) => {
     cancelled.current = false;
-    setState({ phase: "preparing", runId: null, done: 0, total: 0, subdividing: false, error: "", reviewSummary: "", reviewExit: "" });
+    setState({ phase: "preparing", runId: null, done: 0, total: 0, subdividing: false, error: "", reviewSummary: "", reviewExit: "", reviewFailures: [], resolving: "" });
     const res = await postJSON(`/api/packets/${packetId}/ingest`, args);
     if (res.status === 409 && res.data?.runId) { await drive(res.data.runId); return; }
     if (!res.data?.runId) { setState((s) => ({ ...s, phase: "error", error: res.data?.message || res.data?.error || "Could not start the import." })); return; }
@@ -142,9 +149,37 @@ export function useIngestion(packetId: string, opts?: { onComplete?: () => void;
     const runId = runIdRef.current; if (!runId) return;
     cancelled.current = true;
     await postJSON(`/api/ingest/${runId}/discard`, {});
-    setState({ phase: "idle", runId: null, done: 0, total: 0, subdividing: false, error: "", reviewSummary: "", reviewExit: "" });
+    setState({ phase: "idle", runId: null, done: 0, total: 0, subdividing: false, error: "", reviewSummary: "", reviewExit: "", reviewFailures: [], resolving: "" });
   }, []);
+  /** Record one decision about one held unit.
+   *
+   *  The server is re-read afterwards rather than the local array being patched:
+   *  whether this was the LAST unit is a question only the database can answer,
+   *  and answering it optimistically here is how a client comes to believe
+   *  publishing is unblocked while the run still blocks it. */
+  const resolveUnit = useCallback(async (unitId: string, status: "resolved" | "ignored") => {
+    const runId = runIdRef.current; if (!runId) return;
+    setState((s) => ({ ...s, resolving: unitId, error: "" }));
+    const res = await postJSON(`/api/ingest/${runId}/review/${encodeURIComponent(unitId)}`, { status });
+    if (!res.data?.ok) {
+      setState((s) => ({ ...s, resolving: "", error: res.data?.message || "Could not update this item." }));
+      return;
+    }
+    const { data: st } = await getJSON(`/api/ingest/${runId}`);
+    const run = st?.run as { status?: string; totalChunks?: number;
+      review?: { summary?: string; exit?: string; failures?: ReviewFailure[] } } | undefined;
+    if (!run) { setState((s) => ({ ...s, resolving: "" })); return; }
+    if (run.status === "finalized") {
+      setState((s) => ({ ...s, phase: "done", reviewFailures: [], reviewSummary: "", error: "", resolving: "" }));
+      opts?.onComplete?.();
+      return;
+    }
+    setState((s) => ({ ...s, phase: "needs_review", error: "", resolving: "",
+      reviewSummary: run.review?.summary || "", reviewExit: run.review?.exit || "",
+      reviewFailures: run.review?.failures || [] }));
+  }, [opts]);
+
   const cancel = useCallback(() => { cancelled.current = true; }, []);
 
-  return { state, start, resume, retry, discard, cancel };
+  return { state, start, resume, retry, discard, cancel, resolveUnit };
 }

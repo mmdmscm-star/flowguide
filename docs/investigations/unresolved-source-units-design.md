@@ -201,3 +201,55 @@ a call that is actually refused are different claims.
 
 Production smokes after apply: post-deploy 10/10, Library v1 20/20, first-use
 22/22, every one cleaning up its own disposable data.
+
+## The app-side path, built 2026-08-21
+
+Enforcement remains OFF for normal traffic.
+
+**Which units block.** Only `privacy-rejected`. That unit is content the model
+tried to route into a private field with no authority from the source, so
+publishing without a decision means a recipient silently never sees something
+the source said. `source-unresolved` is a value the reconciler could not bind to
+a claim; it stays in the fact ledger with the other evidence. Blocking on it
+would put nearly every import into review and teach people to click through the
+block, which is worse than not having one.
+
+**Media failures keep their own exit.** A missing photo is not a decision these
+controls can make, so it is not given a Resolve button. Because the RPC counts
+any failure lacking `status` as outstanding, a run carrying one can never be
+cleared unit-by-unit and still exits only through discard - exactly today's
+behaviour. That is a fail-closed boundary, not an oversight, and `Discard
+import` stays the primary action whenever such a blocker is present.
+
+**Two decisions that deserve a second look**
+
+1. *Finalize now reads `ingestion_chunks.fact_ledger`.* The ledger was built
+   observe-only, with a source invariant asserting it had no reader at all.
+   Unresolved units are produced per chunk and consumed once per run, and the
+   ledger is the only per-chunk channel that already exists - so finalize reads
+   `unresolved` from it and nothing else, and never writes to it. The invariant
+   was NARROWED to say exactly that rather than deleted. If units ever earn a
+   column of their own, the exception should go with that migration.
+
+2. *The summary sentence is derived live in the panel.* `review.summary`
+   describes what finalize FOUND. Once decisions start landing it is history,
+   and leaving it up meant the banner read "2 pieces" above a list of one. The
+   stored sentence still speaks for blockers these controls cannot clear.
+
+**A pre-existing bug this surfaced.** `GET /api/ingest/:runId` selected `review`
+from the database and never returned it. Every reload of a held run therefore
+dropped the summary and the exit sentence, and would have dropped the units
+themselves. Fixed here; a panel that cannot say what it is holding, after the
+one event most likely to bring someone back to it, reads as a malfunction.
+
+**Proof.** `scripts/ingestion-runtime/proof-review-units.mts` - 34 PASS / 0 FAIL.
+Phase 1 runs the real enforcement chain in-process; phase 2 drives the real
+finalize route, RPC, resolve route and publish gate against a disposable packet.
+The model is deliberately not in the loop in phase 2: a proof of the persistence
+and resolution path must not be able to fail because a provider had an off day.
+What phase 2 does NOT cover is how often a model actually proposes an
+unauthorized private placement - the flagged-enforcement proof measured that.
+
+Verified in the browser as well: the panel lists both units with their verbatim
+text, a decision clears one and leaves the other, a full reload preserves what
+remains, and the last decision removes the panel and unblocks Publish.

@@ -40,6 +40,12 @@ export async function GET(_request: Request, context: Context) {
       totalChunks: run.total_chunks,
       completedChunks: run.completed_chunks,
       error: run.error,
+      // The review verdict was SELECTED here but never returned, so every
+      // reload of a held run dropped the summary, the exit sentence and - now -
+      // the held units themselves. A panel that cannot say what it is holding,
+      // after the one event most likely to bring someone back to it, is a panel
+      // that reads as a malfunction.
+      review: run.review ?? {},
     },
     chunks: (chunks || []).map((c) => ({
       ordinal: c.ordinal,

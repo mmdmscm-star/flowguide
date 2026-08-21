@@ -12,6 +12,19 @@ import { join } from "node:path";
 
 const ROUTE = "src/app/api/ingest/[runId]/chunks/[ordinal]/route.ts";
 const route = readFileSync(ROUTE, "utf8");
+// THE ONE SANCTIONED READER, and the reason it exists.
+//
+// Unresolved source units are not evidence: they are product state. They block
+// publishing and a professional decides them by hand. They are produced per
+// chunk and consumed once per run, and the ledger is the only per-chunk channel
+// that already exists - so finalize reads `unresolved` out of it, and nothing
+// else, and never writes to it.
+//
+// This is a NARROWING of the original "no reader at all", not an abandonment of
+// it. If units ever earn a column of their own, this exception should go with
+// the migration that gives them one.
+const FINALIZE = "src/app/api/ingest/[runId]/finalize/route.ts";
+const finalize = readFileSync(FINALIZE, "utf8");
 // The CALL SITE, not the import line — `indexOf("buildChunkLedger")` finds the
 // import at the top of the file and would place the ledger before everything.
 const CALL = 'buildChunkLedger(segmentText';
@@ -32,9 +45,10 @@ function appFiles(dir: string, acc: string[] = []): string[] {
 }
 const files = appFiles("src");
 
-test("the ledger has exactly one write site and no read site", () => {
-  const hits = files.filter((f) => readFileSync(f, "utf8").includes("fact_ledger"));
-  assert.deepEqual(hits, [ROUTE], `fact_ledger appears outside the chunk route: ${hits.join(", ")}`);
+test("the ledger has exactly one write site and one sanctioned reader", () => {
+  const hits = files.filter((f) => readFileSync(f, "utf8").includes("fact_ledger")).sort();
+  assert.deepEqual(hits, [ROUTE, FINALIZE].sort(),
+    `fact_ledger appears outside the chunk route and finalize: ${hits.join(", ")}`);
 
   // TWO writes now, both updates: the normal ledger, and the fail-closed
   // evidence write when enforcement throws. Still no read path — a select,
@@ -46,6 +60,19 @@ test("the ledger has exactly one write site and no read site", () => {
   assert.doesNotMatch(route, /select\([^)]*fact_ledger/);
 });
 
+test("finalize reads the ledger for unresolved units and NOTHING else", () => {
+  // A select is the whole extent of the dependency. An update from here would
+  // make finalize a second writer of the evidence trail, and the trail would
+  // then no longer be a record of what the chunk actually saw.
+  assert.doesNotMatch(finalize, /fact_ledger:\s*\{/, "finalize writes to the ledger");
+  assert.doesNotMatch(finalize, /\.update\(\{[^}]*fact_ledger/, "finalize updates the ledger");
+  assert.match(finalize, /\.select\("fact_ledger"\)/);
+  // Only `unresolved` is read. Accounting and enforcement telemetry stay
+  // observe-only, which is the property the original invariant protected.
+  const reads = [...finalize.matchAll(/fact_ledger\??\.(\w+)/g)].map((m) => m[1]);
+  assert.deepEqual([...new Set(reads)], ["unresolved"], `finalize reads ${reads.join(", ")}`);
+});
+
 test("no packet, item, section or library path imports the ledger", () => {
   const importers = files.filter((f) => /from "@\/lib\/fact-ledger"/.test(readFileSync(f, "utf8")));
   assert.deepEqual(importers, [ROUTE], `fact-ledger imported outside the chunk route: ${importers.join(", ")}`);
@@ -53,8 +80,14 @@ test("no packet, item, section or library path imports the ledger", () => {
   // consumer each, no read path.
   const acct = files.filter((f) => /from "@\/lib\/chunk-accounting"/.test(readFileSync(f, "utf8")));
   assert.deepEqual(acct, [ROUTE], `chunk-accounting imported outside the chunk route: ${acct.join(", ")}`);
-  const enf = files.filter((f) => /from "@\/lib\/enforce-chunk"/.test(readFileSync(f, "utf8")));
-  assert.deepEqual(enf, [ROUTE], `enforce-chunk imported outside the chunk route: ${enf.join(", ")}`);
+  // enforce-chunk: one VALUE consumer. finalize names its UnresolvedUnit type
+  // and must not be able to run enforcement - a type import erases at compile
+  // time, so this is the difference between naming a shape and acquiring a
+  // second enforcement site.
+  const enf = files.filter((f) => /from "@\/lib\/enforce-chunk"/.test(readFileSync(f, "utf8"))).sort();
+  assert.deepEqual(enf, [ROUTE, FINALIZE].sort(), `enforce-chunk imported outside the chunk route: ${enf.join(", ")}`);
+  assert.match(finalize, /import type \{ UnresolvedUnit \} from "@\/lib\/enforce-chunk"/,
+    "finalize imports enforce-chunk as a value, not just its type");
 });
 
 test("the ledger is computed after the result is durably staged", () => {

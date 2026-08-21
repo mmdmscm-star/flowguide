@@ -30,8 +30,17 @@ export function discardWouldDeletePacket(d: PacketDisposition): boolean {
   return d.entryPoint === "organize" && d.isOriginRun && d.isDraft && d.isEmpty;
 }
 
-/** The way out, phrased for what will actually happen. */
-export function describeReviewExit(d: PacketDisposition): string {
+/** The way out, phrased for what will actually happen.
+ *
+ *  When every outstanding failure is one the professional can DECIDE, discard
+ *  stops being the only exit and stops being the honest sentence: telling
+ *  someone to throw away the import when two clicks would clear it is how a
+ *  safety state gets read as a malfunction. `allResolvable` is passed only when
+ *  that is true of every remaining unit. */
+export function describeReviewExit(d: PacketDisposition, opts?: { allResolvable?: boolean }): string {
+  if (opts?.allResolvable) {
+    return "Decide what to do with each piece below. Once every one is handled, publishing is unblocked.";
+  }
   return discardWouldDeletePacket(d)
     ? "Discard this import and try again — the empty packet will be removed."
     : "Discard the import to clear this review. Everything you can see stays — discarding abandons the source, not the photos it already placed.";

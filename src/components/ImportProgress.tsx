@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef } from "react";
 import { useIngestion } from "@/lib/useIngestion";
+import { isResolvable, hasUnresolvableBlocker } from "@/lib/review-units";
 
 // Drives (resumes) a persisted ingestion run and shows real progress. Rendered
 // whenever a packet has an active run — from a fresh Organize, an Add-with-AI, or
@@ -21,7 +22,7 @@ export default function ImportProgress({
    *  only way out. */
   onNeedsReview?: () => void;
 }) {
-  const { state, resume, retry, discard } = useIngestion(packetId, { onComplete: onDone, onNeedsReview });
+  const { state, resume, retry, discard, resolveUnit } = useIngestion(packetId, { onComplete: onDone, onNeedsReview });
   const started = useRef(false);
 
   useEffect(() => {
@@ -30,8 +31,23 @@ export default function ImportProgress({
     resume(runId);
   }, [runId, resume]);
 
-  const { phase, done, total, subdividing, error, reviewSummary, reviewExit } = state;
+  const { phase, done, total, subdividing, error, reviewSummary, reviewExit, reviewFailures, resolving } = state;
   const needsReview = phase === "needs_review";
+  // Held content the professional can decide about, still outstanding.
+  const open = reviewFailures.filter((f) => isResolvable(f) && (f.status ?? "unresolved") === "unresolved");
+  // Discard stays the exit only while something is blocking that these controls
+  // cannot clear. Offering it as the primary action next to two buttons that
+  // WOULD clear the block is how a professional throws away a good import.
+  const discardIsOnlyExit = hasUnresolvableBlocker(reviewFailures);
+  // `review.summary` describes what finalize FOUND. Once decisions start
+  // landing it is history, and leaving it up means the banner says "2 pieces"
+  // above a list of one. The stored sentence still speaks for blockers these
+  // controls cannot clear; for the units, the live count does.
+  const headline = discardIsOnlyExit || open.length === 0
+    ? (reviewSummary || "Something didn't add up in this import.")
+    : open.length === 1
+      ? "1 piece of information needs a decision before publishing."
+      : `${open.length} pieces of information need a decision before publishing.`;
   const pct = total > 0 ? Math.round((done / total) * 100) : 0;
 
   const heading =
@@ -62,12 +78,48 @@ export default function ImportProgress({
           {phase === "error" && <p className="mt-1 text-sm text-red-700">{error} Your completed parts are saved.</p>}
           {needsReview && (
             <p className="mt-1 text-sm text-amber-900">
-              {reviewSummary || "Something didn't add up in this import."}{" "}
+              {headline}{" "}
               {reviewExit || "Discard the import to clear this review."}
             </p>
           )}
         </div>
       </div>
+
+      {/* THE HELD CONTENT ITSELF.
+          The source text is shown verbatim, because a decision about writing
+          nobody can read is not a decision. It sits with the item it came from,
+          and neither button writes it anywhere: FlowGuide choosing a
+          destination is the error this panel exists to prevent. */}
+      {needsReview && open.length > 0 && (
+        <ul className="mt-3 space-y-2">
+          {open.map((f) => (
+            <li key={f.id} className="rounded-lg border border-amber-200 bg-white/70 p-3">
+              {f.title && <p className="text-xs font-medium text-amber-900">{f.title}</p>}
+              <p className="mt-1 text-sm text-foreground whitespace-pre-wrap">{f.text}</p>
+              <p className="mt-1 text-xs text-muted">
+                This was written as a private note, but nothing in your source said it was
+                private. Add it wherever it belongs, then mark it done.
+              </p>
+              <div className="mt-2 flex items-center gap-2">
+                <button
+                  disabled={resolving === f.id}
+                  onClick={() => resolveUnit(f.id, "resolved")}
+                  className="px-2.5 py-1 rounded-md bg-amber-700 text-white text-xs font-medium hover:bg-amber-800 disabled:opacity-60"
+                >
+                  {resolving === f.id ? "Saving\u2026" : "I've handled this"}
+                </button>
+                <button
+                  disabled={resolving === f.id}
+                  onClick={() => resolveUnit(f.id, "ignored")}
+                  className="px-2.5 py-1 rounded-md border border-border text-xs font-medium text-muted hover:text-foreground disabled:opacity-60"
+                >
+                  Leave it out
+                </button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
 
       <div className="mt-3 flex items-center gap-3">
         {phase === "error" && (
@@ -78,9 +130,10 @@ export default function ImportProgress({
         {phase !== "done" && (
           <button
             onClick={async () => { await discard(); onDiscarded(); }}
-            // In needs_review this is the ONLY way out, so it stops being a
-            // muted secondary action and becomes the thing to press.
-            className={needsReview
+            // In needs_review this WAS the only way out. It still is whenever a
+            // blocker exists that the per-unit controls cannot clear; when every
+            // blocker is decidable above, it goes back to being secondary.
+            className={needsReview && discardIsOnlyExit
               ? "px-3 py-1.5 rounded-lg bg-amber-700 text-white text-sm font-medium hover:bg-amber-800"
               : "px-3 py-1.5 rounded-lg text-sm font-medium text-muted hover:text-foreground border border-border"}
           >
