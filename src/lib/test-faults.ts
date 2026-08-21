@@ -15,7 +15,9 @@
 //     "failAttempts":  { "2": 1 },   // ordinal 2 fails its first 1 attempt(s)
 //     "truncate":      [3],          // ordinal 3 reports truncation -> split
 //     "wrongShape":    [4],          // ordinal 4 returns the OTHER entry point's shape
-//     "emptyResult":   [5]           // ordinal 5 returns a structurally empty result
+//     "emptyResult":   [5],          // ordinal 5 returns a structurally empty result
+//     "privateNote":   { "0": "text" } // ordinal 0's first item comes back with
+//                                      // `notes` set to that text
 //   }
 import { readFileSync } from "node:fs";
 
@@ -23,7 +25,13 @@ export type Fault =
   | { kind: "error"; status: number; message: string }
   | { kind: "split" }
   | { kind: "wrongShape" }
-  | { kind: "emptyResult" };
+  | { kind: "emptyResult" }
+  // A model that routes recipient-intended prose into the private field. This
+  // is the behaviour the semantic contract exists to catch, and since the
+  // prompt was fixed the provider will no longer do it on demand - which is
+  // the same reason every other fault here exists. Applied AFTER the real call,
+  // so the result travels the real validation, enforcement and staging path.
+  | { kind: "privateNote"; text: string };
 
 type Spec = {
   /** Must be exactly true or the spec is ignored entirely. */
@@ -33,6 +41,8 @@ type Spec = {
   truncate?: number[];
   wrongShape?: number[];
   emptyResult?: number[];
+  /** ordinal -> the note text to force onto that chunk's first item. */
+  privateNote?: Record<string, string>;
   /** ordinal -> HTTP status (401/402/403): a permanent provider rejection. */
   permanent?: Record<string, number>;
 };
@@ -92,7 +102,25 @@ export function nextFault(runId: string, ordinal: number, attempt: number): Faul
   if (spec.truncate?.includes(ordinal)) return { kind: "split" };
   if (spec.wrongShape?.includes(ordinal)) return { kind: "wrongShape" };
   if (spec.emptyResult?.includes(ordinal)) return { kind: "emptyResult" };
+  const note = spec.privateNote?.[String(ordinal)];
+  if (typeof note === "string" && note.length > 0) return { kind: "privateNote", text: note };
   return null;
 }
 
 export const faultsEnabled = () => loadSpec() !== null;
+
+/** Put `notes` on the first item of a result, whatever shape it has.
+ *
+ *  Test-only, and deliberately dumb: it does not validate, reshape or repair
+ *  anything. The point is to hand the enforcement path exactly the kind of
+ *  proposal a model used to make, and let the real guard decide what to do
+ *  with it. Returns the input untouched if there is no item to mark. */
+export function injectPrivateNote<T>(result: T, text: string): T {
+  const r = result as { items?: unknown[]; sections?: { items?: unknown[] }[] };
+  const first =
+    (Array.isArray(r?.items) ? r.items[0] : undefined) ??
+    (Array.isArray(r?.sections) ? r.sections.find((s) => Array.isArray(s?.items) && s.items.length)?.items?.[0] : undefined);
+  if (!first || typeof first !== "object") return result;
+  (first as Record<string, unknown>).notes = text;
+  return result;
+}

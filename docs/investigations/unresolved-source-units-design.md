@@ -253,3 +253,44 @@ unauthorized private placement - the flagged-enforcement proof measured that.
 Verified in the browser as well: the panel lists both units with their verbatim
 text, a decision clears one and leaves the other, a full reload preserves what
 remains, and the last decision removes the panel and unblocks Publish.
+
+## 0028 — the dedicated channel, applied 2026-08-21
+
+`0028_chunk_review_units.sql`, sha256
+`a7bd2719ef3d30ce80dc4d49333758124c1d43363da64a2009e8570d65b25d52`. History
+shows 0028 in both Local and Remote; `db push --dry-run` reports up to date.
+
+**Structural verifier** — 16 PASS / 0 FAIL, `BEGIN … ROLLBACK`. Part B makes the
+clearers actually run: a chunk holding ONLY `review_units` (result, segment and
+ledger all null - invisible to the pre-0028 purge predicate) is cleared by
+`purge_ingestion_evidence`, and `library_close_import_run` clears it too.
+
+**The channel, through the LIVE route** — 16 PASS / 0 FAIL. Units are written by
+the real chunk route with stable ids, record provenance and verbatim text;
+finalize aggregates them BY ID; observed-only telemetry never appears as a
+question; publishing is blocked until they are decided.
+
+**The decoy.** `proof-review-units.mts` plants a unit in `fact_ledger.unresolved`
+that exists nowhere else and asserts it never reaches the run's review. Source
+scanning proves nobody typed `fact_ledger`; the decoy proves nobody reads it.
+37 PASS / 0 FAIL.
+
+### Why the live proof needed a forced proposal
+
+The first live run produced no units at all — and the honest diagnosis was
+MODEL, not wiring: enforcement governed 4 items and rejected nothing, because
+the NOTES_RULE prompt fix means the model no longer routes recipient-intended
+prose into the private field on demand.
+
+That is good product behaviour and a bad test dependency. The behaviour the
+semantic contract exists to catch cannot be summoned from the provider, which is
+the same reason `test-faults.ts` already exists for retries, truncation and
+wrong shapes. A `privateNote` fault was added there, applied to the REAL model
+result so it travels the real validation, enforcement, staging and finalize
+path, and held to the same inertness rule as every other fault: production-inert,
+opt-in key required, guarded at the call site by a literal NODE_ENV comparison
+so the branch is eliminated from the production build. Seven tests pin that.
+
+The proof now reports its own diagnosis rather than just failing: it prints
+`privacyRejected` and `itemsGoverned` alongside the unit count, so "the wiring
+broke" and "the model behaved this run" can never be confused again.

@@ -3,7 +3,7 @@ import { getSession } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase";
 import { processSegment, buildSplitChildren, shouldPresplit, EntryPoint } from "@/lib/ingestion";
 import { validateEntryPointResult } from "@/lib/ingest-validate";
-import { nextFault } from "@/lib/test-faults";
+import { nextFault, injectPrivateNote } from "@/lib/test-faults";
 import { buildChunkLedger } from "@/lib/fact-ledger";
 import { buildChunkAccounting } from "@/lib/chunk-accounting";
 import { enforceChunkResult } from "@/lib/enforce-chunk";
@@ -161,6 +161,14 @@ export async function POST(_request: Request, context: Context) {
       segmentText,
       apiKey,
     });
+  }
+
+  // A forced private-note proposal is applied to the REAL result, so it travels
+  // the real enforcement and staging path rather than a synthetic one. Same
+  // literal NODE_ENV comparison as the fault lookup above, so the bundler drops
+  // this branch from the production build entirely.
+  if (process.env.NODE_ENV !== "production" && fault?.kind === "privateNote" && outcome.kind === "ok") {
+    outcome = { kind: "ok", result: injectPrivateNote(outcome.result, fault.text) };
   }
 
   if (outcome.kind === "split") return doSplit();

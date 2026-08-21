@@ -21,7 +21,7 @@
 // because a provider had an off day.
 import { svc, check, summary, errText } from "./lib.mts";
 import { enforceChunkResult } from "../../src/lib/enforce-chunk.ts";
-import { unresolvedCount } from "../../src/lib/review-units.ts";
+import { unresolvedCount, isResolvable } from "../../src/lib/review-units.ts";
 
 const BASE = process.env.FLOWGUIDE_BASE_URL ?? "http://localhost:3000";
 const TAG = "flowguide-review-" + process.pid;
@@ -206,7 +206,7 @@ try {
 
   let run = await runRow();
   check("the run is held for review", run.status === "needs_review", run.status);
-  const persisted = (run.review?.failures ?? []).filter((f: any) => f.code === "unresolved_source_unit");
+  const persisted = (run.review?.failures ?? []).filter(isResolvable);
   check("both held units are persisted on the run", persisted.length === 2, JSON.stringify(run.review).slice(0, 240));
   // THE 0028 BOUNDARY, proven by behaviour rather than by reading the source.
   check("the ledger-only decoy never reaches the run's review",
@@ -223,6 +223,7 @@ try {
     `item=${ITEM} itemIds=${JSON.stringify(harbor?.itemIds)}`);
   check("...with the verbatim excerpt a professional can read",
     String(harbor?.text ?? "").includes("memory care"), String(harbor?.text ?? "").slice(0, 60));
+  check("...and its classified exception code", harbor?.code === "privacy_rejected", harbor?.code);
 
   const pub1 = await api(`/api/packets/${PID}/publish`, { method: "POST", body: JSON.stringify({ action: "publish", skipProfileCheck: true }) });
   check("PUBLISHING IS BLOCKED while a unit is outstanding",
@@ -230,7 +231,7 @@ try {
 
   // Reload: exactly what the panel re-reads after a refresh.
   const reload = await api(`/api/ingest/${RUN}`);
-  const shown = (reload.data?.run?.review?.failures ?? []).filter((f: any) => f.code === "unresolved_source_unit");
+  const shown = (reload.data?.run?.review?.failures ?? []).filter(isResolvable);
   check("both units survive a reload, still readable",
     shown.length === 2 && shown.every((f: any) => String(f.text ?? "").length > 10),
     JSON.stringify(shown.map((f: any) => f.id)).slice(0, 160));
@@ -261,7 +262,7 @@ try {
   check("the verbatim excerpt is stripped once decided", after && after.text === undefined,
     JSON.stringify(after));
   check("...while the audit metadata remains",
-    after?.status === "resolved" && !!after?.resolved_at && after?.code === "unresolved_source_unit",
+    after?.status === "resolved" && !!after?.resolved_at && after?.code === "privacy_rejected",
     JSON.stringify(after));
 
   // ONE OF TWO. The run must NOT finalize here - premature release of the

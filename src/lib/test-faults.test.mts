@@ -18,7 +18,7 @@ const LIVE_SPEC = { flowguideFaultInjection: true, failAttempts: { "0": 1 } };
 
 // nextFault reads process.env on every call, so each case re-imports nothing and
 // simply mutates the environment around the call.
-const { nextFault } = await import("./test-faults.ts");
+const { nextFault, injectPrivateNote } = await import("./test-faults.ts");
 
 function withEnv<T>(env: Record<string, string | undefined>, fn: () => T): T {
   const prev: Record<string, string | undefined> = {};
@@ -114,4 +114,68 @@ test("the chunk route guards the call site with a literal NODE_ENV comparison", 
     /process\.env\.NODE_ENV === "production" \? null : nextFault\(/,
     "call site must be statically eliminable",
   );
+});
+
+// ---------------------------------------------------------------------------
+// privateNote: the forced unauthorized private placement.
+//
+// This one exists because the prompt fix worked - the model no longer routes
+// recipient-intended prose into the private field on demand, so the behaviour
+// the semantic contract is built to catch cannot be summoned from a provider.
+// It is held to exactly the same inertness rule as every other fault.
+// ---------------------------------------------------------------------------
+
+test("privateNote fires outside production and carries its text", () => {
+  write({ flowguideFaultInjection: true, privateNote: { "0": "held prose" } });
+  const f = withEnv({ NODE_ENV: "development", FLOWGUIDE_TEST_FAULT_FILE: specPath },
+    () => nextFault("run-1", 0, 1));
+  assert.equal(f?.kind, "privateNote");
+  assert.equal((f as { text: string }).text, "held prose");
+});
+
+test("privateNote is INERT in production", () => {
+  write({ flowguideFaultInjection: true, privateNote: { "0": "held prose" } });
+  const f = withEnv({ NODE_ENV: "production", FLOWGUIDE_TEST_FAULT_FILE: specPath },
+    () => nextFault("run-1", 0, 1));
+  assert.equal(f, null, "a private-note fault fired in production");
+});
+
+test("privateNote is inert without the explicit opt-in key", () => {
+  write({ privateNote: { "0": "held prose" } });
+  const f = withEnv({ NODE_ENV: "development", FLOWGUIDE_TEST_FAULT_FILE: specPath },
+    () => nextFault("run-1", 0, 1));
+  assert.equal(f, null, "a spec without flowguideFaultInjection was honoured");
+});
+
+test("an empty note is not a fault", () => {
+  // Otherwise a half-written spec would silently mark an item with nothing.
+  write({ flowguideFaultInjection: true, privateNote: { "0": "" } });
+  const f = withEnv({ NODE_ENV: "development", FLOWGUIDE_TEST_FAULT_FILE: specPath },
+    () => nextFault("run-1", 0, 1));
+  assert.equal(f, null);
+});
+
+test("the injection marks the first item and changes nothing else", () => {
+  const before = { sections: [{ title: "S", items: [{ title: "A" }, { title: "B" }] }] };
+  const after = injectPrivateNote(structuredClone(before), "held prose") as typeof before & {
+    sections: { items: { notes?: string }[] }[] };
+  assert.equal(after.sections[0].items[0].notes, "held prose");
+  assert.equal(after.sections[0].items[1].notes, undefined, "a second item was marked too");
+  assert.equal(after.sections[0].items[0].title, "A", "the item's own content was altered");
+});
+
+test("the injection is a no-op when there is no item to mark", () => {
+  assert.deepEqual(injectPrivateNote({ sections: [] }, "x"), { sections: [] });
+  assert.deepEqual(injectPrivateNote({}, "x"), {});
+});
+
+test("the route applies the injection behind a literal NODE_ENV comparison", () => {
+  // Same discipline as the fault lookup itself: the bundler must be able to
+  // eliminate the whole branch from the production build, so the comparison has
+  // to be literal rather than routed through a helper.
+  const route = readFileSync(
+    "src/app/api/ingest/[runId]/chunks/[ordinal]/route.ts", "utf8");
+  assert.match(route,
+    /process\.env\.NODE_ENV !== "production" && fault\?\.kind === "privateNote"/,
+    "the private-note injection is not guarded by a literal NODE_ENV comparison");
 });
