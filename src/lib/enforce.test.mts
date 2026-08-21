@@ -166,3 +166,49 @@ test("identity that cannot be proven is left alone", () => {
   assert.ok((item.details as unknown[]).length >= 1);
   assert.equal(stripped.length, 0);
 });
+
+// ---- ADVERSARIAL STRIPPING. False-strip target is 0. ----------------------
+
+test("two legitimate phones with different roles both survive", () => {
+  const src = "Community Phone: (707) 555-0101\nCell Phone: (707) 555-0202";
+  const { item, stripped } = run(src, {
+    details: [{ label: "After-hours line", value: "(707) 555-0303" }],
+    contacts: [{ name: "Pat", phone: "(707) 555-0101" }],
+  });
+  const phones = (item.contacts as any[]).map((c) => c.phone).filter(Boolean);
+  assert.ok(phones.some((p: string) => p.includes("555-0101")), "lost the community phone");
+  assert.ok(phones.some((p: string) => p.includes("555-0202")), "lost the cell phone");
+  // A third, unclaimed number is not a competing rendering of either.
+  assert.equal((item.details as any[]).length, 1, "stripped a phone the source never claimed");
+  assert.equal(stripped.length, 0);
+});
+
+test("repeated labels in different contexts are not collapsed", () => {
+  const { item } = run("Care Costs: assisted living tier\nCare Costs: memory care tier", { details: [] });
+  const values = (item.details as { value: string }[]).map((d) => d.value).sort();
+  assert.deepEqual(values, ["assisted living tier", "memory care tier"]);
+});
+
+test("a detail holding BOTH a duplicate governed fact and independent info keeps the info", () => {
+  const { item, stripped } = run("Email Address: pat@x.example.com", {
+    details: [{ label: "Admissions", value: "pat@x.example.com — replies within one business day" }],
+    contacts: [],
+  });
+  const d = item.details as { value: string }[];
+  assert.equal(d.length, 1);
+  assert.match(d[0].value, /replies within one business day/);
+  assert.doesNotMatch(d[0].value, /pat@x\.example\.com/);
+  assert.equal(stripped.length, 1);
+});
+
+test("same label, unprovable identity — nothing is stripped", () => {
+  // The label matches a governed claim but the value is a different KIND of
+  // fact. Identity is not proven, so the detail stands and the conflict is
+  // surfaced by the accounting rather than resolved by deletion.
+  const { item, stripped } = run("Website: https://a.example.com", {
+    details: [{ label: "Website availability", value: "under construction until spring" }],
+    links: [],
+  });
+  assert.equal((item.details as any[]).length, 1, "deleted a detail whose identity was not proven");
+  assert.equal(stripped.length, 0);
+});

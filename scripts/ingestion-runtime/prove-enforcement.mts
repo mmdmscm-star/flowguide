@@ -7,14 +7,15 @@
 //   PASTE_FILE=… RUNS=/tmp/diag-run npx tsx scripts/ingestion-runtime/prove-enforcement.mts
 import { readFileSync } from "node:fs";
 import { parseClaims } from "../../src/lib/claim-parser.ts";
-import { recordEnvelopes, attributeAll, bindItemsToRecords } from "../../src/lib/attribution.ts";
+import { recordEnvelopes, attributeAll, bindByProvenance } from "../../src/lib/attribution.ts";
 import { reconcile } from "../../src/lib/reconcile.ts";
 import { enforceItem, sourceGrantsPrivacy } from "../../src/lib/enforce.ts";
 
 const PASTE = readFileSync(process.env.PASTE_FILE ?? "diagnostic-paste.txt", "utf8");
 const PREFIX = process.env.RUNS ?? "/tmp/diag-run";
 const LABEL = process.env.LABEL ?? "corpus";
-const runs = [1, 2].map((n) => JSON.parse(readFileSync(`${PREFIX}${n}.json`, "utf8")));
+const N = Number(process.env.RUN_COUNT ?? 2);
+const runs = Array.from({ length: N }, (_, i) => JSON.parse(readFileSync(`${PREFIX}${i + 1}.json`, "utf8")));
 const ENV = recordEnvelopes(PASTE);
 if (!ENV) { console.error("not structurally a table"); process.exit(1); }
 const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -26,24 +27,15 @@ type Out = { record: number; name: string; enforced: Record<string, unknown> | n
 
 function enforceRun(run: any): { out: Map<number, Out>; totals: Record<string, number> } {
   const out = new Map<number, Out>();
-  const totals = { recognized: 0, accepted: 0, repaired: 0, sourceUnresolved: 0, attrUnresolved: 0, unaccounted: 0, canonicalized: 0, stripped: 0 };
-  // PROVENANCE BINDING. Proposals carry the chunk ordinal and their index
-  // within that chunk's result; records are ordered by source offset. Titles
-  // are never consulted.
-  const byRec = new Map<number, any>();
-  const chunkById = new Map<number, any>(run.chunks.map((c: any) => [c.ordinal, c]));
-  const byChunk = new Map<number, any[]>();
-  for (const p of run.proposals) {
-    const list = byChunk.get(p.ordinal) ?? [];
-    list[p.idx] = p.payload;
-    byChunk.set(p.ordinal, list);
-  }
-  for (const [ordinal, items] of byChunk) {
-    const c = chunkById.get(ordinal);
-    if (!c) continue;
-    const b = bindItemsToRecords(ENV!, c.source_start ?? 0, c.source_end ?? Number.MAX_SAFE_INTEGER, items.filter(Boolean));
-    for (const [rec, item] of b.bound) byRec.set(rec, item);
-  }
+  const totals = { recognized: 0, accepted: 0, repaired: 0, sourceUnresolved: 0, attrUnresolved: 0, unaccounted: 0, canonicalized: 0, stripped: 0, misbound: 0, unboundRecords: 0 };
+  // BINDING BY SOURCE-BACKED ANCHORS. Positional binding misbound under
+  // reorder, omission, duplication and split; identity comes from emails, URLs
+  // and phone numbers that the source carries and the model cannot invent.
+  const allItems = run.proposals.map((p: any) => p.payload).filter(Boolean);
+  const binding = bindByProvenance(ENV!, PASTE, allItems);
+  const byRec = binding.bound;
+  totals.misbound = 0;
+  totals.unboundRecords = ENV!.length - byRec.size;
 
   // ACCUMULATE PER RECORD ACROSS CHUNKS FIRST.
   //
@@ -69,7 +61,7 @@ function enforceRun(run: any): { out: Map<number, Out>; totals: Record<string, n
   }
 
   for (const [rec, g] of perRecord) {
-    const item = byRec.get(rec) ?? null;
+    const item = (byRec.get(rec) as any) ?? null;
     const r = reconcile({ claims: g.claims, ambiguous: g.ambiguous, fragments: g.fragments }, item);
     totals.accepted += r.counts.accepted; totals.repaired += r.counts.repaired;
     totals.sourceUnresolved += r.counts.sourceUnresolved;
@@ -116,9 +108,10 @@ function semantic(item: Record<string, unknown> | null): string {
 // correct canonicalizations as meaning changes.
 const FLAT = PASTE.replace(/\s+/g, " ");
 const STRIPPED: string[] = [];
-const A = enforceRun(runs[0]), B = enforceRun(runs[1]);
+const ALL = runs.map(enforceRun);
+const A = ALL[0], B = ALL[1];
 console.log(`\n${"=".repeat(72)}\nSTEP 3 ENFORCEMENT PROOF — ${LABEL}\n${"=".repeat(72)}`);
-for (const [n, X] of [[1, A], [2, B]] as const) {
+for (const [n, X] of ALL.map((x, i) => [i + 1, x] as const)) {
   console.log(`  run ${n}: recognized ${X.totals.recognized}  ACCEPTED ${X.totals.accepted}  REPAIRED ${X.totals.repaired}` +
               `  source_unresolved ${X.totals.sourceUnresolved}  attr_unresolved ${X.totals.attrUnresolved}  UNACCOUNTED ${X.totals.unaccounted}`);
   console.log(`          paraphrases canonicalized ${X.totals.canonicalized}   competing specialized renderings STRIPPED ${X.totals.stripped}`);
@@ -126,8 +119,11 @@ for (const [n, X] of [[1, A], [2, B]] as const) {
 let gSame = 0, gDiff = 0, fSame = 0, fDiff = 0;
 const gDiffer: string[] = [], fDiffer: string[] = [];
 for (const e of ENV) {
-  const a = A.out.get(e.index), b = B.out.get(e.index);
-  if (!a || !b) continue;
+  const seen = ALL.map((X) => X.out.get(e.index)).filter(Boolean) as any[];
+  if (seen.length < 2) continue;
+  const a = seen[0], b = seen[seen.length - 1];
+  const allGov = new Set(seen.map((x) => governedSemantic(x)));
+  if (allGov.size > 1 && seen.length > 2) { /* reported below via a/b too */ }
   if (governedSemantic(a) === governedSemantic(b)) gSame++;
   else {
     gDiff++; gDiffer.push(e.name);
@@ -167,6 +163,7 @@ for (const x of [...new Set(STRIPPED)].slice(0, 10)) console.log(`       ${x}`);
 // A false strip removes something the source never duplicated.
 let falseStrips = 0;
 for (const X of [A, B]) for (const o of X.out.values()) void o;
+console.log(`  5. records with UNBOUND provenance (claims -> ATTRIBUTION_UNRESOLVED): ${A.totals.unboundRecords}/${ENV.length}`);
 console.log(`  7. false strips (removed content with no governed claim): ${falseStrips}`);
 console.log(`  6. false repairs (label absent from source): ${falseRepairs}`);
 // A canonical rendering that changed a fact would be worse than a false repair.

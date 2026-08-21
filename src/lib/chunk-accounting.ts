@@ -5,7 +5,7 @@
 // route stores. It computes and returns. It repairs nothing, moves nothing and
 // is read by nothing.
 import { parseClaims } from "./claim-parser.ts";
-import { recordEnvelopes, attributeAll } from "./attribution.ts";
+import { recordEnvelopes, attributeAll, bindByProvenance } from "./attribution.ts";
 import { reconcile } from "./reconcile.ts";
 
 export interface ChunkAccounting {
@@ -23,7 +23,6 @@ export interface ChunkAccounting {
   attributionAvailable: boolean;
 }
 
-const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
 
 export function buildChunkAccounting(opts: {
   segmentText: string; chunkOrdinal: number; sourceStart: number;
@@ -40,16 +39,15 @@ export function buildChunkAccounting(opts: {
   const env = sourceText ? recordEnvelopes(sourceText) : null;
   const a = attributeAll(parsed.claims, parsed.ambiguous, parsed.fragments, env, sourceStart);
 
+  const bound = env && sourceText ? bindByProvenance(env, sourceText, items).bound : null;
   const records: ChunkAccounting["records"] = [];
   let accepted = 0, repaired = 0, contentUnresolved = 0, sourceUnresolved = 0, attributed = 0;
 
   for (const [rec, group] of a.byRecord) {
     attributed += group.claims.length + group.ambiguous.length;
     const name = env?.[rec]?.name ?? "";
-    const item = items.find((it) => {
-      const t = norm(String(it.title ?? ""));
-      return t && name && (t.startsWith(norm(name).slice(0, 12)) || norm(name).startsWith(t.slice(0, 12)));
-    }) ?? null;
+    // Anchor binding, never the model-authored title.
+    const item = (bound?.get(rec) as Record<string, unknown> | undefined) ?? null;
     const res = reconcile({ claims: group.claims, ambiguous: group.ambiguous, fragments: group.fragments }, item);
     accepted += res.counts.accepted; repaired += res.counts.repaired;
     contentUnresolved += res.counts.unresolved; sourceUnresolved += res.counts.sourceUnresolved;

@@ -79,6 +79,11 @@ export function enforceItem(
   const stripped: Enforcement["stripped"] = [];
   const byId = new Map(claims.map((c) => [c.id, c]));
 
+  // OCCURRENCE-AWARE SLOT ASSIGNMENT. Two claims can share a label — "Care
+  // Costs" for assisted living and again for memory care — and each needs its
+  // own row. Without this the second claim overwrites the first's slot and one
+  // of two genuinely different facts disappears.
+  const usedDetail = new Set<number>();
   const kindOf = (v: string): ValueKind => {
     const k = probe(v).kind;
     return k === "url" || k === "email" || k === "phone" ? k : "text";
@@ -103,15 +108,18 @@ export function enforceItem(
       // Replace the model's own rendering OF THIS CLAIM, wherever it put it,
       // and leave every other detail alone — including elaborations the model
       // derived from ungoverned content.
-      const at = details.findIndex((d) =>
-        locate({ details: [d] } as Record<string, unknown>, c.value).length > 0 ||
-        canonicalLabel(String(d?.label ?? "")).toLowerCase() === label.toLowerCase());
+      const at = details.findIndex((d, ix) =>
+        !usedDetail.has(ix) &&
+        (locate({ details: [d] } as Record<string, unknown>, c.value).length > 0 ||
+         canonicalLabel(String(d?.label ?? "")).toLowerCase() === label.toLowerCase()));
       const rendered = { label, value: safe };
       if (at >= 0) {
+        usedDetail.add(at);
         const before = JSON.stringify(details[at]);
         details[at] = rendered;
         if (before !== JSON.stringify(rendered)) applied.push({ claimId: c.id, action: `details canonicalized: ${label}` });
       } else {
+        usedDetail.add(details.length);
         details.push(rendered);
         applied.push({ claimId: c.id, action: `details += ${label}` });
       }

@@ -9,7 +9,7 @@
 // (`detectSourceRecords`), which is the same envelope the chunk planner uses.
 // Re-deriving boundaries here would create a second definition of "a record"
 // that could disagree with the one ingestion actually chunked on.
-import { detectSourceRecords } from "./segmentation";
+import { detectSourceRecords } from "./segmentation.ts";
 import type { Claim, Fragment, AmbiguousUnit } from "./claim-parser.ts";
 
 export interface Envelope {
@@ -83,6 +83,90 @@ export function envelopesInRange(envelopes: Envelope[], start: number, end: numb
   return envelopes.filter((e) => e.start < end && e.end > start);
 }
 
+/** BIND PROPOSALS TO SOURCE RECORDS BY SOURCE-BACKED ANCHORS.
+ *
+ *  POSITIONAL BINDING WAS UNSAFE and is gone. Adversarial testing showed it
+ *  misbinding in four of five cases — reorder, omission, duplication and split
+ *  all shifted the i-th item away from the i-th record, and it attached one
+ *  record's governed claims to a different record with full confidence. Under
+ *  enforcement that writes a community's phone number onto its neighbour.
+ *
+ *  Identity comes from the DATA instead: emails, URLs and phone numbers appear
+ *  in the source, are carried into the proposal, and cannot be invented by the
+ *  model. An anchor only identifies if it is UNIQUE to one record — a shared
+ *  head-office number identifies nobody.
+ *
+ *  Binding requires agreement in both directions: exactly one record's anchors
+ *  appear in the item, and exactly one item carries that record's anchors.
+ *  Merge, split and duplication all violate that and end UNBOUND, which is a
+ *  named state (ATTRIBUTION_UNRESOLVED), not a guess. The model is never asked
+ *  to reproduce an identity token.
+ */
+const EMAIL_A = /[\w.+-]+@[\w-]+\.[\w.]+/g;
+const URL_A = /https?:\/\/[^\s"'<>)]+/gi;
+const PHONE_A = /\+?1?[-.\s(]*\d{3}[-.\s)]*\d{3}[-.\s]*\d{4}/g;
+
+function anchorsOf(text: string): Set<string> {
+  const out = new Set<string>();
+  for (const m of String(text ?? "").match(EMAIL_A) ?? []) out.add(`e:${m.toLowerCase()}`);
+  for (const m of String(text ?? "").match(URL_A) ?? []) out.add(`u:${m.toLowerCase().replace(/[/.]+$/, "")}`);
+  for (const m of String(text ?? "").match(PHONE_A) ?? []) {
+    const d = m.replace(/\D/g, "");
+    if (d.length >= 10) out.add(`p:${d.slice(-10)}`);
+  }
+  return out;
+}
+
+export interface Binding<T> {
+  bound: Map<number, T>;
+  unboundRecords: number[];
+  unboundItems: number;
+  reasons: string[];
+}
+
+export function bindByProvenance<T>(
+  envelopes: Envelope[], source: string, items: T[],
+): Binding<T> {
+  // An anchor shared by two records identifies neither.
+  const perRecord = envelopes.map((e) => anchorsOf(source.slice(e.start, e.end)));
+  const seen = new Map<string, number>();
+  for (const set of perRecord) for (const a of set) seen.set(a, (seen.get(a) ?? 0) + 1);
+  const unique = perRecord.map((set) => new Set([...set].filter((a) => seen.get(a) === 1)));
+
+  const itemAnchors = items.map((it) => anchorsOf(JSON.stringify(it)));
+  const claims = new Map<number, number[]>();          // record -> item indices
+  const itemHits = new Map<number, number[]>();        // item -> record indices
+  for (let i = 0; i < items.length; i++) {
+    for (let r = 0; r < envelopes.length; r++) {
+      if ([...unique[r]].some((a) => itemAnchors[i].has(a))) {
+        claims.set(r, [...(claims.get(r) ?? []), i]);
+        itemHits.set(i, [...(itemHits.get(i) ?? []), r]);
+      }
+    }
+  }
+
+  const bound = new Map<number, T>();
+  const reasons: string[] = [];
+  for (let r = 0; r < envelopes.length; r++) {
+    const its = claims.get(r) ?? [];
+    if (its.length === 0) { reasons.push(`${envelopes[r].name}: no proposal carries its anchors`); continue; }
+    if (its.length > 1) { reasons.push(`${envelopes[r].name}: ${its.length} proposals carry its anchors (split or duplicate)`); continue; }
+    const i = its[0];
+    const recs = itemHits.get(i) ?? [];
+    if (recs.length !== 1) { reasons.push(`${envelopes[r].name}: its proposal also carries another record's anchors (merge)`); continue; }
+    bound.set(envelopes[r].index, items[i]);
+  }
+  const boundItems = new Set([...claims.values()].filter((v) => v.length === 1).flat());
+  return {
+    bound,
+    unboundRecords: envelopes.filter((e, r) => !bound.has(e.index) && (claims.get(r) ?? []).length !== 1 || !bound.has(e.index)).map((e) => e.index),
+    unboundItems: items.length - boundItems.size,
+    reasons,
+  };
+}
+
+/** @deprecated positional binding — unsafe under reorder/omit/duplicate/split.
+ *  Retained only so the adversarial test can keep demonstrating why. */
 /** BIND PROPOSALS TO SOURCE RECORDS BY PROVENANCE, NEVER BY TITLE.
  *
  *  The model authors the title and is entitled to vary it: "Enso Village" and

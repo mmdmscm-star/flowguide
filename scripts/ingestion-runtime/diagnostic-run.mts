@@ -95,7 +95,7 @@ async function oneRun(n: number) {
 }
 
 try {
-  for (const n of [1, 2]) await oneRun(n);
+  for (const n of (process.env.RUN_COUNT ? Array.from({length:Number(process.env.RUN_COUNT)},(_,i)=>i+1) : [1,2])) await oneRun(n);
   console.log("\nboth runs complete.");
 } catch (e) {
   console.error("\nHALTED:", errText(e) || (e as Error)?.message || e);
