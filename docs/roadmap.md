@@ -549,3 +549,38 @@ would therefore be held and then discarded without ever being shown. This is a
 BLOCKER for enabling enforcement globally, not a backlog item to schedule
 casually: it must be closed, or enforcement must be scoped to the packet path,
 before the flag goes on for normal traffic.
+
+
+## Reliability rollout — COMPLETE 2026-08-21
+
+**Packet semantic enforcement is ON in production.** `FLOWGUIDE_ENFORCE_CONTRACT=1`
+in the Vercel Production environment, deployed and aliased to the production
+domain. Library ingestion is unchanged.
+
+Rollback is one variable: `vercel env rm FLOWGUIDE_ENFORCE_CONTRACT production`
+followed by a redeploy. The pre-change state was recorded behaviourally, not
+from a config listing — a bounded production import showed
+`enforcementEnabled: false`, and the variable was absent from the environment.
+
+Verified after enabling, against the deployed process:
+
+| | packet | library |
+| --- | --- | --- |
+| scope recorded | `enforced` | `out-of-scope` |
+| items governed | 3 | 0 |
+| ACCEPTED / REPAIRED / STRIPPED | 9 / 0 / 0 | 0 / 0 / 0 |
+| review-required units | 0 | 0 |
+| permanent contract failure | none | none |
+
+Production smokes 10/10, 20/20, 22/22. No disposable data left behind; the 65
+real Library entries untouched.
+
+**The boundary that made this safe** is the destination guard, not the flag. The
+flag says whether the contract may act; the guard says where. Library is
+excluded because a held unit there would be cleared by
+`library_close_import_run` without anyone seeing it — and without enforcement a
+model-placed note stays visible to its owner, so declining preserves content
+rather than risking it.
+
+**Next: the context-aware ingestion/chunking experiment** (item 5). No further
+reliability subsystem before it unless normal use exposes an actual blocker.

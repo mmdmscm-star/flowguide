@@ -18,6 +18,10 @@ import { classifyChunkResponse } from "../../src/lib/chunk-outcome.ts";
 const BASE = process.env.FLOWGUIDE_BASE_URL;
 if (!BASE) { console.error("FLOWGUIDE_BASE_URL is required"); process.exit(2); }
 const TAG = "flowguide-probe-" + process.pid;
+// PROBE_DESTINATION=library drives the Library path instead, so "the guard holds
+// in production" is measured on the path it protects rather than inferred from
+// the path it governs.
+const DEST = process.env.PROBE_DESTINATION === "library" ? "library" : "packet";
 
 // Three records with a private-note-shaped line that grants no privacy anywhere.
 const SOURCE = [
@@ -42,9 +46,11 @@ try {
     return { status: r.status, ok: r.ok, data: await r.json().catch(() => ({})) as any };
   };
 
-  const org = await api("/api/ingest/organize", { method: "POST", body: JSON.stringify({
-    rawText: SOURCE, packetType: "general", requestKey: crypto.randomUUID() }) });
-  if (org.status !== 201) throw new Error(`organize: ${org.status} ${JSON.stringify(org.data).slice(0, 200)}`);
+  const org = DEST === "library"
+    ? await api("/api/library/import", { method: "POST", body: JSON.stringify({ rawText: SOURCE }) })
+    : await api("/api/ingest/organize", { method: "POST", body: JSON.stringify({
+        rawText: SOURCE, packetType: "general", requestKey: crypto.randomUUID() }) });
+  if (org.status !== 201) throw new Error(`start(${DEST}): ${org.status} ${JSON.stringify(org.data).slice(0, 200)}`);
   const RUN = org.data.runId as string;
 
   let permanentFailure: string | null = null;
@@ -66,13 +72,23 @@ try {
   const sum = (k: string) => tel.reduce((n: number, t: any) => n + (t?.[k] ?? 0), 0);
   const units = rows.flatMap((c) => c.review_units ?? []);
 
-  const fin = await api(`/api/ingest/${RUN}/finalize`, { method: "POST", body: "{}" });
+  // Did the model's private-note proposal survive into what was staged? On the
+  // Library path it must; on the packet path enforcement should have taken it.
+  const { data: staged } = await svc.from("ingestion_chunks").select("result").eq("run_id", RUN);
+  const stagedItems = ((staged ?? []) as any[]).flatMap((c) =>
+    (c.result?.items ?? []).concat((c.result?.sections ?? []).flatMap((x: any) => x.items ?? [])));
+  const withNotes = stagedItems.filter((i: any) => String(i?.notes ?? "").trim().length > 0).length;
+
+  // A Library run does not finalize through the packet path, and asking it to
+  // would prove nothing about the guard.
+  const fin = DEST === "library" ? { data: { ok: null } } : await api(`/api/ingest/${RUN}/finalize`, { method: "POST", body: "{}" });
   const { data: runRow } = await svc.from("ingestion_runs")
     .select("status, review, packet_id").eq("id", RUN).single();
   const run = runRow as any;
 
   console.log(JSON.stringify({
     base: BASE,
+    destination: DEST,
     runId: RUN,
     enforcementEnabled: tel.length > 0,
     scopes: [...new Set(tel.map((t: any) => t.scope ?? "(none recorded)"))],
@@ -84,6 +100,8 @@ try {
       attributionUnresolved: sum("attributionUnresolved"), itemsGoverned: sum("itemsGoverned"),
     },
     reviewRequiredUnits: units.length,
+    stagedItems: stagedItems.length,
+    stagedItemsWithNotes: withNotes,
     permanentEnforcementFailure: permanentFailure,
     chunkErrors: rows.map((c) => c.error).filter(Boolean),
     finalizeOk: !!fin.data?.ok,
