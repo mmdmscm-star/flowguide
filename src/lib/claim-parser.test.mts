@@ -57,19 +57,50 @@ test("a label with no value is a fragment, never an empty claim", () => {
   assert.equal(r.fragments[0].reason, "label with no value");
 });
 
-test("unlabelled pricing is claimed when the pairing is unambiguous", () => {
-  for (const [line, descriptor] of [
-    ["One Bedroom $4,090/month", "One Bedroom"],
-    ["- $5,710/month Two Bedroom/double occupancy", "Two Bedroom/double occupancy"],
-    ["Respite (if available) $450/day", "Respite (if available)"],
-  ] as const) {
-    const c = parseClaims(line).claims.find((x) => x.kind === "pricing");
-    assert.ok(c, `not claimed: ${line}`);
-    assert.equal(c!.anchors?.descriptor, descriptor);
+
+
+test("no vocabulary decides a claim — unlabelled money is always unresolved", () => {
+  // The lexical descriptor class is gone. Money is RECOGNIZED so it can be
+  // surfaced and accounted for; its ownership is never inferred. Identical
+  // treatment across verticals is the point — these three lines differ only in
+  // subject matter and must behave the same.
+  for (const line of [
+    "- $4,090/month One Bedroom",          // senior living
+    "- $68/person Family Style",           // catering — used to be claimed WRONGLY
+    "Standing Seam Metal $14/sq ft",       // contracting — used to be dropped
+  ]) {
+    const r = parseClaims(line);
+    assert.equal(r.claims.length, 0, `claimed a pairing it cannot prove: ${line}`);
+    assert.equal(r.ambiguous.length, 1, line);
+    assert.match(r.ambiguous[0].reason, /ownership not structurally provable/);
   }
-  const range = parseClaims("Private Room $10,000-$15,000/month").claims[0];
-  assert.deepEqual(range.anchors?.amounts, ["10000", "15000"]);
-  assert.equal(range.anchors?.unit, "month");
+});
+
+test("money recognition is currency-agnostic and association-free", () => {
+  const r = parseClaims("Deluxe Package £1,200\nStandard €950\nBasic USD 400");
+  assert.equal(r.ambiguous.length, 3);
+  assert.deepEqual(r.ambiguous.map((u) => u.amounts), [["1200"], ["950"], ["400"]]);
+});
+
+test("legitimate labels containing lowercase `to` survive", () => {
+  // The banned-"to" rule was derived from one corpus and rejected every one of
+  // these. The opener test replaced it: a lead-in STARTS like a clause.
+  for (const [line, label] of [
+    ["Time to Completion: 3 weeks", "Time to Completion"],
+    ["Cost to Replace: $450", "Cost to Replace"],
+    ["Distance to Airport: 12 miles", "Distance to Airport"],
+    ["Steps to Apply: 4", "Steps to Apply"],
+    ["One Bedroom: $4,090/month", "One Bedroom"],
+  ] as const) {
+    const c = parseClaims(line).claims.find((x) => x.kind === "labelled");
+    assert.ok(c, `lost a legitimate label: ${line}`);
+    assert.equal(c!.label, label);
+  }
+  for (const line of [
+    "One thing to remember: the waitlist moves fast",
+    "A quick reminder before you call: ask for the coordinator",
+    "What the family said afterwards: they want a second visit",
+  ]) assert.equal(parseClaims(line).claims.find((x) => x.kind === "labelled"), undefined, line);
 });
 
 test("Vine Ridge — the wrapped room block is AMBIGUOUS, never guessed", () => {
@@ -77,7 +108,7 @@ test("Vine Ridge — the wrapped room block is AMBIGUOUS, never guessed", () => 
   // with "One Bedroom". It is wrong — $4,090 belongs to the Studio above — and
   // the misalignment continues down the block while each line looks confident.
   const r = parseClaims("Assisted Living/Memory Care Studio\n- $4,090/month One Bedroom\n- $4,825/month Large One Bedroom\n- $5,035/month");
-  assert.equal(r.claims.filter((c) => c.kind === "pricing").length, 0, "guessed a descriptor it could not know");
+  assert.equal(r.claims.length, 0, "guessed a descriptor it could not know");
   // Recognized, not discarded: they enter accounting as their own source units.
   assert.equal(r.ambiguous.length, 3);
   assert.deepEqual(r.ambiguous.map((u) => u.amounts), [["4090"], ["4825"], ["5035"]]);
@@ -85,8 +116,9 @@ test("Vine Ridge — the wrapped room block is AMBIGUOUS, never guessed", () => 
 
 test("two independent amounts on one line are ambiguous, not two guesses", () => {
   const r = parseClaims("Memory Care Private Studio $7,895 Shared Companion $6,995");
-  assert.equal(r.claims.filter((c) => c.kind === "pricing").length, 0);
+  assert.equal(r.claims.length, 0);
   assert.equal(r.ambiguous.length, 1);
+  assert.deepEqual(r.ambiguous[0].amounts, ["7895", "6995"]);
 });
 
 test("ambiguous source units are inside the accounting identity", () => {
@@ -146,24 +178,13 @@ test("address is matched by provenance, not by exact string", () => {
 test("the accounting identity holds, and a proposal with unresolved content is blocked", () => {
   const p = parseClaims("Community Fee: $2,500\nGarden Studio $4,090/month\nsome unlabelled prose here");
   const r = reconcile(p, item({ details: [{ label: "Community Fee", value: "$2,500" }] }));
-  assert.equal(r.counts.accepted + r.counts.repaired + r.counts.unresolved, r.counts.claims);
-  assert.equal(r.counts.claims, 2, "labelled + pricing");
+  const recognized = r.counts.claims + r.counts.ambiguous;
+  assert.equal(r.counts.accepted + r.counts.repaired + r.counts.unresolved + r.counts.sourceUnresolved, recognized);
+  assert.equal(r.counts.claims, 1, "one labelled claim");
+  assert.equal(r.counts.ambiguous, 1, "the money line is recognized but unresolved");
   assert.equal(r.counts.fragments, 1, "the prose line");
 });
 
-test("Creekwood — descriptor line then amount line is a confident pair", () => {
-  // Distinct from Vine Ridge: the amount line carries no descriptor of its own,
-  // so nothing is competing for it.
-  const r = parseClaims("Assisted Living\n- Private Room\n- $10,000-$15,000/month\n- Shared\n- $8,000-$9,000/month");
-  const pricing = r.claims.filter((c) => c.kind === "pricing");
-  assert.deepEqual(pricing.map((c) => c.anchors?.descriptor), ["Private Room", "Shared"]);
-  assert.deepEqual(pricing[0].anchors?.amounts, ["10000", "15000"]);
-});
 
-test("pricing matching is occurrence-aware — one slot cannot satisfy two claims", () => {
-  const p = parseClaims("Studio A\n- $4,000/month\nStudio B\n- $4,000/month");
-  const r = reconcile(p, { details: [{ label: "Studio A", value: "$4,000/month" }] });
-  const priced = r.resolutions.filter((x) => x.why?.includes("pricing anchors"));
-  assert.equal(priced.length, 1, "the single slot satisfied only one claim");
-  assert.equal(r.counts.accepted + r.counts.repaired + r.counts.unresolved, r.counts.claims);
-});
+
+

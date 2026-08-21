@@ -12,7 +12,7 @@
 // glued onto the end of a labelled line.
 import { probe } from "./fact-match.ts";
 
-export type ClaimKind = "labelled" | "url" | "email" | "phone" | "pricing";
+export type ClaimKind = "labelled" | "url" | "email" | "phone";
 export interface Claim {
   id: string;
   kind: ClaimKind;
@@ -24,9 +24,6 @@ export interface Claim {
    *  claim be attributed to a record envelope BEFORE the model runs. */
   offset: number;
   raw: string;
-  /** Pricing claims carry their parsed anchors so matching can be tolerant of
-   *  reordering without becoming fuzzy. */
-  anchors?: { amounts: string[]; unit?: string; descriptor: string };
 }
 export interface Fragment { line: number; offset: number; text: string; reason: string }
 
@@ -56,12 +53,33 @@ const CLAUSE_MARKERS = new Set([
   "the", "a", "an", "this", "that", "these", "those", "there",
   "was", "were", "is", "are", "be", "been", "being",
   "has", "have", "had", "will", "would", "should", "could",
-  // "to" marks an infinitive, which makes a lead-in, not a label: "One thing to
-  // remember:" would otherwise become a claim and — under enforcement — a bogus
-  // Detail reading "One thing to remember | the waitlist moves fast". No label
-  // in any validated fixture or in the real source uses a lowercase "to".
-  "to",
+
 ]);
+// A LEAD-IN OPENS LIKE A SENTENCE; A LABEL OPENS LIKE A NAME.
+//
+// "One thing to remember:", "A quick reminder before you call:", "What the
+// family said afterwards:" all begin with a determiner or a wh-word and then
+// run on. Labels do not: "Community Fee", "Time to Completion", "Distance to
+// Airport", "Steps to Apply".
+//
+// An earlier version banned a lowercase "to" outright. That was derived from one
+// corpus and it rejected every legitimate label above — a recall failure
+// invented to fix a precision failure. The opener test is structural: it looks
+// at how the phrase STARTS, not at which words it happens to contain.
+//
+// The length guard matters because "One Bedroom" is a real label in senior
+// living and in rentals. A determiner opener alone is not enough to reject; it
+// has to open like a determiner AND keep going like a clause.
+const LEAD_IN_OPENERS = new Set([
+  "a", "an", "the", "this", "that", "these", "those",
+  "what", "which", "who", "when", "where", "why", "how",
+  "one", "some", "any", "thing", "things", "here", "there",
+]);
+const LEAD_IN_MIN_WORDS = 4;
+function opensLikeAClause(words: string[]): boolean {
+  const first = (words[0] ?? "").replace(/[^A-Za-z]/g, "").toLowerCase();
+  return LEAD_IN_OPENERS.has(first) && words.length >= LEAD_IN_MIN_WORDS;
+}
 function looksLikeLabel(label: string): boolean {
   // A PARENTHETICAL QUALIFIER IS PART OF THE LABEL, NOT A CLAUSE.
   // "Memory Care Private Studio (shared bath)" is six words and a perfectly
@@ -71,6 +89,7 @@ function looksLikeLabel(label: string): boolean {
   const counted = label.replace(/\([^)]*\)/g, " ").trim();
   const words = counted.split(/\s+/).filter(Boolean);
   if (!words.length || words.length > MAX_LABEL_WORDS) return false;
+  if (opensLikeAClause(words)) return false;
   return !label.trim().split(/\s+/).some((w) => {
     const bare = w.replace(/[^A-Za-z]/g, "");
     return bare.length > 0 && bare === bare.toLowerCase() && CLAUSE_MARKERS.has(bare);
@@ -164,7 +183,6 @@ export function parseClaims(segment: string, chunkOrdinal = 0): ParseResult {
   const id = (line: number) => `${chunkOrdinal}:${line}:${seq++}`;
 
   const blocks = joinWrapped(cells(segment));
-  let prevAmbiguous = false;
   for (let bi = 0; bi < blocks.length; bi++) {
     const { text, line, offset } = blocks[bi];
     const prev = bi > 0 ? blocks[bi - 1].text : "";
@@ -173,7 +191,6 @@ export function parseClaims(segment: string, chunkOrdinal = 0): ParseResult {
     const isUrlLine = /^\s*[-•*]?\s*https?:\/\//i.test(text);
     const m = isUrlLine ? null : LABEL_RE.exec(text);
     if (m && looksLikeLabel(m[1])) {
-      prevAmbiguous = false;
       const label = m[1].trim();
       const rest = m[2].trim();
       if (!rest) { fragments.push({ line, offset, text, reason: "label with no value" }); continue; }
@@ -197,19 +214,15 @@ export function parseClaims(segment: string, chunkOrdinal = 0): ParseResult {
       // make. Declining them here is the honest position: the layer cannot
       // guarantee what it cannot identify, and pretending otherwise would be
       // the more dangerous error.
-      const priced = pricingClaim(text, prev, prevAmbiguous);
-      prevAmbiguous = priced === "ambiguous";
-      if (priced === "ambiguous")
+      const money = containsMoney(text);
+      if (money.length)
         ambiguous.push({ id: id(line), line, offset, text,
-          reason: "priced line whose descriptor cannot be resolved",
-          amounts: (text.match(MONEY) ?? []).map((a) => a.replace(/\D/g, "")) });
-      else if (priced)
-        claims.push({ id: id(line), kind: "pricing", value: text, line, offset, raw: text, anchors: priced });
+          reason: "unlabelled monetary fragment — ownership not structurally provable",
+          amounts: money });
       else
-        fragments.push({ line, offset, text, reason: /\$|\d/.test(text) ? "unlabelled content carrying numbers" : "unlabelled prose" });
+        fragments.push({ line, offset, text, reason: /\d/.test(text) ? "unlabelled content carrying numbers" : "unlabelled prose" });
     }
   }
-  MONEY.lastIndex = 0;
   return { claims, ambiguous, fragments };
 }
 
@@ -221,102 +234,31 @@ export function specializedValueKind(c: Claim): ClaimKind | null {
 }
 
 // ---------------------------------------------------------------------------
-// UNLABELLED PRICING — a bounded claim class, not a "$ means fact" heuristic.
+// UNLABELLED MONEY — RECOGNIZED, NEVER ASSOCIATED.
 //
-// Most real pricing in the diagnostic source carries no label at all:
+// The previous version claimed a descriptor/amount pair when it recognised the
+// descriptor's words. That word list was senior-living vocabulary, and the
+// cross-vertical audit showed two failures: recall collapsed in other
+// industries, and worse, the SAFETY GUARD inverted — "Plated Dinner" was not a
+// recognised descriptor, so a shifted pairing in a catering menu was accepted as
+// confident where the identical shape in senior living was correctly refused.
 //
-//   One Bedroom $4,090/month          descriptor then amount
-//   - $5,710/month Two Bedroom        amount then descriptor
-//   Studio (Suite) - from $4,695/month
-//   Respite (if available) $450/day
-//   $10,000-$15,000/month             a range
+// A safety mechanism whose failure mode depends on the vertical is worse than
+// none, so the lexical class is gone and is NOT replaced with words from the new
+// corpus. What remains is deterministic and horizontal:
 //
-// Leaving these to the model means they carry no guarantee, and they are the
-// bulk of what a professional is actually selling. So they are claimed — but
-// only when the pairing is unambiguous.
+//   * a monetary fragment is RECOGNIZED to exist,
+//   * its source span and record provenance are preserved,
+//   * ownership between amount and descriptor is never inferred,
+//   * it is classified SOURCE_UNRESOLVED.
 //
-// THE DECEPTIVE CASE, from Vine Ridge, is why confidence has to look backwards:
-//
-//   Assisted Living/Memory Care Studio      <- dangling descriptor
-//   - $4,090/month One Bedroom              <- reads confident, IS NOT
-//   - $4,825/month Large One Bedroom
-//
-// Taken alone, line 2 looks like "amount then descriptor" and would pair
-// $4,090 with "One Bedroom". It is wrong: $4,090 belongs to the Studio above,
-// and "One Bedroom" belongs to the $4,825 below. A parser that scores this
-// confident would silently mis-price a community. When the preceding block is a
-// bare descriptor, the association is genuinely ambiguous and says so.
-const MONEY = /\$\s?\d[\d,]*(?:\.\d{2})?/g;
-const RANGE = /\$\s?\d[\d,]*(?:\.\d{2})?\s*(?:-|–|—|to)\s*\$?\s?\d[\d,]*(?:\.\d{2})?/;
-const UNIT = /\/\s*(month|mo|day|night|year|week|hour)\b|\bper\s+(month|day|night|year|week|hour)\b/i;
-const DESCRIPTOR_WORD = /\b(studio|bedroom|suite|room|apartment|cottage|villa|shared|private|companion|respite|memory|assisted|independent|skilled|nursing|care|deluxe|alcove|courtyard|occupancy|entrance|second|person|pet|community|fee|level|tier|unit)\b/i;
+// Money detection may surface possible unresolved source material. It may never
+// drive a repair on its own. A positional/run-shape approach is a separate
+// experiment and must prove itself across verticals before entering enforcement.
+const MONEY = /(?:[$£€]|\bUSD\b|\bEUR\b|\bGBP\b)\s?\d[\d,]*(?:\.\d{2})?/gi;
 
-/** A block that is only a descriptor — no money, not a label, not a URL. */
-function isBareDescriptor(text: string): boolean {
-  if (!text || MONEY.test(text)) { MONEY.lastIndex = 0; return false; }
+/** Does this unlabelled block contain money? Recognition only — no pairing. */
+export function containsMoney(text: string): string[] {
   MONEY.lastIndex = 0;
-  if (/^\s*https?:/i.test(text) || /:\s*\S/.test(text)) return false;
-  return DESCRIPTOR_WORD.test(text) && text.trim().split(/\s+/).length <= 8;
-}
-
-export type PricingAnchors = { amounts: string[]; unit?: string; descriptor: string };
-
-/** Returns anchors when the amount/descriptor pairing is unambiguous,
- *  "ambiguous" when a priced line's descriptor cannot be resolved, or null. */
-export function pricingClaim(text: string, prevBlock = "", prevWasAmbiguous = false): PricingAnchors | "ambiguous" | null {
-  MONEY.lastIndex = 0;
-  const amounts = text.match(MONEY) ?? [];
-  if (!amounts.length) return null;
-  const stripped = text.replace(/^\s*[-•*]\s*/, "").trim();
-  if (/:\s*\S/.test(stripped)) return null;              // labelled lines are rung 2, not here
-
-  const isRange = RANGE.test(stripped);
-  const distinct = new Set(amounts.map((a) => a.replace(/\D/g, "")));
-  // More than one independent amount on a line, and no range, means more than
-  // one fact sharing one descriptor. Do not guess which is which.
-  if (!isRange && distinct.size > 1) return "ambiguous";
-
-  const first = amounts[0] ?? "", last = amounts[amounts.length - 1] ?? "";
-  const before = stripped.slice(0, stripped.indexOf(first)).replace(/[-–—:]\s*$/, "").trim();
-  const after = stripped.slice(stripped.indexOf(last) + last.length)
-    .replace(UNIT, " ").replace(/^\s*[-–—]\s*/, "").trim();
-
-  const beforeIsDesc = DESCRIPTOR_WORD.test(before);
-  const afterIsDesc = DESCRIPTOR_WORD.test(after);
-
-  // The Vine Ridge trap: a dangling descriptor above means the amount's real
-  // partner is behind it, and the words after it belong to the NEXT amount.
-  // AMBIGUITY PROPAGATES THROUGH A RUN OF PRICED LINES. In Vine Ridge the
-  // descriptor shift is systemic: once one amount is orphaned from its
-  // descriptor, every following line in the run inherits the same misalignment
-  // while looking perfectly confident on its own.
-  if (prevWasAmbiguous && !beforeIsDesc) return "ambiguous";
-  if (isBareDescriptor(prevBlock) && !beforeIsDesc) {
-    // TWO DIFFERENT SHAPES, and the difference is whether the amount line
-    // carries a descriptor of its own.
-    //
-    //   Creekwood — clean alternation, confidently pairable:
-    //     - Private Room
-    //     - $10,000-$15,000/month        <- no descriptor of its own
-    //
-    //   Vine Ridge — shifted, genuinely ambiguous:
-    //     Assisted Living/Memory Care Studio
-    //     - $4,090/month One Bedroom     <- carries a descriptor, which belongs
-    //                                       to the NEXT amount, not this one
-    if (afterIsDesc) return "ambiguous";
-    return {
-      amounts: amounts.map((a) => a.replace(/\D/g, "")),
-      unit: ((): string | undefined => { const u = UNIT.exec(text); return (u?.[1] ?? u?.[2])?.toLowerCase(); })(),
-      descriptor: prevBlock.replace(/^\s*[-•*]\s*/, "").trim(),
-    };
-  }
-  if (beforeIsDesc && afterIsDesc) return "ambiguous";     // descriptors on both sides
-  const descriptor = beforeIsDesc ? before : afterIsDesc ? after : "";
-  if (!descriptor) return "ambiguous";                     // priced, but nothing to call it
-
-  return {
-    amounts: amounts.map((a) => a.replace(/\D/g, "")),
-    unit: ((): string | undefined => { const u = UNIT.exec(text); return (u?.[1] ?? u?.[2])?.toLowerCase(); })(),
-    descriptor,
-  };
+  return (text.match(MONEY) ?? []).map((a) => a.replace(/[^\d]/g, ""));
 }

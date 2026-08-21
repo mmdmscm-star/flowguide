@@ -75,15 +75,37 @@ const CLAUSE_MARKERS = new Set([
   "the", "a", "an", "this", "that", "these", "those", "there",
   "was", "were", "is", "are", "be", "been", "being",
   "has", "have", "had", "will", "would", "should", "could",
-  // "to" marks an infinitive, which makes a lead-in, not a label: "One thing to
-  // remember:" would otherwise become a claim and — under enforcement — a bogus
-  // Detail reading "One thing to remember | the waitlist moves fast". No label
-  // in any validated fixture or in the real source uses a lowercase "to".
-  "to",
+
 ]);
+// A LEAD-IN OPENS LIKE A SENTENCE; A LABEL OPENS LIKE A NAME.
+//
+// "One thing to remember:", "A quick reminder before you call:", "What the
+// family said afterwards:" all begin with a determiner or a wh-word and then
+// run on. Labels do not: "Community Fee", "Time to Completion", "Distance to
+// Airport", "Steps to Apply".
+//
+// An earlier version banned a lowercase "to" outright. That was derived from one
+// corpus and it rejected every legitimate label above — a recall failure
+// invented to fix a precision failure. The opener test is structural: it looks
+// at how the phrase STARTS, not at which words it happens to contain.
+//
+// The length guard matters because "One Bedroom" is a real label in senior
+// living and in rentals. A determiner opener alone is not enough to reject; it
+// has to open like a determiner AND keep going like a clause.
+const LEAD_IN_OPENERS = new Set([
+  "a", "an", "the", "this", "that", "these", "those",
+  "what", "which", "who", "when", "where", "why", "how",
+  "one", "some", "any", "thing", "things", "here", "there",
+]);
+const LEAD_IN_MIN_WORDS = 4;
+function opensLikeAClause(words: string[]): boolean {
+  const first = (words[0] ?? "").replace(/[^A-Za-z]/g, "").toLowerCase();
+  return LEAD_IN_OPENERS.has(first) && words.length >= LEAD_IN_MIN_WORDS;
+}
 function looksLikeLabel(label: string): boolean {
   const words = label.trim().split(/\s+/).filter(Boolean);
   if (!words.length || words.length > MAX_LABEL_WORDS) return false;
+  if (opensLikeAClause(words)) return false;
   return !words.some((w) => {
     const bare = w.replace(/[^A-Za-z]/g, "");
     // Lowercase-only: "A" in `Studio A` is a label word, "a" in prose is not.

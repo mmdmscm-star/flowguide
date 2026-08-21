@@ -81,76 +81,9 @@ function addressPresent(item: Record<string, unknown>, value: string): Field[] {
   return locate(item, value);
 }
 
-/** Every detail-ish slot in the proposal, as matchable text. Occurrence-aware:
- *  each slot may satisfy at most ONE pricing claim, so a repeated amount cannot
- *  discharge two different source facts. */
-function priceSlots(item: Record<string, unknown> | null): { text: string; used: boolean }[] {
-  if (!item) return [];
-  const out: { text: string; used: boolean }[] = [];
-  for (const d of (item.details as { label?: string; value?: string }[]) ?? [])
-    out.push({ text: `${d?.label ?? ""} ${d?.value ?? ""}`, used: false });
-  for (const k of ["description", "notes", "title"] as const)
-    if (item[k]) out.push({ text: String(item[k]), used: false });
-  return out;
-}
-const DESC_STOP = new Set(["the", "a", "an", "of", "and", "or", "for", "per", "from", "to", "if", "available", "starting", "at"]);
-const descTokens = (s: string) =>
-  (s.toLowerCase().match(/[a-z]+/g) ?? []).filter((t) => t.length > 2 && !DESC_STOP.has(t));
-
-/** A pricing claim is satisfied when its immutable anchors agree: every amount
- *  present, the unit present if the source stated one, and enough descriptor
- *  tokens shared. Wording and order are NOT required — the model legitimately
- *  rewrites "$4,090/month One Bedroom" as "One Bedroom | $4,090/month". */
-function matchPricing(c: Claim, slots: { text: string; used: boolean }[]): number {
-  const a = c.anchors;
-  if (!a) return -1;
-  const want = descTokens(a.descriptor);
-  const need = want.length === 0 ? 0 : want.length === 1 ? 1 : Math.max(1, Math.ceil(want.length * 0.5));
-  const candidates: number[] = [];
-  for (let i = 0; i < slots.length; i++) {
-    const s = slots[i];
-    if (s.used) continue;
-    const digits = (s.text.match(/\d[\d,]*/g) ?? []).map((x) => x.replace(/\D/g, ""));
-    if (!a.amounts.every((amt) => digits.includes(amt))) continue;
-    if (a.unit && !new RegExp(`\\b${a.unit}`, "i").test(s.text)) continue;
-    candidates.push(i);
-  }
-  // UNIQUE AMOUNT, RELAXED DESCRIPTOR.
-  //
-  // When exactly one unused slot in this record carries the claim's amounts and
-  // unit, there is nothing for it to be confused with, so a single shared
-  // descriptor token is enough. This is what recovers "Memory Care Suite
-  // $4,830/month" from the proposal's "MC Private Suite $4,830/month": the model
-  // abbreviated the descriptor, which is normalisation, not loss. Requiring the
-  // full token threshold there would report a correctly-placed fact as missing
-  // and let enforcement duplicate it.
-  //
-  // Where several slots share the amount, the full threshold still applies —
-  // that is exactly when a descriptor has to discriminate.
-  const bar = candidates.length === 1 ? Math.min(need, 1) : need;
-  for (const i of candidates) {
-    const have = new Set(descTokens(slots[i].text));
-    if (want.length && want.filter((t) => have.has(t)).length < bar) continue;
-    slots[i].used = true;
-    return i;
-  }
-  return -1;
-}
-
 export function reconcile(parsed: ParseResult, item: Record<string, unknown> | null): Reconciliation {
   const resolutions: Resolution[] = [];
-  const slots = priceSlots(item);
   for (const c of parsed.claims) {
-    if (c.kind === "pricing") {
-      const hit = matchPricing(c, slots);
-      resolutions.push({
-        claimId: c.id, label: c.anchors?.descriptor, value: c.value, rung: 2,
-        want: "details", found: hit >= 0 ? ["details"] : [],
-        outcome: hit >= 0 ? "ACCEPTED" : "REPAIRED",
-        why: hit >= 0 ? "pricing anchors agree (reordering tolerated)" : "priced fact not found in the proposal",
-      });
-      continue;
-    }
     const spec = specialized(c);
     const found = !item ? []
       : spec?.want === "address" ? addressPresent(item, c.value)
