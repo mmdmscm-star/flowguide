@@ -346,12 +346,13 @@ in, not a priority ranking.
    policy, not a redesign. Screens touched during the language and view-vs-edit
    passes already meet the floor; the broad sweep is what remains.
 
-2. **Canonical Library photo normalization, and historical repair — 0026.**
+2. **Canonical Library photo normalization, and historical repair — 0027.**
    Migration numbers follow APPLICATION order, so parked work loses its
    reservation every time something else ships first: this was pencilled in as
-   0024, then 0025, and is now **0026** because 0025 is the observe-only fact
-   ledger. There is exactly one unapplied migration file claiming 0025 and it is
-   the ledger. The
+   0024, then 0025, then 0026, and is now **0027** — 0025 is the observe-only
+   fact ledger and 0026 is packet-path evidence retention. No applied migration
+   file is ever renamed to make room; the parked work simply takes the next free
+   number when it is finally written. The
    application tolerates both the canonical `{url}` shape and the bare strings an
    AI import used to write, and every read and write path handles both — so
    production is protected and this is not urgent. What remains is canonical data

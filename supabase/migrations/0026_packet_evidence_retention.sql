@@ -367,4 +367,37 @@ begin
 end;
 $$;
 
+-- ---------------------------------------------------------------------------
+-- 5. The purge must cover everything 0026 newly retains.
+--
+--    Discard previously cleared `ingestion_runs.error` immediately. Now that a
+--    discarded run keeps it — deliberately, because why an import failed is the
+--    whole point — it needs an expiry like everything else. Chunk-level error
+--    was already purged; the run-level column was not, and would have persisted
+--    for ever. Re-issued from 0025 with one field added; nothing else differs.
+-- ---------------------------------------------------------------------------
+create or replace function public.purge_ingestion_evidence()
+returns int
+language plpgsql
+security definer
+set search_path = ''
+as $pie$
+declare v_runs int := 0;
+begin
+  update public.ingestion_chunks c
+     set result = null, segment_text = null, section_hint = '', error = '', fact_ledger = null, updated_at = now()
+   where c.run_id in (
+           select r.id from public.ingestion_runs r
+            where r.evidence_purge_after is not null and r.evidence_purge_after <= now())
+     and (c.result is not null or c.segment_text is not null or c.fact_ledger is not null);
+
+  update public.ingestion_runs r
+     set source_text = null, error = '', evidence_purge_after = null, updated_at = now()
+   where r.evidence_purge_after is not null and r.evidence_purge_after <= now();
+  get diagnostics v_runs = row_count;
+
+  return v_runs;
+end;
+$pie$;
+
 commit;
