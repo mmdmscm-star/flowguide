@@ -47,8 +47,10 @@ begin
   execute format('alter table public.ingestion_runs drop constraint %I', v_con);
 end $$;
 
+-- packet_id is ALREADY nullable — 0020 dropped NOT NULL when library runs, which
+-- have no packet, were introduced. An `alter column packet_id drop not null`
+-- here would be a silent no-op that implies the opposite to the next reader.
 alter table public.ingestion_runs
-  alter column packet_id drop not null,
   add constraint ingestion_runs_packet_fk
     foreign key (packet_id) references public.packets(id) on delete set null;
 

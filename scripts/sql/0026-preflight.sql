@@ -23,7 +23,10 @@ with c as (
            where conrelid='public.ingestion_runs'::regclass and contype='f'
              and pg_get_constraintdef(oid) ~ 'REFERENCES packets\(id\)')
   union all
-  select 5, 'packet_id is currently NOT NULL', 'NO',
+  -- 0020 already dropped NOT NULL, when library runs (which have no packet) were
+  -- introduced. is_nullable='YES' means nullable, so YES is the correct
+  -- expectation; the earlier 'NO' encoded a schema that has not existed since 0020.
+  select 5, 'packet_id is already nullable (0020), so 0026 need not touch it', 'YES',
          coalesce((select is_nullable from information_schema.columns
                     where table_schema='public' and table_name='ingestion_runs' and column_name='packet_id'),'missing')
   union all
