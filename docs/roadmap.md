@@ -346,12 +346,13 @@ in, not a priority ranking.
    policy, not a redesign. Screens touched during the language and view-vs-edit
    passes already meet the floor; the broad sweep is what remains.
 
-2. **Canonical Library photo normalization, and historical repair — 0028.**
+2. **Canonical Library photo normalization, and historical repair — 0029.**
    Migration numbers follow APPLICATION order, so parked work loses its
    reservation every time something else ships first: this was pencilled in as
-   0024, then 0025, then 0026, then 0027, and is now **0028** — 0025 is the
-   observe-only fact ledger, 0026 is packet-path evidence retention, and 0027 is
-   review-unit resolution. No applied migration
+   0024, then 0025, then 0026, then 0027, then 0028, and is now **0029** — 0025
+   is the observe-only fact ledger, 0026 is packet-path evidence retention, 0027
+   is review-unit resolution, and 0028 is the dedicated per-chunk review-unit
+   channel. No applied migration
    file is ever renamed to make room; the parked work simply takes the next free
    number when it is finally written. The
    application tolerates both the canonical `{url}` shape and the bare strings an
@@ -527,3 +528,24 @@ first response was to fix the default scale (shipped); this control is the
 deferred follow-on. Relates to the recipient typography lift and the
 "one packet, multiple renderers" principle in
 [product-direction.md](product-direction.md).
+
+
+## Backlog — recorded, not started
+
+**Mixed-run discard-only review.** A run holding BOTH a media-accounting failure
+and a review-required unit cannot be cleared unit by unit: the media failure has
+no per-unit remediation, so the run still exits only through discard. That is
+fail-closed and unchanged from how media review has always worked, and this
+slice deliberately did not redesign the mature media-accounting workflow around
+the new resolution UI. Worth revisiting only if a real mixed run turns up and
+the discard-only exit actually costs someone their import.
+
+**Library imports produce review units nobody surfaces.** Enforcement is not
+destination-guarded - it runs for library chunks too - but the review
+aggregation lives in the packet finalize path, and a library import closes
+through `library_close_import_run`, which clears chunk evidence including
+`review_units`. With enforcement ON, a privacy-rejected unit on a Library import
+would therefore be held and then discarded without ever being shown. This is a
+BLOCKER for enabling enforcement globally, not a backlog item to schedule
+casually: it must be closed, or enforcement must be scoped to the packet path,
+before the flag goes on for normal traffic.

@@ -12,19 +12,22 @@ import { join } from "node:path";
 
 const ROUTE = "src/app/api/ingest/[runId]/chunks/[ordinal]/route.ts";
 const route = readFileSync(ROUTE, "utf8");
-// THE ONE SANCTIONED READER, and the reason it exists.
-//
-// Unresolved source units are not evidence: they are product state. They block
-// publishing and a professional decides them by hand. They are produced per
-// chunk and consumed once per run, and the ledger is the only per-chunk channel
-// that already exists - so finalize reads `unresolved` out of it, and nothing
-// else, and never writes to it.
-//
-// This is a NARROWING of the original "no reader at all", not an abandonment of
-// it. If units ever earn a column of their own, this exception should go with
-// the migration that gives them one.
+// 0028 GAVE THE UNITS THEIR OWN COLUMN, so the exception 0027 needed is gone
+// and the original rule stands again: the ledger has ONE writer and NO reader.
+// `ingestion_chunks.review_units` carries product state; `fact_ledger` carries
+// evidence; finalize reads the first and cannot see the second.
 const FINALIZE = "src/app/api/ingest/[runId]/finalize/route.ts";
-const finalize = readFileSync(FINALIZE, "utf8");
+
+/** Comments stripped. Every file here EXPLAINS the ledger boundary, and the
+ *  explanation names the column - so a scan of raw text matches its own
+ *  rationale and can never pass. The fix is to narrow the scan, never to
+ *  loosen the pattern. */
+function codeOf(path: string): string {
+  return readFileSync(path, "utf8")
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .split("\n").map((l) => l.replace(/\/\/.*$/, "")).join("\n");
+}
+const finalize = codeOf(FINALIZE);
 // The CALL SITE, not the import line — `indexOf("buildChunkLedger")` finds the
 // import at the top of the file and would place the ledger before everything.
 const CALL = 'buildChunkLedger(segmentText';
@@ -45,32 +48,36 @@ function appFiles(dir: string, acc: string[] = []): string[] {
 }
 const files = appFiles("src");
 
-test("the ledger has exactly one write site and one sanctioned reader", () => {
-  const hits = files.filter((f) => readFileSync(f, "utf8").includes("fact_ledger")).sort();
-  assert.deepEqual(hits, [ROUTE, FINALIZE].sort(),
-    `fact_ledger appears outside the chunk route and finalize: ${hits.join(", ")}`);
+test("the ledger has exactly one write site and no read site", () => {
+  const hits = files.filter((f) => codeOf(f).includes("fact_ledger"));
+  assert.deepEqual(hits, [ROUTE], `fact_ledger appears outside the chunk route: ${hits.join(", ")}`);
 
   // TWO writes now, both updates: the normal ledger, and the fail-closed
   // evidence write when enforcement throws. Still no read path — a select,
   // order or filter on the column would mean something began depending on it.
-  const uses = route.split("fact_ledger").length - 1;
+  // Counted in CODE. The route now explains the two-column split in prose, and
+  // counting the explanation as a touch made a comment look like a dependency.
+  const uses = codeOf(ROUTE).split("fact_ledger").length - 1;
   assert.equal(uses, 2, "unexpected number of fact_ledger touches in the route");
-  assert.match(route, /\.update\(\{ fact_ledger: \{ \.\.\.ledger, accounting, enforcement, unresolved \} \}\)/);
+  // ONE update, TWO columns: evidence and product state describe the same
+  // chunk and are written together, but they are separate columns so a change
+  // to what we record for diagnosis cannot change what a professional is asked.
+  assert.match(codeOf(ROUTE),
+    /\.update\(\{ fact_ledger: \{ \.\.\.ledger, accounting, enforcement, unresolved \},\s*review_units: reviewUnits\.length \? reviewUnits : null \}\)/);
   assert.match(route, /fact_ledger: \{ enforcementError/, "the fail-closed evidence write is missing");
   assert.doesNotMatch(route, /select\([^)]*fact_ledger/);
 });
 
-test("finalize reads the ledger for unresolved units and NOTHING else", () => {
-  // A select is the whole extent of the dependency. An update from here would
-  // make finalize a second writer of the evidence trail, and the trail would
-  // then no longer be a record of what the chunk actually saw.
-  assert.doesNotMatch(finalize, /fact_ledger:\s*\{/, "finalize writes to the ledger");
-  assert.doesNotMatch(finalize, /\.update\(\{[^}]*fact_ledger/, "finalize updates the ledger");
-  assert.match(finalize, /\.select\("fact_ledger"\)/);
-  // Only `unresolved` is read. Accounting and enforcement telemetry stay
-  // observe-only, which is the property the original invariant protected.
-  const reads = [...finalize.matchAll(/fact_ledger\??\.(\w+)/g)].map((m) => m[1]);
-  assert.deepEqual([...new Set(reads)], ["unresolved"], `finalize reads ${reads.join(", ")}`);
+test("product behaviour reads review_units and never the ledger", () => {
+  // The whole point of 0028. If this ever fails, evidence has become
+  // load-bearing again and a change to what we record for diagnosis can change
+  // what a professional is asked to decide.
+  assert.doesNotMatch(finalize, /fact_ledger/, "finalize can see the evidence ledger again");
+  assert.match(finalize, /\.select\("review_units"\)/);
+  // The units channel is READ by finalize and WRITTEN only by the chunk route,
+  // which is the same one-writer discipline the ledger has.
+  const writers = files.filter((f) => /review_units:\s/.test(codeOf(f)));
+  assert.deepEqual(writers, [ROUTE], `review_units written outside the chunk route: ${writers.join(", ")}`);
 });
 
 test("no packet, item, section or library path imports the ledger", () => {
@@ -80,14 +87,8 @@ test("no packet, item, section or library path imports the ledger", () => {
   // consumer each, no read path.
   const acct = files.filter((f) => /from "@\/lib\/chunk-accounting"/.test(readFileSync(f, "utf8")));
   assert.deepEqual(acct, [ROUTE], `chunk-accounting imported outside the chunk route: ${acct.join(", ")}`);
-  // enforce-chunk: one VALUE consumer. finalize names its UnresolvedUnit type
-  // and must not be able to run enforcement - a type import erases at compile
-  // time, so this is the difference between naming a shape and acquiring a
-  // second enforcement site.
-  const enf = files.filter((f) => /from "@\/lib\/enforce-chunk"/.test(readFileSync(f, "utf8"))).sort();
-  assert.deepEqual(enf, [ROUTE, FINALIZE].sort(), `enforce-chunk imported outside the chunk route: ${enf.join(", ")}`);
-  assert.match(finalize, /import type \{ UnresolvedUnit \} from "@\/lib\/enforce-chunk"/,
-    "finalize imports enforce-chunk as a value, not just its type");
+  const enf = files.filter((f) => /from "@\/lib\/enforce-chunk"/.test(readFileSync(f, "utf8")));
+  assert.deepEqual(enf, [ROUTE], `enforce-chunk imported outside the chunk route: ${enf.join(", ")}`);
 });
 
 test("the ledger is computed after the result is durably staged", () => {
@@ -135,10 +136,14 @@ function liveFunctions(upTo = "9999"): Map<string, { file: string; body: string 
   const out = new Map<string, { file: string; body: string }>();
   for (const f of readdirSync("supabase/migrations").filter((x) => x.endsWith(".sql") && x < upTo).sort()) {
     const s = readFileSync(join("supabase/migrations", f), "utf8");
-    const re = /create or replace function public\.(\w+)\s*\(/g;
+    // Case-insensitive: a mechanically re-issued function comes out of
+    // pg_get_functiondef as CREATE OR REPLACE FUNCTION, and a lowercase-only
+    // scanner silently skips it - reporting the PREVIOUS definition as live and
+    // passing every assertion about a migration it never read.
+    const re = /create or replace function public\.(\w+)\s*\(/gi;
     let m: RegExpExecArray | null;
     while ((m = re.exec(s))) {
-      const tag = /\bas\s+(\$\w*\$)/.exec(s.slice(m.index));
+      const tag = /\bas\s+(\$\w*\$)/i.exec(s.slice(m.index));
       if (!tag) continue;
       const openAt = m.index + tag.index + tag[0].length;
       const end = s.indexOf(tag[1], openAt);
@@ -160,6 +165,10 @@ test("every live function that clears chunk evidence also clears the ledger", ()
     clearers.push(name);
     assert.match(body, /fact_ledger\s*=\s*null/,
       `${name} clears segment_text but leaves fact_ledger behind — the quotations would outlive the source`);
+    // review_units holds verbatim source text too. A clearer that misses it
+    // would leave a third copy of the source outside every lifecycle.
+    assert.match(body, /review_units\s*=\s*null/,
+      `${name} clears segment_text but leaves review_units behind`);
   }
   // The scan found something. Without this the test passes vacuously if the
   // matcher ever stops matching.
@@ -175,6 +184,8 @@ test("scheduled expiry treats a ledger-only chunk as still holding evidence", ()
   // A chunk whose result and segment were already cleared, but which still
   // holds a ledger, must remain eligible for purge.
   assert.match(purge!.body, /c\.fact_ledger is not null/);
+  assert.match(purge!.body, /c\.review_units is not null/,
+    "a chunk holding only review_units would never become eligible for purge");
 });
 
 test("0025 changes nothing about what the re-issued functions DO", () => {

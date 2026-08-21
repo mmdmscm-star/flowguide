@@ -12,6 +12,7 @@ import { parseClaims } from "./claim-parser.ts";
 import { recordEnvelopes, attributeAll, bindByProvenance } from "./attribution.ts";
 import { reconcile } from "./reconcile.ts";
 import { enforceItem, sourceGrantsPrivacy, contractEnforcementEnabled } from "./enforce.ts";
+import { buildReviewUnits, type ReviewFailure } from "./review-units.ts";
 
 export interface EnforcementTelemetry {
   accepted: number; repaired: number; stripped: number;
@@ -33,7 +34,12 @@ export interface UnresolvedUnit {
 export interface ChunkEnforcement {
   result: unknown;
   telemetry: EnforcementTelemetry;
+  /** EVERY unit, review-required and observed alike. Telemetry: this is what
+   *  goes to the fact ledger, and nothing product-facing may read it. */
   unresolved: UnresolvedUnit[];
+  /** ONLY the review-required exceptions, with stable ids. Product state: this
+   *  is what goes to `ingestion_chunks.review_units` and becomes a question. */
+  reviewUnits: ReviewFailure[];
 }
 
 const empty = (): EnforcementTelemetry => ({
@@ -65,10 +71,10 @@ function maybeThrowForTest(): void {
 
 export function enforceChunkResult(opts: {
   segmentText: string; chunkOrdinal: number; sourceStart: number;
-  sourceText: string | null; result: unknown;
+  sourceText: string | null; result: unknown; runId?: string;
 }): ChunkEnforcement {
-  const { segmentText, chunkOrdinal, sourceStart, sourceText, result } = opts;
-  if (!contractEnforcementEnabled()) return { result, telemetry: empty(), unresolved: [] };
+  const { segmentText, chunkOrdinal, sourceStart, sourceText, result, runId } = opts;
+  if (!contractEnforcementEnabled()) return { result, telemetry: empty(), unresolved: [], reviewUnits: [] };
   maybeThrowForTest();
 
   const r = (result ?? {}) as { items?: unknown; sections?: { items?: unknown }[] };
@@ -76,7 +82,7 @@ export function enforceChunkResult(opts: {
     ...(Array.isArray(r.items) ? r.items : []),
     ...(Array.isArray(r.sections) ? r.sections.flatMap((s) => (Array.isArray(s?.items) ? s.items : [])) : []),
   ].filter((x): x is Record<string, unknown> => Boolean(x) && typeof x === "object");
-  if (!items.length || !sourceText) return { result, telemetry: empty(), unresolved: [] };
+  if (!items.length || !sourceText) return { result, telemetry: empty(), unresolved: [], reviewUnits: [] };
 
   const env = recordEnvelopes(sourceText);
   const parsed = parseClaims(segmentText, chunkOrdinal);
@@ -118,5 +124,11 @@ export function enforceChunkResult(opts: {
     }
     replaced.set(item, e.item);
   }
-  return { result: withItems(result, items.map((it) => replaced.get(it) ?? it)), telemetry: t, unresolved };
+  return {
+    result: withItems(result, items.map((it) => replaced.get(it) ?? it)),
+    telemetry: t, unresolved,
+    // The SPLIT happens here, at the point of production, so the two channels
+    // can never disagree about what is a question and what is a note to self.
+    reviewUnits: buildReviewUnits(runId ?? "", chunkOrdinal, unresolved),
+  };
 }

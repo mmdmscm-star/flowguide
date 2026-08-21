@@ -21,7 +21,7 @@
 // because a provider had an off day.
 import { svc, check, summary, errText } from "./lib.mts";
 import { enforceChunkResult } from "../../src/lib/enforce-chunk.ts";
-import { toReviewFailures, unresolvedCount } from "../../src/lib/review-units.ts";
+import { unresolvedCount } from "../../src/lib/review-units.ts";
 
 const BASE = process.env.FLOWGUIDE_BASE_URL ?? "http://localhost:3000";
 const TAG = "flowguide-review-" + process.pid;
@@ -111,11 +111,16 @@ try {
   check("it is NOT auto-placed into Details",
     !JSON.stringify(item.details ?? []).includes("memory care"), JSON.stringify(item.details));
 
-  const failures = toReviewFailures("run-fixture", held);
+  // The SPLIT: review-required exceptions become questions; observed telemetry
+  // does not. Both were produced by the same call.
+  check("only review-required exceptions become review units",
+    e.reviewUnits.length === 2 && e.unresolved.length >= e.reviewUnits.length,
+    `${e.reviewUnits.length} review units of ${e.unresolved.length} unresolved`);
   check("the held unit carries a stable content-derived id",
-    /^u_[0-9a-f]{16}$/.test(failures[0].id), failures[0].id);
-  check("and the same units produce the same id twice",
-    toReviewFailures("run-fixture", held)[0].id === failures[0].id);
+    /^u_[0-9a-f]{16}$/.test(e.reviewUnits[0].id), e.reviewUnits[0].id);
+  check("every review unit is classified, none unclassified",
+    e.reviewUnits.every((u) => u.code === "privacy_rejected"),
+    JSON.stringify(e.reviewUnits.map((u) => u.code)));
 
   // ---------------------------------------------------------------- phase 2
   const { data: u, error: uerr } = await svc.from("users")
@@ -151,6 +156,12 @@ try {
   }).select("id").single();
   if (rerr) throw new Error(errText(rerr));
   const RUN = (r0 as { id: string }).id;
+  // Enforcement re-run with the REAL run id, so the units carry the ids the
+  // product path would actually have assigned.
+  const e2 = enforceChunkResult({
+    segmentText: SOURCE, chunkOrdinal: 0, sourceStart: 0,
+    sourceText: SOURCE, result: MODEL_RESULT, runId: RUN,
+  });
   const { error: chErr } = await svc.from("ingestion_chunks").insert({
     run_id: RUN, ordinal: 0, status: "completed", attempt_count: 1,
     source_start: 0, source_end: SOURCE.length, segment_text: SOURCE,
@@ -159,7 +170,15 @@ try {
     // stages once enforcement has had its say. The items below are therefore
     // created by the real apply path, not pre-planted by this script.
     result: e.result,
-    fact_ledger: { unresolved: held },
+    review_units: e2.reviewUnits,
+    // A DECOY. The ledger carries a unit that exists nowhere else. If any of it
+    // reaches the run's review, product behaviour is reading evidence again -
+    // which is the boundary 0028 exists to restore, and no amount of source
+    // scanning proves it as well as watching the value fail to arrive.
+    fact_ledger: {
+      unresolved: [...held, { record: 9, title: "Ledger Decoy", kind: "privacy-rejected",
+                              text: "LEDGER-ONLY-DECOY-must-never-surface", reason: "decoy" }],
+    },
   });
   if (chErr) throw new Error(`ingestion_chunks: ${errText(chErr)}`);
 
@@ -189,6 +208,10 @@ try {
   check("the run is held for review", run.status === "needs_review", run.status);
   const persisted = (run.review?.failures ?? []).filter((f: any) => f.code === "unresolved_source_unit");
   check("both held units are persisted on the run", persisted.length === 2, JSON.stringify(run.review).slice(0, 240));
+  // THE 0028 BOUNDARY, proven by behaviour rather than by reading the source.
+  check("the ledger-only decoy never reaches the run's review",
+    !JSON.stringify(run.review).includes("LEDGER-ONLY-DECOY"),
+    "a fact_ledger unit surfaced as a question");
   check("...each on its own record",
     persisted.map((f: any) => f.title).sort().join("|") === "Cedar Ridge|Harbor House",
     JSON.stringify(persisted.map((f: any) => f.title)));

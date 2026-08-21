@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useRef } from "react";
 import { useIngestion } from "@/lib/useIngestion";
-import { isResolvable, hasUnresolvableBlocker } from "@/lib/review-units";
+import { isResolvable, hasUnresolvableBlocker, guidanceFor } from "@/lib/review-units";
 
 // Drives (resumes) a persisted ingestion run and shows real progress. Rendered
 // whenever a packet has an active run — from a fresh Organize, an Add-with-AI, or
@@ -96,10 +96,9 @@ export default function ImportProgress({
             <li key={f.id} className="rounded-lg border border-amber-200 bg-white/70 p-3">
               {f.title && <p className="text-xs font-medium text-amber-900">{f.title}</p>}
               <p className="mt-1 text-sm text-foreground whitespace-pre-wrap">{f.text}</p>
-              <p className="mt-1 text-xs text-muted">
-                This was written as a private note, but nothing in your source said it was
-                private. Add it wherever it belongs, then mark it done.
-              </p>
+              {/* From the exception registry, not hardcoded here, so a future
+                  review-required kind arrives with its own wording. */}
+              <p className="mt-1 text-xs text-muted">{guidanceFor(f)}</p>
               <div className="mt-2 flex items-center gap-2">
                 <button
                   disabled={resolving === f.id}

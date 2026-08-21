@@ -1,31 +1,74 @@
 import { createHash } from "node:crypto";
-import type { UnresolvedUnit } from "./enforce-chunk";
+import type { UnresolvedUnit } from "./enforce-chunk.ts";
 
-// UNRESOLVED SOURCE UNITS, PERSISTED FOR THE CREATOR.
+// TWO KINDS OF "UNRESOLVED", AND THEY ARE NOT THE SAME THING.
 //
-// Enforcement can refuse a placement the model proposed. The prose is not
-// deleted and not silently moved somewhere tidy - both of those are decisions
-// the professional never made. It is held here, attached to its record, until
-// they say what it is.
+// 1. REVIEW-REQUIRED PRODUCT EXCEPTION
+//    A known contract violation where source content would otherwise be
+//    silently hidden, lost, or treated unsafely, AND a professional decision is
+//    required to settle it. These persist into `ingestion_runs.review`, they
+//    block publishing, and the creator is shown the verbatim source.
+//    Today: privacy_rejected.
 //
-// WHICH UNITS BLOCK PUBLISHING
-// Only `privacy-rejected`. That unit is content the model tried to route into a
-// private field with no authority from the source, so publishing without a
-// decision means a recipient silently never sees something the source said -
-// the exact failure the private-note work closed.
+// 2. OBSERVED-UNRESOLVED TELEMETRY
+//    The deterministic layer recognized potentially meaningful source material
+//    but cannot prove enough to demand a specific decision. These stay in
+//    accounting and evidence. They do not block publishing and they are not
+//    shown as a question.
+//    Today: ambiguous unlabelled pricing (SOURCE_UNRESOLVED).
 //
-// `source-unresolved` is a value the reconciler could not bind to a claim. It
-// is evidence, and it stays in the fact ledger where the other evidence lives.
-// Blocking on it would put nearly every import into review and teach people to
-// click through the block, which is worse than not having one.
+// The distinction is the whole point. Promoting every uncertainty into the
+// review UI to make the accounting visible would produce review fatigue and
+// teach people to click through warnings - which costs more than the accounting
+// is worth. The registry below is what keeps the line drawn on purpose rather
+// than by whichever code path happened to be written first.
+//
+// TO ADD A FUTURE EXCEPTION (a proven attribution conflict, say): add an entry
+// to REVIEW_REQUIRED with its own code and guidance. Nothing else needs to
+// change - the route, the RPC and the panel are all driven from this registry.
+// The bar for entry is PROOF, not suspicion: if the layer cannot show that
+// something would be hidden, lost or unsafe, it belongs in OBSERVED_ONLY.
 
-export const BLOCKING_KINDS = new Set(["privacy-rejected"]);
+export interface ExceptionKind {
+  /** Stable, persisted discriminator. Never reuse one for a different meaning. */
+  code: string;
+  /** What the professional is being asked, in their language. */
+  guidance: string;
+}
+
+export const REVIEW_REQUIRED: Record<string, ExceptionKind> = {
+  "privacy-rejected": {
+    code: "privacy_rejected",
+    guidance:
+      "This was written as a private note, but nothing in your source said it was private. " +
+      "Add it wherever it belongs, then mark it done.",
+  },
+};
+
+/** Recognized, recorded, and deliberately NOT a question. */
+export const OBSERVED_ONLY: Record<string, string> = {
+  "source-unresolved": "a value the reconciler could not bind to a claim",
+};
+
+export const REVIEW_REQUIRED_CODES = new Set(Object.values(REVIEW_REQUIRED).map((e) => e.code));
+
+/** Fail closed on an unrecognized kind: something the layer produced but nobody
+ *  classified is, by definition, not proven safe to hide. A source test asserts
+ *  every kind is classified explicitly, so this should never fire in practice -
+ *  it is here so that if it ever does, the answer is a question rather than
+ *  silence. */
+export function isReviewRequired(kind: string): boolean {
+  if (kind in REVIEW_REQUIRED) return true;
+  if (kind in OBSERVED_ONLY) return false;
+  return true;
+}
 
 export interface ReviewFailure {
   id: string;
   code: string;
   kind?: string;
   record?: number;
+  chunk?: number;
   title?: string | null;
   /** The verbatim source excerpt. Present ONLY while unresolved - the RPC
    *  removes it on resolve or ignore. */
@@ -39,44 +82,62 @@ export interface ReviewFailure {
 /** Deterministic, content-derived, stable across reloads and replays.
  *  A positional id would move whenever anything else in the array changed, and
  *  a stale client would then clear a different unit than the one on screen. */
-export function unitId(runId: string, u: { record: number; kind: string; text: string }): string {
+export function unitId(
+  runId: string,
+  u: { chunk: number; record: number; kind: string; text: string },
+): string {
   return "u_" + createHash("sha256")
-    .update([runId, u.record, u.kind, u.text].join(" "))
+    .update([runId, u.chunk, u.record, u.kind, u.text].join(" "))
     .digest("hex").slice(0, 16);
 }
 
-/** Units to review failures. Deduped by id: the same excerpt on the same record
- *  is one decision, not two, however many chunks reported it. */
-export function toReviewFailures(
-  runId: string,
-  units: UnresolvedUnit[],
-  itemIdByTitle?: Map<string, string[]>,
+/** Units produced by enforcement for ONE chunk, reduced to the review-required
+ *  ones and stamped with stable ids. Written to `ingestion_chunks.review_units`
+ *  by the enforcement path; `fact_ledger` keeps the full telemetry. */
+export function buildReviewUnits(
+  runId: string, chunk: number, units: UnresolvedUnit[],
 ): ReviewFailure[] {
   const out = new Map<string, ReviewFailure>();
   for (const u of units) {
-    if (!BLOCKING_KINDS.has(u.kind)) continue;
+    if (!isReviewRequired(u.kind)) continue;
     const text = String(u.text ?? "").trim();
     if (!text) continue;
-    const id = unitId(runId, { record: u.record, kind: u.kind, text });
-    if (out.has(id)) continue;
-    const ids = u.title ? itemIdByTitle?.get(u.title) : undefined;
+    const id = unitId(runId, { chunk, record: u.record, kind: u.kind, text });
+    if (out.has(id)) continue;      // one excerpt on one record is one decision
     out.set(id, {
-      id, code: "unresolved_source_unit", kind: u.kind, record: u.record,
+      id, code: REVIEW_REQUIRED[u.kind]?.code ?? "unclassified_exception",
+      kind: u.kind, record: u.record, chunk,
       title: u.title ?? null, text, reason: u.reason, status: "unresolved",
-      // An ambiguous title must not name a specific item. The title itself is
-      // shown either way, so the professional still knows what they are looking
-      // at; pointing at the wrong item would be worse than pointing at none.
-      ...(ids && ids.length === 1 ? { itemIds: ids } : {}),
     });
   }
   return [...out.values()];
+}
+
+/** Finalize's half: attach the item a unit belongs to, once items exist. */
+export function attachItems(
+  units: ReviewFailure[], itemIdByTitle: Map<string, string[]>,
+): ReviewFailure[] {
+  return units.map((f) => {
+    const ids = f.title ? itemIdByTitle.get(f.title) : undefined;
+    // An ambiguous title must not name a specific item. The title is shown
+    // either way, so the professional still knows what they are looking at;
+    // pointing at the wrong item would be worse than pointing at none.
+    return ids && ids.length === 1 ? { ...f, itemIds: ids } : f;
+  });
 }
 
 /** A failure the professional can actually decide. Everything else - a missing
  *  photo, a run that produced nothing - has its own remediation and keeps its
  *  existing exit. */
 export function isResolvable(f: ReviewFailure): boolean {
-  return f?.code === "unresolved_source_unit" && typeof f?.id === "string" && f.id.length > 0;
+  return REVIEW_REQUIRED_CODES.has(f?.code) && typeof f?.id === "string" && f.id.length > 0;
+}
+
+/** The sentence shown with a held unit, from the registry rather than the panel,
+ *  so a future exception arrives with its own wording. */
+export function guidanceFor(f: ReviewFailure): string {
+  return REVIEW_REQUIRED[f?.kind ?? ""]?.guidance
+    ?? "This needs a decision before publishing.";
 }
 
 /** Mirrors the RPC's count exactly: a failure with no `status` key is legacy

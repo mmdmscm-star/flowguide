@@ -4,8 +4,7 @@ import { createServerClient } from "@/lib/supabase";
 import { buildMediaLedger, describeMediaFailures, type StoredMedia } from "@/lib/media-ledger";
 import { describeReviewExit, discardWouldDeletePacket } from "@/lib/review-exit";
 import { checkRunOutcome } from "@/lib/run-guards";
-import { toReviewFailures, type ReviewFailure } from "@/lib/review-units";
-import type { UnresolvedUnit } from "@/lib/enforce-chunk";
+import { attachItems, type ReviewFailure } from "@/lib/review-units";
 
 export const maxDuration = 60;
 type Context = { params: Promise<{ runId: string }> };
@@ -114,19 +113,22 @@ export async function POST(_request: Request, context: Context) {
       const failures: unknown[] = [...ledger.failures];
       const summaries = ledger.failures.length ? [describeMediaFailures(ledger.failures)] : [];
 
-      // UNRESOLVED SOURCE UNITS.
+      // REVIEW-REQUIRED UNITS.
       //
       // Enforcement refused a placement the model proposed and held the prose
-      // rather than choosing a destination for it. Those decisions are gathered
-      // here, once, from the chunk ledgers where they were recorded - the same
-      // place and the same moment as media accounting, because both answer the
-      // one question finalize exists to ask: is anything from the source
-      // unaccounted for.
-      const units: UnresolvedUnit[] = [];
+      // rather than choosing a destination for it. Gathered here, once, from
+      // the dedicated product-state column - never from `fact_ledger`, which is
+      // evidence and must stay unreadable to product behaviour, or a change to
+      // what we record for diagnosis could change what a professional is asked.
+      //
+      // Ids were assigned at production time, so this is aggregation, not
+      // derivation: two chunks reporting the same excerpt on the same record
+      // collapse to the one decision they always were.
+      const byId = new Map<string, ReviewFailure>();
       const { data: chunkRows } = await supabase
-        .from("ingestion_chunks").select("fact_ledger").eq("run_id", runId);
-      for (const c of (chunkRows ?? []) as Array<{ fact_ledger?: { unresolved?: UnresolvedUnit[] } }>) {
-        for (const u of c.fact_ledger?.unresolved ?? []) units.push(u);
+        .from("ingestion_chunks").select("review_units").eq("run_id", runId);
+      for (const c of (chunkRows ?? []) as Array<{ review_units?: ReviewFailure[] | null }>) {
+        for (const u of c.review_units ?? []) if (u?.id && !byId.has(u.id)) byId.set(u.id, u);
       }
       // Title to item id, only where the title names exactly ONE item. A title
       // shared by two items must not point the professional at whichever one
@@ -141,7 +143,7 @@ export async function POST(_request: Request, context: Context) {
           byTitle.set(k, [...(byTitle.get(k) ?? []), it.id]);
         }
       }
-      const unitFailures: ReviewFailure[] = toReviewFailures(runId, units, byTitle);
+      const unitFailures: ReviewFailure[] = attachItems([...byId.values()], byTitle);
       if (unitFailures.length) {
         failures.push(...unitFailures);
         summaries.push(unitFailures.length === 1
@@ -215,7 +217,20 @@ export async function POST(_request: Request, context: Context) {
           : {}),
       };
 
-      if (!ok) {
+      // A run someone already cleared must not be pushed back into review by a
+      // replayed finalize. `reused` alone is the wrong test: a finalize that
+      // applied and then died before writing its review would also be a replay,
+      // and skipping it there would leave the run finalized with unresolved
+      // work and publishing open. So ask the state instead - only a run that
+      // has been AFFIRMATIVELY cleared is left alone.
+      const { data: nowRow } = await supabase
+        .from("ingestion_runs").select("status, review").eq("id", runId).maybeSingle();
+      const cleared = (nowRow as { status?: string; review?: { ok?: boolean } } | null);
+      const alreadyDecided = cleared?.status === "finalized" && cleared?.review?.ok === true;
+
+      if (!ok && alreadyDecided) {
+        console.warn("[finalize] replay on an already-cleared run; leaving review alone", { runId, packetId });
+      } else if (!ok) {
         console.error("[finalize] run needs review", { runId, packetId, failures });
         // Persisting the review state needs migration 0013 (the `needs_review`
         // status and the `review` column). Until it is applied this write fails

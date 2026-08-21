@@ -193,15 +193,18 @@ export async function POST(_request: Request, context: Context) {
   let staged: unknown = outcome.result;
   let enforcement: ReturnType<typeof enforceChunkResult>["telemetry"] | null = null;
   let unresolved: ReturnType<typeof enforceChunkResult>["unresolved"] = [];
+  let reviewUnits: ReturnType<typeof enforceChunkResult>["reviewUnits"] = [];
   if (contractEnforcementEnabled()) {
     try {
       const e = enforceChunkResult({
         segmentText, chunkOrdinal: ordinal, sourceStart,
         sourceText: (run.source_text as string | null) ?? null, result: outcome.result,
+        runId,
       });
       staged = e.result;
       enforcement = e.telemetry;
       unresolved = e.unresolved;
+      reviewUnits = e.reviewUnits;
     } catch (err) {
       const message = (err as Error)?.message ?? "contract enforcement failed";
       // Evidence first, so the failure is diagnosable at all.
@@ -259,7 +262,13 @@ export async function POST(_request: Request, context: Context) {
     // ledger with a reading of a superseded response.
     await supabase
       .from("ingestion_chunks")
-      .update({ fact_ledger: { ...ledger, accounting, enforcement, unresolved } })
+      // TWO COLUMNS, TWO LIFECYCLES. `fact_ledger` is evidence and nothing
+      // product-facing may read it; `review_units` is product state that
+      // finalize aggregates into the run's review. Written together because
+      // they describe the same chunk, kept apart because a change to what we
+      // record for diagnosis must never change what a professional is asked.
+      .update({ fact_ledger: { ...ledger, accounting, enforcement, unresolved },
+                review_units: reviewUnits.length ? reviewUnits : null })
       .eq("run_id", runId)
       .eq("ordinal", ordinal)
       .eq("attempt_count", attempt);
