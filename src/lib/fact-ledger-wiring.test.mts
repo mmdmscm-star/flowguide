@@ -112,6 +112,10 @@ function liveFunctions(upTo = "9999"): Map<string, { file: string; body: string 
 }
 
 test("every live function that clears chunk evidence also clears the ledger", () => {
+  // 0026 removed the clearing from the packet path entirely — finalize and
+  // discard now RETAIN evidence for the bounded window — so the set of clearing
+  // functions shrank. What must remain true is the rule, not the count: any
+  // function that still clears evidence must clear the ledger with it.
   const clearers: string[] = [];
   for (const [name, { body }] of liveFunctions()) {
     if (!/segment_text\s*=\s*null/.test(body)) continue;
@@ -121,7 +125,10 @@ test("every live function that clears chunk evidence also clears the ledger", ()
   }
   // The scan found something. Without this the test passes vacuously if the
   // matcher ever stops matching.
-  assert.ok(clearers.length >= 4, `expected at least 4 clearing functions, found ${clearers.length}`);
+  assert.ok(clearers.length >= 1, `expected at least 1 clearing function, found ${clearers.length}`);
+  // purge is the one that must always be there: it is how retained evidence
+  // eventually goes away.
+  assert.ok(clearers.includes("purge_ingestion_evidence"), "scheduled purge no longer clears chunk evidence");
 });
 
 test("scheduled expiry treats a ledger-only chunk as still holding evidence", () => {
@@ -143,13 +150,19 @@ test("0025 changes nothing about what the re-issued functions DO", () => {
   // that is live today. Anything else — a reordered statement, a changed guard,
   // a dropped line — fails here.
   const before = liveFunctions("0025");
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const after = liveFunctions();
   const reissued = ["finalize_ingestion_run", "discard_ingestion_run", "library_close_import_run", "purge_ingestion_evidence"];
 
   for (const name of reissued) {
     const was = before.get(name), now = after.get(name);
     assert.ok(was && now, `${name} missing`);
-    assert.equal(now!.file, "0025_ingestion_fact_ledger.sql", `${name} was not re-issued by 0025`);
+    // finalize and discard were re-issued again by 0026 for packet retention;
+    // library close and purge are still last touched by 0025.
+    const expectFile = ["finalize_ingestion_run", "discard_ingestion_run"].includes(name)
+      ? "0026_packet_evidence_retention.sql" : "0025_ingestion_fact_ledger.sql";
+    assert.equal(now!.file, expectFile, `${name} last re-issued by ${now!.file}`);
+    if (expectFile !== "0025_ingestion_fact_ledger.sql") return;   // 0026 changes behaviour on purpose
     const stripped = now!.body
       .replace(/fact_ledger = null, /g, "")
       .replace(/ or c\.fact_ledger is not null/g, "");

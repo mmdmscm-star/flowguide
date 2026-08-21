@@ -2,8 +2,9 @@
 // shapes from the 20-record diagnostic source, not tidy invented lines.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { parseClaims } from "./claim-parser.ts";
+import { parseClaims, looksLikeHostname } from "./claim-parser.ts";
 import { reconcile } from "./reconcile.ts";
+import { canonicalValue } from "./canonical.ts";
 
 const labels = (s: string) => parseClaims(s).claims.filter((c) => c.kind === "labelled").map((c) => `${c.label}=${c.value}`);
 
@@ -188,3 +189,54 @@ test("the accounting identity holds, and a proposal with unresolved content is b
 
 
 
+
+// ---- TWO-LINE LABEL / VALUE, and bare hostnames ---------------------------
+
+test("two-line Label / value is recognized when the value is an identity", () => {
+  for (const [src, label, value] of [
+    ["Capacity\n120", "Capacity", "120"],
+    ["Cancellation Policy\n48 hours", "Cancellation Policy", "48 hours"],
+    ["Price\n$85", "Price", "$85"],
+    ["Website\nexample.com", "Website", "example.com"],
+  ] as const) {
+    const c = parseClaims(src).claims[0];
+    assert.ok(c, `no claim: ${src}`);
+    assert.equal(c.label, label);
+    assert.equal(c.value, value);
+  }
+});
+
+test("two-line form is recognized when the label RECURS, as a directory does", () => {
+  const src = "Address\n688 San Jose Ave, SF\n\nAddress\n3692 18th St, SF\n\nAddress\n6902 Sebastopol Ave";
+  const claims = parseClaims(src).claims.filter((c) => c.label === "Address");
+  assert.equal(claims.length, 3);
+});
+
+test("a heading followed by content is NOT a claim", () => {
+  for (const src of [
+    "Shop Directory\n1. Mitchell's Ice Cream — San Francisco",
+    "About Us\nWe have served the community since 1953 and take pride in it.",
+    "Overview\nA family-run institution.",
+  ]) assert.equal(parseClaims(src).claims.length, 0, `invented a claim: ${src}`);
+});
+
+test("the hostname validator is conservative", () => {
+  for (const t of ["e.g", "i.e", "3.5", "U.S.A", "St. Helena", "Inc.", "hello.world", "a.b"])
+    assert.equal(looksLikeHostname(t), false, `fired on: ${t}`);
+  for (const t of ["example.com", "www.example.com", "mitchellsicecream.com", "thetam.org"])
+    assert.equal(looksLikeHostname(t), true, `missed: ${t}`);
+});
+
+test("a bare hostname is a URL claim wherever it appears, and gets its scheme deterministically", () => {
+  assert.equal(parseClaims("Website: mitchellsicecream.com").claims[0].kind, "url");
+  assert.equal(parseClaims("Website\nmitchellsicecream.com").claims[0].kind, "url");
+  assert.equal(parseClaims("mitchellsicecream.com").claims[0].kind, "url");
+  assert.equal(canonicalValue("mitchellsicecream.com", "url"), "https://mitchellsicecream.com/");
+});
+
+test("a bare hostname routes to links, not details", () => {
+  const p = parseClaims("Website\nexample.com");
+  const r = reconcile(p, { links: [], details: [] });
+  assert.equal(r.resolutions[0].rung, 1);
+  assert.equal(r.resolutions[0].want, "links");
+});

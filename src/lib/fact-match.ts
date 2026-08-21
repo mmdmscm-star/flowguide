@@ -27,6 +27,10 @@ export const urlKey = (s: unknown) =>
 export function probe(text: string): Probe {
   const t = String(text ?? "").trim();
   if (/^https?:\/\//i.test(t)) return { kind: "url", needle: urlKey(t) };
+  // A bare hostname is a URL. Without this the precedence ladder sends
+  // "mitchellsicecream.com" to details instead of links.
+  if (/^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+(?:com|org|net|edu|gov|io|co|us|uk|ca|au|de|fr|nl|es|it|info|biz|dev|app|shop|store|online|site|xyz|me|tv|health|care|life)\.?$/i.test(t))
+    return { kind: "url", needle: urlKey(t) };
   if (/^[\w.+-]+@[\w-]+\.[\w.]+$/.test(t)) return { kind: "email", needle: squash(t) };
   if (/^\+?1?[-.\s(]*\d{3}[-.\s)]*\d{3}[-.\s]*\d{4}$/.test(t)) return { kind: "phone", needle: digitsOf(t) };
   if (/\$/.test(t)) return { kind: "money", needle: digitsOf(t) };

@@ -68,6 +68,10 @@ export interface Enforcement {
    *  noncanonical fields. Telemetry: how often the model duplicates a fact it
    *  was given one home for. */
   stripped: { claimId: string; from: string; text: string; reason: string }[];
+  /** Content removed from `notes` for want of source authority, PRESERVED here
+   *  rather than deleted. It is ordinary source prose the model made private;
+   *  it needs a decision, not a bin. */
+  unresolvedNotes: { text: string; reason: string }[];
 }
 
 /** Apply the contract to ONE item, given that item's resolutions. */
@@ -77,6 +81,7 @@ export function enforceItem(
   const next: Item = { ...item };
   const applied: { claimId: string; action: string }[] = [];
   const stripped: Enforcement["stripped"] = [];
+  const unresolvedNotes: Enforcement["unresolvedNotes"] = [];
   const byId = new Map(claims.map((c) => [c.id, c]));
 
   // OCCURRENCE-AWARE SLOT ASSIGNMENT. Two claims can share a label — "Care
@@ -261,8 +266,17 @@ export function enforceItem(
   // The claims it held have already been placed by their own rung above, so
   // clearing it removes a duplicate, not a fact.
   if (!opts.privacyGranted && String(next.notes ?? "").trim()) {
-    applied.push({ claimId: "-", action: "notes cleared — no source authority for privacy" });
+    // SURFACED, NOT DELETED. The ice-cream import put 13 "Why it made the list"
+    // paragraphs into notes — prose plainly written FOR the recipient, which a
+    // private field hides. Removing it from notes is right; discarding it is
+    // not. It has no safe destination yet, so it becomes an explicit unresolved
+    // item for the professional to place.
+    unresolvedNotes.push({
+      text: String(next.notes),
+      reason: "recipient-intended prose placed in a private field with no source authority",
+    });
+    applied.push({ claimId: "-", action: "notes surfaced as unresolved — no source authority for privacy" });
     next.notes = "";
   }
-  return { item: next, applied, stripped };
+  return { item: next, applied, stripped, unresolvedNotes };
 }

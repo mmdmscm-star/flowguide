@@ -98,6 +98,29 @@ function looksLikeLabel(label: string): boolean {
 
 const LABEL_RE = /^\s*[-•*]?\s*([A-Za-z0-9][A-Za-z0-9 /&()'’.+-]{0,47}):\s*(.*)$/;
 const URL_RE = /https?:\/\/[^\s"'<>)]+/gi;
+
+// BARE HOSTNAMES ARE URLs. The ice-cream source carried 15 websites and zero
+// schemes — "mitchellsicecream.com", "www.screaminmimisicecream.com" — and URL
+// detection that insists on "https://" saw none of them. A human reads those as
+// links; so should the parser, and the scheme is added by canonicalization
+// rather than demanded of the model.
+//
+// CONSERVATIVE ON PURPOSE, not "contains a dot": a known TLD, real label
+// syntax, and a whole-token match. "e.g", "i.e", "3.5", "U.S.A" and "St. Helena"
+// must never become links.
+const TLD = "com|org|net|edu|gov|mil|int|io|co|us|uk|ca|au|de|fr|nl|es|it|info|biz|dev|app|shop|store|online|site|xyz|me|tv|health|care|life";
+const HOSTNAME_RE = new RegExp(
+  `^(?:https?:\\/\\/)?(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\.)+(?:${TLD})\\.?$`, "i");
+
+/** Is this whole token a hostname we are willing to treat as a link? */
+export function looksLikeHostname(token: string): boolean {
+  const t = String(token ?? "").trim().replace(/[),.;]+$/, "");
+  if (!t || /\s/.test(t)) return false;
+  if (!HOSTNAME_RE.test(t)) return false;
+  // The label before the TLD must be a real name, not an initialism artefact.
+  const parts = t.replace(/^https?:\/\//i, "").replace(/\.$/, "").split(".");
+  return parts.length >= 2 && (parts[parts.length - 2] ?? "").length >= 2;
+}
 const EMAIL_RE = /[\w.+-]+@[\w-]+\.[\w.]+/g;
 const PHONE_RE = /\+?1?[-.\s(]*\d{3}[-.\s)]*\d{3}[-.\s]*\d{4}/g;
 
@@ -175,6 +198,27 @@ function cells(segment: string): { text: string; offset: number }[] {
   return out;
 }
 
+// TWO-LINE LABEL / VALUE. Copied directories and documents write
+//
+//   Website
+//   mitchellsicecream.com
+//
+// rather than "Website: mitchellsicecream.com". Recognising it must not turn
+// every heading into a claim — "Shop Directory" followed by the first entry is
+// a heading, not a field.
+//
+// So the pair is only accepted on structural evidence, never on vocabulary:
+//   * the label passes the same short-noun-phrase test as a colon label, AND
+//   * either the label RECURS as a standalone line in this segment — which is
+//     what a directory's repeated fields look like — or the value is an
+//     unambiguous identity on its own (hostname, phone, email, money, quantity).
+// A one-off heading satisfies neither.
+const IDENTITY_VALUE = /^(?:\$?[\d,]+(?:\.\d+)?(?:\s+[A-Za-z]{2,12})?|\+?1?[-.\s(]*\d{3}[-.\s)]*\d{3}[-.\s]*\d{4}|[\w.+-]+@[\w-]+\.[\w.]+)$/;
+function valueIsIdentity(v: string): boolean {
+  const t = v.trim();
+  return looksLikeHostname(t) || IDENTITY_VALUE.test(t);
+}
+
 export function parseClaims(segment: string, chunkOrdinal = 0): ParseResult {
   const claims: Claim[] = [];
   const ambiguous: AmbiguousUnit[] = [];
@@ -183,24 +227,59 @@ export function parseClaims(segment: string, chunkOrdinal = 0): ParseResult {
   const id = (line: number) => `${chunkOrdinal}:${line}:${seq++}`;
 
   const blocks = joinWrapped(cells(segment));
+  // How often does each short line recur on its own? A repeated standalone line
+  // in a directory is a field name.
+  const standalone = new Map<string, number>();
+  for (const b of blocks) {
+    const t = b.text.trim();
+    if (t && t.length <= 48 && !/:/.test(t)) standalone.set(t.toLowerCase(), (standalone.get(t.toLowerCase()) ?? 0) + 1);
+  }
+  const consumedAsValue = new Set<number>();
   for (let bi = 0; bi < blocks.length; bi++) {
     const { text, line, offset } = blocks[bi];
     const prev = bi > 0 ? blocks[bi - 1].text : "";
     // A URL is not a labelled line. "https://x/a.jpg" otherwise parses as the
     // label "https" with the value "//x/a.jpg".
     const isUrlLine = /^\s*[-•*]?\s*https?:\/\//i.test(text);
+    if (consumedAsValue.has(bi)) continue;
+
+    // TWO-LINE FORM, checked before the single-line one so a bare label is not
+    // mistaken for prose.
+    // A line that is ITSELF a value can never be a label. Without this,
+    // "pat@x.example.com" followed by a phone number was read as a field name.
+    if (!/:/.test(text) && looksLikeLabel(text) && !valueIsIdentity(text) && bi + 1 < blocks.length) {
+      const nextText = blocks[bi + 1].text.trim();
+      const nextIsLabelLine = /:/.test(nextText) || (looksLikeLabel(nextText) && (standalone.get(nextText.toLowerCase()) ?? 0) > 1);
+      const recurs = (standalone.get(text.toLowerCase()) ?? 0) > 1;
+      if (nextText && !nextIsLabelLine && (recurs || valueIsIdentity(nextText))) {
+        const label = text.trim();
+        const kind = looksLikeHostname(nextText) ? "url" : "labelled";
+        claims.push(kind === "url"
+          ? { id: id(line), kind: "url", label, value: nextText, line, offset, raw: `${text} / ${nextText}` }
+          : { id: id(line), kind: "labelled", label, value: nextText, line, offset, raw: `${text} / ${nextText}` });
+        consumedAsValue.add(bi + 1);
+        continue;
+      }
+    }
+
     const m = isUrlLine ? null : LABEL_RE.exec(text);
     if (m && looksLikeLabel(m[1])) {
       const label = m[1].trim();
       const rest = m[2].trim();
       if (!rest) { fragments.push({ line, offset, text, reason: "label with no value" }); continue; }
       const { value, trailing } = splitTrailingProse(rest);
-      claims.push({ id: id(line), kind: "labelled", label, value, line, offset, raw: text });
+      claims.push(looksLikeHostname(value)
+        ? { id: id(line), kind: "url", label, value, line, offset, raw: text }
+        : { id: id(line), kind: "labelled", label, value, line, offset, raw: text });
       if (trailing) fragments.push({ line, offset, text: trailing, reason: "prose appended to a labelled line" });
       continue;
     }
     // Unlabelled lines: still claim anything with an unambiguous identity.
     let claimedHere = false;
+    if (looksLikeHostname(text)) {
+      claims.push({ id: id(line), kind: "url", value: text.trim(), line, offset, raw: text });
+      claimedHere = true;
+    }
     for (const [re, kind] of [[URL_RE, "url"], [EMAIL_RE, "email"], [PHONE_RE, "phone"]] as const) {
       re.lastIndex = 0;
       for (const hit of text.match(re) ?? []) {

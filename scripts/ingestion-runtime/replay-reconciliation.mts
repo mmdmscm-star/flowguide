@@ -130,8 +130,11 @@ const LABEL_LINE = /^\s*[-•*]?\s*([A-Za-z0-9][A-Za-z0-9 /&()'’.+-]{0,47}):\s
 let expected = 0, claimed = 0;
 const missed: string[] = [];
 for (const rec of SRC) {
+  // ANY claim carrying the label counts. "Existing Website: https://…" is a URL
+  // claim that keeps its label; filtering to kind "labelled" scored nine
+  // correctly-claimed websites as misses and measured the filter, not recall.
   const got = new Set(parseClaims(rec.cells.join("\t")).claims
-    .filter((c) => c.kind === "labelled").map((c) => c.label));
+    .filter((c) => c.label).map((c) => c.label));
   for (const cell of rec.cells.slice(2, 4))
     for (const line of String(cell ?? "").split("\n")) {
       const m = LABEL_LINE.exec(line.trim());

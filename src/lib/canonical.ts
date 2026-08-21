@@ -37,7 +37,11 @@ export function canonicalLabel(label: string): string {
  *  is left exactly as written — path case can be significant, and a server that
  *  distinguishes /A from /a is not ours to second-guess. */
 export function canonicalUrl(raw: string): string {
-  const s = tidy(raw);
+  let s = tidy(raw);
+  // A bare hostname is a URL that has not been written out. FlowGuide supplies
+  // the scheme deterministically; the model is never asked to add one, and the
+  // source is not altered — only its rendering.
+  if (s && !/^[a-z][a-z0-9+.-]*:\/\//i.test(s) && /^[a-z0-9-]+(\.[a-z0-9-]+)+\.?$/i.test(s)) s = `https://${s}`;
   try {
     const u = new URL(s);
     u.protocol = u.protocol.toLowerCase();

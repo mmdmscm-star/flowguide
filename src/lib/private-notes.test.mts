@@ -89,5 +89,8 @@ test("the hotfix added no migration — it is a read-layer change only", () => {
   // highest migration number must still be the fact ledger.
   const nums = readdirSync("supabase/migrations")
     .filter((f) => /^\d{4}_/.test(f)).map((f) => Number(f.slice(0, 4))).sort((a, b) => a - b);
-  assert.equal(Math.max(...nums), 25, "a migration was added — this fix requires none");
+  // The privacy hotfix itself added none. 0026 is packet-evidence retention,
+  // an unrelated later change — this asserts no migration was smuggled INTO the
+  // hotfix, not that the schema froze afterwards.
+  assert.ok(Math.max(...nums) <= 26, `unexpected migration ${Math.max(...nums)}`);
 });
