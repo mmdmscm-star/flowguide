@@ -19,7 +19,22 @@ export interface EnforcementTelemetry {
   privacyRejected: number; itemsGoverned: number;
 }
 
-export interface ChunkEnforcement { result: unknown; telemetry: EnforcementTelemetry }
+/** Source content that survived, attached to its record, awaiting a decision.
+ *  NOT hidden, NOT deleted, and NOT placed into description or details — those
+ *  would each be a silent choice the professional never made. */
+export interface UnresolvedUnit {
+  record: number;
+  title: string | null;
+  kind: "privacy-rejected" | "source-unresolved";
+  text: string;
+  reason: string;
+}
+
+export interface ChunkEnforcement {
+  result: unknown;
+  telemetry: EnforcementTelemetry;
+  unresolved: UnresolvedUnit[];
+}
 
 const empty = (): EnforcementTelemetry => ({
   accepted: 0, repaired: 0, stripped: 0, sourceUnresolved: 0,
@@ -40,24 +55,34 @@ function withItems(result: unknown, next: Record<string, unknown>[]): unknown {
   return { ...r, items: next };
 }
 
+/** Test-only fault injection, dead code in production builds. Lets the control
+ *  test prove that an enforcement failure does NOT stage unprotected output. */
+function maybeThrowForTest(): void {
+  if (process.env.NODE_ENV === "production") return;
+  if (process.env.FLOWGUIDE_TEST_ENFORCE_THROW === "1")
+    throw new Error("injected enforcement failure (test hook)");
+}
+
 export function enforceChunkResult(opts: {
   segmentText: string; chunkOrdinal: number; sourceStart: number;
   sourceText: string | null; result: unknown;
 }): ChunkEnforcement {
   const { segmentText, chunkOrdinal, sourceStart, sourceText, result } = opts;
-  if (!contractEnforcementEnabled()) return { result, telemetry: empty() };
+  if (!contractEnforcementEnabled()) return { result, telemetry: empty(), unresolved: [] };
+  maybeThrowForTest();
 
   const r = (result ?? {}) as { items?: unknown; sections?: { items?: unknown }[] };
   const items = [
     ...(Array.isArray(r.items) ? r.items : []),
     ...(Array.isArray(r.sections) ? r.sections.flatMap((s) => (Array.isArray(s?.items) ? s.items : [])) : []),
   ].filter((x): x is Record<string, unknown> => Boolean(x) && typeof x === "object");
-  if (!items.length || !sourceText) return { result, telemetry: empty() };
+  if (!items.length || !sourceText) return { result, telemetry: empty(), unresolved: [] };
 
   const env = recordEnvelopes(sourceText);
   const parsed = parseClaims(segmentText, chunkOrdinal);
   const a = attributeAll(parsed.claims, parsed.ambiguous, parsed.fragments, env, sourceStart);
   const t = empty();
+  const unresolved: UnresolvedUnit[] = [];
   t.attributionUnresolved = a.unattributedClaims.length + a.unattributedAmbiguous.length;
 
   const bound = env ? bindByProvenance(env, sourceText, items).bound : new Map<number, Record<string, unknown>>();
@@ -74,17 +99,24 @@ export function enforceChunkResult(opts: {
     t.stripped += e.stripped.length;
     t.itemsGoverned++;
 
-    // RECIPIENT-INTENDED PROSE THAT LOST ITS PRIVATE FIELD IS NOT DISCARDED.
-    // Without source authority a note may not stand, but the words were written
-    // for the client. With no narrative field yet, they are appended to the
-    // recipient-visible description and counted, rather than hidden or deleted.
-    let out = e.item;
+    // RECIPIENT-INTENDED PROSE THAT LOST ITS PRIVATE FIELD BECOMES AN EXPLICIT
+    // UNRESOLVED UNIT — attached to its record, never placed automatically.
+    //
+    // An earlier version appended it to `description`, which would have turned
+    // description into exactly the narrative overflow field we decided not to
+    // create. Choosing a destination on the professional's behalf is the same
+    // class of error as the model choosing `notes`: it looks tidy and it hides
+    // a decision nobody made.
     for (const un of e.unresolvedNotes) {
       t.privacyRejected++;
-      const desc = String(out.description ?? "").trim();
-      out = { ...out, description: desc ? `${desc}\n\n${un.text.trim()}` : un.text.trim() };
+      unresolved.push({ record: rec, title: String(item.title ?? "") || null,
+        kind: "privacy-rejected", text: un.text, reason: un.reason });
     }
-    replaced.set(item, out);
+    for (const r of res.resolutions.filter((x) => x.outcome === "SOURCE_UNRESOLVED")) {
+      unresolved.push({ record: rec, title: String(item.title ?? "") || null,
+        kind: "source-unresolved", text: r.value, reason: r.why });
+    }
+    replaced.set(item, e.item);
   }
-  return { result: withItems(result, items.map((it) => replaced.get(it) ?? it)), telemetry: t };
+  return { result: withItems(result, items.map((it) => replaced.get(it) ?? it)), telemetry: t, unresolved };
 }

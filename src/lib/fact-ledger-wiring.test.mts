@@ -36,11 +36,13 @@ test("the ledger has exactly one write site and no read site", () => {
   const hits = files.filter((f) => readFileSync(f, "utf8").includes("fact_ledger"));
   assert.deepEqual(hits, [ROUTE], `fact_ledger appears outside the chunk route: ${hits.join(", ")}`);
 
-  // The single occurrence is an UPDATE. A select/order/filter on the column
-  // would mean something started depending on it.
+  // TWO writes now, both updates: the normal ledger, and the fail-closed
+  // evidence write when enforcement throws. Still no read path — a select,
+  // order or filter on the column would mean something began depending on it.
   const uses = route.split("fact_ledger").length - 1;
-  assert.equal(uses, 1, "the route touches fact_ledger more than once");
-  assert.match(route, /\.update\(\{ fact_ledger: \{ \.\.\.ledger, accounting, enforcement \} \}\)/);
+  assert.equal(uses, 2, "unexpected number of fact_ledger touches in the route");
+  assert.match(route, /\.update\(\{ fact_ledger: \{ \.\.\.ledger, accounting, enforcement, unresolved \} \}\)/);
+  assert.match(route, /fact_ledger: \{ enforcementError/, "the fail-closed evidence write is missing");
   assert.doesNotMatch(route, /select\([^)]*fact_ledger/);
 });
 

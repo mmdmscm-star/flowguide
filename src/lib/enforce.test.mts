@@ -238,3 +238,49 @@ test("enforcement is inert when the flag is off", async () => {
   assert.equal(out.telemetry.itemsGoverned, 0);
   if (was === undefined) delete process.env.FLOWGUIDE_ENFORCE_CONTRACT; else process.env.FLOWGUIDE_ENFORCE_CONTRACT = was;
 });
+
+test("FAIL CLOSED: an enforcement failure must not stage the raw model result", async () => {
+  const { enforceChunkResult } = await import("./enforce-chunk.ts");
+  const flag = process.env.FLOWGUIDE_ENFORCE_CONTRACT, thr = process.env.FLOWGUIDE_TEST_ENFORCE_THROW;
+  process.env.FLOWGUIDE_ENFORCE_CONTRACT = "1";
+  process.env.FLOWGUIDE_TEST_ENFORCE_THROW = "1";
+  assert.throws(() => enforceChunkResult({
+    segmentText: "Community Fee: $1", chunkOrdinal: 0, sourceStart: 0,
+    sourceText: "Community Fee: $1", result: { items: [{ title: "A" }] },
+  }), /injected enforcement failure/);
+  if (flag === undefined) delete process.env.FLOWGUIDE_ENFORCE_CONTRACT; else process.env.FLOWGUIDE_ENFORCE_CONTRACT = flag;
+  if (thr === undefined) delete process.env.FLOWGUIDE_TEST_ENFORCE_THROW; else process.env.FLOWGUIDE_TEST_ENFORCE_THROW = thr;
+});
+
+test("the route stages nothing when enforcement throws", () => {
+  const route = readFileSync("src/app/api/ingest/[runId]/chunks/[ordinal]/route.ts", "utf8");
+  const catchAt = route.indexOf("catch (err)");
+  const stageAt = route.indexOf("stage_chunk_result");
+  assert.ok(catchAt > 0 && catchAt < stageAt, "the enforcement catch must precede staging");
+  const block = route.slice(catchAt, stageAt);
+  assert.match(block, /mark_chunk_failed/, "a contract failure must mark the chunk failed");
+  assert.match(block, /return NextResponse\.json/, "a contract failure must return, not fall through to staging");
+  assert.doesNotMatch(block, /staged = outcome\.result/, "the raw model result is being used as a fallback");
+});
+
+test("privacy-rejected prose is preserved as unresolved, never placed", async () => {
+  const { enforceChunkResult } = await import("./enforce-chunk.ts");
+  const was = process.env.FLOWGUIDE_ENFORCE_CONTRACT;
+  process.env.FLOWGUIDE_ENFORCE_CONTRACT = "1";
+  const src = "1. Alpha Shop\nWebsite\nalpha.example.com\n\n2. Bravo Shop\nWebsite\nbravo.example.com\n\n3. Cedar Shop\nWebsite\ncedar.example.com\n";
+  const out = enforceChunkResult({
+    segmentText: src, chunkOrdinal: 0, sourceStart: 0, sourceText: src,
+    result: { items: [
+      { title: "Alpha Shop", description: "An overview.", notes: "Why it made the list: a local favourite.",
+        links: [{ url: "https://alpha.example.com/" }] },
+    ] },
+  });
+  const item = (out.result as any).items[0];
+  assert.equal(String(item.notes ?? ""), "", "unauthorised note survived");
+  assert.equal(item.description, "An overview.", "prose was appended to description");
+  const pr = out.unresolved.filter((u) => u.kind === "privacy-rejected");
+  assert.equal(pr.length, 1, "the rejected prose was not preserved as unresolved");
+  assert.match(pr[0].text, /a local favourite/);
+  assert.equal(pr[0].title, "Alpha Shop", "unresolved content lost its record");
+  if (was === undefined) delete process.env.FLOWGUIDE_ENFORCE_CONTRACT; else process.env.FLOWGUIDE_ENFORCE_CONTRACT = was;
+});

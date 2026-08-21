@@ -87,6 +87,24 @@ try {
 
   check("WEBSITES restored to canonical Links", withLink === (items ?? []).length && withLink > 0,
     `${withLink}/${(items ?? []).length} items have a link`);
+  const unresolved = chunks.flatMap((c: any) => c.fact_ledger?.unresolved ?? []);
+  const pr = unresolved.filter((u: any) => u.kind === "privacy-rejected");
+  // EITHER the model kept recipient prose out of notes (the prompt fix working),
+  // OR it did not and every rejected unit was preserved with its record. What
+  // must never happen is a note being emptied and its content vanishing.
+  // Asserting pr.length > 0 would have required the model to misbehave.
+  check("recipient prose is accounted for: kept out of notes, or preserved as unresolved",
+    (notesLeft === 0 && pr.length === 0) || (pr.length > 0 && pr.every((u: any) => u.title)),
+    `notesLeft=${notesLeft} privacyRejected=${pr.length}`);
+  const source = readFileSync(process.env.SRC_FILE ?? "/tmp/flagged-source.txt", "utf8");
+  const whys = (source.match(/Why it made the list:/g) ?? []).length;
+  const survived = (items ?? []).filter((i: any) =>
+    /why it made the list/i.test(`${i.description ?? ""} ${i.notes ?? ""}`)).length;
+  check("every 'Why it made the list' paragraph survived somewhere recipient-visible",
+    survived === whys, `${survived}/${whys} survived`);
+  check("...and NOT appended to description",
+    (items ?? []).every((i: any) => !pr.some((u: any) => String(i.description ?? "").includes(String(u.text).slice(0, 30)))),
+    "prose leaked into description");
   check("every link is canonical https", (links ?? []).every((l: any) => /^https:\/\//.test(l.url)),
     (links ?? []).slice(0, 2).map((l: any) => l.url).join(" "));
   check("NO private note survives without source authority", notesLeft === 0, `${notesLeft} items still carry notes`);

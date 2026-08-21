@@ -7,6 +7,7 @@ import { nextFault } from "@/lib/test-faults";
 import { buildChunkLedger } from "@/lib/fact-ledger";
 import { buildChunkAccounting } from "@/lib/chunk-accounting";
 import { enforceChunkResult } from "@/lib/enforce-chunk";
+import { contractEnforcementEnabled } from "@/lib/enforce";
 
 export const maxDuration = 60;
 type Context = { params: Promise<{ runId: string; ordinal: string }> };
@@ -184,19 +185,39 @@ export async function POST(_request: Request, context: Context) {
   // placed and rendered from the source rather than from the model's paraphrase,
   // and private-note content without source authority is surfaced instead of
   // hidden. Runs BEFORE staging so what is staged is what was contracted.
+  // FAIL CLOSED. The contract exists because the raw model result is not
+  // trusted enough to be the fallback — so if enforcement throws, the
+  // unprotected output must NOT reach staging. The chunk is marked failed with
+  // a permanent contract error, the segment and the raw result are preserved in
+  // the ledger for diagnosis, and every other chunk in the run continues.
   let staged: unknown = outcome.result;
   let enforcement: ReturnType<typeof enforceChunkResult>["telemetry"] | null = null;
-  try {
-    const e = enforceChunkResult({
-      segmentText, chunkOrdinal: ordinal, sourceStart,
-      sourceText: (run.source_text as string | null) ?? null, result: outcome.result,
-    });
-    staged = e.result;
-    enforcement = e.telemetry;
-  } catch {
-    // A failure here must never cost the professional their import: the model's
-    // own result stands, exactly as if the flag were off.
-    staged = outcome.result;
+  let unresolved: ReturnType<typeof enforceChunkResult>["unresolved"] = [];
+  if (contractEnforcementEnabled()) {
+    try {
+      const e = enforceChunkResult({
+        segmentText, chunkOrdinal: ordinal, sourceStart,
+        sourceText: (run.source_text as string | null) ?? null, result: outcome.result,
+      });
+      staged = e.result;
+      enforcement = e.telemetry;
+      unresolved = e.unresolved;
+    } catch (err) {
+      const message = (err as Error)?.message ?? "contract enforcement failed";
+      // Evidence first, so the failure is diagnosable at all.
+      try {
+        await supabase.from("ingestion_chunks")
+          .update({ fact_ledger: { enforcementError: message, rawResult: outcome.result, segmentText } })
+          .eq("run_id", runId).eq("ordinal", ordinal).eq("attempt_count", attempt);
+      } catch { /* evidence is best-effort; the failure below is not */ }
+      await supabase.rpc("mark_chunk_failed", {
+        p_run_id: runId, p_owner: session.userId, p_ordinal: ordinal, p_attempt: attempt,
+        p_error: `${PERMANENT_MARK} contract enforcement failed: ${message}`,
+      });
+      return NextResponse.json(
+        { error: "contract_enforcement_failed", message, permanent: true }, { status: 422 },
+      );
+    }
   }
 
   const { error: stageErr } = await supabase.rpc("stage_chunk_result", {
@@ -238,7 +259,7 @@ export async function POST(_request: Request, context: Context) {
     // ledger with a reading of a superseded response.
     await supabase
       .from("ingestion_chunks")
-      .update({ fact_ledger: { ...ledger, accounting, enforcement } })
+      .update({ fact_ledger: { ...ledger, accounting, enforcement, unresolved } })
       .eq("run_id", runId)
       .eq("ordinal", ordinal)
       .eq("attempt_count", attempt);

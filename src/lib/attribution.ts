@@ -11,6 +11,7 @@
 // that could disagree with the one ingestion actually chunked on.
 import { detectSourceRecords, detectListRecords } from "./segmentation.ts";
 import type { Claim, Fragment, AmbiguousUnit } from "./claim-parser.ts";
+import { looksLikeHostname } from "./claim-parser.ts";
 
 export interface Envelope {
   index: number;
@@ -117,8 +118,22 @@ const PHONE_A = /\+?1?[-.\s(]*\d{3}[-.\s)]*\d{3}[-.\s]*\d{4}/g;
 
 function anchorsOf(text: string): Set<string> {
   const out = new Set<string>();
-  for (const m of String(text ?? "").match(EMAIL_A) ?? []) out.add(`e:${m.toLowerCase()}`);
-  for (const m of String(text ?? "").match(URL_A) ?? []) out.add(`u:${m.toLowerCase().replace(/[/.]+$/, "")}`);
+  const t = String(text ?? "");
+  for (const m of t.match(EMAIL_A) ?? []) out.add(`e:${m.toLowerCase()}`);
+  // HOSTNAME, NOT THE WRITTEN FORM. The source may say "alpha.example.com" while
+  // the proposal carries "https://alpha.example.com/" — the same identity in two
+  // spellings. Keying on the raw string meant a source whose only identifier was
+  // a bare domain produced NO anchors and could never be bound, which is exactly
+  // the shape of a pasted directory.
+  for (const m of t.match(URL_A) ?? []) {
+    const host = m.toLowerCase().replace(/^https?:\/\//, "").split(/[/?#]/)[0].replace(/\.$/, "");
+    if (host) out.add(`u:${host}`);
+  }
+  for (const tok of t.split(/[\s"'<>(),;]+/)) {
+    const bare = tok.trim().replace(/[.,;:]+$/, "");
+    if (bare && !bare.includes("@") && !/^https?:/i.test(bare) && looksLikeHostname(bare))
+      out.add(`u:${bare.toLowerCase().replace(/\.$/, "")}`);
+  }
   for (const m of String(text ?? "").match(PHONE_A) ?? []) {
     const d = m.replace(/\D/g, "");
     if (d.length >= 10) out.add(`p:${d.slice(-10)}`);
