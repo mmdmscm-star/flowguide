@@ -12,16 +12,23 @@
 // glued onto the end of a labelled line.
 import { probe } from "./fact-match.ts";
 
-export type ClaimKind = "labelled" | "url" | "email" | "phone";
+export type ClaimKind = "labelled" | "url" | "email" | "phone" | "pricing";
 export interface Claim {
   id: string;
   kind: ClaimKind;
   label?: string;
   value: string;
   line: number;
+  /** Offset of this claim's block within the segment. Added to the chunk's
+   *  source_start it gives an absolute source offset, which is what lets a
+   *  claim be attributed to a record envelope BEFORE the model runs. */
+  offset: number;
   raw: string;
+  /** Pricing claims carry their parsed anchors so matching can be tolerant of
+   *  reordering without becoming fuzzy. */
+  anchors?: { amounts: string[]; unit?: string; descriptor: string };
 }
-export interface Fragment { line: number; text: string; reason: string }
+export interface Fragment { line: number; offset: number; text: string; reason: string }
 export interface ParseResult { claims: Claim[]; fragments: Fragment[] }
 
 // A LABEL IS A SHORT NOUN PHRASE, not a clause. Same rule as the fact ledger:
@@ -58,14 +65,14 @@ const PHONE_RE = /\+?1?[-.\s(]*\d{3}[-.\s)]*\d{3}[-.\s]*\d{4}/g;
 const CONTINUES = /[,;:]$|\b(for|of|to|and|or|with|the|a|an|from|per|than|based on|including)$/i;
 
 /** Join wrapped continuation lines onto the value they belong to. */
-function joinWrapped(lines: string[]): { text: string; line: number }[] {
-  const out: { text: string; line: number }[] = [];
+function joinWrapped(lines: { text: string; offset: number }[]): { text: string; line: number; offset: number }[] {
+  const out: { text: string; line: number; offset: number }[] = [];
   for (let i = 0; i < lines.length; i++) {
-    const cur = lines[i].trim();
+    const cur = lines[i].text.trim();
     if (!cur) continue;
     let text = cur, n = i;
     while (n + 1 < lines.length) {
-      const next = (lines[n + 1] ?? "").trim();
+      const next = (lines[n + 1]?.text ?? "").trim();
       if (!next) break;
       const carriesOn = CONTINUES.test(text);
       const nextStartsSomethingNew = LABEL_RE.test(next) || /^[-•*]/.test(next) || /^https?:/i.test(next);
@@ -73,7 +80,7 @@ function joinWrapped(lines: string[]): { text: string; line: number }[] {
       text = `${text} ${next}`;
       n++;
     }
-    out.push({ text, line: i });
+    out.push({ text, line: i, offset: lines[i].offset });
     i = n;
   }
   return out;
@@ -115,10 +122,15 @@ function splitTrailingProse(value: string): { value: string; trailing?: string }
 // cells are separated before anything else happens. Quote state is not tracked
 // across chunk boundaries — a chunk can begin mid-cell — so stray delimiters are
 // trimmed per block rather than parsed as a document.
-function cells(segment: string): string[] {
-  return String(segment ?? "")
-    .split(/[\n\t]/)
-    .map((b) => b.trim().replace(/^"+/, "").replace(/"+$/, "").replace(/""/g, '"').trim());
+function cells(segment: string): { text: string; offset: number }[] {
+  const src = String(segment ?? "");
+  const out: { text: string; offset: number }[] = [];
+  let at = 0;
+  for (const raw of src.split(/[\n\t]/)) {
+    out.push({ text: raw.trim().replace(/^"+/, "").replace(/"+$/, "").replace(/""/g, '"').trim(), offset: at });
+    at += raw.length + 1;
+  }
+  return out;
 }
 
 export function parseClaims(segment: string, chunkOrdinal = 0): ParseResult {
@@ -127,18 +139,23 @@ export function parseClaims(segment: string, chunkOrdinal = 0): ParseResult {
   let seq = 0;
   const id = (line: number) => `${chunkOrdinal}:${line}:${seq++}`;
 
-  for (const { text, line } of joinWrapped(cells(segment))) {
+  const blocks = joinWrapped(cells(segment));
+  let prevAmbiguous = false;
+  for (let bi = 0; bi < blocks.length; bi++) {
+    const { text, line, offset } = blocks[bi];
+    const prev = bi > 0 ? blocks[bi - 1].text : "";
     // A URL is not a labelled line. "https://x/a.jpg" otherwise parses as the
     // label "https" with the value "//x/a.jpg".
     const isUrlLine = /^\s*[-•*]?\s*https?:\/\//i.test(text);
     const m = isUrlLine ? null : LABEL_RE.exec(text);
     if (m && looksLikeLabel(m[1])) {
+      prevAmbiguous = false;
       const label = m[1].trim();
       const rest = m[2].trim();
-      if (!rest) { fragments.push({ line, text, reason: "label with no value" }); continue; }
+      if (!rest) { fragments.push({ line, offset, text, reason: "label with no value" }); continue; }
       const { value, trailing } = splitTrailingProse(rest);
-      claims.push({ id: id(line), kind: "labelled", label, value, line, raw: text });
-      if (trailing) fragments.push({ line, text: trailing, reason: "prose appended to a labelled line" });
+      claims.push({ id: id(line), kind: "labelled", label, value, line, offset, raw: text });
+      if (trailing) fragments.push({ line, offset, text: trailing, reason: "prose appended to a labelled line" });
       continue;
     }
     // Unlabelled lines: still claim anything with an unambiguous identity.
@@ -146,7 +163,7 @@ export function parseClaims(segment: string, chunkOrdinal = 0): ParseResult {
     for (const [re, kind] of [[URL_RE, "url"], [EMAIL_RE, "email"], [PHONE_RE, "phone"]] as const) {
       re.lastIndex = 0;
       for (const hit of text.match(re) ?? []) {
-        claims.push({ id: id(line), kind, value: hit, line, raw: text });
+        claims.push({ id: id(line), kind, value: hit, line, offset, raw: text });
         claimedHere = true;
       }
     }
@@ -156,7 +173,14 @@ export function parseClaims(segment: string, chunkOrdinal = 0): ParseResult {
       // make. Declining them here is the honest position: the layer cannot
       // guarantee what it cannot identify, and pretending otherwise would be
       // the more dangerous error.
-      fragments.push({ line, text, reason: /\$|\d/.test(text) ? "unlabelled content carrying numbers" : "unlabelled prose" });
+      const priced = pricingClaim(text, prev, prevAmbiguous);
+      prevAmbiguous = priced === "ambiguous";
+      if (priced === "ambiguous")
+        fragments.push({ line, offset, text, reason: "priced line whose descriptor cannot be resolved" });
+      else if (priced)
+        claims.push({ id: id(line), kind: "pricing", value: text, line, offset, raw: text, anchors: priced });
+      else
+        fragments.push({ line, offset, text, reason: /\$|\d/.test(text) ? "unlabelled content carrying numbers" : "unlabelled prose" });
     }
   }
   return { claims, fragments };
@@ -167,4 +191,105 @@ export function specializedValueKind(c: Claim): ClaimKind | null {
   if (c.kind !== "labelled") return c.kind;
   const k = probe(c.value).kind;
   return k === "url" || k === "email" || k === "phone" ? k : null;
+}
+
+// ---------------------------------------------------------------------------
+// UNLABELLED PRICING — a bounded claim class, not a "$ means fact" heuristic.
+//
+// Most real pricing in the diagnostic source carries no label at all:
+//
+//   One Bedroom $4,090/month          descriptor then amount
+//   - $5,710/month Two Bedroom        amount then descriptor
+//   Studio (Suite) - from $4,695/month
+//   Respite (if available) $450/day
+//   $10,000-$15,000/month             a range
+//
+// Leaving these to the model means they carry no guarantee, and they are the
+// bulk of what a professional is actually selling. So they are claimed — but
+// only when the pairing is unambiguous.
+//
+// THE DECEPTIVE CASE, from Vine Ridge, is why confidence has to look backwards:
+//
+//   Assisted Living/Memory Care Studio      <- dangling descriptor
+//   - $4,090/month One Bedroom              <- reads confident, IS NOT
+//   - $4,825/month Large One Bedroom
+//
+// Taken alone, line 2 looks like "amount then descriptor" and would pair
+// $4,090 with "One Bedroom". It is wrong: $4,090 belongs to the Studio above,
+// and "One Bedroom" belongs to the $4,825 below. A parser that scores this
+// confident would silently mis-price a community. When the preceding block is a
+// bare descriptor, the association is genuinely ambiguous and says so.
+const MONEY = /\$\s?\d[\d,]*(?:\.\d{2})?/g;
+const RANGE = /\$\s?\d[\d,]*(?:\.\d{2})?\s*(?:-|–|—|to)\s*\$?\s?\d[\d,]*(?:\.\d{2})?/;
+const UNIT = /\/\s*(month|mo|day|night|year|week|hour)\b|\bper\s+(month|day|night|year|week|hour)\b/i;
+const DESCRIPTOR_WORD = /\b(studio|bedroom|suite|room|apartment|cottage|villa|shared|private|companion|respite|memory|assisted|independent|skilled|nursing|care|deluxe|alcove|courtyard|occupancy|entrance|second|person|pet|community|fee|level|tier|unit)\b/i;
+
+/** A block that is only a descriptor — no money, not a label, not a URL. */
+function isBareDescriptor(text: string): boolean {
+  if (!text || MONEY.test(text)) { MONEY.lastIndex = 0; return false; }
+  MONEY.lastIndex = 0;
+  if (/^\s*https?:/i.test(text) || /:\s*\S/.test(text)) return false;
+  return DESCRIPTOR_WORD.test(text) && text.trim().split(/\s+/).length <= 8;
+}
+
+export type PricingAnchors = { amounts: string[]; unit?: string; descriptor: string };
+
+/** Returns anchors when the amount/descriptor pairing is unambiguous,
+ *  "ambiguous" when a priced line's descriptor cannot be resolved, or null. */
+export function pricingClaim(text: string, prevBlock = "", prevWasAmbiguous = false): PricingAnchors | "ambiguous" | null {
+  MONEY.lastIndex = 0;
+  const amounts = text.match(MONEY) ?? [];
+  if (!amounts.length) return null;
+  const stripped = text.replace(/^\s*[-•*]\s*/, "").trim();
+  if (/:\s*\S/.test(stripped)) return null;              // labelled lines are rung 2, not here
+
+  const isRange = RANGE.test(stripped);
+  const distinct = new Set(amounts.map((a) => a.replace(/\D/g, "")));
+  // More than one independent amount on a line, and no range, means more than
+  // one fact sharing one descriptor. Do not guess which is which.
+  if (!isRange && distinct.size > 1) return "ambiguous";
+
+  const first = amounts[0] ?? "", last = amounts[amounts.length - 1] ?? "";
+  const before = stripped.slice(0, stripped.indexOf(first)).replace(/[-–—:]\s*$/, "").trim();
+  const after = stripped.slice(stripped.indexOf(last) + last.length)
+    .replace(UNIT, " ").replace(/^\s*[-–—]\s*/, "").trim();
+
+  const beforeIsDesc = DESCRIPTOR_WORD.test(before);
+  const afterIsDesc = DESCRIPTOR_WORD.test(after);
+
+  // The Vine Ridge trap: a dangling descriptor above means the amount's real
+  // partner is behind it, and the words after it belong to the NEXT amount.
+  // AMBIGUITY PROPAGATES THROUGH A RUN OF PRICED LINES. In Vine Ridge the
+  // descriptor shift is systemic: once one amount is orphaned from its
+  // descriptor, every following line in the run inherits the same misalignment
+  // while looking perfectly confident on its own.
+  if (prevWasAmbiguous && !beforeIsDesc) return "ambiguous";
+  if (isBareDescriptor(prevBlock) && !beforeIsDesc) {
+    // TWO DIFFERENT SHAPES, and the difference is whether the amount line
+    // carries a descriptor of its own.
+    //
+    //   Creekwood — clean alternation, confidently pairable:
+    //     - Private Room
+    //     - $10,000-$15,000/month        <- no descriptor of its own
+    //
+    //   Vine Ridge — shifted, genuinely ambiguous:
+    //     Assisted Living/Memory Care Studio
+    //     - $4,090/month One Bedroom     <- carries a descriptor, which belongs
+    //                                       to the NEXT amount, not this one
+    if (afterIsDesc) return "ambiguous";
+    return {
+      amounts: amounts.map((a) => a.replace(/\D/g, "")),
+      unit: ((): string | undefined => { const u = UNIT.exec(text); return (u?.[1] ?? u?.[2])?.toLowerCase(); })(),
+      descriptor: prevBlock.replace(/^\s*[-•*]\s*/, "").trim(),
+    };
+  }
+  if (beforeIsDesc && afterIsDesc) return "ambiguous";     // descriptors on both sides
+  const descriptor = beforeIsDesc ? before : afterIsDesc ? after : "";
+  if (!descriptor) return "ambiguous";                     // priced, but nothing to call it
+
+  return {
+    amounts: amounts.map((a) => a.replace(/\D/g, "")),
+    unit: ((): string | undefined => { const u = UNIT.exec(text); return (u?.[1] ?? u?.[2])?.toLowerCase(); })(),
+    descriptor,
+  };
 }

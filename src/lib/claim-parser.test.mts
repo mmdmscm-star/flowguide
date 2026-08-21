@@ -57,13 +57,33 @@ test("a label with no value is a fragment, never an empty claim", () => {
   assert.equal(r.fragments[0].reason, "label with no value");
 });
 
-test("unlabelled pricing lines are declined LOUDLY, not silently", () => {
-  // Vine Ridge's room list has real prices and no labels. The parser cannot
-  // guarantee structure it cannot identify — but it must say so.
-  const r = parseClaims("Assisted Living/Memory Care Studio\n- $4,090/month One Bedroom\n- $4,825/month");
-  assert.equal(r.claims.length, 0);
-  assert.equal(r.fragments.length, 3);
-  assert.ok(r.fragments.some((f) => f.reason === "unlabelled content carrying numbers"));
+test("unlabelled pricing is claimed when the pairing is unambiguous", () => {
+  for (const [line, descriptor] of [
+    ["One Bedroom $4,090/month", "One Bedroom"],
+    ["- $5,710/month Two Bedroom/double occupancy", "Two Bedroom/double occupancy"],
+    ["Respite (if available) $450/day", "Respite (if available)"],
+  ] as const) {
+    const c = parseClaims(line).claims.find((x) => x.kind === "pricing");
+    assert.ok(c, `not claimed: ${line}`);
+    assert.equal(c!.anchors?.descriptor, descriptor);
+  }
+  const range = parseClaims("Private Room $10,000-$15,000/month").claims[0];
+  assert.deepEqual(range.anchors?.amounts, ["10000", "15000"]);
+  assert.equal(range.anchors?.unit, "month");
+});
+
+test("Vine Ridge — the wrapped room block is AMBIGUOUS, never guessed", () => {
+  // The trap: line 2 reads as "amount then descriptor" and would pair $4,090
+  // with "One Bedroom". It is wrong — $4,090 belongs to the Studio above — and
+  // the misalignment continues down the block while each line looks confident.
+  const r = parseClaims("Assisted Living/Memory Care Studio\n- $4,090/month One Bedroom\n- $4,825/month Large One Bedroom\n- $5,035/month");
+  assert.equal(r.claims.filter((c) => c.kind === "pricing").length, 0, "guessed a descriptor it could not know");
+  assert.equal(r.fragments.filter((f) => f.reason === "priced line whose descriptor cannot be resolved").length, 3);
+});
+
+test("two independent amounts on one line are ambiguous, not two guesses", () => {
+  const r = parseClaims("Memory Care Private Studio $7,895 Shared Companion $6,995");
+  assert.equal(r.claims.filter((c) => c.kind === "pricing").length, 0);
 });
 
 test("bare URLs, emails and phones are claimed from unlabelled lines", () => {
@@ -106,8 +126,26 @@ test("address is matched by provenance, not by exact string", () => {
 });
 
 test("the accounting identity holds, and a proposal with unresolved content is blocked", () => {
-  const p = parseClaims("Community Fee: $2,500\n- $4,090/month One Bedroom");
+  const p = parseClaims("Community Fee: $2,500\nGarden Studio $4,090/month\nsome unlabelled prose here");
   const r = reconcile(p, item({ details: [{ label: "Community Fee", value: "$2,500" }] }));
   assert.equal(r.counts.accepted + r.counts.repaired + r.counts.unresolved, r.counts.claims);
-  assert.equal(r.counts.fragments, 1);
+  assert.equal(r.counts.claims, 2, "labelled + pricing");
+  assert.equal(r.counts.fragments, 1, "the prose line");
+});
+
+test("Creekwood — descriptor line then amount line is a confident pair", () => {
+  // Distinct from Vine Ridge: the amount line carries no descriptor of its own,
+  // so nothing is competing for it.
+  const r = parseClaims("Assisted Living\n- Private Room\n- $10,000-$15,000/month\n- Shared\n- $8,000-$9,000/month");
+  const pricing = r.claims.filter((c) => c.kind === "pricing");
+  assert.deepEqual(pricing.map((c) => c.anchors?.descriptor), ["Private Room", "Shared"]);
+  assert.deepEqual(pricing[0].anchors?.amounts, ["10000", "15000"]);
+});
+
+test("pricing matching is occurrence-aware — one slot cannot satisfy two claims", () => {
+  const p = parseClaims("Studio A\n- $4,000/month\nStudio B\n- $4,000/month");
+  const r = reconcile(p, { details: [{ label: "Studio A", value: "$4,000/month" }] });
+  const priced = r.resolutions.filter((x) => x.why?.includes("pricing anchors"));
+  assert.equal(priced.length, 1, "the single slot satisfied only one claim");
+  assert.equal(r.counts.accepted + r.counts.repaired + r.counts.unresolved, r.counts.claims);
 });

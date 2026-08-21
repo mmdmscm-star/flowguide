@@ -6,10 +6,17 @@
 // the number of claims. That identity is asserted, because an accounting layer
 // that can lose track of its own claims is worse than none.
 import { type Claim, type Fragment, type ParseResult, specializedValueKind } from "./claim-parser.ts";
-import { locate, type Field } from "./placement.ts";
+import { locate, survives, type Field } from "./placement.ts";
 import { squash, probe } from "./fact-match.ts";
 
-export type Outcome = "ACCEPTED" | "REPAIRED" | "UNRESOLVED";
+// FOUR OUTCOMES, NO DROPPED STATE.
+//
+//   detected   = attributed + attribution_unresolved
+//   attributed = accepted + repaired + content_unresolved
+//
+// Every detected source claim ends as exactly one of these. A claim that cannot
+// be attributed is not a claim that vanished; it is a claim in a named state.
+export type Outcome = "ACCEPTED" | "REPAIRED" | "CONTENT_UNRESOLVED" | "ATTRIBUTION_UNRESOLVED";
 export interface Resolution {
   claimId: string;
   label?: string;
@@ -73,9 +80,59 @@ function addressPresent(item: Record<string, unknown>, value: string): Field[] {
   return locate(item, value);
 }
 
+/** Every detail-ish slot in the proposal, as matchable text. Occurrence-aware:
+ *  each slot may satisfy at most ONE pricing claim, so a repeated amount cannot
+ *  discharge two different source facts. */
+function priceSlots(item: Record<string, unknown> | null): { text: string; used: boolean }[] {
+  if (!item) return [];
+  const out: { text: string; used: boolean }[] = [];
+  for (const d of (item.details as { label?: string; value?: string }[]) ?? [])
+    out.push({ text: `${d?.label ?? ""} ${d?.value ?? ""}`, used: false });
+  for (const k of ["description", "notes", "title"] as const)
+    if (item[k]) out.push({ text: String(item[k]), used: false });
+  return out;
+}
+const DESC_STOP = new Set(["the", "a", "an", "of", "and", "or", "for", "per", "from", "to", "if", "available", "starting", "at"]);
+const descTokens = (s: string) =>
+  (s.toLowerCase().match(/[a-z]+/g) ?? []).filter((t) => t.length > 2 && !DESC_STOP.has(t));
+
+/** A pricing claim is satisfied when its immutable anchors agree: every amount
+ *  present, the unit present if the source stated one, and enough descriptor
+ *  tokens shared. Wording and order are NOT required — the model legitimately
+ *  rewrites "$4,090/month One Bedroom" as "One Bedroom | $4,090/month". */
+function matchPricing(c: Claim, slots: { text: string; used: boolean }[]): number {
+  const a = c.anchors;
+  if (!a) return -1;
+  const want = descTokens(a.descriptor);
+  const need = want.length === 0 ? 0 : want.length === 1 ? 1 : Math.max(1, Math.ceil(want.length * 0.5));
+  for (let i = 0; i < slots.length; i++) {
+    const s = slots[i];
+    if (s.used) continue;
+    const digits = (s.text.match(/\d[\d,]*/g) ?? []).map((x) => x.replace(/\D/g, ""));
+    if (!a.amounts.every((amt) => digits.includes(amt))) continue;
+    if (a.unit && !new RegExp(`\\b${a.unit}`, "i").test(s.text)) continue;
+    const have = new Set(descTokens(s.text));
+    if (want.filter((t) => have.has(t)).length < need) continue;
+    s.used = true;
+    return i;
+  }
+  return -1;
+}
+
 export function reconcile(parsed: ParseResult, item: Record<string, unknown> | null): Reconciliation {
   const resolutions: Resolution[] = [];
+  const slots = priceSlots(item);
   for (const c of parsed.claims) {
+    if (c.kind === "pricing") {
+      const hit = matchPricing(c, slots);
+      resolutions.push({
+        claimId: c.id, label: c.anchors?.descriptor, value: c.value, rung: 2,
+        want: "details", found: hit >= 0 ? ["details"] : [],
+        outcome: hit >= 0 ? "ACCEPTED" : "REPAIRED",
+        why: hit >= 0 ? "pricing anchors agree (reordering tolerated)" : "priced fact not found in the proposal",
+      });
+      continue;
+    }
     const spec = specialized(c);
     const found = !item ? []
       : spec?.want === "address" ? addressPresent(item, c.value)
@@ -102,14 +159,34 @@ export function reconcile(parsed: ParseResult, item: Record<string, unknown> | n
       continue;
     }
     resolutions.push({ claimId: c.id, value: c.value, rung: 3, want: null, found,
-      outcome: "UNRESOLVED", why: "no deterministic destination" });
+      outcome: "CONTENT_UNRESOLVED", why: "no deterministic destination" });
   }
 
-  const hay = item ? squash(JSON.stringify(item)) : "";
+  // PRESENCE-TOLERANT, STILL DETERMINISTIC.
+  //
+  // A prefix comparison called a fragment orphaned whenever the model reworded
+  // it — and rewording is most of what the model legitimately does. The source
+  // line "Vine Ridge Senior Living 247 Treadway Dr. Cloverdale, CA 95425" is
+  // fully present once split into a title and an address, and holding a record
+  // for review over that is a limitation of the matcher, not real ambiguity.
+  //
+  // A fragment is orphaned only when its own content is genuinely missing:
+  // its numbers are gone, or too few of its meaningful tokens survive.
   const orphaned = parsed.fragments.filter((f) => {
+    if (f.reason === "label with no value") return false;   // there is no content to lose
+    // GENUINE AMBIGUITY IS NOT SETTLED BY PRESENCE. When a priced line's
+    // descriptor cannot be resolved, the amount is usually present in the
+    // proposal — paired with SOME descriptor. The open question is whether it is
+    // paired with the RIGHT one, and no presence test can answer that. These
+    // always surface; that is what the review state is for.
+    if (f.reason === "priced line whose descriptor cannot be resolved") return true;
     const t = squash(f.text);
-    if (t.length < 12) return false;                 // too short to judge
-    return !hay.includes(t.slice(0, 40));
+    if (t.length < 12) return false;
+    if (!item) return true;
+    const nums = f.text.match(/\d[\d,]*/g)?.map((x) => x.replace(/\D/g, "")).filter((x) => x.length >= 3) ?? [];
+    const hayNums = JSON.stringify(item).match(/\d[\d,]*/g)?.map((x) => x.replace(/\D/g, "")) ?? [];
+    if (nums.length && nums.every((n) => hayNums.includes(n))) return false;
+    return !survives(item, f.text);
   });
 
   const counts = {
@@ -117,7 +194,7 @@ export function reconcile(parsed: ParseResult, item: Record<string, unknown> | n
     claims: parsed.claims.length,
     accepted: resolutions.filter((r) => r.outcome === "ACCEPTED").length,
     repaired: resolutions.filter((r) => r.outcome === "REPAIRED").length,
-    unresolved: resolutions.filter((r) => r.outcome === "UNRESOLVED").length,
+    unresolved: resolutions.filter((r) => r.outcome === "CONTENT_UNRESOLVED").length,
     fragments: parsed.fragments.length,
   };
   // The identity that makes this an accounting layer rather than a heuristic.
