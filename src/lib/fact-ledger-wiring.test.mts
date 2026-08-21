@@ -40,13 +40,16 @@ test("the ledger has exactly one write site and no read site", () => {
   // would mean something started depending on it.
   const uses = route.split("fact_ledger").length - 1;
   assert.equal(uses, 1, "the route touches fact_ledger more than once");
-  assert.match(route, /\.update\(\{ fact_ledger: ledger \}\)/);
+  assert.match(route, /\.update\(\{ fact_ledger: \{ \.\.\.ledger, accounting \} \}\)/);
   assert.doesNotMatch(route, /select\([^)]*fact_ledger/);
 });
 
 test("no packet, item, section or library path imports the ledger", () => {
   const importers = files.filter((f) => /from "@\/lib\/fact-ledger"/.test(readFileSync(f, "utf8")));
   assert.deepEqual(importers, [ROUTE], `fact-ledger imported outside the chunk route: ${importers.join(", ")}`);
+  // The accounting layer is held to the same rule: one consumer, no read path.
+  const acct = files.filter((f) => /from "@\/lib\/chunk-accounting"/.test(readFileSync(f, "utf8")));
+  assert.deepEqual(acct, [ROUTE], `chunk-accounting imported outside the chunk route: ${acct.join(", ")}`);
 });
 
 test("the ledger is computed after the result is durably staged", () => {
@@ -63,11 +66,16 @@ test("the ledger is computed after the result is durably staged", () => {
 test("a ledger failure cannot fail the chunk", () => {
   const i = callAt;
   const before = route.slice(0, i);
+  assert.ok(route.indexOf("buildChunkAccounting({") > callAt, "accounting must be computed with the ledger, after staging");
   const after = route.slice(i);
   // The nearest preceding brace-opener is a try, and the block ends in a catch
   // that returns nothing.
   assert.ok(before.lastIndexOf("try {") > before.lastIndexOf("} catch"), "the ledger write is not inside a try");
-  assert.match(after.slice(0, 900), /\} catch \{/);
+  // Structural, not a fixed window: an earlier version sliced 900 characters
+  // and broke the moment the block grew, which measures the slice rather than
+  // the invariant.
+  const catchAt = after.indexOf("} catch {");
+  assert.ok(catchAt > 0, "no catch follows the ledger block");
   // No throw, no early return, no status change between the ledger and the
   // route's success response.
   const tail = after.slice(0, after.indexOf('return NextResponse.json({ status: "completed" })'));
@@ -76,8 +84,9 @@ test("a ledger failure cannot fail the chunk", () => {
 });
 
 test("the write is guarded on the claim generation, like every other chunk write", () => {
-  const block = route.slice(callAt);
-  assert.match(block.slice(0, 600), /\.eq\("attempt_count", attempt\)/);
+  const block = route.slice(callAt, route.indexOf("} catch {", callAt));
+  assert.ok(block.length > 0, "the ledger block is not inside a try/catch");
+  assert.match(block, /\.eq\("attempt_count", attempt\)/);
 });
 
 // ---------------------------------------------------------------------------

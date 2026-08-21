@@ -5,6 +5,7 @@ import { processSegment, buildSplitChildren, shouldPresplit, EntryPoint } from "
 import { validateEntryPointResult } from "@/lib/ingest-validate";
 import { nextFault } from "@/lib/test-faults";
 import { buildChunkLedger } from "@/lib/fact-ledger";
+import { buildChunkAccounting } from "@/lib/chunk-accounting";
 
 export const maxDuration = 60;
 type Context = { params: Promise<{ runId: string; ordinal: string }> };
@@ -197,13 +198,24 @@ export async function POST(_request: Request, context: Context) {
   // outliving the material it quotes.
   try {
     const ledger = buildChunkLedger(segmentText, ordinal, outcome.result);
+    // STEP 1: reconciliation accounting, stored beside the fact ledger.
+    //
+    // The fact ledger answers "is this present anywhere", which is structurally
+    // blind to details -> notes. This answers where each recognized source unit
+    // landed and whether it is accounted for. Still OBSERVE-ONLY: nothing is
+    // repaired, rerouted or surfaced, and no read path exists.
+    const accounting = buildChunkAccounting({
+      segmentText, chunkOrdinal: ordinal, sourceStart,
+      sourceText: (run.source_text as string | null) ?? null,
+      result: outcome.result,
+    });
     // Guarded on the CLAIM GENERATION, exactly as stage/fail/split are. If this
     // chunk was reclaimed by a newer attempt while the model was working, that
     // attempt owns the result and this stale claimant must not overwrite its
     // ledger with a reading of a superseded response.
     await supabase
       .from("ingestion_chunks")
-      .update({ fact_ledger: ledger })
+      .update({ fact_ledger: { ...ledger, accounting } })
       .eq("run_id", runId)
       .eq("ordinal", ordinal)
       .eq("attempt_count", attempt);
