@@ -221,11 +221,14 @@ test("a heading followed by content is NOT a claim", () => {
 });
 
 test("the hostname validator is conservative", () => {
-  // NOT "hello.world" — .world is a real TLD, so using it as a false-positive
-  // fixture would assert that a false NEGATIVE is correct. These are genuine
-  // non-domains: abbreviations, decimals, and sentence punctuation.
+  // Genuine non-domains: abbreviations, decimals, sentence punctuation.
   for (const t of ["e.g", "i.e", "3.5", "U.S.A", "Inc.", "a.b", "12.04", "Ave. Suite"])
     assert.equal(looksLikeHostname(t), false, `fired on: ${t}`);
+  // And the suffixes a hand-written list would have missed. "hello.world" is
+  // here as an ACCEPT: .world is a real suffix, and the old fixture asserting
+  // otherwise was pinning a false negative.
+  for (const t of ["hello.world", "shop.pizza", "something.nyc", "acme.co.jp"])
+    assert.equal(looksLikeHostname(t), true, `missed a valid suffix: ${t}`);
   for (const t of ["example.com", "www.example.com", "mitchellsicecream.com", "thetam.org"])
     assert.equal(looksLikeHostname(t), true, `missed: ${t}`);
 });

@@ -11,6 +11,7 @@
 // orphaned continuations, repeated labels, digit-bearing labels, and prose
 // glued onto the end of a labelled line.
 import { probe } from "./fact-match.ts";
+import { parse } from "tldts";
 
 export type ClaimKind = "labelled" | "url" | "email" | "phone";
 export interface Claim {
@@ -105,22 +106,31 @@ const URL_RE = /https?:\/\/[^\s"'<>)]+/gi;
 // links; so should the parser, and the scheme is added by canonicalization
 // rather than demanded of the model.
 //
-// CONSERVATIVE ON PURPOSE, not "contains a dot": a known TLD, real label
-// syntax, and a whole-token match. "e.g", "i.e", "3.5", "U.S.A" and "St. Helena"
-// must never become links.
-const TLD = "com|org|net|edu|gov|mil|int|io|co|us|uk|ca|au|de|fr|nl|es|it|info|biz|dev|app|shop|store|online|site|xyz|me|tv|health|care|life";
-const HOSTNAME_RE = new RegExp(
-  `^(?:https?:\\/\\/)?(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\.)+(?:${TLD})\\.?$`, "i");
-
+// CONSERVATIVE, AND NOT FROM A LIST WE MAINTAIN. An earlier version matched a
+// hand-written set of about thirty suffixes. It failed by MISSING valid domains
+// — .pizza, .nyc, .co.jp — and it was a manual list inside the horizontal core,
+// which is the failure mode the cross-vertical audit named: a rule that needs a
+// vocabulary to work will age badly and fail silently in the cases nobody tested.
+//
+// The Public Suffix List decides instead. `isIcann` distinguishes a real suffix
+// from a sentence artefact: "e.g", "i.e", "3.5", "12.04", "U.S.A" and "a.b" all
+// resolve to non-ICANN suffixes, while "hello.world" resolves to a real one —
+// .world IS a valid suffix, so treating it as a link is correct, and the old
+// test that asserted otherwise was asserting a false negative.
 /** Is this whole token a hostname we are willing to treat as a link? */
 export function looksLikeHostname(token: string): boolean {
-  const t = String(token ?? "").trim().replace(/[),.;]+$/, "");
-  if (!t || /\s/.test(t)) return false;
-  if (!HOSTNAME_RE.test(t)) return false;
-  // The label before the TLD must be a real name, not an initialism artefact.
-  const parts = t.replace(/^https?:\/\//i, "").replace(/\.$/, "").split(".");
-  return parts.length >= 2 && (parts[parts.length - 2] ?? "").length >= 2;
+  // STRICT: the whole token must be a BARE hostname — no scheme, no path. A
+  // scheme-qualified URL is already handled by URL_RE, and accepting one here
+  // produced two url claims for one line.
+  const t = String(token ?? "").trim().replace(/[),;]+$/, "");
+  if (!t || /\s/.test(t) || /:\/\//.test(t) || t.includes("/")) return false;
+  if (!/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+\.?$/i.test(t)) return false;
+  const r = parse(t, { allowPrivateDomains: false });
+  // A real ICANN suffix AND a registrable domain under it. "Inc." has a valid
+  // suffix but no domain, which is exactly the distinction that matters.
+  return r.isIcann === true && typeof r.domain === "string" && r.domain.length > 0;
 }
+
 const EMAIL_RE = /[\w.+-]+@[\w-]+\.[\w.]+/g;
 const PHONE_RE = /\+?1?[-.\s(]*\d{3}[-.\s)]*\d{3}[-.\s]*\d{4}/g;
 
