@@ -116,3 +116,64 @@ worked, so this path needs a deliberate control rather than a hopeful one.
 The first-class reusable public narrative/content type. These units are the
 honest interim: the content is preserved, attached, visible, and awaiting a
 decision — rather than being placed somewhere convenient.
+
+## RPC invariants (added before apply)
+
+**Security.** `SECURITY DEFINER` with `search_path = ''` and every object
+schema-qualified. `EXECUTE` is revoked from `PUBLIC` explicitly — that is the
+grant that matters, since a new function grants it by default and every
+authenticated visitor inherits it — then from `anon` and `authenticated` by
+name, and granted only to `service_role`. Preflight row 18 confirms this
+matches every other ingestion lifecycle function rather than inventing a posture
+for one function.
+
+**`p_owner` is not a credential.** It is an assertion the caller must already
+have earned. The route MUST derive it from the authenticated session and MUST
+NOT accept an owner id from the request body — otherwise resolving anyone's
+review reduces to guessing a uuid. The function does the half it can: it refuses
+when the run does not belong to the owner passed. This is a standing constraint
+on the route that has not been written yet, and the route's own gate must assert
+it.
+
+**Mutation contract.** `p_status ∈ {resolved, ignored}`. The run must be in
+`needs_review`. A unit id must match exactly one unit: zero raises not-found,
+and duplicates raise rather than mutate one of two units the caller cannot tell
+apart. An already-handled unit is idempotent, never overwritten by a stale
+client. Unrelated units and unrelated `review` keys pass through untouched, and
+array order is preserved.
+
+**Legacy failures.** Entries written before `status` existed have no such key.
+Every unresolved test reads `coalesce(f->>'status', 'unresolved')`, so a legacy
+unit counts as outstanding. The opposite reading would silently finalize a run
+with real work still in it — absence reading as success, again.
+
+**Last-unit transition.** Only at zero remaining, in one `UPDATE`: status
+becomes `finalized` (the run had already applied its content before entering
+review), `finalized_at` is stamped with `coalesce` so an earlier stamp is not
+clobbered, `review.ok` becomes true and the stale failure `summary` is cleared
+so the JSON cannot read "failed" while the run reads finalized. The publish
+block and the one-active-run index both key off `status`, so both clear in that
+same transaction.
+
+**Retention.** `text` is removed on resolve *and* on ignore; id, code, item
+reference, status and `resolved_at` remain.
+
+**Blast radius.** The function mutates `ingestion_runs` and nothing else. A
+source gate enumerates every table named in an `UPDATE`/`INSERT`/`DELETE` and
+fails if the set is anything other than `{ingestion_runs}`.
+
+### Where each invariant is proven
+
+| Gate | File | When |
+| --- | --- | --- |
+| Statically provable from the SQL text | `scripts/sql/0027-source-gates.py` | before apply |
+| Environment preconditions | `scripts/sql/0027-preflight.sql` | before apply |
+| Catalog security posture | `scripts/sql/0027-verify.sql` part A | after apply |
+| Behaviour against a fixture run | `scripts/sql/0027-verify.sql` part B | after apply |
+
+Part B calls the function for real and asserts what it did. It is
+`BEGIN … ROLLBACK` with no `COMMIT`, so the fixture leaves nothing behind.
+There is no local Postgres on this machine and no Docker, so behavioural
+verification cannot run before the function exists on the linked database —
+which is why the statically provable invariants were pulled forward into a
+separate source-gate pass rather than waiting for it.

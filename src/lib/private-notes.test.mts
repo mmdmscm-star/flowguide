@@ -78,19 +78,28 @@ test("ItemCard is still a client component — the reason data-layer stripping i
   assert.match(read("src/components/item-card.tsx").slice(0, 40), /^"use client"/);
 });
 
-test("the hotfix added no migration — it is a read-layer change only", () => {
-  // The precise claim. An earlier version of this test scanned for `notes =` in
-  // migrations and flagged 0010/0011/0017 — but those are update_item_content
-  // and friends, the ordinary write path a professional uses to EDIT a note.
-  // Matching them proved nothing except that the pattern was too loose.
+test("the privacy gate lives in the read layer, not in SQL", () => {
+  // An earlier version asserted `max(migrationNumber) <= 26`. Its own comment
+  // said it was "not that the schema froze afterwards" — and then it froze the
+  // schema, so 0027 broke it for a reason that has nothing to do with private
+  // notes. A high-water mark is not an invariant; it is a number that has to be
+  // edited every time unrelated work lands, and a test edited that often stops
+  // being read.
   //
-  // What actually matters is that no new migration exists: the fix strips notes
-  // from the recipient's data on read, and touches no stored content, so the
-  // highest migration number must still be the fact ledger.
-  const nums = readdirSync("supabase/migrations")
-    .filter((f) => /^\d{4}_/.test(f)).map((f) => Number(f.slice(0, 4))).sort((a, b) => a - b);
-  // The privacy hotfix itself added none. 0026 is packet-evidence retention,
-  // an unrelated later change — this asserts no migration was smuggled INTO the
-  // hotfix, not that the schema froze afterwards.
-  assert.ok(Math.max(...nums) <= 26, `unexpected migration ${Math.max(...nums)}`);
+  // The durable claim is where the gate LIVES. Notes are withheld by the
+  // assembler choosing an audience; if that decision ever moves into SQL the
+  // rule has two homes that can disagree, which is the failure mode this file
+  // exists to prevent. Comments are stripped first — the migrations discuss
+  // recipients in prose, and a scan that matched its own rationale would be
+  // measuring the wrong thing.
+  const sqlOnly = (t: string) => t.split("\n").map((l) => l.replace(/--.*$/, "")).join("\n");
+  const offenders = readdirSync("supabase/migrations")
+    .filter((f) => /^\d{4}_.*\.sql$/.test(f))
+    .filter((f) => /\baudience\b/i.test(sqlOnly(read(join("supabase/migrations", f)))));
+  assert.deepEqual(offenders, [], `audience gating leaked into SQL: ${offenders.join(", ")}`);
+
+  // ABSENCE READS AS SUCCESS: an empty migrations directory would also produce
+  // an empty offender list. Assert there was something to scan.
+  const scanned = readdirSync("supabase/migrations").filter((f) => /^\d{4}_.*\.sql$/.test(f));
+  assert.ok(scanned.length >= 26, `only ${scanned.length} migrations scanned`);
 });

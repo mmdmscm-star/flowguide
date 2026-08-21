@@ -71,6 +71,38 @@ with c as (
          (select coalesce(count(*),0)::text from public.ingestion_runs r,
                  lateral jsonb_array_elements(coalesce(r.review->'failures','[]'::jsonb)) f
            where f->>'id' is null)
+  union all
+  -- SECURITY PRECONDITIONS. A grant to a role that does not exist is a silent
+  -- no-op, so confirm the target is real before trusting the grant line.
+  select 16, 'service_role exists — the grant target is a real role', '1',
+         (select count(*)::text from pg_roles where rolname='service_role')
+  union all
+  select 17, 'no leftover resolve_review_unit privileges from a prior attempt', '0',
+         (select coalesce(count(*),0)::text from pg_proc p
+                 join pg_namespace n on n.oid=p.pronamespace,
+                 lateral aclexplode(p.proacl) a
+                 join pg_roles r on r.oid=a.grantee
+           where n.nspname='public' and p.proname='resolve_review_unit'
+             and r.rolname in ('anon','authenticated','public'))
+  union all
+  -- HOUSE STANDARD. If any existing ingestion lifecycle function were reachable
+  -- by anon/authenticated, 0027 matching its neighbours would not mean much.
+  select 18, 'precedent: no ingestion lifecycle function is callable by anon/authenticated', '0',
+         (select coalesce(count(*),0)::text from pg_proc p
+                 join pg_namespace n on n.oid=p.pronamespace,
+                 lateral aclexplode(p.proacl) a
+                 join pg_roles r on r.oid=a.grantee
+           where n.nspname='public'
+             and p.proname ~ '^(mark_chunk_failed|finalize_ingestion_run|discard_ingestion_run|purge_ingestion_evidence)$'
+             and r.rolname in ('anon','authenticated')
+             and a.privilege_type='EXECUTE')
+  union all
+  -- SECURITY DEFINER without a pinned search_path is a privilege-escalation
+  -- shape. Reported so 0027 is measured against what is already there.
+  select 19, 'public SECURITY DEFINER functions with no pinned search_path', 'report',
+         (select count(*)::text from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+           where n.nspname='public' and p.prosecdef
+             and not coalesce(array_to_string(p.proconfig,',') ~ 'search_path', false))
 )
 select ord, check_name, expected, actual,
        case when expected='report' then 'INFO' when expected=actual then 'PASS' else 'FAIL' end as result
