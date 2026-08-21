@@ -29,7 +29,25 @@ export interface Claim {
   anchors?: { amounts: string[]; unit?: string; descriptor: string };
 }
 export interface Fragment { line: number; offset: number; text: string; reason: string }
-export interface ParseResult { claims: Claim[]; fragments: Fragment[] }
+
+/** RECOGNIZED, BUT NOT RESOLVABLE.
+ *
+ *  A priced line the parser can see carries a fact, but whose amount cannot be
+ *  confidently paired with a descriptor. It must not be turned into a claim —
+ *  that would be guessing — and it must not fall outside the accounting
+ *  universe either, which would recreate the silent-loss hole one level down.
+ *  So it is its own kind of source unit: recognized, spanned, attributed, and
+ *  always resolved as SOURCE_UNRESOLVED. */
+export interface AmbiguousUnit {
+  id: string;
+  line: number;
+  offset: number;
+  text: string;
+  reason: string;
+  /** What the parser could read, without asserting how the parts pair up. */
+  amounts: string[];
+}
+export interface ParseResult { claims: Claim[]; ambiguous: AmbiguousUnit[]; fragments: Fragment[] }
 
 // A LABEL IS A SHORT NOUN PHRASE, not a clause. Same rule as the fact ledger:
 // grammar, never digits — `2nd Person Fee` and `Level 2 Care` are labels.
@@ -38,6 +56,11 @@ const CLAUSE_MARKERS = new Set([
   "the", "a", "an", "this", "that", "these", "those", "there",
   "was", "were", "is", "are", "be", "been", "being",
   "has", "have", "had", "will", "would", "should", "could",
+  // "to" marks an infinitive, which makes a lead-in, not a label: "One thing to
+  // remember:" would otherwise become a claim and — under enforcement — a bogus
+  // Detail reading "One thing to remember | the waitlist moves fast". No label
+  // in any validated fixture or in the real source uses a lowercase "to".
+  "to",
 ]);
 function looksLikeLabel(label: string): boolean {
   // A PARENTHETICAL QUALIFIER IS PART OF THE LABEL, NOT A CLAUSE.
@@ -135,6 +158,7 @@ function cells(segment: string): { text: string; offset: number }[] {
 
 export function parseClaims(segment: string, chunkOrdinal = 0): ParseResult {
   const claims: Claim[] = [];
+  const ambiguous: AmbiguousUnit[] = [];
   const fragments: Fragment[] = [];
   let seq = 0;
   const id = (line: number) => `${chunkOrdinal}:${line}:${seq++}`;
@@ -176,14 +200,17 @@ export function parseClaims(segment: string, chunkOrdinal = 0): ParseResult {
       const priced = pricingClaim(text, prev, prevAmbiguous);
       prevAmbiguous = priced === "ambiguous";
       if (priced === "ambiguous")
-        fragments.push({ line, offset, text, reason: "priced line whose descriptor cannot be resolved" });
+        ambiguous.push({ id: id(line), line, offset, text,
+          reason: "priced line whose descriptor cannot be resolved",
+          amounts: (text.match(MONEY) ?? []).map((a) => a.replace(/\D/g, "")) });
       else if (priced)
         claims.push({ id: id(line), kind: "pricing", value: text, line, offset, raw: text, anchors: priced });
       else
         fragments.push({ line, offset, text, reason: /\$|\d/.test(text) ? "unlabelled content carrying numbers" : "unlabelled prose" });
     }
   }
-  return { claims, fragments };
+  MONEY.lastIndex = 0;
+  return { claims, ambiguous, fragments };
 }
 
 /** Claims whose value is itself a specialized identity (Email Address: x@y.com). */

@@ -16,7 +16,8 @@ import { squash, probe } from "./fact-match.ts";
 //
 // Every detected source claim ends as exactly one of these. A claim that cannot
 // be attributed is not a claim that vanished; it is a claim in a named state.
-export type Outcome = "ACCEPTED" | "REPAIRED" | "CONTENT_UNRESOLVED" | "ATTRIBUTION_UNRESOLVED";
+export type Outcome = "ACCEPTED" | "REPAIRED" | "CONTENT_UNRESOLVED"
+  | "SOURCE_UNRESOLVED" | "ATTRIBUTION_UNRESOLVED";
 export interface Resolution {
   claimId: string;
   label?: string;
@@ -36,7 +37,7 @@ export interface Reconciliation {
    *  unplaced source content holds a proposal back. */
   orphaned: Fragment[];
   counts: { claims: number; accepted: number; repaired: number; unresolved: number;
-            fragments: number; orphaned: number };
+            fragments: number; orphaned: number; ambiguous: number; sourceUnresolved: number };
 }
 
 const IMAGE = /\.(jpe?g|png|gif|webp|avif)(\?|$)/i;
@@ -105,15 +106,32 @@ function matchPricing(c: Claim, slots: { text: string; used: boolean }[]): numbe
   if (!a) return -1;
   const want = descTokens(a.descriptor);
   const need = want.length === 0 ? 0 : want.length === 1 ? 1 : Math.max(1, Math.ceil(want.length * 0.5));
+  const candidates: number[] = [];
   for (let i = 0; i < slots.length; i++) {
     const s = slots[i];
     if (s.used) continue;
     const digits = (s.text.match(/\d[\d,]*/g) ?? []).map((x) => x.replace(/\D/g, ""));
     if (!a.amounts.every((amt) => digits.includes(amt))) continue;
     if (a.unit && !new RegExp(`\\b${a.unit}`, "i").test(s.text)) continue;
-    const have = new Set(descTokens(s.text));
-    if (want.filter((t) => have.has(t)).length < need) continue;
-    s.used = true;
+    candidates.push(i);
+  }
+  // UNIQUE AMOUNT, RELAXED DESCRIPTOR.
+  //
+  // When exactly one unused slot in this record carries the claim's amounts and
+  // unit, there is nothing for it to be confused with, so a single shared
+  // descriptor token is enough. This is what recovers "Memory Care Suite
+  // $4,830/month" from the proposal's "MC Private Suite $4,830/month": the model
+  // abbreviated the descriptor, which is normalisation, not loss. Requiring the
+  // full token threshold there would report a correctly-placed fact as missing
+  // and let enforcement duplicate it.
+  //
+  // Where several slots share the amount, the full threshold still applies —
+  // that is exactly when a descriptor has to discriminate.
+  const bar = candidates.length === 1 ? Math.min(need, 1) : need;
+  for (const i of candidates) {
+    const have = new Set(descTokens(slots[i].text));
+    if (want.length && want.filter((t) => have.has(t)).length < bar) continue;
+    slots[i].used = true;
     return i;
   }
   return -1;
@@ -179,7 +197,7 @@ export function reconcile(parsed: ParseResult, item: Record<string, unknown> | n
     // proposal — paired with SOME descriptor. The open question is whether it is
     // paired with the RIGHT one, and no presence test can answer that. These
     // always surface; that is what the review state is for.
-    if (f.reason === "priced line whose descriptor cannot be resolved") return true;
+
     const t = squash(f.text);
     if (t.length < 12) return false;
     if (!item) return true;
@@ -189,21 +207,34 @@ export function reconcile(parsed: ParseResult, item: Record<string, unknown> | n
     return !survives(item, f.text);
   });
 
+  // RECOGNIZED-BUT-AMBIGUOUS SOURCE UNITS ENTER ACCOUNTING.
+  // They are never ACCEPTED and never REPAIRED — the parser refused to guess
+  // the pairing, so nothing downstream may act as if it knew it. They resolve
+  // as SOURCE_UNRESOLVED and they always surface.
+  for (const u of parsed.ambiguous)
+    resolutions.push({ claimId: u.id, value: u.text, rung: 3, want: null, found: [],
+      outcome: "SOURCE_UNRESOLVED", why: u.reason });
+
   const counts = {
     orphaned: orphaned.length,
+    ambiguous: parsed.ambiguous.length,
     claims: parsed.claims.length,
     accepted: resolutions.filter((r) => r.outcome === "ACCEPTED").length,
     repaired: resolutions.filter((r) => r.outcome === "REPAIRED").length,
     unresolved: resolutions.filter((r) => r.outcome === "CONTENT_UNRESOLVED").length,
+    sourceUnresolved: resolutions.filter((r) => r.outcome === "SOURCE_UNRESOLVED").length,
     fragments: parsed.fragments.length,
   };
   // The identity that makes this an accounting layer rather than a heuristic.
-  if (counts.accepted + counts.repaired + counts.unresolved !== counts.claims)
-    throw new Error(`reconciliation lost a claim: ${JSON.stringify(counts)}`);
+  // THE IDENTITY. Every recognized source unit — confident claim or declared
+  // ambiguity — ends in exactly one named state. Nothing meaningful sits outside.
+  const recognized = counts.claims + counts.ambiguous;
+  if (counts.accepted + counts.repaired + counts.unresolved + counts.sourceUnresolved !== recognized)
+    throw new Error(`reconciliation lost a source unit: ${JSON.stringify(counts)}`);
   return { resolutions, fragments: parsed.fragments, orphaned, counts };
 }
 
 /** Would this proposal materialize? Not while it holds unaccounted source content. */
 export function blocksMaterialization(r: Reconciliation): boolean {
-  return r.counts.unresolved > 0 || r.counts.orphaned > 0;
+  return r.counts.unresolved > 0 || r.counts.sourceUnresolved > 0 || r.counts.orphaned > 0;
 }

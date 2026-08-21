@@ -194,13 +194,22 @@ test("prose lead-ins are rejected on grammar, not on digits", () => {
   }
 });
 
-test("the known label false positive is still exactly one, and still bounded", () => {
-  // "One thing to remember:" is four words with no determiner and no verb — it
-  // is grammatically a label. It is left detected on purpose: the fix would be
-  // to add "to" to the marker set, which breaks "Fee for Second Person" style
-  // labels for a rarer case. Its cost is a spurious unresolved entry, never a
-  // lost fact. If this ever starts failing, the rule moved — decide deliberately.
-  const kv = detectFacts("One thing to remember: the waitlist moves fast", 0).find((d) => d.kind === "keyvalue");
-  assert.ok(kv, "the known limitation changed — re-derive the label rule deliberately");
-  assert.equal(kv!.detailEligible, true);   // bounded: worst case it is preserved verbatim
+test("`One thing to remember:` is prose, not a label — the last known FP is closed", () => {
+  // It used to be detected and was left that way as a bounded limitation: a
+  // spurious unresolved entry, never a lost fact. Once the claim parser became
+  // an ENFORCEMENT input that calculus changed — a false label would have
+  // produced a real Detail reading "One thing to remember | the waitlist moves
+  // fast" in a professional's Library. "to" marks an infinitive, which makes a
+  // lead-in; no label in any validated fixture or in the real source uses one.
+  assert.equal(detectFacts("One thing to remember: the waitlist moves fast", 0).find((d) => d.kind === "keyvalue"), undefined);
+  // ...and the labels that legitimately carry connectives still survive.
+  for (const [line, label] of [
+    ["Days of Operation: Monday to Friday", "Days of Operation"],
+    ["Fee for Second Person: $950", "Fee for Second Person"],
+    ["Board and Care Rate: $4,800/month", "Board and Care Rate"],
+  ] as const) {
+    const kv = detectFacts(line, 0).find((d) => d.kind === "keyvalue");
+    assert.ok(kv, line);
+    assert.equal(kv!.label, label);
+  }
 });

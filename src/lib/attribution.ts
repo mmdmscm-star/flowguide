@@ -10,7 +10,7 @@
 // Re-deriving boundaries here would create a second definition of "a record"
 // that could disagree with the one ingestion actually chunked on.
 import { detectSourceRecords } from "./segmentation";
-import type { Claim, Fragment } from "./claim-parser.ts";
+import type { Claim, Fragment, AmbiguousUnit } from "./claim-parser.ts";
 
 export interface Envelope {
   index: number;
@@ -49,26 +49,31 @@ export function attribute<T extends { offset: number }>(
 }
 
 export interface AttributionResult {
-  byRecord: Map<number, { claims: Claim[]; fragments: Fragment[] }>;
+  byRecord: Map<number, { claims: Claim[]; ambiguous: AmbiguousUnit[]; fragments: Fragment[] }>;
   /** Claims that could not be attributed to any record envelope. They are NOT
    *  dropped — they are counted and reported as ATTRIBUTION_UNRESOLVED. */
   unattributedClaims: Claim[];
+  unattributedAmbiguous: AmbiguousUnit[];
   unattributedFragments: Fragment[];
 }
 
 export function attributeAll(
-  claims: Claim[], fragments: Fragment[], envelopes: Envelope[] | null, base: number,
+  claims: Claim[], ambiguous: AmbiguousUnit[], fragments: Fragment[],
+  envelopes: Envelope[] | null, base: number,
 ): AttributionResult {
-  const byRecord = new Map<number, { claims: Claim[]; fragments: Fragment[] }>();
+  const byRecord = new Map<number, { claims: Claim[]; ambiguous: AmbiguousUnit[]; fragments: Fragment[] }>();
   const unattributedClaims: Claim[] = [];
+  const unattributedAmbiguous: AmbiguousUnit[] = [];
   const unattributedFragments: Fragment[] = [];
   const bucket = (i: number) => {
-    if (!byRecord.has(i)) byRecord.set(i, { claims: [], fragments: [] });
+    if (!byRecord.has(i)) byRecord.set(i, { claims: [], ambiguous: [], fragments: [] });
     return byRecord.get(i)!;
   };
   for (const { item, record } of attribute(claims, envelopes, base))
     record === null ? unattributedClaims.push(item) : bucket(record).claims.push(item);
+  for (const { item, record } of attribute(ambiguous, envelopes, base))
+    record === null ? unattributedAmbiguous.push(item) : bucket(record).ambiguous.push(item);
   for (const { item, record } of attribute(fragments, envelopes, base))
     record === null ? unattributedFragments.push(item) : bucket(record).fragments.push(item);
-  return { byRecord, unattributedClaims, unattributedFragments };
+  return { byRecord, unattributedClaims, unattributedAmbiguous, unattributedFragments };
 }

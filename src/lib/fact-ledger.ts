@@ -75,6 +75,11 @@ const CLAUSE_MARKERS = new Set([
   "the", "a", "an", "this", "that", "these", "those", "there",
   "was", "were", "is", "are", "be", "been", "being",
   "has", "have", "had", "will", "would", "should", "could",
+  // "to" marks an infinitive, which makes a lead-in, not a label: "One thing to
+  // remember:" would otherwise become a claim and — under enforcement — a bogus
+  // Detail reading "One thing to remember | the waitlist moves fast". No label
+  // in any validated fixture or in the real source uses a lowercase "to".
+  "to",
 ]);
 function looksLikeLabel(label: string): boolean {
   const words = label.trim().split(/\s+/).filter(Boolean);

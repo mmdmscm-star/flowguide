@@ -78,12 +78,30 @@ test("Vine Ridge — the wrapped room block is AMBIGUOUS, never guessed", () => 
   // the misalignment continues down the block while each line looks confident.
   const r = parseClaims("Assisted Living/Memory Care Studio\n- $4,090/month One Bedroom\n- $4,825/month Large One Bedroom\n- $5,035/month");
   assert.equal(r.claims.filter((c) => c.kind === "pricing").length, 0, "guessed a descriptor it could not know");
-  assert.equal(r.fragments.filter((f) => f.reason === "priced line whose descriptor cannot be resolved").length, 3);
+  // Recognized, not discarded: they enter accounting as their own source units.
+  assert.equal(r.ambiguous.length, 3);
+  assert.deepEqual(r.ambiguous.map((u) => u.amounts), [["4090"], ["4825"], ["5035"]]);
 });
 
 test("two independent amounts on one line are ambiguous, not two guesses", () => {
   const r = parseClaims("Memory Care Private Studio $7,895 Shared Companion $6,995");
   assert.equal(r.claims.filter((c) => c.kind === "pricing").length, 0);
+  assert.equal(r.ambiguous.length, 1);
+});
+
+test("ambiguous source units are inside the accounting identity", () => {
+  // The invariant: nothing the parser RECOGNIZES as meaningful may live outside
+  // accounting. An ambiguous priced line is recognized — it plainly carries a
+  // fact — so it resolves as SOURCE_UNRESOLVED rather than being a loose
+  // fragment nobody counts.
+  const p = parseClaims("Community Fee: $2,500\nAssisted Living Studio\n- $4,090/month One Bedroom");
+  const r = reconcile(p, { details: [{ label: "Community Fee", value: "$2,500" }] });
+  const recognized = r.counts.claims + r.counts.ambiguous;
+  assert.equal(r.counts.accepted + r.counts.repaired + r.counts.unresolved + r.counts.sourceUnresolved, recognized);
+  assert.equal(r.counts.sourceUnresolved, 1);
+  assert.ok(r.resolutions.some((x) => x.outcome === "SOURCE_UNRESOLVED"));
+  // ...and it is never repaired, because the parser refused to guess the pairing.
+  assert.ok(!r.resolutions.some((x) => x.outcome === "REPAIRED" && x.why.includes("descriptor cannot")));
 });
 
 test("bare URLs, emails and phones are claimed from unlabelled lines", () => {

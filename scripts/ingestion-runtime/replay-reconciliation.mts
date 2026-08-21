@@ -29,15 +29,15 @@ function analyse(run: any) {
   for (const c of run.chunks) {
     if (c.status !== "completed" || !c.segment_text) continue;
     const parsed = parseClaims(c.segment_text, c.ordinal);
-    detected += parsed.claims.length;
-    const a = attributeAll(parsed.claims, parsed.fragments, ENV, c.source_start ?? 0);
-    attrUnresolved += a.unattributedClaims.length;
+    detected += parsed.claims.length + parsed.ambiguous.length;
+    const a = attributeAll(parsed.claims, parsed.ambiguous, parsed.fragments, ENV, c.source_start ?? 0);
+    attrUnresolved += a.unattributedClaims.length + a.unattributedAmbiguous.length;
     for (const [rec, group] of a.byRecord) {
-      attributed += group.claims.length;
+      attributed += group.claims.length + group.ambiguous.length;
       const item = proposalsByRecord.get(rec) ?? null;
       // A record the model never produced an item for: its claims are not
       // dropped, they are ATTRIBUTION_UNRESOLVED against a missing proposal.
-      const r = reconcile({ claims: group.claims, fragments: group.fragments }, item);
+      const r = reconcile({ claims: group.claims, ambiguous: group.ambiguous, fragments: group.fragments }, item);
       rows.push({ record: rec, name: ENV![rec].name, title: String(item?.title ?? "(no proposal)"),
                   counts: r.counts, res: r.resolutions, orphaned: r.orphaned });
     }
@@ -53,16 +53,18 @@ for (const [n, X] of [[1, A], [2, B]] as const) {
   const acc = X.rows.reduce((t, r) => t + r.counts.accepted, 0);
   const rep = X.rows.reduce((t, r) => t + r.counts.repaired, 0);
   const cun = X.rows.reduce((t, r) => t + r.counts.unresolved, 0);
+  const sun = X.rows.reduce((t, r) => t + r.counts.sourceUnresolved, 0);
   console.log(`  RUN ${n}`);
-  console.log(`    detected .................... ${X.detected}`);
+  console.log(`    recognized source units ..... ${X.detected}`);
   console.log(`    attributed .................. ${X.attributed}`);
   console.log(`    ATTRIBUTION_UNRESOLVED ...... ${X.attrUnresolved}`);
   console.log(`      identity 1: detected = attributed + attribution_unresolved  -> ${X.detected === X.attributed + X.attrUnresolved}`);
   console.log(`    ACCEPTED .................... ${acc}`);
   console.log(`    REPAIRED .................... ${rep}`);
   console.log(`    CONTENT_UNRESOLVED .......... ${cun}`);
-  console.log(`      identity 2: attributed = accepted + repaired + content_unresolved -> ${X.attributed === acc + rep + cun}`);
-  console.log(`    DROPPED ..................... ${X.detected - X.attrUnresolved - acc - rep - cun}\n`);
+  console.log(`    SOURCE_UNRESOLVED ........... ${sun}   (recognized, pairing not provable)`);
+  console.log(`      identity 2: attributed = accepted + repaired + content_unresolved + source_unresolved -> ${X.attributed === acc + rep + cun + sun}`);
+  console.log(`    UNACCOUNTED ................. ${X.detected - X.attrUnresolved - acc - rep - cun - sun}\n`);
 }
 
 // ---- run-to-run agreement under the contract --------------------------------
@@ -90,11 +92,12 @@ for (const e of ENV) {
 console.log(`  RUN-TO-RUN AGREEMENT (n=${compared})   as the model left it: ${before} disagree   under the contract: ${after} disagree`);
 
 // ---- what is still held, and exactly why ------------------------------------
-const held = A.rows.filter((r) => r.counts.unresolved > 0 || r.orphaned.length > 0);
+const held = A.rows.filter((r) => r.counts.unresolved > 0 || r.counts.sourceUnresolved > 0 || r.orphaned.length > 0);
 console.log(`\n  HELD FOR REVIEW: ${held.length} of ${ENV.length} records (run 1)`);
 const why: Record<string, number> = {};
 for (const r of held) {
-  for (const x of r.res.filter((y: any) => y.outcome === "CONTENT_UNRESOLVED")) why[`claim: ${x.why}`] = (why[`claim: ${x.why}`] ?? 0) + 1;
+  for (const x of r.res.filter((y: any) => y.outcome === "CONTENT_UNRESOLVED" || y.outcome === "SOURCE_UNRESOLVED"))
+    why[`${x.outcome}: ${x.why}`] = (why[`${x.outcome}: ${x.why}`] ?? 0) + 1;
   for (const f of r.orphaned) why[`fragment: ${f.reason}`] = (why[`fragment: ${f.reason}`] ?? 0) + 1;
 }
 for (const [k, v] of Object.entries(why).sort((a, b) => b[1] - a[1])) console.log(`    ${String(v).padStart(4)}×  ${k}`);
@@ -107,7 +110,7 @@ for (const c of runs[0].chunks) {
   if (c.status !== "completed" || !c.segment_text) continue;
   const p = parseClaims(c.segment_text, c.ordinal);
   pClaims += p.claims.filter((x) => x.kind === "pricing").length;
-  pAmbig += p.fragments.filter((f) => f.reason === "priced line whose descriptor cannot be resolved").length;
+  pAmbig += p.ambiguous.length;
 }
 const pAcc = A.rows.reduce((t, r) => t + r.res.filter((x: any) => x.why?.startsWith("pricing anchors agree")).length, 0);
 const pRep = A.rows.reduce((t, r) => t + r.res.filter((x: any) => x.why === "priced fact not found in the proposal").length, 0);
