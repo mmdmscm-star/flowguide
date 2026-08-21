@@ -372,18 +372,35 @@ in, not a priority ranking.
    ordering — *when actual use supports it*. Deliberately absent so far because
    search plus recency has not yet been shown to fail.
 
-5. **Successful packet-path ingestion still destroys its own evidence.**
-   Found while writing 0025, recorded rather than fixed — it is outside the
-   approved scope of the semantic-reliability work and changing it is a
-   production behaviour change. 0024 stopped finalize from wiping source text,
-   segments and results, but only on the **Library** path
-   (`library_close_import_run`). The packet path's `finalize_ingestion_run` still
-   clears every segment and every model result the moment an import succeeds, so
-   a packet import remains undiagnosable after it finishes — the exact condition
-   that made the 61-record Library import impossible to investigate. The fix is
-   the same shape as 0024's: keep the evidence on finalize, stamp
-   `evidence_purge_after`, let the existing pg_cron job expire it. Nothing new
-   has to be designed; the retention machinery already exists and already runs.
+5. **NEXT INVESTIGATION — context-aware ingestion / chunking experiment.**
+   Recorded, not started. Nothing about chunking, chunk size, source-map
+   prompting or model context strategy was touched by the semantic-contract
+   work, deliberately.
+
+   *Hypothesis:* resilient chunking may be reducing the model's useful
+   run-level context on modest inputs, even where the chunk boundaries are
+   structurally safe. The 15-shop ice-cream source is 6.5KB and was cut into
+   three chunks; a model shown one third of a directory has less to reason with
+   than one shown the whole thing.
+
+   *Method:* the same moderate-size sources under three modes — (a) current
+   chunking, (b) chunking plus deterministic run-level source-map context,
+   (c) whole-source processing where comfortably within model limits.
+
+   *Measure RAW model quality, before enforcement:* ACCEPTED vs REPAIRED,
+   omissions, semantic consistency, run-to-run variation. The deterministic
+   contract stays as the safety layer in every mode — the question is how much
+   work the model is being made to do badly, not whether the contract catches it.
+
+6. **RESOLVED — packet-path evidence destruction.** Closed by 0026: finalize and
+   discard both retain source, segments, results and the ledger for a bounded
+   30-day window; a discarded run survives the deletion of its draft; expired
+   orphans are deleted unless a Library entry still references them.
+
+7. **RESOLVED — the hostname validator's hardcoded TLD list.** Replaced with
+   `tldts` (Public Suffix List). Note for whoever writes fixtures: `.world` IS a
+   valid suffix, so `hello.world` must not be used as a false-positive example —
+   doing so asserts that a false negative is correct.
 
 8. **Block-mode Library insertion.** A composition project, low priority. See its
    own entry: `trg_freeze_items` forbids the item INSERT outright, so this is a
