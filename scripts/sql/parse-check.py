@@ -39,7 +39,8 @@ for f in TARGETS:
             bad += 1
             continue
         print(f"ok    {f}  ({len(stmts)} stmt, read-only)")
-    elif f.startswith("scripts/sql/") and "verify" in f:
+    elif f.startswith("scripts/sql/") and ("verify" in f or "behaviour" in f) \
+            and any(k in WRITE_KINDS or k in ("DoStmt",) for k in kinds):
         # A verifier may write, because it tests behaviour — but only inside a
         # transaction it cannot commit. Checked through the PARSER, not by
         # grepping for "commit": `on commit drop` is not a COMMIT statement, and
