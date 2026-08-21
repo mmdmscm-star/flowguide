@@ -90,10 +90,73 @@ the source, a note can only have come from overflow, so any note is suspect.
 - **Friends House** and **Tamalpais Marin** have **empty** Profile & Pricing
   cells. Their missing pricing is **correctly absent**, not lost. The
   professional's instinct was right and is now proven from source.
-- **Creekwood Senior Home** was reviewed as correct, but its source cell carries
-  a `Care Costs:` label and its Library entry holds "Care costs are all-inclusive
-  (included in price)" in the private note. By the professional's own rule that
-  is a reusable community fact in a private field. Raised as a question, not a
-  correction — it may be a case that was not scrutinised, or one they consider
-  acceptable. Which it is changes whether the "any note is suspect" rule holds at
-  11/11 or 12/12.
+- **Creekwood Senior Home** — resolved by the professional as a **known partial
+  failure, MISCLASSIFIED**. Source: `Care Costs: Prices are all-inclusive (care
+  costs included in price)`. Output: the same meaning, reworded, in the private
+  note. Not lost, not fabricated — an explicitly labelled reusable fact routed to
+  a private field. **The "any private note" predictor is therefore 12/12 with 0
+  false positives against 9 known-good.**
+
+
+## Two correlations, neither of them a rule
+
+Creekwood produced the decisive pair. Its source cell holds two ADJACENT
+labelled lines:
+
+```
+Community Fee: $2,500                                       -> details
+Care Costs: Prices are all-inclusive (care costs included…)  -> PRIVATE NOTE
+```
+
+One line apart, same cell, same `Label: value` form, opposite destinations. That
+single pair eliminates the host cell, the chunk boundary, line wrapping, and
+narrative ambiguity as sufficient explanations.
+
+What remains is the value. Measured across the joined dataset, excluding labels
+whose correct home is `contacts` or `links`:
+
+| value shape | facts | → detail | → notes | missing |
+|---|---|---|---|---|
+| scalar (`$2,500`, `AL, MC`, `58`) | 212 | 69% | 18% | 13% |
+| prose (`Additional monthly fee based on level of care…`) | 69 | 43% | **41%** | 16% |
+
+A prose value reaches the private note **2.3× more often**. Real effect — and
+still not a rule: 43% of prose values became details anyway, and 18% of scalars
+went to notes anyway.
+
+**And then the pair that breaks it outright:**
+
+```
+Creekwood     Community Fee: $2,500  -> details
+Vine Ridge    Community Fee: $2,400  -> PRIVATE NOTE
+```
+
+Same label. Same value shape. Same magnitude. Opposite destinations.
+
+### What that means
+
+**No property of the fact determines where it lands.** Host cell is a risk
+factor (83% vs 57% detail). Value shape is a risk factor (69% vs 43%). Neither
+is deterministic, and together they do not account for the residual.
+
+The remaining explanation is that placement is decided per record, inconsistently
+— which is a very different problem from a missing prompt rule. A missing rule
+is fixed by writing the rule. Instability is not: a rule that is followed 70% of
+the time still loses three facts in ten.
+
+**The twice-run diagnostic is now the deciding experiment.** If the same record
+lands the same way in both runs, placement is stable and driven by something in
+the record we have not yet isolated. If it moves between runs, placement is
+genuinely non-deterministic, and no prompt-level rule can be relied on without
+accounting to catch what it misses.
+
+Recorded before the runs so it cannot be reinterpreted afterwards.
+
+### A measurement error worth recording
+
+The first version of the value-shape table reported scalars as 65% "missing".
+That number was meaningless: it counted `Email Address`, `Cell Phone` and
+`Existing Website` as missing details when they had correctly become contacts.
+Excluding contact- and link-destined labels changed scalar placement from
+28% to 69% detail. The corrected table is above; the flawed one was never
+reported as a finding.
