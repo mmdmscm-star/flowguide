@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { parseClaims } from "./claim-parser.ts";
 import { reconcile } from "./reconcile.ts";
 import { enforceItem, sourceGrantsPrivacy, contractEnforcementEnabled } from "./enforce.ts";
@@ -211,4 +212,29 @@ test("same label, unprovable identity — nothing is stripped", () => {
   });
   assert.equal((item.details as any[]).length, 1, "deleted a detail whose identity was not proven");
   assert.equal(stripped.length, 0);
+});
+
+test("packet prompts no longer route ambiguity into the private note", () => {
+  const prompts = readFileSync("src/lib/ai-prompts.ts", "utf8");
+  // CODE ONLY. The comment explaining the removal naturally quotes the phrase,
+  // and an earlier version of this test scanned it and failed — measuring the
+  // comment rather than what reaches the model. Same self-reference trap as
+  // before; the fix is to scope the scan, never to loosen the pattern.
+  const code = prompts.split("\n").filter((l) => !l.trim().startsWith("//")).join("\n");
+  assert.doesNotMatch(code, /ambiguous\s*->\s*notes/, "`ambiguous -> notes` still reaches the model");
+  // ...and replaced by an explicit authority requirement.
+  assert.match(prompts, /notes is PRIVATE/);
+  assert.match(prompts, /ONLY when the source itself says it is private/);
+});
+
+test("enforcement is inert when the flag is off", async () => {
+  const { enforceChunkResult } = await import("./enforce-chunk.ts");
+  const was = process.env.FLOWGUIDE_ENFORCE_CONTRACT;
+  delete process.env.FLOWGUIDE_ENFORCE_CONTRACT;
+  const result = { items: [{ title: "A", notes: "should survive when off" }] };
+  const out = enforceChunkResult({ segmentText: "Community Fee: $1", chunkOrdinal: 0, sourceStart: 0,
+    sourceText: "Community Fee: $1", result });
+  assert.equal(out.result, result, "the model's own result must be returned untouched");
+  assert.equal(out.telemetry.itemsGoverned, 0);
+  if (was === undefined) delete process.env.FLOWGUIDE_ENFORCE_CONTRACT; else process.env.FLOWGUIDE_ENFORCE_CONTRACT = was;
 });

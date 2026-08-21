@@ -9,6 +9,14 @@ const URL_RULES = `URL CLASSIFICATION — route each URL by pattern:
 - MAP (google.com/maps, goo.gl/maps) -> "links" label "View on Map"
 - ALL OTHER -> "links" label "Website"`;
 
+// PRIVATE NOTE HAS A STRICT MEANING NOW.
+//
+// `ambiguous -> notes` used to send anything the model could not place into a
+// field the recipient never sees. A real import put thirteen "Why it made the
+// list" paragraphs — prose written FOR the client — into it. Uncertainty is not
+// privacy, and a private field is not an overflow bin.
+const NOTES_RULE = `notes is PRIVATE and is for the professional only. Put something there ONLY when the source itself says it is private, internal, confidential or not for the client. Never put ordinary information there because you are unsure where it belongs — if you cannot place something, leave it in description rather than notes.`;
+
 const ITEM_FIELDS = `Each item: title (required), address, description, notes,
 details [{label,value}], links [{url,label}], photos [url], contacts (ORDERED
 array of people/businesses; every person a SEPARATE entry, never merged, never
@@ -45,7 +53,8 @@ Extract a short packet title, an optional clientName if a client/recipient is na
 ${g ? "\n" + g + "\n" : ""}
 ${URL_RULES}
 
-Rules: preserve ALL specifics (addresses, phones, prices, hours, names); do not invent; ambiguous -> notes; full street addresses -> address; keep every person + their own phone/email; keep titles < 60 chars; a label for every link.
+Rules: preserve ALL specifics (addresses, phones, prices, hours, names); do not invent; full street addresses -> address; keep every person + their own phone/email; keep titles < 60 chars; a label for every link.
+${NOTES_RULE}
 ${NOTHING_RULE}
 
 Respond with ONLY valid JSON (no markdown):
@@ -60,7 +69,8 @@ export function sectionsPrompt(packetType: string): string {
 ${g ? "\n" + g + "\n" : ""}
 ${URL_RULES}
 
-Rules: preserve ALL specifics; do not invent; ambiguous -> notes; full addresses -> address; keep every person + their own phone/email; titles < 60 chars; a label for every link.
+Rules: preserve ALL specifics; do not invent; full addresses -> address; keep every person + their own phone/email; titles < 60 chars; a label for every link.
+${NOTES_RULE}
 ${NOTHING_RULE}
 If a section heading is provided as context, use it as the section title so items group consistently.
 
@@ -75,6 +85,8 @@ Return ONLY items — no sections, titles, or grouping.
 ${URL_RULES}
 
 Rules: do not invent; preserve all specifics; keep every person + their own phone/email; titles < 60 chars.
+${NOTES_RULE}
+${NOTES_RULE}
 ${NOTHING_RULE}
 Respond with ONLY valid JSON (no markdown), items is the ONLY top-level key:
 { "items": [ { "title": "string", "address": "string?", "description": "string?", "notes": "string?", "details": [{"label":"string","value":"string"}], "links": [{"url":"string","label":"string"}], "photos": ["string"], "contacts": [{"name":"string?","role":"string?","phone":"string?","email":"string?","website":"string?"}] } ] }`;

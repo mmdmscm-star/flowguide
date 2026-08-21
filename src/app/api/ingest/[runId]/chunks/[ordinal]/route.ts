@@ -6,6 +6,7 @@ import { validateEntryPointResult } from "@/lib/ingest-validate";
 import { nextFault } from "@/lib/test-faults";
 import { buildChunkLedger } from "@/lib/fact-ledger";
 import { buildChunkAccounting } from "@/lib/chunk-accounting";
+import { enforceChunkResult } from "@/lib/enforce-chunk";
 
 export const maxDuration = 60;
 type Context = { params: Promise<{ runId: string; ordinal: string }> };
@@ -176,8 +177,30 @@ export async function POST(_request: Request, context: Context) {
     );
   }
 
+  // SEMANTIC CONTRACT ENFORCEMENT — OFF unless FLOWGUIDE_ENFORCE_CONTRACT=1.
+  //
+  // With the flag off this returns the model's result untouched and ingestion
+  // behaves exactly as it does today. With it on, governed source claims are
+  // placed and rendered from the source rather than from the model's paraphrase,
+  // and private-note content without source authority is surfaced instead of
+  // hidden. Runs BEFORE staging so what is staged is what was contracted.
+  let staged: unknown = outcome.result;
+  let enforcement: ReturnType<typeof enforceChunkResult>["telemetry"] | null = null;
+  try {
+    const e = enforceChunkResult({
+      segmentText, chunkOrdinal: ordinal, sourceStart,
+      sourceText: (run.source_text as string | null) ?? null, result: outcome.result,
+    });
+    staged = e.result;
+    enforcement = e.telemetry;
+  } catch {
+    // A failure here must never cost the professional their import: the model's
+    // own result stands, exactly as if the flag were off.
+    staged = outcome.result;
+  }
+
   const { error: stageErr } = await supabase.rpc("stage_chunk_result", {
-    p_run_id: runId, p_owner: session.userId, p_ordinal: ordinal, p_attempt: attempt, p_segment_hash: c.segment_hash, p_result: outcome.result,
+    p_run_id: runId, p_owner: session.userId, p_ordinal: ordinal, p_attempt: attempt, p_segment_hash: c.segment_hash, p_result: staged,
   });
   if (stageErr) return NextResponse.json({ error: stageErr.message }, { status: 400 });
 
@@ -207,7 +230,7 @@ export async function POST(_request: Request, context: Context) {
     const accounting = buildChunkAccounting({
       segmentText, chunkOrdinal: ordinal, sourceStart,
       sourceText: (run.source_text as string | null) ?? null,
-      result: outcome.result,
+      result: staged,
     });
     // Guarded on the CLAIM GENERATION, exactly as stage/fail/split are. If this
     // chunk was reclaimed by a newer attempt while the model was working, that
@@ -215,7 +238,7 @@ export async function POST(_request: Request, context: Context) {
     // ledger with a reading of a superseded response.
     await supabase
       .from("ingestion_chunks")
-      .update({ fact_ledger: { ...ledger, accounting } })
+      .update({ fact_ledger: { ...ledger, accounting, enforcement } })
       .eq("run_id", runId)
       .eq("ordinal", ordinal)
       .eq("attempt_count", attempt);

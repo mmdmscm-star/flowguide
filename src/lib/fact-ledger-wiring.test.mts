@@ -40,16 +40,19 @@ test("the ledger has exactly one write site and no read site", () => {
   // would mean something started depending on it.
   const uses = route.split("fact_ledger").length - 1;
   assert.equal(uses, 1, "the route touches fact_ledger more than once");
-  assert.match(route, /\.update\(\{ fact_ledger: \{ \.\.\.ledger, accounting \} \}\)/);
+  assert.match(route, /\.update\(\{ fact_ledger: \{ \.\.\.ledger, accounting, enforcement \} \}\)/);
   assert.doesNotMatch(route, /select\([^)]*fact_ledger/);
 });
 
 test("no packet, item, section or library path imports the ledger", () => {
   const importers = files.filter((f) => /from "@\/lib\/fact-ledger"/.test(readFileSync(f, "utf8")));
   assert.deepEqual(importers, [ROUTE], `fact-ledger imported outside the chunk route: ${importers.join(", ")}`);
-  // The accounting layer is held to the same rule: one consumer, no read path.
+  // The accounting and enforcement layers are held to the same rule: one
+  // consumer each, no read path.
   const acct = files.filter((f) => /from "@\/lib\/chunk-accounting"/.test(readFileSync(f, "utf8")));
   assert.deepEqual(acct, [ROUTE], `chunk-accounting imported outside the chunk route: ${acct.join(", ")}`);
+  const enf = files.filter((f) => /from "@\/lib\/enforce-chunk"/.test(readFileSync(f, "utf8")));
+  assert.deepEqual(enf, [ROUTE], `enforce-chunk imported outside the chunk route: ${enf.join(", ")}`);
 });
 
 test("the ledger is computed after the result is durably staged", () => {
