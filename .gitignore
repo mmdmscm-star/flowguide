@@ -59,3 +59,7 @@ scripts/ingestion-runtime/evidence-*.json
 *.csv
 diagnostic-paste.txt
 cross-vertical-paste.txt
+
+# Supabase CLI local state — never committed
+supabase/.temp/
+supabase/.branches/
