@@ -184,7 +184,13 @@ export async function callModel(systemPrompt: string, userText: string): Promise
         max_tokens: MAX_OUTPUT_TOKENS,
         provider: { data_collection: "deny", zdr: true },
       }),
-      signal: AbortSignal.timeout(300_000),
+      // NOT an artificial request timeout. 300s used to sit here, and it was
+      // both too low - a whole-source generation legitimately ran 258s - and
+      // ineffective, because AbortSignal covers the fetch (headers) and stops
+      // applying once the body starts streaming. One call hung for 1192s under
+      // it. This is a hang backstop far above any real generation, not a limit
+      // the experiment can reach.
+      signal: AbortSignal.timeout(1_800_000),
     });
     // fetch() resolves when the HEADERS arrive; the body is still streaming.
     // Stamping the clock here measured time-to-first-byte and reported a
@@ -206,9 +212,18 @@ export async function callModel(systemPrompt: string, userText: string): Promise
       return { ok: false, status: 200, error: "output_truncated", finishReason, content,
         parsed: null, ms, promptTokens, completionTokens, cost, provider };
     }
+    // A 200 CARRYING AN ERROR. Providers return one, and discarding the
+    // envelope turned a diagnosable upstream failure into "unparseable_json"
+    // with nothing to look at. Keep the envelope when there is no content.
+    if (content === null || content === undefined) {
+      return { ok: false, status: 200,
+        error: data?.error?.message ? `upstream: ${data.error.message}` : "no_content_in_200",
+        finishReason, content: JSON.stringify(data ?? null).slice(0, 4000),
+        parsed: null, ms, promptTokens, completionTokens, cost, provider };
+    }
     let parsed: unknown = null;
     try {
-      parsed = JSON.parse(String(content ?? "").replace(/^```(json)?\s*/i, "").replace(/```\s*$/, ""));
+      parsed = JSON.parse(String(content).replace(/^```(json)?\s*/i, "").replace(/```\s*$/, ""));
     } catch {
       return { ok: false, status: 200, error: "unparseable_json", finishReason, content,
         parsed: null, ms, promptTokens, completionTokens, cost, provider };
