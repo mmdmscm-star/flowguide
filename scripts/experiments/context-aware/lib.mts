@@ -196,8 +196,25 @@ export async function callModel(systemPrompt: string, userText: string): Promise
     // Stamping the clock here measured time-to-first-byte and reported a
     // 15,790-token generation as 1.5 seconds - about 10,000 tok/s, which no
     // Claude model does. The clock stops when the body is actually in hand.
-    const data = await res.json().catch(() => null) as any;
+    //
+    // READ AS TEXT, NOT .json(). During a long generation the gateway emits
+    // SSE-style keepalive comment lines (": OPENROUTER PROCESSING") ahead of
+    // the payload to hold the connection open. `res.json()` fails on those, and
+    // it fails SILENTLY into null - which is how three whole-source runs came
+    // back as "no content" with no usage and no finish reason after 13-21
+    // minutes of real generation. The payload was there; the parser never saw
+    // it. Short calls never emitted enough keepalives to trip it, which is why
+    // this only appeared once generations passed ~4 minutes.
+    const bodyText = await res.text();
     const ms = Date.now() - t0;
+    const jsonStart = bodyText.search(/[[{]/);
+    let data: any = null;
+    try { data = JSON.parse(jsonStart >= 0 ? bodyText.slice(jsonStart) : bodyText); } catch { data = null; }
+    if (data === null) {
+      return { ok: false, status: res.status, error: "unparseable_response_body",
+        content: bodyText.slice(0, 4000), parsed: null, ms,
+        promptTokens: 0, completionTokens: 0, cost: 0 };
+    }
     if (!res.ok) {
       return { ok: false, status: res.status, error: data?.error?.message ?? `http ${res.status}`,
         content: null, parsed: null, ms, promptTokens: 0, completionTokens: 0, cost: 0 };
