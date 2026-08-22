@@ -12,6 +12,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { segment, DEFAULT_BUDGET } from "../../../src/lib/segmentation.ts";
 import { recordEnvelopes } from "../../../src/lib/attribution.ts";
+import { detectSourceRecords, detectListRecords } from "../../../src/lib/segmentation.ts";
 import { parseClaims } from "../../../src/lib/claim-parser.ts";
 import { STRUCTURE_MODEL, MAX_OUTPUT_TOKENS } from "../../../src/lib/ai-structure.ts";
 import { organizeLeadPrompt, sectionsPrompt } from "../../../src/lib/ai-prompts.ts";
@@ -107,13 +108,25 @@ export interface Chunk { ordinal: number; start: number; end: number; text: stri
 /** A and B MUST share these. One function, called once per corpus, so the two
  *  arms cannot drift apart by construction rather than by promise. */
 export function chunksOf(source: string): Chunk[] {
-  return segment(source, DEFAULT_BUDGET).map((s, i) => ({
-    ordinal: i, start: s.start, end: s.end, text: s.text, isLead: s.start === 0,
+  // Segment exposes sourceStart/sourceEnd, NOT start/end. Reading the wrong
+  // names gave every chunk `undefined` offsets, which silently made
+  // `isLead` false for chunk 0 - so the lead prompt, which production DOES use
+  // for the first chunk of an organize run, was never exercised. A typo that
+  // produces undefined rather than an error is the expensive kind.
+  const segs = segment(source, DEFAULT_BUDGET);
+  const out = segs.map((s, i) => ({
+    ordinal: i, start: s.sourceStart, end: s.sourceEnd, text: s.text,
+    isLead: s.sourceStart === 0,
   }));
+  if (!out.length || !out.some((c) => c.isLead) || out.some((c) => !Number.isFinite(c.start))) {
+    throw new Error(`chunksOf: bad chunk plan (${out.length} chunks, lead=${out.filter((c) => c.isLead).length})`);
+  }
+  return out;
 }
 
 // ------------------------------------------------------------ the prompts ---
-export function promptFor(arm: "A" | "B" | "C", packetType: string, isLead: boolean): string {
+export function promptFor(arm: "A" | "B" | "B2" | "C", packetType: string, isLead: boolean): string {
+  // B, B2 and A share the SAME prompts. Only the user-message context differs.
   if (arm !== "C") return isLead ? organizeLeadPrompt(packetType) : sectionsPrompt(packetType);
   // C: the SAME extraction instructions, with only the chunk-specific language
   // removed. Nothing is added - if C won because it was told more about the
@@ -189,3 +202,92 @@ export async function callModel(systemPrompt: string, userText: string): Promise
 }
 
 export const MODEL = STRUCTURE_MODEL;
+
+
+// ============================================================================
+// ARM B2 — STRUCTURAL CONTEXT THAT CANNOT BE COPIED.
+//
+// B failed twice, and both failures were the same failure: the map contained
+// material the model could USE. v1 named a subset of labels and told it where
+// they went, so it treated the subset as an allowlist and the destination as an
+// order. v2 removed the instruction but still listed record identities as their
+// own first lines - and the model copied them into titles verbatim.
+//
+// The lesson is not "word it more carefully". It is that any content in the
+// context block is a candidate for the output. So B2 contains NO content: no
+// titles, no values, no labels it cannot prove exhaustive, no destinations, no
+// prose. Only facts about the SHAPE of the source, plus opaque identifiers.
+//
+// If the stability gain survives this, the gain was structural awareness. If it
+// disappears, the gain was semantic priming - the model doing better because we
+// handed it pieces of the answer. Both are results; only one is a feature.
+// ============================================================================
+
+function recordSpans(source: string): Array<{ start: number; end: number }> | null {
+  const t = detectSourceRecords(source);
+  if (t) return t.records.map((r) => ({ start: r.start, end: r.end }));
+  const l = detectListRecords(source);
+  if (l) return l.records.map((r) => ({ start: r.start, end: r.end }));
+  const env = recordEnvelopes(source);
+  return env ? env.map((e) => ({ start: e.start, end: e.end })) : null;
+}
+
+export function buildStructuralContext(
+  source: string, chunk: { start: number; end: number; ordinal: number }, chunkCount: number,
+): string {
+  const tabular = detectSourceRecords(source);
+  const list = detectListRecords(source);
+  const spans = recordSpans(source);
+
+  const lines: string[] = [];
+  lines.push("METADATA ABOUT THE SHAPE OF THE FULL SOURCE. This block is NOT source content.");
+  lines.push("Nothing here is a fact about any entry, and nothing here may appear in your output.");
+  lines.push("Every word of your output must come from the source text below this block.");
+  lines.push("");
+
+  if (tabular) {
+    lines.push(`- Structure: a delimited table, proven by consistent field counts. ${tabular.fields} columns per record, delimiter ${JSON.stringify(tabular.delimiter)}.`);
+    // Headers are included ONLY when the source defines an exhaustive schema
+    // row. Neither corpus here has one, so nothing is asserted about columns.
+  } else if (list) {
+    lines.push("- Structure: a repeated directory of entries, proven by repeated list markers.");
+    // Labels are deliberately absent. The detector can show that labels RECUR;
+    // it cannot show that a set of them is COMPLETE, and an incomplete list
+    // reads as the complete one.
+  } else {
+    lines.push("- Structure: no repeated record structure could be proven.");
+  }
+
+  if (spans && spans.length) {
+    lines.push(`- The full source contains ${spans.length} records, numbered R01 to R${String(spans.length).padStart(2, "0")} in source order.`);
+    // Which records this chunk covers - by opaque identifier only.
+    const covered: string[] = [];
+    for (let i = 0; i < spans.length; i++) {
+      const s = spans[i];
+      if (s.start < chunk.end && s.end > chunk.start) covered.push(`R${String(i + 1).padStart(2, "0")}`);
+    }
+    if (covered.length === 1) lines.push(`- This segment covers record ${covered[0]}.`);
+    else if (covered.length > 1) lines.push(`- This segment covers records ${covered[0]} to ${covered[covered.length - 1]} (${covered.length} of ${spans.length}).`);
+    else lines.push("- This segment covers no complete record.");
+  }
+  lines.push(`- This is segment ${chunk.ordinal + 1} of ${chunkCount}.`);
+  lines.push("- Records outside this segment are handled by other segments. Do not invent or restate them.");
+  return lines.join("\n");
+}
+
+/** THE CONTAMINATION GATE, checked before any call is made.
+ *
+ *  B2's whole claim is that the block carries nothing copyable. That is not a
+ *  promise to keep in a comment - it is checked: no run of this many characters
+ *  from the block may appear anywhere in the source. */
+export function contaminationCheck(block: string, source: string, n = 12): string[] {
+  const hay = source.toLowerCase();
+  const hits: string[] = [];
+  const words = block.toLowerCase().replace(/\s+/g, " ");
+  for (let i = 0; i + n <= words.length; i++) {
+    const probe = words.slice(i, i + n);
+    if (!/[a-z]/.test(probe)) continue;
+    if (hay.includes(probe)) hits.push(probe);
+  }
+  return [...new Set(hits)];
+}

@@ -1,0 +1,41 @@
+{
+  "model": "anthropic/claude-sonnet-4",
+  "arm": "B2",
+  "corpus": "icecream",
+  "rep": 1,
+  "calls": [
+    {
+      "ordinal": 0,
+      "ok": false,
+      "error": "This request requires more credits, or fewer max_tokens. You requested up to 24000 tokens, but can only afford 21871. To increase, visit https://openrouter.ai/workspaces/default/keys/98a1876cbcec1e5fa20458120a1643e3387a396fa71684598b54f9bf2a84cc64 and adjust the key's total limit",
+      "ms": 144,
+      "promptTokens": 0,
+      "completionTokens": 0,
+      "cost": 0,
+      "userChars": 3035,
+      "content": null
+    },
+    {
+      "ordinal": 1,
+      "ok": false,
+      "error": "This request requires more credits, or fewer max_tokens. You requested up to 24000 tokens, but can only afford 21871. To increase, visit https://openrouter.ai/workspaces/default/keys/98a1876cbcec1e5fa20458120a1643e3387a396fa71684598b54f9bf2a84cc64 and adjust the key's total limit",
+      "ms": 123,
+      "promptTokens": 0,
+      "completionTokens": 0,
+      "cost": 0,
+      "userChars": 3217,
+      "content": null
+    },
+    {
+      "ordinal": 2,
+      "ok": false,
+      "error": "This request requires more credits, or fewer max_tokens. You requested up to 24000 tokens, but can only afford 21871. To increase, visit https://openrouter.ai/workspaces/default/keys/98a1876cbcec1e5fa20458120a1643e3387a396fa71684598b54f9bf2a84cc64 and adjust the key's total limit",
+      "ms": 131,
+      "promptTokens": 0,
+      "completionTokens": 0,
+      "cost": 0,
+      "userChars": 2197,
+      "content": null
+    }
+  ]
+}

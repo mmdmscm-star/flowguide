@@ -18,3 +18,19 @@ than when the body arrived, reporting ~10,000 tok/s where the provider does 363.
 Both defects are fixed in the current harness. The contaminated output is kept
 because the allowlist artifact is a finding in its own right: a structural map
 that names a subset of fields will be read as naming ALL the fields that matter.
+
+## v3 (paired A vs B2) — INVALID, credit-exhausted
+
+`out-v3-INVALID-credit-exhausted/` is a partial run and must not be scored. The
+API key hit its own $20 spending limit partway through: OpenRouter reserves
+`max_tokens` UP FRONT, so once the remaining key budget fell below the 24,000
+token reservation every subsequent call was refused before generating anything.
+The refusals surface as `malformed`, which is why the log shows runs of
+"0 items, 0 accepted" completing in 0.4s.
+
+Only `senior/A` r1-r3 completed. `senior/B2/r1` is partial (8 items, 10 refused);
+everything after it is refusals.
+
+The fix is NOT to lower `max_tokens` — that changes the generation settings the
+experiment is required to hold constant, and would make the arms
+non-comparable with the earlier runs.

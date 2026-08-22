@@ -1,0 +1,195 @@
+{
+  "model": "anthropic/claude-sonnet-4",
+  "arm": "B2",
+  "corpus": "senior",
+  "rep": 3,
+  "calls": [
+    {
+      "ordinal": 0,
+      "ok": false,
+      "error": "This request requires more credits, or fewer max_tokens. You requested up to 24000 tokens, but can only afford 21871. To increase, visit https://openrouter.ai/workspaces/default/keys/98a1876cbcec1e5fa20458120a1643e3387a396fa71684598b54f9bf2a84cc64 and adjust the key's total limit",
+      "ms": 160,
+      "promptTokens": 0,
+      "completionTokens": 0,
+      "cost": 0,
+      "userChars": 4267,
+      "content": null
+    },
+    {
+      "ordinal": 1,
+      "ok": false,
+      "error": "This request requires more credits, or fewer max_tokens. You requested up to 24000 tokens, but can only afford 21871. To increase, visit https://openrouter.ai/workspaces/default/keys/98a1876cbcec1e5fa20458120a1643e3387a396fa71684598b54f9bf2a84cc64 and adjust the key's total limit",
+      "ms": 167,
+      "promptTokens": 0,
+      "completionTokens": 0,
+      "cost": 0,
+      "userChars": 3776,
+      "content": null
+    },
+    {
+      "ordinal": 2,
+      "ok": false,
+      "error": "This request requires more credits, or fewer max_tokens. You requested up to 24000 tokens, but can only afford 21871. To increase, visit https://openrouter.ai/workspaces/default/keys/98a1876cbcec1e5fa20458120a1643e3387a396fa71684598b54f9bf2a84cc64 and adjust the key's total limit",
+      "ms": 204,
+      "promptTokens": 0,
+      "completionTokens": 0,
+      "cost": 0,
+      "userChars": 2859,
+      "content": null
+    },
+    {
+      "ordinal": 3,
+      "ok": false,
+      "error": "This request requires more credits, or fewer max_tokens. You requested up to 24000 tokens, but can only afford 21871. To increase, visit https://openrouter.ai/workspaces/default/keys/98a1876cbcec1e5fa20458120a1643e3387a396fa71684598b54f9bf2a84cc64 and adjust the key's total limit",
+      "ms": 131,
+      "promptTokens": 0,
+      "completionTokens": 0,
+      "cost": 0,
+      "userChars": 2635,
+      "content": null
+    },
+    {
+      "ordinal": 4,
+      "ok": false,
+      "error": "This request requires more credits, or fewer max_tokens. You requested up to 24000 tokens, but can only afford 21871. To increase, visit https://openrouter.ai/workspaces/default/keys/98a1876cbcec1e5fa20458120a1643e3387a396fa71684598b54f9bf2a84cc64 and adjust the key's total limit",
+      "ms": 125,
+      "promptTokens": 0,
+      "completionTokens": 0,
+      "cost": 0,
+      "userChars": 3478,
+      "content": null
+    },
+    {
+      "ordinal": 5,
+      "ok": false,
+      "error": "This request requires more credits, or fewer max_tokens. You requested up to 24000 tokens, but can only afford 21871. To increase, visit https://openrouter.ai/workspaces/default/keys/98a1876cbcec1e5fa20458120a1643e3387a396fa71684598b54f9bf2a84cc64 and adjust the key's total limit",
+      "ms": 170,
+      "promptTokens": 0,
+      "completionTokens": 0,
+      "cost": 0,
+      "userChars": 2120,
+      "content": null
+    },
+    {
+      "ordinal": 6,
+      "ok": false,
+      "error": "This request requires more credits, or fewer max_tokens. You requested up to 24000 tokens, but can only afford 21871. To increase, visit https://openrouter.ai/workspaces/default/keys/98a1876cbcec1e5fa20458120a1643e3387a396fa71684598b54f9bf2a84cc64 and adjust the key's total limit",
+      "ms": 155,
+      "promptTokens": 0,
+      "completionTokens": 0,
+      "cost": 0,
+      "userChars": 3137,
+      "content": null
+    },
+    {
+      "ordinal": 7,
+      "ok": false,
+      "error": "This request requires more credits, or fewer max_tokens. You requested up to 24000 tokens, but can only afford 21871. To increase, visit https://openrouter.ai/workspaces/default/keys/98a1876cbcec1e5fa20458120a1643e3387a396fa71684598b54f9bf2a84cc64 and adjust the key's total limit",
+      "ms": 131,
+      "promptTokens": 0,
+      "completionTokens": 0,
+      "cost": 0,
+      "userChars": 4057,
+      "content": null
+    },
+    {
+      "ordinal": 8,
+      "ok": false,
+      "error": "This request requires more credits, or fewer max_tokens. You requested up to 24000 tokens, but can only afford 21871. To increase, visit https://openrouter.ai/workspaces/default/keys/98a1876cbcec1e5fa20458120a1643e3387a396fa71684598b54f9bf2a84cc64 and adjust the key's total limit",
+      "ms": 120,
+      "promptTokens": 0,
+      "completionTokens": 0,
+      "cost": 0,
+      "userChars": 4412,
+      "content": null
+    },
+    {
+      "ordinal": 9,
+      "ok": false,
+      "error": "This request requires more credits, or fewer max_tokens. You requested up to 24000 tokens, but can only afford 21871. To increase, visit https://openrouter.ai/workspaces/default/keys/98a1876cbcec1e5fa20458120a1643e3387a396fa71684598b54f9bf2a84cc64 and adjust the key's total limit",
+      "ms": 153,
+      "promptTokens": 0,
+      "completionTokens": 0,
+      "cost": 0,
+      "userChars": 3114,
+      "content": null
+    },
+    {
+      "ordinal": 10,
+      "ok": false,
+      "error": "This request requires more credits, or fewer max_tokens. You requested up to 24000 tokens, but can only afford 21871. To increase, visit https://openrouter.ai/workspaces/default/keys/98a1876cbcec1e5fa20458120a1643e3387a396fa71684598b54f9bf2a84cc64 and adjust the key's total limit",
+      "ms": 132,
+      "promptTokens": 0,
+      "completionTokens": 0,
+      "cost": 0,
+      "userChars": 3060,
+      "content": null
+    },
+    {
+      "ordinal": 11,
+      "ok": false,
+      "error": "This request requires more credits, or fewer max_tokens. You requested up to 24000 tokens, but can only afford 21871. To increase, visit https://openrouter.ai/workspaces/default/keys/98a1876cbcec1e5fa20458120a1643e3387a396fa71684598b54f9bf2a84cc64 and adjust the key's total limit",
+      "ms": 128,
+      "promptTokens": 0,
+      "completionTokens": 0,
+      "cost": 0,
+      "userChars": 2799,
+      "content": null
+    },
+    {
+      "ordinal": 12,
+      "ok": false,
+      "error": "This request requires more credits, or fewer max_tokens. You requested up to 24000 tokens, but can only afford 21871. To increase, visit https://openrouter.ai/workspaces/default/keys/98a1876cbcec1e5fa20458120a1643e3387a396fa71684598b54f9bf2a84cc64 and adjust the key's total limit",
+      "ms": 119,
+      "promptTokens": 0,
+      "completionTokens": 0,
+      "cost": 0,
+      "userChars": 3020,
+      "content": null
+    },
+    {
+      "ordinal": 13,
+      "ok": false,
+      "error": "This request requires more credits, or fewer max_tokens. You requested up to 24000 tokens, but can only afford 21871. To increase, visit https://openrouter.ai/workspaces/default/keys/98a1876cbcec1e5fa20458120a1643e3387a396fa71684598b54f9bf2a84cc64 and adjust the key's total limit",
+      "ms": 152,
+      "promptTokens": 0,
+      "completionTokens": 0,
+      "cost": 0,
+      "userChars": 2696,
+      "content": null
+    },
+    {
+      "ordinal": 14,
+      "ok": false,
+      "error": "This request requires more credits, or fewer max_tokens. You requested up to 24000 tokens, but can only afford 21871. To increase, visit https://openrouter.ai/workspaces/default/keys/98a1876cbcec1e5fa20458120a1643e3387a396fa71684598b54f9bf2a84cc64 and adjust the key's total limit",
+      "ms": 124,
+      "promptTokens": 0,
+      "completionTokens": 0,
+      "cost": 0,
+      "userChars": 2861,
+      "content": null
+    },
+    {
+      "ordinal": 15,
+      "ok": false,
+      "error": "This request requires more credits, or fewer max_tokens. You requested up to 24000 tokens, but can only afford 21871. To increase, visit https://openrouter.ai/workspaces/default/keys/98a1876cbcec1e5fa20458120a1643e3387a396fa71684598b54f9bf2a84cc64 and adjust the key's total limit",
+      "ms": 139,
+      "promptTokens": 0,
+      "completionTokens": 0,
+      "cost": 0,
+      "userChars": 2979,
+      "content": null
+    },
+    {
+      "ordinal": 16,
+      "ok": false,
+      "error": "This request requires more credits, or fewer max_tokens. You requested up to 24000 tokens, but can only afford 21871. To increase, visit https://openrouter.ai/workspaces/default/keys/98a1876cbcec1e5fa20458120a1643e3387a396fa71684598b54f9bf2a84cc64 and adjust the key's total limit",
+      "ms": 106,
+      "promptTokens": 0,
+      "completionTokens": 0,
+      "cost": 0,
+      "userChars": 2886,
+      "content": null
+    }
+  ]
+}
