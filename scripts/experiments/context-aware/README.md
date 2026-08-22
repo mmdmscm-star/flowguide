@@ -72,3 +72,31 @@ directive framing with side effects we do not understand well enough to ship.
 
 NOT PURSUED: B4. The decision rule said to stop rather than keep tuning, and
 the mechanism found is not the one the experiment set out to exploit.
+
+## Arm O (orientation before execution) — the answer is NO
+
+Paired, counterbalanced, 3 repetitions. Senior living, the primary corpus:
+
+| | A | O |
+| --- | --- | --- |
+| accepted rate | 71.7% | 72.7% (+1.0pp; rule required +3) |
+| whole-item consistency | 5/20 | **0/20** (rule required +5) |
+| cross-record leakage | 0 | **1** (a URL from a chunk that never held it) |
+
+Consistency fell on EVERY corpus: senior 5/20 -> 0/20, ice cream 6/15 -> 1/15,
+cross-vertical 4/4 -> 3/4.
+
+The mechanism is visible in the briefs. They agree with each other only 35-49%
+by vocabulary across repetitions - the orientation is itself nondeterministic.
+Handing each run a different understanding of the document makes the downstream
+output MORE variable, not less. Orientation does not damp the existing
+nondeterminism; it adds a second source of it.
+
+The briefs are otherwise good: genuinely source-level prose about shape rather
+than contents, no covert extraction in 8 of 9. The exception is senior r1, which
+wrote an aggregate price range ("$3,000 to over $15,000") - two record-derived
+values, and a violation of the predeclared zero-specifics rule even though it
+reads as a summary rather than a copy.
+
+Predeclared rule failed on: accepted margin, consistency, leakage, and brief
+validity. No production change follows.
