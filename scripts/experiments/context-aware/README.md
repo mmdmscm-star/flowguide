@@ -100,3 +100,53 @@ reads as a summary rather than a copy.
 
 Predeclared rule failed on: accepted margin, consistency, leakage, and brief
 validity. No production change follows.
+
+## C2 — whole source plus a horizontal lossless-organization contract
+
+Generic rules only: every distinct claim represented, multiple values of a kind
+are separate facts, enumerations not collapsed, apparent redundancy is not
+permission to omit, presentation may change but factual content may not shrink.
+No field, domain or value kind is named. C2 is C as a strict prefix plus this
+block.
+
+| senior | A | C | C2 |
+| --- | --- | --- | --- |
+| accepted rate | 71.7% | 70.7% | **74.6%** |
+| omissions (of 429) | 19.7 | 32.0 | 23.0 |
+| fabrication | 0.0 | 1.0 | 0.0 |
+| seconds | 133 (17 calls) | 154 | 304 |
+
+Of the 26 C-specific omissions: 8 recovered in every repetition (all from one
+dense enumerated line), 18 still missing in every repetition (16 secondary
+contact phones, 2 URLs), 0 intermittent, 0 new omissions introduced.
+
+The contract works SELECTIVELY. "Do not collapse an enumeration" was accepted.
+"Two values of the same kind are two facts" was not - the model still treats a
+contact's second phone as redundant with their first. A generic no-reduction
+rule does not reach a per-entity judgement about duplication.
+
+Controls pass: ice cream 100% accepted, 0 omissions, 0 fabrication. Cross
+vertical 80.7% vs A's 80.0%, 1 omission both.
+
+### The cost is reliability, and it is not confined to the large corpus
+
+3 of 15 C2 whole-source calls hung and terminated (senior twice, ice cream
+once), at 736-1339s. Arm C never did this in 9 calls. Successful C2 calls also
+vary wildly for identical input: ice cream ran 397s and 37s on the same source.
+Arm C ran it in 35s every time.
+
+A single call that usually takes 5 minutes and sometimes dies at 20 is not a
+viable interactive import path, however good its output is.
+
+### Harness defects found in this arm, all client-side
+
+1. A 300s AbortSignal - too low for a legitimate 258s generation, and
+   ineffective anyway since it covers the fetch, not the body stream.
+2. The response envelope was discarded, turning a diagnosable upstream failure
+   into an opaque "unparseable_json".
+3. `res.json()` silently returned null on bodies carrying the gateway's SSE
+   keepalive lines, so three successful generations were recorded as "no
+   content" after 13-21 minutes. The payload was there; the parser never saw it.
+
+Each was hidden by the previous one. None touched model, provider, temperature,
+max_tokens, prompts, corpora or scoring.
