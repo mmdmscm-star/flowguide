@@ -125,7 +125,7 @@ export function chunksOf(source: string): Chunk[] {
 }
 
 // ------------------------------------------------------------ the prompts ---
-export function promptFor(arm: "A" | "B" | "B2" | "B3" | "C", packetType: string, isLead: boolean): string {
+export function promptFor(arm: "A" | "B" | "B2" | "B3" | "O" | "C", packetType: string, isLead: boolean): string {
   // B, B2 and A share the SAME prompts. Only the user-message context differs.
   if (arm !== "C") return isLead ? organizeLeadPrompt(packetType) : sectionsPrompt(packetType);
   // C: the SAME extraction instructions, with only the chunk-specific language
@@ -304,4 +304,85 @@ export function contaminationCheck(block: string, source: string, n = 12): strin
     if (hay.includes(probe)) hits.push(probe);
   }
   return [...new Set(hits)];
+}
+
+
+// ============================================================================
+// ARM O — ORIENTATION BEFORE EXECUTION.
+//
+// One extra call, before any chunk, whose only job is to read the whole source
+// and say what KIND of thing it is. It is working context, not source truth:
+// the chunk still carries the only evidence allowed to support a fact.
+//
+// The constraints below are not decoration. A brief that names a business, a
+// price or a URL has stopped orienting and started extracting, and every later
+// number would be measuring a smuggled copy of the source rather than
+// understanding of it. `analyseBriefs` checks that rather than trusting it.
+// ============================================================================
+
+export const ORIENTATION_MAX_TOKENS = 1200;
+
+export const ORIENTATION_PROMPT = `You are reading a document BEFORE it is processed in pieces. Your only job is to describe what kind of thing it is, so that whoever processes the pieces treats them consistently.
+
+Describe, briefly:
+- what kind of collection or document this appears to be;
+- the overall repeated structure you can see;
+- the recurring kinds of information that appear across entries;
+- meaningful variations between entries;
+- patterns or ambiguities that could cause inconsistent handling of entries.
+
+You MUST NOT:
+- create or propose any structured item, record or field;
+- extract or reproduce any individual entry;
+- name any specific business, person, place, phone number, address, URL, price or other entry-specific value;
+- say which field any information should be placed in;
+- make any public/private or confidentiality decision;
+- state anything the document does not say.
+
+Write at most 200 words of plain prose. Describe the SHAPE of the document, never its contents.`;
+
+export async function orientationCall(source: string): Promise<Call> {
+  const t0 = Date.now();
+  try {
+    const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${API_KEY}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: STRUCTURE_MODEL,
+        messages: [
+          { role: "system", content: ORIENTATION_PROMPT },
+          { role: "user", content: source },
+        ],
+        temperature: 0.3,
+        // A short brief needs a small ceiling. This is the ONLY setting that
+        // differs from a chunk call, it is reported separately, and it cannot
+        // affect the chunk calls that follow.
+        max_tokens: ORIENTATION_MAX_TOKENS,
+        provider: { data_collection: "deny", zdr: true },
+      }),
+      signal: AbortSignal.timeout(300_000),
+    });
+    const data = await res.json().catch(() => null) as any;
+    const ms = Date.now() - t0;
+    if (!res.ok) {
+      return { ok: false, status: res.status, error: data?.error?.message ?? `http ${res.status}`,
+        content: null, parsed: null, ms, promptTokens: 0, completionTokens: 0, cost: 0 };
+    }
+    return {
+      ok: true, status: 200, finishReason: data?.choices?.[0]?.finish_reason,
+      content: data?.choices?.[0]?.message?.content ?? null, parsed: null, ms,
+      promptTokens: data?.usage?.prompt_tokens ?? 0,
+      completionTokens: data?.usage?.completion_tokens ?? 0,
+      cost: data?.usage?.cost ?? 0, provider: data?.provider,
+    };
+  } catch (e) {
+    return { ok: false, status: 0, error: (e as Error)?.message ?? "network",
+      content: null, parsed: null, ms: Date.now() - t0, promptTokens: 0, completionTokens: 0, cost: 0 };
+  }
+}
+
+/** How the brief is handed to an ordinary chunk call. The chunk prompt itself
+ *  is untouched; the brief precedes the same segment text. */
+export function withOrientation(brief: string, chunkText: string): string {
+  return `WORKING CONTEXT (one reader's impression of the document this segment came from). It is background only. It is NOT evidence, and no fact may come from it.\n${brief.trim()}\n\n--- SEGMENT TO STRUCTURE (the only evidence for anything you output) ---\n${chunkText}`;
 }
