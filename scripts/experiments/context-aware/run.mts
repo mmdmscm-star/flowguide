@@ -15,7 +15,7 @@ if (!process.env.FLOWGUIDE_EXP_CONFIRM) {
   process.exit(2);
 }
 const REPS = Number(process.env.REPS ?? 3);
-const ARMS = (process.env.ARMS ?? "A,B,C").split(",") as ("A" | "B" | "B2" | "B3" | "O" | "C")[];
+const ARMS = (process.env.ARMS ?? "A,B,C").split(",") as ("A" | "B" | "B2" | "B3" | "O" | "C" | "C2")[];
 const ONLY = process.env.CORPUS ?? "";
 const OUT = `${root}/scripts/experiments/context-aware/out`;
 if (!existsSync(OUT)) mkdirSync(OUT, { recursive: true });
@@ -38,14 +38,14 @@ const LEAK_MARKERS = [
   /handled by other segments/i, /shape of the full source/i,
 ];
 
-async function oneRun(arm: "A" | "B" | "B2" | "B3" | "O" | "C", c: { key: string; text: string; packetType: string }, rep: number): Promise<RunRecord> {
+async function oneRun(arm: "A" | "B" | "B2" | "B3" | "O" | "C" | "C2", c: { key: string; text: string; packetType: string }, rep: number): Promise<RunRecord> {
   const raw: Array<{ ordinal: number; system: string; user: string; chunkText: string; call: Call }> = [];
   let items: unknown[] = [];
   const malformedDetail: string[] = [];
   let orientation: RunRecord["orientation"];
 
-  if (arm === "C") {
-    const system = promptFor("C", c.packetType, true);
+  if (arm === "C" || arm === "C2") {
+    const system = promptFor(arm, c.packetType, true);
     const call = await callModel(system, c.text);
     raw.push({ ordinal: 0, system, user: c.text, chunkText: c.text, call });
     if (call.ok) items = itemsOf(call.parsed);

@@ -125,15 +125,34 @@ export function chunksOf(source: string): Chunk[] {
 }
 
 // ------------------------------------------------------------ the prompts ---
-export function promptFor(arm: "A" | "B" | "B2" | "B3" | "O" | "C", packetType: string, isLead: boolean): string {
+// A HORIZONTAL LOSSLESS-ORGANIZATION CONTRACT.
+//
+// The forensic pass showed whole-source did not fail from truncation, tail
+// degradation or randomness: it dropped facts DELIBERATELY, behaving like an
+// editor given the whole document - one value where several were listed, a
+// summary where an enumeration stood. Every rule below is a general statement
+// about not reducing factual content. None of them names a field, a domain, a
+// kind of value, or anything about any corpus: if a rule had to know what the
+// document was about, it would be teaching the answer rather than setting a
+// contract.
+const LOSSLESS_RULES = `LOSSLESS ORGANIZATION - this applies to the whole source:
+- Every distinct factual claim stated in the source must still be represented in your output.
+- Where several values of the same kind are given, they are separate facts. Keep all of them; do not choose one as representative.
+- Enumerations of facts must be preserved as the individual facts they are. Do not replace a list of values with a summary, a range, or a description of the list.
+- Apparent redundancy is not permission to omit. Two values that look similar, or that seem to serve the same purpose, are still two facts.
+- You may reorganize how information is presented and grouped. You may not reduce how much factual content is present.`;
+
+export function promptFor(arm: "A" | "B" | "B2" | "B3" | "O" | "C" | "C2", packetType: string, isLead: boolean): string {
   // B, B2 and A share the SAME prompts. Only the user-message context differs.
-  if (arm !== "C") return isLead ? organizeLeadPrompt(packetType) : sectionsPrompt(packetType);
+  if (arm !== "C" && arm !== "C2") return isLead ? organizeLeadPrompt(packetType) : sectionsPrompt(packetType);
   // C: the SAME extraction instructions, with only the chunk-specific language
   // removed. Nothing is added - if C won because it was told more about the
   // task, the comparison would be meaningless.
-  return organizeLeadPrompt(packetType)
+  const base = organizeLeadPrompt(packetType)
     .replace("Structure ONLY the provided segment.", "Structure the complete source text below.")
     .replace(/If this segment has no entry of its own[^\n]*\n?/, "");
+  // C2 = C plus the lossless contract, and nothing else.
+  return arm === "C2" ? `${base}\n\n${LOSSLESS_RULES}` : base;
 }
 
 // -------------------------------------------------------------- the model ---
