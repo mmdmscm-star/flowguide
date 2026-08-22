@@ -8,7 +8,9 @@ type Row = { arm: string; corpus: string; rep: number; calls: number;
   promptTokens: number; completionTokens: number; ms: number; cost: number; score: Score };
 const rows: Row[] = JSON.parse(readFileSync(`${root}/scripts/experiments/context-aware/out/scores.json`, "utf8"));
 
-const ARMS = ["A", "B", "C"];
+// Derived from the data, not hardcoded: a hardcoded list silently omitted B2
+// entirely and printed a one-arm "comparison".
+const ARMS = [...new Set(rows.map((r) => r.arm))].sort();
 const corpora = [...new Set(rows.map((r) => r.corpus))];
 const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
 const mean = (xs: number[]) => (xs.length ? sum(xs) / xs.length : 0);
