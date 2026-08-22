@@ -34,3 +34,41 @@ everything after it is refusals.
 The fix is NOT to lower `max_tokens` — that changes the generation settings the
 experiment is required to hold constant, and would make the arms
 non-comparable with the earlier runs.
+
+## Outcome: STOP. The gain was directive framing, not structural facts.
+
+Three paired runs, same gate throughout:
+
+| run | arm | senior acc% | senior whole-item consistency |
+| --- | --- | --- | --- |
+| v4 | A / B2 (facts + 2 instructions) | 71.4 / **76.1** | 4/20 / **14/20** |
+| v5 | A / B3 (facts only)             | 71.5 / 72.9 | 3/20 / **2/20** |
+
+Removing exactly two instructional sentences removed the entire stability gain.
+The structural FACTS - record count, delimiter, column count, opaque ordinal
+range, segment position - do nothing on their own. What worked was telling the
+model to copy literally and stay inside its segment, and that is the same
+mechanism that changed how titles were formed.
+
+### A correction
+
+The v4 verdict "B2 regresses ice-cream titles" is NOT established. In v5, arm A
+itself produced the city-suffixed titles in two of three repetitions and the
+bare names in the third. The title convention is A's own nondeterminism. v4
+compared a stable arm against an oscillating one and read one side of the
+oscillation as the baseline. Phones and websites were byte-identical in every
+pairing.
+
+### What is and is not known
+
+KNOWN: current chunking is stable in accuracy and unstable in output identity
+(A holds 3-4 of 20 items constant across three runs, in every run measured).
+
+KNOWN: purely factual structural metadata does not fix that.
+
+MEASURED ONCE, NOT REPLICATED: the B2 configuration reached 14/20. A single
+three-repetition observation of a large effect, whose mechanism appears to be
+directive framing with side effects we do not understand well enough to ship.
+
+NOT PURSUED: B4. The decision rule said to stop rather than keep tuning, and
+the mechanism found is not the one the experiment set out to exploit.

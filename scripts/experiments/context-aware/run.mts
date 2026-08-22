@@ -15,7 +15,7 @@ if (!process.env.FLOWGUIDE_EXP_CONFIRM) {
   process.exit(2);
 }
 const REPS = Number(process.env.REPS ?? 3);
-const ARMS = (process.env.ARMS ?? "A,B,C").split(",") as ("A" | "B" | "B2" | "C")[];
+const ARMS = (process.env.ARMS ?? "A,B,C").split(",") as ("A" | "B" | "B2" | "B3" | "C")[];
 const ONLY = process.env.CORPUS ?? "";
 const OUT = `${root}/scripts/experiments/context-aware/out`;
 if (!existsSync(OUT)) mkdirSync(OUT, { recursive: true });
@@ -36,7 +36,7 @@ const LEAK_MARKERS = [
   /handled by other segments/i, /shape of the full source/i,
 ];
 
-async function oneRun(arm: "A" | "B" | "B2" | "C", c: { key: string; text: string; packetType: string }, rep: number): Promise<RunRecord> {
+async function oneRun(arm: "A" | "B" | "B2" | "B3" | "C", c: { key: string; text: string; packetType: string }, rep: number): Promise<RunRecord> {
   const raw: Array<{ ordinal: number; system: string; user: string; call: Call }> = [];
   let items: unknown[] = [];
   const malformedDetail: string[] = [];
@@ -58,8 +58,8 @@ async function oneRun(arm: "A" | "B" | "B2" | "C", c: { key: string; text: strin
       let user = ch.text;
       if (arm === "B") {
         user = `${map}\n\nSEGMENT ${ch.ordinal + 1} OF ${chunks.length} (structure only this text):\n${ch.text}`;
-      } else if (arm === "B2") {
-        const block = buildStructuralContext(c.text, ch, chunks.length);
+      } else if (arm === "B2" || arm === "B3") {
+        const block = buildStructuralContext(c.text, ch, chunks.length, arm);
         // CHECKED, NOT PROMISED. If any 12-character run of the block occurs in
         // the source, the block is carrying copyable content and the arm is
         // invalid - so the run stops rather than producing a number nobody

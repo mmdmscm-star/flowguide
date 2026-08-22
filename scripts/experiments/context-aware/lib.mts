@@ -125,7 +125,7 @@ export function chunksOf(source: string): Chunk[] {
 }
 
 // ------------------------------------------------------------ the prompts ---
-export function promptFor(arm: "A" | "B" | "B2" | "C", packetType: string, isLead: boolean): string {
+export function promptFor(arm: "A" | "B" | "B2" | "B3" | "C", packetType: string, isLead: boolean): string {
   // B, B2 and A share the SAME prompts. Only the user-message context differs.
   if (arm !== "C") return isLead ? organizeLeadPrompt(packetType) : sectionsPrompt(packetType);
   // C: the SAME extraction instructions, with only the chunk-specific language
@@ -232,8 +232,17 @@ function recordSpans(source: string): Array<{ start: number; end: number }> | nu
   return env ? env.map((e) => ({ start: e.start, end: e.end })) : null;
 }
 
+// B3 = B2 with exactly two INSTRUCTIONAL sentences removed and every factual
+// structural line untouched. B2 passed every gate except ice-cream titles,
+// where it produced "Mitchell's Ice Cream - San Francisco" instead of
+// "Mitchell's Ice Cream" - a literalism its content could not have caused,
+// since the block provably shares no text with the source. The hypothesis under
+// test is that the pressure came from telling the model to copy.
+export type ContextVariant = "B2" | "B3";
+
 export function buildStructuralContext(
   source: string, chunk: { start: number; end: number; ordinal: number }, chunkCount: number,
+  variant: ContextVariant = "B2",
 ): string {
   const tabular = detectSourceRecords(source);
   const list = detectListRecords(source);
@@ -242,7 +251,10 @@ export function buildStructuralContext(
   const lines: string[] = [];
   lines.push("METADATA ABOUT THE SHAPE OF THE FULL SOURCE. This block is NOT source content.");
   lines.push("Nothing here is a fact about any entry, and nothing here may appear in your output.");
-  lines.push("Every word of your output must come from the source text below this block.");
+  // REMOVED IN B3. This is the sentence most likely to have produced the
+  // literal-title regression: a copy instruction, applied to a source line that
+  // happens to contain the city.
+  if (variant === "B2") lines.push("Every word of your output must come from the source text below this block.");
   lines.push("");
 
   if (tabular) {
@@ -271,7 +283,9 @@ export function buildStructuralContext(
     else lines.push("- This segment covers no complete record.");
   }
   lines.push(`- This is segment ${chunk.ordinal + 1} of ${chunkCount}.`);
-  lines.push("- Records outside this segment are handled by other segments. Do not invent or restate them.");
+  // REMOVED IN B3. The second instructional sentence; the factual line above it
+  // (which segment this is) stays.
+  if (variant === "B2") lines.push("- Records outside this segment are handled by other segments. Do not invent or restate them.");
   return lines.join("\n");
 }
 

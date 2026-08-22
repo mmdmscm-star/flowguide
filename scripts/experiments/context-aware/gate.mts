@@ -21,7 +21,7 @@ const digits = (s: unknown) => String(s ?? "").replace(/\D+/g, "");
 // ---- ice cream: titles, phones, websites must not regress ----------------
 console.log("### ice cream — exact titles / phones / websites");
 for (const rep of [1, 2, 3]) {
-  const a = items("icecream", "A", rep), b = items("icecream", "B2", rep);
+  const a = items("icecream", "A", rep), b = items("icecream", "B3", rep);
   const titles = (xs: any[]) => xs.map((i) => String(i.title ?? "")).sort();
   const phones = (xs: any[]) => [...new Set(JSON.stringify(xs).match(/\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}/g) ?? [])].map(digits).sort();
   const sites = (xs: any[]) => [...new Set((JSON.stringify(xs).match(/[a-z0-9.-]+\.(com|net|org)/gi) ?? []))].map(norm).sort();
@@ -39,11 +39,11 @@ for (const rep of [1, 2, 3]) {
 // ---- cross-vertical: the contamination control ---------------------------
 console.log("\n### cross-vertical — one chunk, so B2 has no deficit to repair");
 for (const rep of [1, 2, 3]) {
-  const a = items("crossvert", "A", rep), b = items("crossvert", "B2", rep);
+  const a = items("crossvert", "A", rep), b = items("crossvert", "B3", rep);
   const key = (xs: any[]) => xs.map((i) => JSON.stringify([i.title, i.address, i.details, i.links, i.photos, i.contacts])).sort();
   const ka = key(a), kb = key(b);
   const identical = ka.filter((x) => kb.includes(x)).length;
   console.log(`r${rep}: ${a.length} vs ${b.length} items, byte-identical items: ${identical}/${a.length}`);
   console.log(`   titles A: ${JSON.stringify(a.map((i) => i.title))}`);
-  console.log(`   titles B2:${JSON.stringify(b.map((i) => i.title))}`);
+  console.log(`   titles B3:${JSON.stringify(b.map((i) => i.title))}`);
 }
