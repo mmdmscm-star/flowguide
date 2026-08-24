@@ -39,6 +39,9 @@ export default async function PreviewPage({ params }: Props) {
         packetId={id}
         slug={packet.slug}
         initialStatus={packet.status}
+        title={packet.title}
+        clientName={packet.clientName}
+        professionalName={packet.professional?.name}
       />
 
       <PacketHeader

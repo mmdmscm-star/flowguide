@@ -2,14 +2,19 @@
 
 import { useState } from "react";
 import OwnershipResolution, { type OwnershipState } from "./OwnershipResolution";
+import ClientMessagePanel from "./client-message-panel";
 
 type Props = {
   packetId: string;
   slug: string;
   initialStatus: string;
+  /** For the client message. All optional - it degrades a line at a time. */
+  title?: string | null;
+  clientName?: string | null;
+  professionalName?: string | null;
 };
 
-export function PreviewActions({ packetId, slug, initialStatus }: Props) {
+export function PreviewActions({ packetId, slug, initialStatus, title, clientName, professionalName }: Props) {
   const [status, setStatus] = useState(initialStatus);
   const [publishing, setPublishing] = useState(false);
   const [error, setError] = useState("");
@@ -78,8 +83,13 @@ export function PreviewActions({ packetId, slug, initialStatus }: Props) {
     }
   }
 
+  // ONE definition, used by the link copy and by the message, so the two can
+  // never disagree about where the packet lives. Empty during SSR; the panel
+  // only renders after publish, which is client-side.
+  const shareUrl = typeof window === "undefined" ? `/p/${slug}` : `${window.location.origin}/p/${slug}`;
+
   function copyLink() {
-    navigator.clipboard.writeText(`${window.location.origin}/p/${slug}`);
+    navigator.clipboard.writeText(shareUrl);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   }
@@ -94,13 +104,18 @@ export function PreviewActions({ packetId, slug, initialStatus }: Props) {
           Anyone with this link can open the packet — no sign-in required. Share
           it only with people you want to see it.
         </p>
-        <div className="flex items-center justify-center gap-3">
-          <button
-            onClick={copyLink}
-            className="px-4 py-1.5 rounded-lg bg-accent hover:bg-accent-hover text-white text-xs font-medium transition-colors"
-          >
-            {copied ? "Copied!" : "Copy Link"}
-          </button>
+        {/* The message CONTAINS the link, so it takes precedence and
+            "Copy link only" becomes the secondary action beside it. The link
+            behaviour itself is unchanged. */}
+        <ClientMessagePanel
+          title={title}
+          clientName={clientName}
+          professionalName={professionalName}
+          url={shareUrl}
+          onCopyLink={copyLink}
+          linkCopied={copied}
+        />
+        <div className="mt-3">
           <a
             href={`/edit/${packetId}`}
             className="text-xs text-green-700 hover:text-green-900 underline"
