@@ -167,8 +167,8 @@ function LibraryBar({ packetId, sectionId, disabled, itemCount, refreshKey, onSa
   }, [refreshKey]);
 
   const empty = hasSaved === false;
-  const PRIMARY = "flex-none px-3 py-1.5 rounded-lg bg-accent hover:bg-accent-hover text-white text-xs font-medium disabled:opacity-60";
-  const SECONDARY = "flex-none px-3 py-1.5 rounded-lg border border-border bg-white text-xs font-medium text-foreground hover:border-accent hover:text-accent disabled:opacity-60";
+  const PRIMARY = "flex-none px-3 py-1.5 rounded-lg bg-accent hover:bg-accent-hover text-white text-sm font-medium disabled:opacity-60";
+  const SECONDARY = "flex-none px-3 py-1.5 rounded-lg border border-border bg-white text-sm font-medium text-foreground hover:border-accent hover:text-accent disabled:opacity-60";
 
   const addBtn = (
     <button key="add" onClick={() => setPicker(true)} disabled={disabled || empty}
@@ -1100,7 +1100,7 @@ export function LegacyPacketEditor() {
         onNotice={setLibraryNotice}
         onRefresh={loadPacket}
       />
-      {libraryNotice && <p className="mb-4 text-xs text-green-700">{libraryNotice}</p>}
+      {libraryNotice && <p className="mb-4 text-sm text-green-700">{libraryNotice}</p>}
 
       {/* Personal note */}
       <div className="mb-8">
@@ -1185,7 +1185,7 @@ export function LegacyPacketEditor() {
               </div>
               <button
                 onClick={() => deleteSection(section.id)}
-                className="text-xs text-red-400 hover:text-red-600 mt-1 flex-shrink-0"
+                className="text-sm text-red-400 hover:text-red-600 mt-1 flex-shrink-0"
               >
                 Delete
               </button>
@@ -1300,7 +1300,7 @@ export function LegacyPacketEditor() {
           </p>
           <button
             onClick={() => setPromoting(true)}
-            className="mt-3 px-3 py-1.5 rounded-lg bg-accent hover:bg-accent-hover text-white text-xs font-medium"
+            className="mt-3 px-3 py-1.5 rounded-lg bg-accent hover:bg-accent-hover text-white text-sm font-medium"
           >
             Save to Library
           </button>
@@ -1670,7 +1670,7 @@ export function LegacyPacketEditor() {
               />
               <span>
                 <span className="block text-sm font-medium text-foreground">{opt.title}</span>
-                <span className="block text-xs text-muted">{opt.desc}</span>
+                <span className="block text-sm text-muted">{opt.desc}</span>
               </span>
             </label>
           ))}
@@ -1880,7 +1880,7 @@ function ItemEditor({
                 if (e.target.value) onMove(item.id, e.target.value);
               }}
               aria-label="Move to section"
-              className="text-xs text-muted border border-border rounded px-1 py-0.5 bg-white max-w-[8rem] focus:outline-none focus:ring-2 focus:ring-accent"
+              className="text-sm text-muted border border-border rounded px-1 py-0.5 bg-white max-w-[8rem] focus:outline-none focus:ring-2 focus:ring-accent"
             >
               <option value="">Move to…</option>
               {otherSections.map((s) => (
@@ -1892,13 +1892,13 @@ function ItemEditor({
           )}
           <button
             onClick={() => setExpanded(!expanded)}
-            className="text-xs text-muted hover:text-foreground px-1"
+            className="text-sm text-muted hover:text-foreground px-1"
           >
             {expanded ? "▾" : "▸"}
           </button>
           <button
             onClick={() => onDelete(item.id)}
-            className="text-xs text-red-400 hover:text-red-600 px-1"
+            className="text-sm text-red-400 hover:text-red-600 px-1"
           >
             ×
           </button>
@@ -1941,7 +1941,7 @@ function ItemEditor({
           <div>
             <div className="flex items-center justify-between mb-1">
               <span className="text-xs font-medium text-muted uppercase tracking-wide">Details</span>
-              <button onClick={() => onAddDetail(item.id)} className="text-xs text-accent hover:text-accent-hover">
+              <button onClick={() => onAddDetail(item.id)} className="text-sm text-accent hover:text-accent-hover">
                 + Add
               </button>
             </div>
@@ -1952,18 +1952,18 @@ function ItemEditor({
                   value={detail.label}
                   onChange={(e) => onUpdateDetail(item.id, detail.id, "label", e.target.value)}
                   placeholder="Label"
-                  className="flex-1 px-2.5 py-1.5 rounded border border-border text-xs focus:outline-none focus:ring-2 focus:ring-accent placeholder:text-gray-300"
+                  className="flex-1 px-2.5 py-1.5 rounded border border-border text-sm focus:outline-none focus:ring-2 focus:ring-accent placeholder:text-gray-300"
                 />
                 <input
                   type="text"
                   value={detail.value}
                   onChange={(e) => onUpdateDetail(item.id, detail.id, "value", e.target.value)}
                   placeholder="Value"
-                  className="flex-1 px-2.5 py-1.5 rounded border border-border text-xs focus:outline-none focus:ring-2 focus:ring-accent placeholder:text-gray-300"
+                  className="flex-1 px-2.5 py-1.5 rounded border border-border text-sm focus:outline-none focus:ring-2 focus:ring-accent placeholder:text-gray-300"
                 />
                 <button
                   onClick={() => onRemoveDetail(item.id, detail.id)}
-                  className="text-xs text-red-400 hover:text-red-600 px-1"
+                  className="text-sm text-red-400 hover:text-red-600 px-1"
                 >
                   ×
                 </button>
@@ -1975,7 +1975,7 @@ function ItemEditor({
           <div>
             <div className="flex items-center justify-between mb-1">
               <span className="text-xs font-medium text-muted uppercase tracking-wide">Links</span>
-              <button onClick={() => onAddLink(item.id)} className="text-xs text-accent hover:text-accent-hover">
+              <button onClick={() => onAddLink(item.id)} className="text-sm text-accent hover:text-accent-hover">
                 + Add
               </button>
             </div>
@@ -1986,18 +1986,18 @@ function ItemEditor({
                   value={link.url}
                   onChange={(e) => onUpdateLink(item.id, link.id, "url", e.target.value)}
                   placeholder="https://..."
-                  className="flex-[2] px-2.5 py-1.5 rounded border border-border text-xs focus:outline-none focus:ring-2 focus:ring-accent placeholder:text-gray-300"
+                  className="flex-[2] px-2.5 py-1.5 rounded border border-border text-sm focus:outline-none focus:ring-2 focus:ring-accent placeholder:text-gray-300"
                 />
                 <input
                   type="text"
                   value={link.label}
                   onChange={(e) => onUpdateLink(item.id, link.id, "label", e.target.value)}
                   placeholder="Label"
-                  className="flex-1 px-2.5 py-1.5 rounded border border-border text-xs focus:outline-none focus:ring-2 focus:ring-accent placeholder:text-gray-300"
+                  className="flex-1 px-2.5 py-1.5 rounded border border-border text-sm focus:outline-none focus:ring-2 focus:ring-accent placeholder:text-gray-300"
                 />
                 <button
                   onClick={() => onRemoveLink(item.id, link.id)}
-                  className="text-xs text-red-400 hover:text-red-600 px-1"
+                  className="text-sm text-red-400 hover:text-red-600 px-1"
                 >
                   ×
                 </button>
@@ -2009,7 +2009,7 @@ function ItemEditor({
           <div>
             <div className="flex items-center justify-between mb-1">
               <span className="text-xs font-medium text-muted uppercase tracking-wide">Photos</span>
-              <button onClick={() => onAddPhoto(item.id)} className="text-xs text-accent hover:text-accent-hover">
+              <button onClick={() => onAddPhoto(item.id)} className="text-sm text-accent hover:text-accent-hover">
                 + Add
               </button>
             </div>
@@ -2046,13 +2046,13 @@ function ItemEditor({
                     onChange={(e) => onUpdatePhoto(item.id, photo.id, e.target.value)}
                     placeholder="Paste image URL..."
                     autoFocus
-                    className="flex-1 px-2.5 py-1.5 rounded border border-border text-xs focus:outline-none focus:ring-2 focus:ring-accent placeholder:text-gray-300"
+                    className="flex-1 px-2.5 py-1.5 rounded border border-border text-sm focus:outline-none focus:ring-2 focus:ring-accent placeholder:text-gray-300"
                   />
                   {/* Upload sits BESIDE the URL field, not instead of it. A
                       professional who already keeps images somewhere should not
                       have to re-upload them to keep working. */}
                   <label
-                    className={`shrink-0 px-2.5 py-1.5 rounded border border-border text-xs cursor-pointer
+                    className={`shrink-0 px-2.5 py-1.5 rounded border border-border text-sm cursor-pointer
                                 hover:bg-gray-50 ${photoUploading === photo.id ? "opacity-60 pointer-events-none" : ""}`}
                   >
                     {photoUploading === photo.id ? "Uploading…" : "Upload"}
@@ -2071,13 +2071,13 @@ function ItemEditor({
                   </label>
                   <button
                     onClick={() => onRemovePhoto(item.id, photo.id)}
-                    className="text-xs text-red-400 hover:text-red-600 px-1"
+                    className="text-sm text-red-400 hover:text-red-600 px-1"
                   >
                     ×
                   </button>
                 </div>
               ))}
-            {photoError && <p className="text-xs text-red-600 mt-1">{photoError}</p>}
+            {photoError && <p className="text-sm text-red-600 mt-1">{photoError}</p>}
           </div>
 
           {/* Notes */}
@@ -2095,19 +2095,19 @@ function ItemEditor({
               <span className="text-xs font-medium text-muted">Contacts (people)</span>
               <button
                 onClick={() => onAddContact(item.id)}
-                className="text-xs text-accent hover:text-accent-hover font-medium"
+                className="text-sm text-accent hover:text-accent-hover font-medium"
               >
                 + Add contact
               </button>
             </div>
             <div className="mt-2 space-y-2">
               {item.contacts.map((c, ci) => {
-                const cInput = "px-2.5 py-1.5 rounded border border-border text-xs focus:outline-none focus:ring-2 focus:ring-accent placeholder:text-gray-300";
+                const cInput = "px-2.5 py-1.5 rounded border border-border text-sm focus:outline-none focus:ring-2 focus:ring-accent placeholder:text-gray-300";
                 return (
                   <div key={c.id} className="rounded-lg border border-border p-2">
                     <div className="flex items-center justify-between mb-1.5">
-                      <span className="text-[11px] font-medium text-muted">Contact {ci + 1}</span>
-                      <button onClick={() => onRemoveContact(item.id, c.id)} className="text-[11px] text-red-400 hover:text-red-600 font-medium">Remove</button>
+                      <span className="text-xs font-medium text-muted">Contact {ci + 1}</span>
+                      <button onClick={() => onRemoveContact(item.id, c.id)} className="text-xs text-red-400 hover:text-red-600 font-medium">Remove</button>
                     </div>
                     <div className="grid grid-cols-2 gap-2">
                       <input type="text" value={c.name} onChange={(e) => onUpdateContact(item.id, c.id, "name", e.target.value)} placeholder="Name" className={cInput} />
