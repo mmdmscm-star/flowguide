@@ -5,7 +5,12 @@ import { specifics, itemsOf, type Score } from "./ruler.mts";
 const OUT = `${root}/scripts/experiments/context-aware/out`;
 type Row = { arm: string; corpus: string; rep: number; calls: number; completionTokens: number;
   ms: number; cost: number; score: Score };
-const rows: Row[] = JSON.parse(readFileSync(`${OUT}/scores.json`, "utf8"));
+// SENIOR ONLY. The gate was written and first applied when out/ held senior
+// alone, so every threshold in it is a senior threshold. Averaging three
+// corpora into it would silently change what the numbers mean while appearing
+// to run the same gate. Controls are reported separately, as they always were.
+const rows: Row[] = (JSON.parse(readFileSync(`${OUT}/scores.json`, "utf8")) as Row[])
+  .filter((r) => r.corpus === "senior");
 const m = (arm: string, f: (r: Row) => number) => {
   const a = rows.filter((r) => r.arm === arm); return a.reduce((n, r) => n + f(r), 0) / a.length;
 };

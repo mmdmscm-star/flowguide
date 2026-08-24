@@ -191,3 +191,25 @@ The mechanism also makes sense per-chunk: the enumeration rule bites on a dense
 line the chunk sees whole. What it does NOT fix is the shared blind spot - a
 bare unlabelled value alone on a line - which nothing in these rules addresses
 and which was predeclared as expected to remain.
+
+## A2 CONFIRMATION RUN — replicated. Nothing tuned.
+
+Fresh paired run, all three corpora, same frozen prompts/scorer/corpora/
+settings/gate.
+
+| senior | first run | confirmation |
+| --- | --- | --- |
+| A accepted | 71.6% | 71.5% |
+| A2 accepted | **77.0%** | **77.1%** |
+| A omissions | 19.7 | 19.7 |
+| A2 omissions | 17.0 | **15.7** |
+
+The accepted-rate gain replicated to within 0.2pp (+5.4 then +5.6). The
+omission reduction was larger the second time (-4.0 vs -2.7). Every A2
+repetition beat every A repetition in both runs.
+
+All 9 senior gates PASS. Controls PASS: ice cream 100% -> 100% with everything
+at zero; cross-vertical 80.0% -> 82.0%, omissions 1.0 -> 0.7, and the one
+stray unauthorized note in A (0.33/rep) went to 0 in A2.
+
+Experimentation on this line is CLOSED. The block is frozen as measured.

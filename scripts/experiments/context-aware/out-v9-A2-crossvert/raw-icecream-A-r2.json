@@ -2,13 +2,13 @@
   "model": "anthropic/claude-sonnet-4",
   "arm": "A",
   "corpus": "icecream",
-  "rep": 3,
+  "rep": 2,
   "calls": [
     {
       "ordinal": 0,
       "ok": true,
       "finishReason": "stop",
-      "ms": 8924,
+      "ms": 8584,
       "promptTokens": 1337,
       "completionTokens": 1258,
       "cost": 0.022881,
@@ -21,7 +21,7 @@
       "ordinal": 1,
       "ok": true,
       "finishReason": "stop",
-      "ms": 16459,
+      "ms": 8899,
       "promptTokens": 1338,
       "completionTokens": 1299,
       "cost": 0.023499,
@@ -34,14 +34,14 @@
       "ordinal": 2,
       "ok": true,
       "finishReason": "stop",
-      "ms": 6250,
+      "ms": 5224,
       "promptTokens": 1057,
-      "completionTokens": 783,
-      "cost": 0.014916,
+      "completionTokens": 708,
+      "cost": 0.013791,
       "provider": "Amazon Bedrock",
       "userChars": 1562,
       "chunkText": " Century-old Pleasanton landmark best known for soft serve from a classic drive-through and walk-up window. Chocolate and vanilla anchor a rotating lineup of seasonal flavors.\nWhy it made the list: 2026 Bay Area Parent East Bay silver winner and a Chronicle-recommended historic Bay Area stop.\n13. Cookiebar Scoop Shop — Alameda\nAddress\n1608 Webster St, Alameda, CA 94501\nPhone\n(510) 521-1544\nWebsite\ncookiebarscoopshop.com\n\n Alameda's West End scoop shop known for smooth, creative ice creams, including Asian-inspired flavors such as egg tart alongside approachable classics.\nWhy it made the list: Strong local following and high customer ratings; a distinctive Alameda representative.\n14. Angela's Organic Ice Cream — Petaluma (Sonoma County)\nAddress\n134 Petaluma Blvd N, Petaluma, CA 94952\nPhone\n(707) 774-6567\nWebsite\nwww.angelasicecream.com\n\n Downtown Petaluma artisan shop focused on small-batch organic ice cream, locally sourced ingredients and rotating creative flavors, with vegan and seasonal selections.\nWhy it made the list: Established Sonoma County artisan creamery with multiple North Bay locations.\n15. Koolfi Creamery — San Francisco\nAddress\n50 Fremont St, Suite 125, San Francisco, CA 94105\nPhone\n(415) 390-6210\nWebsite\nkoolficreamery.com\n\n Indian-inspired creamery using organic dairy and real spices, fruits and house-made dessert mix-ins. Signature ideas include Klassic Koolfi, mango lassi and cardamom-forward flavors.\nWhy it made the list: Featured in current Chronicle/Eater coverage for distinctive Indian-inspired Bay Area ice cream.",
-      "content": "{\n  \"sections\": [\n    {\n      \"title\": \"Ice Cream Shops\",\n      \"description\": null,\n      \"items\": [\n        {\n          \"title\": \"Cookiebar Scoop Shop\",\n          \"address\": \"1608 Webster St, Alameda, CA 94501\",\n          \"description\": \"Alameda's West End scoop shop known for smooth, creative ice creams, including Asian-inspired flavors such as egg tart alongside approachable classics.\",\n          \"notes\": null,\n          \"details\": [\n            {\n              \"label\": \"Recognition\",\n              \"value\": \"Strong local following and high customer ratings; a distinctive Alameda representative\"\n            }\n          ],\n          \"links\": [\n            {\n              \"url\": \"cookiebarscoopshop.com\",\n              \"label\": \"Website\"\n            }\n          ],\n          \"photos\": [],\n          \"contacts\": [\n            {\n              \"name\": null,\n              \"role\": null,\n              \"phone\": \"(510) 521-1544\",\n              \"email\": null,\n              \"website\": null\n            }\n          ]\n        },\n        {\n          \"title\": \"Angela's Organic Ice Cream\",\n          \"address\": \"134 Petaluma Blvd N, Petaluma, CA 94952\",\n          \"description\": \"Downtown Petaluma artisan shop focused on small-batch organic ice cream, locally sourced ingredients and rotating creative flavors, with vegan and seasonal selections.\",\n          \"notes\": null,\n          \"details\": [\n            {\n              \"label\": \"Recognition\",\n              \"value\": \"Established Sonoma County artisan creamery with multiple North Bay locations\"\n            }\n          ],\n          \"links\": [\n            {\n              \"url\": \"www.angelasicecream.com\",\n              \"label\": \"Website\"\n            }\n          ],\n          \"photos\": [],\n          \"contacts\": [\n            {\n              \"name\": null,\n              \"role\": null,\n              \"phone\": \"(707) 774-6567\",\n              \"email\": null,\n              \"website\": null\n            }\n          ]\n        },\n        {\n          \"title\": \"Koolfi Creamery\",\n          \"address\": \"50 Fremont St, Suite 125, San Francisco, CA 94105\",\n          \"description\": \"Indian-inspired creamery using organic dairy and real spices, fruits and house-made dessert mix-ins. Signature ideas include Klassic Koolfi, mango lassi and cardamom-forward flavors.\",\n          \"notes\": null,\n          \"details\": [\n            {\n              \"label\": \"Recognition\",\n              \"value\": \"Featured in current Chronicle/Eater coverage for distinctive Indian-inspired Bay Area ice cream\"\n            }\n          ],\n          \"links\": [\n            {\n              \"url\": \"koolficreamery.com\",\n              \"label\": \"Website\"\n            }\n          ],\n          \"photos\": [],\n          \"contacts\": [\n            {\n              \"name\": null,\n              \"role\": null,\n              \"phone\": \"(415) 390-6210\",\n              \"email\": null,\n              \"website\": null\n            }\n          ]\n        }\n      ]\n    }\n  ]\n}"
+      "content": "{\n  \"sections\": [\n    {\n      \"title\": \"Ice Cream Shops\",\n      \"description\": null,\n      \"items\": [\n        {\n          \"title\": \"Cookiebar Scoop Shop\",\n          \"address\": \"1608 Webster St, Alameda, CA 94501\",\n          \"description\": \"Alameda's West End scoop shop known for smooth, creative ice creams, including Asian-inspired flavors such as egg tart alongside approachable classics.\",\n          \"notes\": null,\n          \"details\": [\n            {\"label\": \"Why it made the list\", \"value\": \"Strong local following and high customer ratings; a distinctive Alameda representative\"}\n          ],\n          \"links\": [\n            {\"url\": \"cookiebarscoopshop.com\", \"label\": \"Website\"}\n          ],\n          \"photos\": [],\n          \"contacts\": [\n            {\"name\": null, \"role\": null, \"phone\": \"(510) 521-1544\", \"email\": null, \"website\": null}\n          ]\n        },\n        {\n          \"title\": \"Angela's Organic Ice Cream\",\n          \"address\": \"134 Petaluma Blvd N, Petaluma, CA 94952\",\n          \"description\": \"Downtown Petaluma artisan shop focused on small-batch organic ice cream, locally sourced ingredients and rotating creative flavors, with vegan and seasonal selections.\",\n          \"notes\": null,\n          \"details\": [\n            {\"label\": \"Why it made the list\", \"value\": \"Established Sonoma County artisan creamery with multiple North Bay locations\"}\n          ],\n          \"links\": [\n            {\"url\": \"www.angelasicecream.com\", \"label\": \"Website\"}\n          ],\n          \"photos\": [],\n          \"contacts\": [\n            {\"name\": null, \"role\": null, \"phone\": \"(707) 774-6567\", \"email\": null, \"website\": null}\n          ]\n        },\n        {\n          \"title\": \"Koolfi Creamery\",\n          \"address\": \"50 Fremont St, Suite 125, San Francisco, CA 94105\",\n          \"description\": \"Indian-inspired creamery using organic dairy and real spices, fruits and house-made dessert mix-ins. Signature ideas include Klassic Koolfi, mango lassi and cardamom-forward flavors.\",\n          \"notes\": null,\n          \"details\": [\n            {\"label\": \"Why it made the list\", \"value\": \"Featured in current Chronicle/Eater coverage for distinctive Indian-inspired Bay Area ice cream\"}\n          ],\n          \"links\": [\n            {\"url\": \"koolficreamery.com\", \"label\": \"Website\"}\n          ],\n          \"photos\": [],\n          \"contacts\": [\n            {\"name\": null, \"role\": null, \"phone\": \"(415) 390-6210\", \"email\": null, \"website\": null}\n          ]\n        }\n      ]\n    }\n  ]\n}"
     }
   ]
 }

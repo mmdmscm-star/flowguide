@@ -2,13 +2,13 @@
   "model": "anthropic/claude-sonnet-4",
   "arm": "A",
   "corpus": "crossvert",
-  "rep": 3,
+  "rep": 2,
   "calls": [
     {
       "ordinal": 0,
       "ok": true,
       "finishReason": "stop",
-      "ms": 13035,
+      "ms": 12356,
       "promptTokens": 1695,
       "completionTokens": 1759,
       "cost": 0.03147,
