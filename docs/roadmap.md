@@ -692,6 +692,34 @@ library with reference counting; migrating the 407 existing Cloudinary photos;
 profile logo/headshot upload (same mechanism, different surface, now cheap);
 and canonical Library photo normalization, **now 0030**.
 
+## Dashboard at scale — SHIPPED 2026-08-22
+
+The Library had search at 65 items; the dashboard had none at 67, and the
+dashboard is where a professional lands every time. `packets.map(...)` rendered
+every packet, drafts and published mixed, ordered by `updated_at desc`.
+
+**v1, as shipped:** client-side search over title, client name and slug; an
+All / Drafts / Published filter with live counts; a distinct no-matches state
+offering Clear filters. No API change, no schema change.
+
+`src/lib/packet-filter.ts` holds the logic as a pure function so two things that
+are easy to break later stay asserted: **filtering never re-sorts** (the API's
+`updated_at desc` survives it), and **"no matches" returns `[]`** rather than
+the whole list - which is what lets the dashboard tell "nothing matches" apart
+from "no FlowGuides yet" and offer the right way out. Anything not published
+counts as a draft, so an unanticipated status appears under Drafts rather than
+vanishing from every view.
+
+Verified at 0, 1 and 25 packets; search alone, status alone, combined, and
+cleared; Viewed / Not yet viewed unchanged.
+
+**Deliberately not in v1:** pagination, archive, tags, folders, bulk actions,
+sort controls. 67 rows is a finding problem, not a rendering one.
+
+**Not pursued, and recorded only:** 46 of 67 packets are drafts. That may be
+development debris rather than behaviour, and search makes a long list navigable
+without saying whether it should be long. Out of scope by instruction.
+
 ## Backlog — recorded, not started
 
 **Copy Link reports success it did not have.** `copyLink()` in
