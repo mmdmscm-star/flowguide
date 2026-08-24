@@ -339,12 +339,33 @@ the product is reviewed as a whole. **Nothing here is implemented until that
 review produces a concrete finding.** The order below is the order it was given
 in, not a priority ranking.
 
-1. **Creator-side typography and readability.** The creator UI is 12px-heavy
-   while the recipient experience is 16px-led — measured at 141 `text-xs` plus 7
-   `text-[11px]` across creator surfaces. Decision-making text should generally
-   be at least `text-sm`, with `text-xs` reserved for real metadata. A size
-   policy, not a redesign. Screens touched during the language and view-vs-edit
-   passes already meet the floor; the broad sweep is what remains.
+1. **Creator-side typography and readability — LEGACY EDITOR DONE 2026-08-22.**
+   The creator UI was 12px-heavy while the recipient experience is 16px-led. A
+   size policy, not a redesign: decision-making text, field values and
+   actionable controls at `text-sm` minimum; `text-xs` kept only for genuine
+   metadata.
+
+   **Legacy editor, final:** `text-xs` **50 -> 28**, `text-[11px]` **2 -> 0**,
+   `text-sm` 54 -> 78. 26 sites raised, 17 deliberately left alone. The item
+   card grew 6% with no reflow break and no spacing changes; hierarchy is
+   carried by weight (title 14/500, values 14/400, structural labels 12/500).
+
+   Kept at 12px on purpose: structural section labels (DETAILS/LINKS/PHOTOS/
+   Contacts), explanatory hint text, the Saved/Draft pill, uppercase field
+   labels, `Remove` on a contact (so a destructive action does not outweigh the
+   fields it deletes), and the photo delete badge (its icon sits in a fixed 20px
+   circle that larger text overflows).
+
+   **Optional follow-ups, both left at 12px on scope boundaries:**
+   - `Convert to block editor` in `composition-mode-control.tsx` — shared chrome
+     rendered by BOTH editors, so raising it reaches past the legacy editor.
+   - the item-level `Save to Library` in `library/item-library-actions.tsx` — a
+     Library component, excluded from that pass, though it renders inside the
+     item card.
+
+   Each is a one-line change. **Still unswept:** dashboard, settings and Library
+   creator surfaces — the original item covered all of them, and only the legacy
+   editor was done.
 
 2. **Canonical Library photo normalization, and historical repair — 0030.**
    Migration numbers follow APPLICATION order, so parked work loses its

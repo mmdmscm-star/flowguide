@@ -51,6 +51,17 @@ by both editors, which hardcodes '' and takes photos as plain URLs. Changing tha
 is a large edit to a mature write path; the URL proves the same thing because the
 bucket grants no write to anon or authenticated.
 
+## One unattributed object in packet-photos
+
+`ee/ee97e720….jpg` sits in the bucket with ZERO referencing rows in
+`item_photos`, `library_items` or `packet_blocks`. It is not from the upload
+verification (that used a PNG, since removed) and no script or smoke uploads a
+JPEG.
+
+**Left in place deliberately.** v1 has no reaper precisely because deleting
+bytes you cannot account for is the wrong default, and that reasoning applies to
+our own cleanup too. Delete it only if someone can say what it was.
+
 ## Verifying the live state rather than assuming it
 
 `scripts/ingestion-runtime/probe-enforcement-state.mts` drives one bounded
