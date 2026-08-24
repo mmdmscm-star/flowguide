@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { UseLibraryPicker } from "@/components/library/use-library-picker";
+import { filterPackets, isPublished, type StatusFilter } from "@/lib/packet-filter";
 
 interface PacketSummary {
   id: string;
@@ -24,6 +25,15 @@ export default function DashboardPage() {
   const [duplicatingId, setDuplicatingId] = useState<string | null>(null);
   const [showNewMenu, setShowNewMenu] = useState(false);
   const [useLibrary, setUseLibrary] = useState(false);
+  // FINDING, not fetching. The list is already fully loaded, so filtering it
+  // client-side needs no API and no schema change - and it stays instant, which
+  // an unbounded list that only ever grows benefits from more than pagination
+  // would. Ordering is untouched: whatever survives the filter stays in
+  // updated_at order.
+  const [query, setQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+
+  const visiblePackets = filterPackets(packets, query, statusFilter);
 
   const loadPackets = useCallback(async () => {
     const res = await fetch("/api/packets");
@@ -172,6 +182,40 @@ export default function DashboardPage() {
         </div>
       </div>
 
+      {/* Search and status filter. Shown only once there is something to sift
+          through - a search box above an empty account is furniture. */}
+      {packets.length > 0 && (
+        <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center">
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search your FlowGuides…"
+            aria-label="Search your FlowGuides"
+            className="flex-1 px-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:ring-2 focus:ring-accent"
+          />
+          <div className="flex items-center gap-1" role="group" aria-label="Filter by status">
+            {([
+              ["all", "All", packets.length],
+              ["draft", "Drafts", packets.filter((p) => !isPublished(p)).length],
+              ["published", "Published", packets.filter(isPublished).length],
+            ] as const).map(([value, label, count]) => (
+              <button
+                key={value}
+                onClick={() => setStatusFilter(value)}
+                aria-pressed={statusFilter === value}
+                className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  statusFilter === value
+                    ? "bg-accent text-white"
+                    : "border border-border text-muted hover:text-foreground"
+                }`}
+              >
+                {label} {count}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Packet list */}
       {packets.length === 0 ? (
         <div className="text-center py-16">
@@ -189,9 +233,26 @@ export default function DashboardPage() {
             Create your first FlowGuide
           </button>
         </div>
+      ) : visiblePackets.length === 0 ? (
+        // NOT the same as having no FlowGuides. Saying "none yet" here would be
+        // a lie about the account, and the way out is to clear the filter, so
+        // the way out is what this offers.
+        <div className="text-center py-12">
+          <p className="text-sm text-muted">
+            {query.trim()
+              ? <>Nothing matches “{query.trim()}”{statusFilter !== "all" ? " in this view" : ""}.</>
+              : <>You have no {statusFilter === "published" ? "published" : "draft"} FlowGuides.</>}
+          </p>
+          <button
+            onClick={() => { setQuery(""); setStatusFilter("all"); }}
+            className="mt-3 px-3 py-1.5 rounded-lg border border-border text-sm font-medium text-muted hover:text-foreground"
+          >
+            Clear filters
+          </button>
+        </div>
       ) : (
         <div className="space-y-3">
-          {packets.map((packet) => (
+          {visiblePackets.map((packet) => (
             <div
               key={packet.id}
               className="border border-border rounded-xl p-4 hover:border-accent/30 transition-colors"
