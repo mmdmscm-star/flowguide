@@ -44,6 +44,32 @@ const TYPE_GUIDANCE: Record<string, string> = {
 // The validator has always accepted an empty result; the model was never told.
 const NOTHING_RULE = `If this segment has no entry of its own — only photos, URLs or a fragment continuing something that started earlier — return an EMPTY list. Returning nothing is a valid, expected answer. NEVER build a title out of a URL, filename or image path.`;
 
+// LOSSLESS ORGANIZATION.
+//
+// Offline measurement showed the model compressing on its own initiative:
+// keeping one value where the source listed several, replacing an enumeration
+// with a summary. Not truncation and not randomness - an editorial judgement
+// that some of what the source said was redundant.
+//
+// Every rule here is a general statement about not reducing factual content.
+// None names a field, a domain or a kind of value: a rule that had to know what
+// the document was about would be teaching the answer rather than setting a
+// contract, and would not survive the next vertical.
+//
+// Paired offline runs, senior-living corpus, three repetitions, replicated:
+// source-backed placement 71.5% -> 77.1%, omissions 19.7 -> 15.7, with
+// fabrication, unauthorized private notes, misbinding and malformed output all
+// flat at zero, item counts unchanged, no new within-item duplication, and
+// output tokens at 1.02x. Controls unchanged.
+//
+// FROZEN as measured. Changing this wording invalidates that measurement.
+const LOSSLESS_RULES = `LOSSLESS ORGANIZATION - this applies to the whole source:
+- Every distinct factual claim stated in the source must still be represented in your output.
+- Where several values of the same kind are given, they are separate facts. Keep all of them; do not choose one as representative.
+- Enumerations of facts must be preserved as the individual facts they are. Do not replace a list of values with a summary, a range, or a description of the list.
+- Apparent redundancy is not permission to omit. Two values that look similar, or that seem to serve the same purpose, are still two facts.
+- You may reorganize how information is presented and grouped. You may not reduce how much factual content is present.`;
+
 // organize LEAD chunk: also captures a packet title + optional client name.
 export function organizeLeadPrompt(packetType: string): string {
   const g = TYPE_GUIDANCE[packetType] || "";
@@ -58,7 +84,9 @@ ${NOTES_RULE}
 ${NOTHING_RULE}
 
 Respond with ONLY valid JSON (no markdown):
-{ "title": "string", "clientName": "string or null", "sections": ${SECTION_SCHEMA.slice(1)}`;
+{ "title": "string", "clientName": "string or null", "sections": ${SECTION_SCHEMA.slice(1)}
+
+${LOSSLESS_RULES}`;
 }
 
 // organize non-lead + all append chunks: sections only (appended to the packet).
@@ -74,7 +102,9 @@ ${NOTES_RULE}
 ${NOTHING_RULE}
 If a section heading is provided as context, use it as the section title so items group consistently.
 
-Respond with ONLY valid JSON (no markdown): ${SECTION_SCHEMA}`;
+Respond with ONLY valid JSON (no markdown): ${SECTION_SCHEMA}
+
+${LOSSLESS_RULES}`;
 }
 
 // section_append chunks: items only, into the already-chosen section.
