@@ -655,6 +655,14 @@ moved on. A test pins the snapshot path so it cannot regress silently.
 
 ### Parked, deliberately
 
+**Replaced-image cleanup.** Profile upload creates a NEW orphan pattern that
+item photos did not: every time a professional changes their logo or headshot,
+the previous object stays in the bucket with nothing referencing it. Item photos
+mostly die with their packet; a logo is replaced in place. This is the strongest
+future argument for a reaper - but a reaper must not delete an object a
+published packet's SNAPSHOT still points at, which is exactly the case that
+looks orphaned and is not. Deliberately not built.
+
 Deletion and an orphan reaper (removing bytes another packet may point at is
 worse than an orphaned file); drag reorder; crop and editing; a shared asset
 library with reference counting; migrating the 407 existing Cloudinary photos;

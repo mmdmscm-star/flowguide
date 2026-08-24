@@ -52,6 +52,47 @@ by both editors, which hardcodes '' and takes photos as plain URLs. Changing tha
 is a large edit to a mature write path; the URL proves the same thing because the
 bucket grants no write to anon or authenticated.
 
+## Creator image upload: one helper, two surfaces
+
+`storeCreatorImage` in `src/lib/photo-upload.ts` is the single implementation of
+everything security-critical about storing a creator's image: the type comes
+from sniffed magic bytes (never the browser's Content-Type or the filename), the
+object name is 32 random bytes carrying neither filename nor identity, and
+nothing is ever overwritten.
+
+Both upload routes call it:
+
+| route | ownership check |
+| --- | --- |
+| `POST /api/packets/[id]/photos` | the packet must belong to the session |
+| `POST /api/profile/images` | the profile IS the session |
+
+Ownership stays at the routes precisely because it differs. Everything else is
+shared, so the two surfaces cannot drift apart. Tests assert that neither route
+reimplements the randomness or the sniffing.
+
+Both use the `packet-photos` bucket. **The bucket name is an implementation
+detail** - profile logos live there too. A second bucket would be a second
+policy to keep correct for no gain, since the object path is what carries the
+privacy.
+
+## Snapshot behaviour (why a rebrand does not rewrite delivered packets)
+
+Publishing reads the LIVE professional profile and freezes it into
+`packets.professional_snapshot`; the recipient render path reads the snapshot.
+
+- updating logo/headshot changes the profile;
+- a newly published FlowGuide snapshots the current images;
+- an already-published FlowGuide does NOT change when the professional later
+  rebrands.
+
+Verified end to end, and pinned by a test. **If publish ever stops snapshotting,
+image upload silently starts rewriting packets that were already delivered.**
+
+Caveat, pre-existing: packets whose snapshot is NULL (published before the
+snapshot feature) still fall back to the live profile, and those WOULD change on
+a rebrand.
+
 ## One unattributed object in packet-photos
 
 `ee/ee97e720….jpg` sits in the bucket with ZERO referencing rows in
