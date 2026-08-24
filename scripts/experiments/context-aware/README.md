@@ -150,3 +150,44 @@ viable interactive import path, however good its output is.
 
 Each was hidden by the previous one. None touched model, provider, temperature,
 max_tokens, prompts, corpora or scoring.
+
+## A2 — the lossless contract on the EXISTING chunked path. Passes every gate.
+
+A2 = production-faithful A plus the byte-identical block C2 used, appended to
+whichever production prompt the chunk already received. Nothing else differs.
+
+### senior living (paired, counterbalanced, 3 reps)
+
+| | A | A2 |
+| --- | --- | --- |
+| accepted rate | 71.6% | **77.0%** |
+| omissions (of 429) | 19.7 | **17.0** |
+| fabrication / notes / misbinding / malformed | 0 | **0** |
+| items | 20 | 20 |
+| within-item duplication | 21.0 | 21.0 |
+| output tokens | 17,334 | 17,680 (1.02x) |
+| whole-item consistency | 3/20 | 6/20 |
+| seconds / cost | 143.6 / $0.337 | 146.0 / $0.350 |
+
+All nine predeclared gates PASS. Omissions per rep: A 20,19,20 -> A2 16,17,18.
+
+Of the 32 whole-source omissions: A2 preserves 24 of the 26 C-specific in every
+repetition, and recovers 1 of the 6 shared blind spots. It introduced ZERO
+losses that paired A did not also lose, and recovered 1 fact paired A never had.
+
+### controls
+
+Ice cream: A 100% / A2 100%, 0 omissions, 0 fabrication, both arms, all reps.
+Cross-vertical: A 80.0% / A2 80.7% (41,40,41 vs 40,40,40 accepted), 1 omission
+both. Neither regressed.
+
+### why this is the result the whole line was looking for
+
+The gain C2 bought at 20% call failure is available on the path that has never
+failed once. +5.4 points accepted for +2% output tokens, +2.4 seconds and
+1.3 cents per run, with every safety measure flat at zero.
+
+The mechanism also makes sense per-chunk: the enumeration rule bites on a dense
+line the chunk sees whole. What it does NOT fix is the shared blind spot - a
+bare unlabelled value alone on a line - which nothing in these rules addresses
+and which was predeclared as expected to remain.
