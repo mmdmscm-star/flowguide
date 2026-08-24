@@ -15,7 +15,7 @@ if (!process.env.FLOWGUIDE_EXP_CONFIRM) {
   process.exit(2);
 }
 const REPS = Number(process.env.REPS ?? 3);
-const ARMS = (process.env.ARMS ?? "A,B,C").split(",") as ("A" | "B" | "B2" | "B3" | "O" | "C" | "C2")[];
+const ARMS = (process.env.ARMS ?? "A,B,C").split(",") as ("A" | "A2" | "B" | "B2" | "B3" | "O" | "C" | "C2")[];
 const ONLY = process.env.CORPUS ?? "";
 const OUT = `${root}/scripts/experiments/context-aware/out`;
 if (!existsSync(OUT)) mkdirSync(OUT, { recursive: true });
@@ -38,7 +38,7 @@ const LEAK_MARKERS = [
   /handled by other segments/i, /shape of the full source/i,
 ];
 
-async function oneRun(arm: "A" | "B" | "B2" | "B3" | "O" | "C" | "C2", c: { key: string; text: string; packetType: string }, rep: number): Promise<RunRecord> {
+async function oneRun(arm: "A" | "A2" | "B" | "B2" | "B3" | "O" | "C" | "C2", c: { key: string; text: string; packetType: string }, rep: number): Promise<RunRecord> {
   const raw: Array<{ ordinal: number; system: string; user: string; chunkText: string; call: Call }> = [];
   let items: unknown[] = [];
   const malformedDetail: string[] = [];

@@ -142,9 +142,14 @@ const LOSSLESS_RULES = `LOSSLESS ORGANIZATION - this applies to the whole source
 - Apparent redundancy is not permission to omit. Two values that look similar, or that seem to serve the same purpose, are still two facts.
 - You may reorganize how information is presented and grouped. You may not reduce how much factual content is present.`;
 
-export function promptFor(arm: "A" | "B" | "B2" | "B3" | "O" | "C" | "C2", packetType: string, isLead: boolean): string {
+export function promptFor(arm: "A" | "A2" | "B" | "B2" | "B3" | "O" | "C" | "C2", packetType: string, isLead: boolean): string {
   // B, B2 and A share the SAME prompts. Only the user-message context differs.
-  if (arm !== "C" && arm !== "C2") return isLead ? organizeLeadPrompt(packetType) : sectionsPrompt(packetType);
+  if (arm !== "C" && arm !== "C2") {
+    const base = isLead ? organizeLeadPrompt(packetType) : sectionsPrompt(packetType);
+    // A2 = A plus the SAME lossless block C2 used, on whichever production
+    // prompt this chunk would already have received. Nothing else changes.
+    return arm === "A2" ? `${base}\n\n${LOSSLESS_RULES}` : base;
+  }
   // C: the SAME extraction instructions, with only the chunk-specific language
   // removed. Nothing is added - if C won because it was told more about the
   // task, the comparison would be meaningless.
