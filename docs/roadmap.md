@@ -584,3 +584,30 @@ rather than risking it.
 
 **Next: the context-aware ingestion/chunking experiment** (item 5). No further
 reliability subsystem before it unless normal use exposes an actual blocker.
+
+
+## Context-aware ingestion experiment — CLOSED 2026-08-22
+
+Five hypotheses tested offline, ~$17, production untouched throughout. Four
+failed: whole-source (more omissions, the only fabrication), a structural source
+map (the gain came from directive framing, with side effects), structural facts
+alone (inert), and orientation-before-execution (made output LESS consistent -
+the brief is itself nondeterministic, so it adds variance rather than damping
+it).
+
+The one that worked came from a forensic finding rather than a guess: whole
+source did not fail from truncation, tail degradation or randomness. It
+compressed DELIBERATELY - one value where the source listed several, a summary
+where an enumeration stood. A generic lossless-organization contract, naming no
+field or domain, recovered most of that. It failed operationally as a
+whole-source arm (20% of calls hung), so it was moved to the chunked path where
+it cost nothing.
+
+**Shipped 2026-08-22**: the lossless block on `organizeLeadPrompt` and
+`sectionsPrompt`. Replicated across two paired runs - source-backed placement
+71.5% -> 77.1%, omissions 19.7 -> 15.7, every safety measure flat at zero,
+output tokens 1.02x. `itemsOnlyPrompt` (Library, section_append) untouched.
+
+Recorded, NOT pursued: six "shared blind spots" - bare unlabelled values alone
+on a line - invisible to every strategy tried. That is a prompt gap, not a
+chunking one, and nothing here addressed it.
