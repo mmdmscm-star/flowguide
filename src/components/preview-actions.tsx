@@ -3,6 +3,7 @@
 import { useState } from "react";
 import OwnershipResolution, { type OwnershipState } from "./OwnershipResolution";
 import ClientMessagePanel from "./client-message-panel";
+import EmailVersionPanel from "./email-version-panel";
 
 type Props = {
   packetId: string;
@@ -23,6 +24,11 @@ export function PreviewActions({ packetId, slug, initialStatus, title, clientNam
   // driven by the 409 rather than mounted speculatively, so a professional whose
   // packet is fine never sees a photo-checking screen at all.
   const [ownership, setOwnership] = useState<OwnershipState | null>(null);
+  // The email version is fetched on demand and never stored: a saved copy is a
+  // second source of truth that goes stale when the packet changes.
+  const [emailDoc, setEmailDoc] = useState<{ html: string; text: string } | null>(null);
+  const [emailBusy, setEmailBusy] = useState(false);
+  const [emailError, setEmailError] = useState("");
   const [resolved, setResolved] = useState(false);
 
   // The 409 carries the findings, but not what may be DONE about each one. That
@@ -88,6 +94,24 @@ export function PreviewActions({ packetId, slug, initialStatus, title, clientNam
   // only renders after publish, which is client-side.
   const shareUrl = typeof window === "undefined" ? `/p/${slug}` : `${window.location.origin}/p/${slug}`;
 
+  async function createEmailVersion() {
+    setEmailBusy(true);
+    setEmailError("");
+    try {
+      const res = await fetch(`/api/packets/${packetId}/email`);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.html) {
+        setEmailError(data?.message || "Could not build the email version.");
+        return;
+      }
+      setEmailDoc({ html: data.html, text: data.text ?? "" });
+    } catch {
+      setEmailError("Could not build the email version. Check your connection and try again.");
+    } finally {
+      setEmailBusy(false);
+    }
+  }
+
   function copyLink() {
     navigator.clipboard.writeText(shareUrl);
     setCopied(true);
@@ -115,6 +139,23 @@ export function PreviewActions({ packetId, slug, initialStatus, title, clientNam
           onCopyLink={copyLink}
           linkCopied={copied}
         />
+        {/* A second way to deliver the SAME packet, for a client who wants the
+            content in the email body rather than behind a link. */}
+        {emailDoc ? (
+          <EmailVersionPanel html={emailDoc.html} text={emailDoc.text} onClose={() => setEmailDoc(null)} />
+        ) : (
+          <div className="mt-2">
+            <button
+              onClick={createEmailVersion}
+              disabled={emailBusy}
+              className="text-sm text-green-700 hover:text-green-900 underline disabled:opacity-60"
+            >
+              {emailBusy ? "Building…" : "Create email version"}
+            </button>
+            {emailError && <p className="mt-1 text-sm text-red-600">{emailError}</p>}
+          </div>
+        )}
+
         <div className="mt-3">
           <a
             href={`/edit/${packetId}`}
