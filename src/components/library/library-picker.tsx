@@ -45,7 +45,7 @@ export function LibraryPicker({
           Each one is added as a copy. Editing it here will not change your saved version.
         </p>
 
-        {error && <p className="mb-2 text-xs text-red-700">{error}</p>}
+        {error && <p className="mb-2 text-sm text-red-700">{error}</p>}
 
         <LibraryList
           selectable
@@ -56,11 +56,11 @@ export function LibraryPicker({
 
         <div className="mt-4 flex items-center gap-2">
           <button onClick={insert} disabled={busy || selected.length === 0}
-            className="px-3 py-1.5 rounded-lg bg-accent hover:bg-accent-hover text-white text-xs font-medium disabled:opacity-60">
+            className="px-3 py-1.5 rounded-lg bg-accent hover:bg-accent-hover text-white text-sm font-medium disabled:opacity-60">
             {busy ? "Adding…" : selected.length ? `Add ${selected.length}` : "Add"}
           </button>
           <button onClick={onClose} disabled={busy}
-            className="ml-auto text-xs font-medium text-muted hover:text-foreground">Cancel</button>
+            className="ml-auto text-sm font-medium text-muted hover:text-foreground">Cancel</button>
         </div>
       </div>
     </div>

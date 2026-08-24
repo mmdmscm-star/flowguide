@@ -87,7 +87,7 @@ export function BulkPromote({
           is not changed.
         </p>
 
-        {error && <p className="mb-2 text-xs text-red-700">{error}</p>}
+        {error && <p className="mb-2 text-sm text-red-700">{error}</p>}
         {loading && <p className="text-xs text-muted">Loading…</p>}
 
         {!loading && available.length === 0 && (
@@ -100,7 +100,7 @@ export function BulkPromote({
           <>
             <button
               onClick={() => setSelected(selected.length === available.length ? [] : available.map((i) => i.id))}
-              className="mb-2 text-xs font-medium text-accent hover:text-accent-hover"
+              className="mb-2 text-sm font-medium text-accent hover:text-accent-hover"
             >
               {selected.length === available.length ? "Clear all" : "Select all"}
             </button>
@@ -123,11 +123,11 @@ export function BulkPromote({
 
         <div className="mt-4 flex items-center gap-2">
           <button onClick={save} disabled={busy || selected.length === 0}
-            className="px-3 py-1.5 rounded-lg bg-accent hover:bg-accent-hover text-white text-xs font-medium disabled:opacity-60">
+            className="px-3 py-1.5 rounded-lg bg-accent hover:bg-accent-hover text-white text-sm font-medium disabled:opacity-60">
             {busy ? "Saving…" : selected.length ? `Save ${selected.length} to Library` : "Save to Library"}
           </button>
           <button onClick={onClose} disabled={busy}
-            className="ml-auto text-xs font-medium text-muted hover:text-foreground">Cancel</button>
+            className="ml-auto text-sm font-medium text-muted hover:text-foreground">Cancel</button>
         </div>
       </div>
     </div>

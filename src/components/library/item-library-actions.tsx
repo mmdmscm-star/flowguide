@@ -75,7 +75,7 @@ export function ItemLibraryActions({
         // ACTION. Reads as a button, because it is one.
         <button onClick={() => saveToLibrary()} disabled={busy}
           className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-white px-2.5 py-1
-                     text-xs font-medium text-foreground hover:border-accent hover:text-accent
+                     text-sm font-medium text-foreground hover:border-accent hover:text-accent
                      disabled:opacity-60">
           <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
             <path d="M6 4h12a1 1 0 011 1v15l-7-4-7 4V5a1 1 0 011-1z" />
@@ -83,7 +83,7 @@ export function ItemLibraryActions({
           {busy ? "Saving…" : "Save to Library"}
         </button>
       )}
-      {error && <p className="mt-1 text-xs text-red-700">{error}</p>}
+      {error && <p className="mt-1 text-sm text-red-700">{error}</p>}
 
       {dialog && libraryItemId && (
         <SaveBackDialog

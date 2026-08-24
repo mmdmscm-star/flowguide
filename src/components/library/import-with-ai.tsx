@@ -192,14 +192,14 @@ export function ImportWithAI({ onClose, onSaved }: { onClose: () => void; onSave
               placeholder="Paste your information here…"
               className="w-full h-56 px-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:ring-2 focus:ring-accent resize-none"
             />
-            {error && <p className="mt-2 text-xs text-red-700">{error}</p>}
+            {error && <p className="mt-2 text-sm text-red-700">{error}</p>}
             <div className="mt-3 flex items-center gap-2">
               <button onClick={start} disabled={busy || text.trim().length < 10}
-                className="px-3 py-1.5 rounded-lg bg-accent hover:bg-accent-hover text-white text-xs font-medium disabled:opacity-60">
+                className="px-3 py-1.5 rounded-lg bg-accent hover:bg-accent-hover text-white text-sm font-medium disabled:opacity-60">
                 {busy ? "Starting…" : "Organize with AI"}
               </button>
               <button onClick={onClose} disabled={busy}
-                className="ml-auto text-xs font-medium text-muted hover:text-foreground">Cancel</button>
+                className="ml-auto text-sm font-medium text-muted hover:text-foreground">Cancel</button>
             </div>
           </>
         )}
@@ -215,13 +215,13 @@ export function ImportWithAI({ onClose, onSaved }: { onClose: () => void; onSave
               <div className="h-1.5 rounded-full bg-accent transition-all"
                    style={{ width: `${total ? Math.round((done / total) * 100) : 0}%` }} />
             </div>
-            {error && <p className="mt-2 text-xs text-red-700">{error}</p>}
+            {error && <p className="mt-2 text-sm text-red-700">{error}</p>}
             <div className="mt-3 flex items-center gap-2">
-              <button onClick={onClose} className="text-xs font-medium text-muted hover:text-foreground">
+              <button onClick={onClose} className="text-sm font-medium text-muted hover:text-foreground">
                 Close — this keeps running
               </button>
               <button onClick={abandon} disabled={busy}
-                className="ml-auto text-xs font-medium text-red-700 hover:text-red-800">Abandon</button>
+                className="ml-auto text-sm font-medium text-red-700 hover:text-red-800">Abandon</button>
             </div>
           </>
         )}
@@ -247,8 +247,8 @@ export function ImportWithAI({ onClose, onSaved }: { onClose: () => void; onSave
               Nothing is saved until you choose it. Edits and selections are kept — you can close
               this and come back.
             </p>
-            {notice && <p className="mb-2 text-xs text-green-700">{notice}</p>}
-            {error && <p className="mb-2 text-xs text-red-700">{error}</p>}
+            {notice && <p className="mb-2 text-sm text-green-700">{notice}</p>}
+            {error && <p className="mb-2 text-sm text-red-700">{error}</p>}
 
             {proposals.length === 0 ? (
               <p className="text-sm text-muted">Nothing left to review.</p>
@@ -263,7 +263,7 @@ export function ImportWithAI({ onClose, onSaved }: { onClose: () => void; onSave
                       {p.address ? <span className="text-muted"> · {p.address}</span> : null}
                     </span>
                     <button onClick={() => setEditing(p)}
-                            className="flex-none text-xs font-medium text-accent hover:text-accent-hover">
+                            className="flex-none text-sm font-medium text-accent hover:text-accent-hover">
                       Edit
                     </button>
                   </li>
@@ -273,15 +273,15 @@ export function ImportWithAI({ onClose, onSaved }: { onClose: () => void; onSave
 
             <div className="mt-4 flex flex-wrap items-center gap-2">
               <button onClick={saveSelected} disabled={busy || selected === 0}
-                className="px-3 py-1.5 rounded-lg bg-accent hover:bg-accent-hover text-white text-xs font-medium disabled:opacity-60">
+                className="px-3 py-1.5 rounded-lg bg-accent hover:bg-accent-hover text-white text-sm font-medium disabled:opacity-60">
                 {busy ? "Saving…" : selected ? `Save ${selected} to Library` : "Save to Library"}
               </button>
               <button onClick={() => finish()} disabled={busy}
-                className="px-3 py-1.5 rounded-lg border border-border text-xs font-medium text-foreground hover:border-accent">
+                className="px-3 py-1.5 rounded-lg border border-border text-sm font-medium text-foreground hover:border-accent">
                 Finish
               </button>
               <button onClick={abandon} disabled={busy}
-                className="ml-auto text-xs font-medium text-red-700 hover:text-red-800">Abandon</button>
+                className="ml-auto text-sm font-medium text-red-700 hover:text-red-800">Abandon</button>
             </div>
           </>
         ))}
@@ -290,7 +290,7 @@ export function ImportWithAI({ onClose, onSaved }: { onClose: () => void; onSave
           <>
             <p className="text-sm font-medium text-foreground">This import is closed</p>
             <p className="mt-1 text-xs text-muted">Anything you saved is in your Library.</p>
-            <button onClick={onClose} className="mt-3 px-3 py-1.5 rounded-lg bg-accent text-white text-xs font-medium">
+            <button onClick={onClose} className="mt-3 px-3 py-1.5 rounded-lg bg-accent text-white text-sm font-medium">
               Done
             </button>
           </>

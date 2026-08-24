@@ -173,7 +173,7 @@ export default function LibraryWorkspace() {
           <div className="mb-4 flex flex-wrap items-center gap-2">
             <button
               onClick={() => { setNotice(""); setImporting(true); }}
-              className="px-3 py-1.5 rounded-lg bg-accent hover:bg-accent-hover text-white text-xs font-medium"
+              className="px-3 py-1.5 rounded-lg bg-accent hover:bg-accent-hover text-white text-sm font-medium"
             >
               Import with AI
             </button>
@@ -244,25 +244,25 @@ export default function LibraryWorkspace() {
           />
         )}
 
-        {notice && <p className="mb-4 text-xs text-green-700">{notice}</p>}
+        {notice && <p className="mb-4 text-sm text-green-700">{notice}</p>}
 
         {conflict && (
           <div className="mb-4 rounded-lg border border-amber-300 bg-amber-50/70 p-3">
             <p className="text-sm font-medium text-foreground">This item changed while you had it open</p>
-            <p className="mt-1 text-xs text-amber-900">
+            <p className="mt-1 text-sm text-amber-900">
               Someone — probably you, in another tab — saved “{conflict.title}” after you opened it.
               Your edits were not applied, so nothing was lost on either side.
             </p>
             <div className="mt-2 flex gap-2">
               <button
                 onClick={() => { setEditing(conflict); setConflict(null); }}
-                className="px-3 py-1.5 rounded-lg bg-accent text-white text-xs font-medium"
+                className="px-3 py-1.5 rounded-lg bg-accent text-white text-sm font-medium"
               >
                 Open the current version
               </button>
               <button
                 onClick={() => setConflict(null)}
-                className="px-3 py-1.5 rounded-lg border border-border text-xs font-medium text-muted"
+                className="px-3 py-1.5 rounded-lg border border-border text-sm font-medium text-muted"
               >
                 Dismiss
               </button>
@@ -296,7 +296,7 @@ export default function LibraryWorkspace() {
               <button
                 onClick={() => remove(editing)}
                 disabled={busy}
-                className="text-xs font-medium text-red-700 hover:text-red-800 disabled:opacity-60"
+                className="text-sm font-medium text-red-700 hover:text-red-800 disabled:opacity-60"
               >
                 Delete
               </button>

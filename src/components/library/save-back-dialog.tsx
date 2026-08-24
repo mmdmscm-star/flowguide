@@ -101,7 +101,7 @@ export function SaveBackDialog({
   }
 
   if (error && !state) {
-    return <Shell onCancel={onCancel}><p className="text-xs text-red-700">{error}</p></Shell>;
+    return <Shell onCancel={onCancel}><p className="text-sm text-red-700">{error}</p></Shell>;
   }
   if (!state) {
     return <Shell onCancel={onCancel}><p className="text-xs text-muted">Comparing…</p></Shell>;
@@ -118,11 +118,11 @@ export function SaveBackDialog({
     return (
       <Shell onCancel={onCancel}>
         <p className="text-sm font-medium text-foreground">This item is no longer in your Library</p>
-        <p className="mt-1 text-xs text-muted">
+        <p className="mt-1 text-sm text-muted">
           “{itemTitle}” was removed from your Library. You can save this version as a new
           Library item.
         </p>
-        {error && <p className="mt-2 text-xs text-red-700">{error}</p>}
+        {error && <p className="mt-2 text-sm text-red-700">{error}</p>}
         <Actions
           primary={{ label: busy ? "Saving…" : "Save to Library", onClick: () => act("save_as_new") }}
           busy={busy} onCancel={onCancel}
@@ -135,7 +135,7 @@ export function SaveBackDialog({
     return (
       <Shell onCancel={onCancel}>
         <p className="text-sm font-medium text-foreground">Nothing to update</p>
-        <p className="mt-1 text-xs text-muted">
+        <p className="mt-1 text-sm text-muted">
           This item matches your saved version{decision.ancestorMovedOn ? ", though your saved version has changed since you added this one" : ""}.
         </p>
         <Actions busy={busy} onCancel={onCancel} cancelLabel="Close" />
@@ -155,12 +155,12 @@ export function SaveBackDialog({
       {removalsFirst ? (
         <>
           <p className="text-sm font-medium text-foreground">This version is shorter than the one you saved</p>
-          <p className="mt-1 text-xs text-muted">
+          <p className="mt-1 text-sm text-muted">
             You trimmed {removals.join(", ")} here
             {removedLabels.length > 0 && <>: <span className="text-foreground">{removedLabels.join(" · ")}</span></>}.
             Your saved version still has {removedLabels.length === 1 ? "it" : "them"}.
           </p>
-          <p className="mt-2 text-xs text-muted">
+          <p className="mt-2 text-sm text-muted">
             <span className="font-medium text-foreground">Keep both</span> to save this shorter version
             alongside the fuller one, or <span className="font-medium text-foreground">replace</span> if the
             trimmed version is the one you want to reuse from now on.
@@ -169,24 +169,24 @@ export function SaveBackDialog({
       ) : (
         <>
           <p className="text-sm font-medium text-foreground">Update your saved version of “{itemTitle}”?</p>
-          <p className="mt-1 text-xs text-muted">
+          <p className="mt-1 text-sm text-muted">
             {[...additions.map((a) => `${a} added`), ...changes.map((c) => `${c} changed`)].join(" · ") || "Text changed"}.
           </p>
         </>
       )}
 
       {decision.ancestorMovedOn && (
-        <p className="mt-2 text-xs text-muted">
+        <p className="mt-2 text-sm text-muted">
           Your saved version has also changed since you added this one. Replacing will
           use this version instead.
         </p>
       )}
 
-      <p className="mt-2 text-xs text-muted">
+      <p className="mt-2 text-sm text-muted">
         Any FlowGuide already using this item stays as it is.
       </p>
 
-      {error && <p className="mt-2 text-xs text-red-700">{error}</p>}
+      {error && <p className="mt-2 text-sm text-red-700">{error}</p>}
 
       <Actions
         busy={busy}
@@ -225,18 +225,18 @@ function Actions({
     <div className="mt-4 flex flex-wrap items-center gap-2">
       {primary && (
         <button onClick={primary.onClick} disabled={busy}
-          className="px-3 py-1.5 rounded-lg bg-accent hover:bg-accent-hover text-white text-xs font-medium disabled:opacity-60">
+          className="px-3 py-1.5 rounded-lg bg-accent hover:bg-accent-hover text-white text-sm font-medium disabled:opacity-60">
           {primary.label}
         </button>
       )}
       {secondary && (
         <button onClick={secondary.onClick} disabled={busy}
-          className="px-3 py-1.5 rounded-lg border border-border text-xs font-medium text-muted hover:text-foreground disabled:opacity-60">
+          className="px-3 py-1.5 rounded-lg border border-border text-sm font-medium text-muted hover:text-foreground disabled:opacity-60">
           {secondary.label}
         </button>
       )}
       <button onClick={onCancel} disabled={busy}
-        className="ml-auto text-xs font-medium text-muted hover:text-foreground disabled:opacity-60">
+        className="ml-auto text-sm font-medium text-muted hover:text-foreground disabled:opacity-60">
         {cancelLabel}
       </button>
     </div>
