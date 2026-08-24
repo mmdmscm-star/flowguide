@@ -363,9 +363,32 @@ in, not a priority ranking.
      Library component, excluded from that pass, though it renders inside the
      item card.
 
-   Each is a one-line change. **Still unswept:** dashboard, settings and Library
-   creator surfaces — the original item covered all of them, and only the legacy
-   editor was done.
+   **Library pass done 2026-08-22.** Same policy, 42 sites raised, 12 kept.
+   `components/library` `text-xs` **54 -> 12**. Raised: every dialog control,
+   every error and success notice, the workspace conflict explanation, and the
+   save-back dialog's explanations - "Keep both ... or replace ..." IS the
+   choice, not a hint about it, and raising them together stopped the dialog
+   being half one size. Kept: intro hints, "Loading…"/"Comparing…" status, the
+   detail panel's structural labels and its "Only you see this." privacy note,
+   and the "From your Library ·" provenance row, which is deliberately quiet.
+   The detail panel needed nothing - its values were already `text-sm`.
+
+   **POLICY COMPLETE for the two surfaces a professional lives in.** Final
+   counts, all deliberate keeps rather than backlog:
+
+   | surface | `text-xs` | `text-[11px]` |
+   | --- | --- | --- |
+   | legacy editor | 28 | 0 |
+   | components/library | 12 | 0 |
+
+   **Parked, not dropped — 28 sites:** block editor (17, a prototype with one
+   live packet), dashboard (6), `/new` (3), nav (2), plus `Convert to block
+   editor` and one other in `composition-mode-control.tsx` (2) which is shared
+   chrome rendered by BOTH editors and needs a decision before sweeping.
+
+   The save-back dialog was verified by measurement and source review, not
+   visually: reaching it needs an item inserted from the Library, edited in a
+   packet, then saved back.
 
 2. **Canonical Library photo normalization, and historical repair — 0030.**
    Migration numbers follow APPLICATION order, so parked work loses its
