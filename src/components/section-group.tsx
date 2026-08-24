@@ -1,5 +1,6 @@
 import { Section } from "@/lib/types";
 import { ItemCard } from "./item-card";
+import { SectionContents } from "./section-contents";
 
 export function SectionGroup({ section }: { section: Section }) {
   return (
@@ -16,9 +17,18 @@ export function SectionGroup({ section }: { section: Section }) {
           )}
         </div>
       )}
+      {/* Contents first, then the cards it points at. Only for a section with
+          more than one item - see SectionContents. */}
+      <SectionContents items={section.items} sectionTitle={section.title} />
+
       <div className="px-5 space-y-4">
         {section.items.map((item) => (
-          <ItemCard key={item.id} item={item} />
+          // The anchor lives on a wrapper so ItemCard itself is untouched.
+          // scroll-mt keeps the card's top edge off the very top of the
+          // viewport after a jump.
+          <div key={item.id} id={`item-${item.id}`} className="scroll-mt-4">
+            <ItemCard item={item} />
+          </div>
         ))}
       </div>
     </section>
