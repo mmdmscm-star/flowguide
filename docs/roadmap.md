@@ -530,7 +530,55 @@ deferred follow-on. Relates to the recipient typography lift and the
 [product-direction.md](product-direction.md).
 
 
+## Copy client message — SHIPPED, v1 COMPLETE 2026-08-22
+
+A deterministic wrapper around the live FlowGuide, so a professional goes from
+"it's ready" to "I can send this now" without writing anything.
+
+**The v1 scope, deliberately drawn here so a later change knows what it is
+changing:**
+
+- **Post-publish bar only.** The moment the work ends. The panel takes plain
+  values rather than a packet so the dashboard or editor could adopt it without
+  rework — gated on someone actually returning to send a packet published
+  earlier, which is not yet known to happen.
+- **Deterministic, never generated.** Client name, packet title, live link,
+  professional name. Each missing value removes its own line. A four-sentence
+  message is the first thing a client reads and has no contract behind it, so
+  run-to-run variation is worse here than it was in ingestion.
+- **Never summarises the packet's contents.** No "12 communities with photos and
+  pricing". That is a second account of the content that goes stale when an item
+  changes, and it competes with the link instead of driving to it. A source gate
+  fails the build if a content-describing clause is added.
+- **Editable, not persisted.** A stored message is a second source of truth that
+  drifts from the packet. Regenerating is free. A professional asking for their
+  edit to be remembered is the signal that would change this.
+- **Copy message leads, Copy link only steps back.** The message contains the
+  link, so it takes precedence; the link behaviour itself is unchanged and both
+  read one shared URL definition.
+- **Explicitly out of scope:** sending from FlowGuide, email integration,
+  delivery tracking, AI generation, per-channel (email/SMS) variants, subject
+  lines, stored messages, dashboard/editor placement.
+
+**What would earn a v2:** professionals pasting into email and writing their own
+subject line (earns a second variant), or asking for the message somewhere other
+than the publish moment (earns the second placement). Both are cheap once
+observed and speculative before.
+
 ## Backlog — recorded, not started
+
+**Copy Link reports success it did not have.** `copyLink()` in
+`src/components/preview-actions.tsx` calls `navigator.clipboard.writeText()`
+without awaiting or catching it, then sets "Copied!" unconditionally. When the
+clipboard rejects — an insecure context, a denied permission, a browser that
+refuses without a user gesture — the professional is told the link was copied
+and it was not. Observed live: the browser pane denies clipboard writes and the
+button still reported success.
+
+Pre-existing, unrelated to the client-message work, and deliberately NOT fixed
+there so that change stayed to what was verified. The fix is small: await the
+promise, catch it, and show the same fallback the client-message panel already
+shows. Do it whenever that file is next open for another reason.
 
 **Mixed-run discard-only review.** A run holding BOTH a media-accounting failure
 and a review-required unit cannot be cleared unit by unit: the media failure has
