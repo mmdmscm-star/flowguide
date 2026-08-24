@@ -4,26 +4,22 @@ import { createServerClient } from "@/lib/supabase";
 import { MAX_PHOTO_BYTES, storeCreatorImage } from "@/lib/photo-upload";
 
 export const maxDuration = 30;
-type Context = { params: Promise<{ id: string }> };
 
-// POST /api/packets/:id/photos — store one creator-supplied image.
+// POST /api/profile/images — store one logo or headshot.
 //
-// The browser never touches storage. It posts a file here, this route decides
-// whether to keep it and what to call it, and returns a URL. That is the only
-// reason the bucket can be public-read without being an open file host: there
-// is no client-side write path to abuse.
-export async function POST(request: Request, context: Context) {
+// This route STORES a file and returns a URL. It does not write the profile:
+// which field the URL lands in, and when it is saved, stays with the existing
+// profile save path. A route that both stored the bytes and updated the profile
+// would be two decisions in one place, and the second one already has an owner.
+//
+// OWNERSHIP IS THE SESSION ITSELF. The packet-photo route asks "does this
+// session own that packet"; here there is no packet — a professional is
+// uploading their own branding, so being signed in IS the check. That
+// difference is why this is a separate route rather than a parameter on the
+// other one.
+export async function POST(request: Request) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-  const { id: packetId } = await context.params;
-  const supabase = createServerClient();
-
-  // OWNERSHIP FIRST, before reading the body. A stranger's upload should cost
-  // us one query, not a 10MB read.
-  const { data: packet } = await supabase
-    .from("packets").select("id").eq("id", packetId).eq("user_id", session.userId).maybeSingle();
-  if (!packet) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   let file: File | null = null;
   try {
@@ -36,9 +32,7 @@ export async function POST(request: Request, context: Context) {
   if (!file) {
     return NextResponse.json({ error: "no_file", message: "Choose an image to upload." }, { status: 400 });
   }
-  if (file.size === 0) {
-    return NextResponse.json({ error: "empty_file", message: "That file is empty." }, { status: 400 });
-  }
+  // Checked before the body is read into memory, as well as inside the helper.
   if (file.size > MAX_PHOTO_BYTES) {
     return NextResponse.json({
       error: "too_large",
@@ -46,11 +40,12 @@ export async function POST(request: Request, context: Context) {
     }, { status: 413 });
   }
 
-  // Validation, the random object name and the write all live in one shared
-  // place; see storeCreatorImage.
+  const supabase = createServerClient();
+  // Same validation, same unguessable object name, same bucket — one
+  // implementation, so the rules cannot drift between the two upload surfaces.
   const stored = await storeCreatorImage(supabase, Buffer.from(await file.arrayBuffer()));
   if (!stored.ok) {
-    if (stored.code === "upload_failed") console.error("[photos] upload failed", { packetId });
+    if (stored.code === "upload_failed") console.error("[profile-images] upload failed", { userId: session.userId });
     return NextResponse.json({ error: stored.code, message: stored.message }, { status: stored.status });
   }
   return NextResponse.json({ ok: true, url: stored.url });

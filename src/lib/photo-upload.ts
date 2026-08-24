@@ -3,6 +3,12 @@
 // Pure and dependency-free so the rules can be tested without a bucket, a
 // session or a network.
 
+import { randomBytes } from "node:crypto";
+
+// ONE BUCKET for every creator-supplied image. The name is historical - profile
+// logos and headshots live here too - and it is an implementation detail: the
+// object path is what carries privacy, and a second bucket would mean a second
+// policy to keep correct for no gain.
 export const PHOTO_BUCKET = "packet-photos";
 
 /** Matches the bucket's own file_size_limit in migration 0029. Two places, one
@@ -65,3 +71,51 @@ export function sniffImageType(bytes: Buffer): AcceptedType | null {
  *  control, because the browser decides what it sends and the bytes decide
  *  what we keep. */
 export const PHOTO_ACCEPT_ATTR = ACCEPTED_PHOTO_TYPES.map((t) => t.mime).join(",");
+
+
+/** The result of storing one creator-supplied image. */
+export type StoreResult =
+  | { ok: true; url: string; objectPath: string }
+  | { ok: false; code: "empty_file" | "too_large" | "unsupported_type" | "upload_failed"; message: string; status: number };
+
+/**
+ * Validate and store one image. ONE implementation, shared by the packet-photo
+ * route and the profile-image route.
+ *
+ * The security-critical decisions live here and nowhere else: the type comes
+ * from the bytes, the object name is unguessable and carries neither the
+ * uploader's filename nor any identity, and nothing is ever overwritten. A
+ * second copy of this logic is a second place for one of those to drift.
+ *
+ * Ownership is NOT checked here - it differs per caller (a packet must belong
+ * to the session; a profile IS the session) and belongs at the route, before
+ * this is reached.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function storeCreatorImage(supabase: any, bytes: Buffer): Promise<StoreResult> {
+  if (!bytes || bytes.length === 0) {
+    return { ok: false, code: "empty_file", message: "That file is empty.", status: 400 };
+  }
+  if (bytes.length > MAX_PHOTO_BYTES) {
+    return { ok: false, code: "too_large", status: 413,
+      message: `That image is larger than ${Math.floor(MAX_PHOTO_BYTES / 1048576)}MB. Try a smaller one.` };
+  }
+  const sniffed = sniffImageType(bytes);
+  if (!sniffed) {
+    return { ok: false, code: "unsupported_type", status: 415,
+      message: `That file isn't a supported image. Use ${ACCEPTED_PHOTO_TYPES.map((t) => t.ext.toUpperCase()).join(", ")}.` };
+  }
+  const name = randomBytes(32).toString("hex");
+  const objectPath = `${name.slice(0, 2)}/${name}.${sniffed.ext}`;
+  const { error } = await supabase.storage.from(PHOTO_BUCKET).upload(objectPath, bytes, {
+    contentType: sniffed.mime,
+    upsert: false,
+    cacheControl: "31536000",
+  });
+  if (error) {
+    return { ok: false, code: "upload_failed", status: 502,
+      message: "Could not store that image. Please try again." };
+  }
+  const { data } = supabase.storage.from(PHOTO_BUCKET).getPublicUrl(objectPath);
+  return { ok: true, url: data.publicUrl as string, objectPath };
+}

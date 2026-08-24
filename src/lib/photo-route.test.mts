@@ -5,6 +5,10 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 const route = readFileSync("src/app/api/packets/[id]/photos/route.ts", "utf8");
+// The storage rules moved into a shared helper when the profile-image route
+// arrived, so that both upload surfaces obey ONE implementation. The properties
+// below are unchanged; they are asserted where the logic now lives.
+const helper = readFileSync("src/lib/photo-upload.ts", "utf8");
 const sql = readFileSync("supabase/migrations/0029_packet_photo_storage.sql", "utf8");
 const code = route.split("\n").filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join("\n");
 // SQL COMMENTS STRIPPED. The migration explains at length why it grants no
@@ -21,22 +25,24 @@ test("ownership is checked BEFORE the body is read", () => {
 });
 
 test("the stored type comes from the bytes, never the browser", () => {
-  assert.match(code, /sniffImageType\(bytes\)/);
+  assert.match(helper, /sniffImageType\(bytes\)/);
+  assert.match(code, /storeCreatorImage/, "the route no longer delegates to the shared helper");
   // The client's own claims must not decide what is stored.
   assert.doesNotMatch(code, /file\.type/, "the route trusts the browser's Content-Type");
   assert.doesNotMatch(code, /file\.name/, "the route uses the uploader's filename");
 });
 
 test("the object name is random, and carries neither identity nor filename", () => {
-  assert.match(code, /randomBytes\(32\)/, "the object name is not strongly random");
-  const pathLine = code.split("\n").find((l) => l.includes("objectPath =")) ?? "";
+  assert.match(helper, /randomBytes\(32\)/, "the object name is not strongly random");
+  const pathLine = helper.split("\n").find((l) => l.includes("objectPath =")) ?? "";
+  assert.ok(pathLine, "objectPath is no longer computed in the helper");
   for (const leak of [/packetId/, /userId/, /file\.name/, /session\./]) {
     assert.doesNotMatch(pathLine, leak, `the object path leaks identity: ${leak}`);
   }
 });
 
 test("upserts are refused — a collision is a bug, not a retry", () => {
-  assert.match(code, /upsert:\s*false/);
+  assert.match(helper, /upsert:\s*false/);
 });
 
 test("the bucket is public-read with no write grant to anon or authenticated", () => {

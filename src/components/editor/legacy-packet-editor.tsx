@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback, useRef, type ReactNode } from "react";
+import ImageUploadField from "./image-upload-field";
 import { PHOTO_ACCEPT_ATTR } from "@/lib/photo-upload";
 import { useRouter, useParams, useSearchParams } from "next/navigation";
 import { CompositionModeControl } from "@/components/editor/composition-mode-control";
@@ -1427,36 +1428,18 @@ export function LegacyPacketEditor() {
             </p>
           </div>
           <div className="mt-3">
-            <div className="flex items-center gap-3">
-              {profile.logoUrl && (
-                <img
-                  src={profile.logoUrl}
-                  alt="Logo"
-                  className="h-10 w-auto max-w-[120px] object-contain rounded"
-                />
-              )}
-              <input
-                type="url"
-                value={profile.logoUrl}
-                onChange={(e) => updateProfile("logoUrl", e.target.value)}
-                placeholder="Logo URL (optional)"
-                className="flex-1 px-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:ring-2 focus:ring-accent"
-              />
-            </div>
-            <div className="mt-2 flex items-center gap-3">
-              {profile.headshotUrl && (
-                <img
-                  src={profile.headshotUrl}
-                  alt="Headshot"
-                  className="w-10 h-10 rounded-full object-cover flex-shrink-0 border border-border"
-                />
-              )}
-              <input
-                type="url"
+            <ImageUploadField
+              value={profile.logoUrl}
+              onChange={(url) => updateProfile("logoUrl", url)}
+              placeholder="Logo URL, or upload"
+              preview={<img src={profile.logoUrl} alt="Logo" className="h-10 w-auto max-w-[120px] object-contain rounded" />}
+            />
+            <div className="mt-2">
+              <ImageUploadField
                 value={profile.headshotUrl}
-                onChange={(e) => updateProfile("headshotUrl", e.target.value)}
-                placeholder="Headshot photo URL (optional)"
-                className="flex-1 px-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:ring-2 focus:ring-accent"
+                onChange={(url) => updateProfile("headshotUrl", url)}
+                placeholder="Headshot URL, or upload"
+                preview={<img src={profile.headshotUrl} alt="Headshot" className="w-10 h-10 rounded-full object-cover flex-shrink-0 border border-border" />}
               />
             </div>
             <input
@@ -1562,28 +1545,20 @@ export function LegacyPacketEditor() {
             />
             <p className="mt-1 text-xs text-muted">Shown above the name on the FlowGuide. Leave blank to hide it.</p>
           </div>
-          <div className="mt-3 flex items-center gap-3">
-            {packet.customIdentity?.logoUrl && (
-              <img src={packet.customIdentity.logoUrl} alt="Logo" className="h-10 w-auto max-w-[120px] object-contain rounded" />
-            )}
-            <input
-              type="url"
+          <div className="mt-3">
+            <ImageUploadField
               value={packet.customIdentity?.logoUrl || ""}
-              onChange={(e) => updateCustomField("logoUrl", e.target.value)}
-              placeholder="Logo URL (optional)"
-              className="flex-1 px-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:ring-2 focus:ring-accent"
+              onChange={(url) => updateCustomField("logoUrl", url)}
+              placeholder="Logo URL, or upload"
+              preview={<img src={packet.customIdentity!.logoUrl} alt="Logo" className="h-10 w-auto max-w-[120px] object-contain rounded" />}
             />
           </div>
-          <div className="mt-2 flex items-center gap-3">
-            {packet.customIdentity?.headshotUrl && (
-              <img src={packet.customIdentity.headshotUrl} alt="Headshot" className="w-10 h-10 rounded-full object-cover flex-shrink-0 border border-border" />
-            )}
-            <input
-              type="url"
+          <div className="mt-2">
+            <ImageUploadField
               value={packet.customIdentity?.headshotUrl || ""}
-              onChange={(e) => updateCustomField("headshotUrl", e.target.value)}
-              placeholder="Headshot photo URL (optional)"
-              className="flex-1 px-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:ring-2 focus:ring-accent"
+              onChange={(url) => updateCustomField("headshotUrl", url)}
+              placeholder="Headshot URL, or upload"
+              preview={<img src={packet.customIdentity!.headshotUrl} alt="Headshot" className="w-10 h-10 rounded-full object-cover flex-shrink-0 border border-border" />}
             />
           </div>
           <input
