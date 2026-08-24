@@ -55,6 +55,8 @@ export function extractSourceMedia(source: string): SourceMedia[] {
   return out;
 }
 
+import { isCreatorUploaded } from "./creator-media.ts";
+
 export type MediaFailureCode =
   | "media_missing"        // NO copy stored, or a copy lost from a DIFFERENT record
   | "media_consolidated"   // advisory: one record listed it twice, one copy stored
@@ -124,7 +126,13 @@ export function buildMediaLedger(opts: {
   rejected?: string[];
 }): MediaLedger {
   const sourceMedia = extractSourceMedia(opts.source);
-  const stored = (opts.stored || []).filter((s) => isMediaUrl(s.url));
+  // CREATOR-UPLOADED MEDIA IS NOT SOURCE MEDIA, so it takes no part in source
+  // accounting - not as something missing, not as something duplicated, and
+  // above all not as `media_not_in_source`. The creator supplied it directly;
+  // there is no source claim for it to agree or disagree with.
+  const stored = (opts.stored || [])
+    .filter((s) => isMediaUrl(s.url))
+    .filter((s) => !isCreatorUploaded(s.url));
   const rejected = new Set((opts.rejected || []).map((u) => u.trim()));
 
   // OCCURRENCE-AWARE. Stage 1 deduplicated the source, so an author who listed

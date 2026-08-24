@@ -34,6 +34,8 @@ export interface ItemProvenance {
   originChunkOrdinal: number | null;
   originEmitIndex: number | null;
   photoUrls: string[];
+  /** Subset of photoUrls the creator uploaded through FlowGuide. */
+  creatorUploadedUrls?: string[];
 }
 
 export type DeclineReason =
@@ -111,6 +113,7 @@ export function recomputeOwnership(opts: {
     chunkOrdinal: i.originChunkOrdinal!,
     title: i.title,
     photos: i.photoUrls,
+    creatorUploaded: i.creatorUploadedUrls ?? [],
     // Carried so binding can tell "this is the model's output" from "this is
     // what is left after the professional deleted one". Without it a deletion
     // shifts every later binding and manufactures confident wrong proposals.

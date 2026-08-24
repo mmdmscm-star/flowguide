@@ -346,10 +346,10 @@ in, not a priority ranking.
    policy, not a redesign. Screens touched during the language and view-vs-edit
    passes already meet the floor; the broad sweep is what remains.
 
-2. **Canonical Library photo normalization, and historical repair — 0029.**
+2. **Canonical Library photo normalization, and historical repair — 0030.**
    Migration numbers follow APPLICATION order, so parked work loses its
    reservation every time something else ships first: this was pencilled in as
-   0024, then 0025, then 0026, then 0027, then 0028, and is now **0029** — 0025
+   0024, then 0025, then 0026, then 0027, then 0028, then 0029, and is now **0030** — 0025
    is the observe-only fact ledger, 0026 is packet-path evidence retention, 0027
    is review-unit resolution, and 0028 is the dedicated per-chunk review-unit
    channel. No applied migration

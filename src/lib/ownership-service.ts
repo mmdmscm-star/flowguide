@@ -30,6 +30,7 @@
 // and every caller must surface it as such.
 // ---------------------------------------------------------------------------
 
+import { isCreatorUploaded } from "./creator-media.ts";
 import { createServerClient } from "./supabase.ts";
 import {
   recomputeOwnership, resolveFindings, blocksPublishing,
@@ -139,8 +140,12 @@ export async function loadPacketOwnership(packetId: string, db?: Db): Promise<Pa
   // every misplaced photo in the packet clean.
   if (photoErr) return unavailable("item_photos", photoErr.message);
   const photosByItem = new Map<string, string[]>();
+  const uploadedByItem = new Map<string, string[]>();
   for (const p of (photoRows ?? []) as Array<{ item_id: string; url: string }>) {
     photosByItem.set(p.item_id, [...(photosByItem.get(p.item_id) ?? []), p.url]);
+    if (isCreatorUploaded(p.url)) {
+      uploadedByItem.set(p.item_id, [...(uploadedByItem.get(p.item_id) ?? []), p.url]);
+    }
   }
 
   const out: PacketOwnership = {
@@ -216,6 +221,7 @@ export async function loadPacketOwnership(packetId: string, db?: Db): Promise<Pa
         originChunkOrdinal: i.origin_chunk_ordinal,
         originEmitIndex: i.origin_emit_index,
         photoUrls: photosByItem.get(i.id) ?? [],
+        creatorUploadedUrls: uploadedByItem.get(i.id) ?? [],
       }));
 
     const result = recomputeOwnership({ rawInput, run, chunks, items: mine });

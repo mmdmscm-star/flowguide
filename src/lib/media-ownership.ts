@@ -31,6 +31,9 @@ export interface ProducedItem {
   chunkOrdinal: number;
   title: string;
   photos: string[];
+  /** Photos on this item the creator uploaded through FlowGuide. Authorized by
+   *  construction: they have no source record and need none. */
+  creatorUploaded?: string[];
   /** Zero-based position within its chunk's output, as EMITTED (0014's
    *  origin_emit_index). Optional so callers replaying a plan directly can omit
    *  it, but when present it is what proves the positional binding below is
@@ -211,10 +214,17 @@ export function verifyOwnership(opts: {
     // listing it twice SHOULD produce. Reporting it twice would be two
     // indistinguishable findings the professional cannot act on separately.
     const seen = new Set<string>();
+    const uploaded = new Set(it.creatorUploaded ?? []);
     for (const url of it.photos) {
       if (!isMediaUrl(url)) continue;
       if (seen.has(url)) continue;
       seen.add(url);
+      // CREATOR-SUPPLIED: the professional uploaded this file themselves, so
+      // ownership is settled at the point of upload and no source record is
+      // required. Stated here rather than left to fall through the
+      // "absent from source" branch below, which would make it incidental -
+      // true only for as long as nothing else changes.
+      if (uploaded.has(url)) continue;
       const sourceRecords = byUrl.get(url);
       if (!sourceRecords || sourceRecords.length === 0) continue; // accounting's job
       const distinct = [...new Set(sourceRecords)];

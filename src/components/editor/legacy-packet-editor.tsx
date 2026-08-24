@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback, useRef, type ReactNode } from "react";
+import { PHOTO_ACCEPT_ATTR } from "@/lib/photo-upload";
 import { useRouter, useParams, useSearchParams } from "next/navigation";
 import { CompositionModeControl } from "@/components/editor/composition-mode-control";
 import ImportProgress from "@/components/ImportProgress";
@@ -213,6 +214,10 @@ export function LegacyPacketEditor() {
   const params = useParams();
   const searchParams = useSearchParams();
   const packetId = params.id as string;
+  // Which photo row is uploading, and why the last one failed. An upload that
+  // shows nothing while it works reads as a button that does nothing.
+  const [photoUploading, setPhotoUploading] = useState("");
+  const [photoError, setPhotoError] = useState("");
 
   const [showAiBanner, setShowAiBanner] = useState(searchParams.get("ai") === "1");
   const [packet, setPacket] = useState<PacketData | null>(null);
@@ -785,6 +790,32 @@ export function LegacyPacketEditor() {
     );
   }
 
+  // UPLOAD, then reuse the ordinary URL path.
+  //
+  // The file goes to the packet's photo route, which decides whether to keep it
+  // and what to call it, and returns a URL. From there this is the same flow as
+  // pasting one: updatePhoto writes it and the existing debounced save
+  // persists it. Nothing downstream needs to know the difference.
+  async function uploadPhoto(itemId: string, photoId: string, file: File) {
+    setPhotoUploading(photoId);
+    setPhotoError("");
+    try {
+      const body = new FormData();
+      body.append("file", file);
+      const res = await fetch(`/api/packets/${packetId}/photos`, { method: "POST", body });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.url) {
+        setPhotoError(data?.message || "Could not upload that image.");
+        return;
+      }
+      updatePhoto(itemId, photoId, data.url as string);
+    } catch {
+      setPhotoError("Could not upload that image. Check your connection and try again.");
+    } finally {
+      setPhotoUploading("");
+    }
+  }
+
   function removePhoto(itemId: string, photoId: string) {
     const item = items.find((i) => i.id === itemId);
     if (!item) return;
@@ -1199,6 +1230,9 @@ export function LegacyPacketEditor() {
                       onAddPhoto={addPhoto}
                       onUpdatePhoto={updatePhoto}
                       onRemovePhoto={removePhoto}
+                      onUploadPhoto={uploadPhoto}
+                      photoUploading={photoUploading}
+                      photoError={photoError}
                     />
                   ))}
                 </div>
@@ -1770,6 +1804,9 @@ function ItemEditor({
   onRemoveContact,
   onAddPhoto,
   onUpdatePhoto,
+  onUploadPhoto,
+  photoUploading,
+  photoError,
   onRemovePhoto,
 }: {
   item: EditorItem;
@@ -1789,6 +1826,9 @@ function ItemEditor({
   onRemoveContact: (itemId: string, contactId: string) => void;
   onAddPhoto: (itemId: string) => void;
   onUpdatePhoto: (itemId: string, photoId: string, url: string) => void;
+  onUploadPhoto: (itemId: string, photoId: string, file: File) => void;
+  photoUploading: string;
+  photoError: string;
   onRemovePhoto: (itemId: string, photoId: string) => void;
 }) {
   // Open expanded by default so the full canonical editor is visible immediately
@@ -2008,6 +2048,27 @@ function ItemEditor({
                     autoFocus
                     className="flex-1 px-2.5 py-1.5 rounded border border-border text-xs focus:outline-none focus:ring-2 focus:ring-accent placeholder:text-gray-300"
                   />
+                  {/* Upload sits BESIDE the URL field, not instead of it. A
+                      professional who already keeps images somewhere should not
+                      have to re-upload them to keep working. */}
+                  <label
+                    className={`shrink-0 px-2.5 py-1.5 rounded border border-border text-xs cursor-pointer
+                                hover:bg-gray-50 ${photoUploading === photo.id ? "opacity-60 pointer-events-none" : ""}`}
+                  >
+                    {photoUploading === photo.id ? "Uploading…" : "Upload"}
+                    <input
+                      type="file"
+                      accept={PHOTO_ACCEPT_ATTR}
+                      className="hidden"
+                      disabled={photoUploading === photo.id}
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        // Cleared so choosing the same file twice still fires.
+                        e.target.value = "";
+                        if (f) onUploadPhoto(item.id, photo.id, f);
+                      }}
+                    />
+                  </label>
                   <button
                     onClick={() => onRemovePhoto(item.id, photo.id)}
                     className="text-xs text-red-400 hover:text-red-600 px-1"
@@ -2016,6 +2077,7 @@ function ItemEditor({
                   </button>
                 </div>
               ))}
+            {photoError && <p className="text-xs text-red-600 mt-1">{photoError}</p>}
           </div>
 
           {/* Notes */}
