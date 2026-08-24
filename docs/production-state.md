@@ -10,9 +10,46 @@ messages. Everything here is live unless it says otherwise.
 | Packet semantic enforcement | **ON** — `FLOWGUIDE_ENFORCE_CONTRACT=1` in the Vercel Production environment | `vercel env rm FLOWGUIDE_ENFORCE_CONTRACT production`, then redeploy |
 | Library semantic enforcement | **OFF by design** — destination guard inside `enforceChunkResult`, not the flag | n/a; see the limitation below |
 | Lossless block in the organize prompts | **LIVE** — commit `fd62712` | `git revert fd62712`, then redeploy |
-| Migrations | `0001`–`0028` applied; local and remote in sync | per-migration; none pending |
+| Creator photo upload | **LIVE** — bucket `packet-photos` (0029) + `POST /api/packets/[id]/photos` | see below; two independent steps |
+| Migrations | `0001`–`0029` applied; local and remote in sync | per-migration; none pending |
 
 Both rollbacks are independent, carry no state, and need no migration.
+
+## Photo upload rollback
+
+Two independent steps, in this order if both are wanted:
+
+1. **Code**: `git revert` the photo-upload commit and redeploy. The editor loses
+   the Upload button; pasted URLs keep working; photos already uploaded keep
+   rendering, because they are ordinary URLs in `item_photos`.
+2. **Bucket**: only if you also want the files gone. Reverting the code does NOT
+   remove them, and removing the bucket BREAKS any packet already using an
+   uploaded photo. Check `select count(*) from item_photos where url ~
+   '/storage/v1/object/public/packet-photos/'` first; if it is non-zero, do not
+   drop the bucket.
+
+Step 1 is safe and reversible. Step 2 is destructive and usually wrong.
+
+## The creator-supplied media rule
+
+`src/lib/creator-media.ts` is the single statement of it, consulted by name from
+`media-ledger.ts` and `media-ownership.ts`.
+
+A photo whose URL sits under the `packet-photos` bucket was uploaded by the
+authenticated creator through a server route that verified they own the packet.
+It is authorized by construction and needs no AI source provenance.
+
+**This is load-bearing.** Without it, the next finalize of ANY run on a packet
+reports an uploaded photo as `media_not_in_source` — a BLOCKING failure — and
+parks the packet in review for using the product correctly. Verified end to end:
+an append import after an upload finalized clean, while a pasted external URL
+absent from the source was still reported.
+
+The discriminator is the URL and NOT `item_photos.storage_path`, which stays ''.
+storage_path is written by `update_item_content` (0011), the atomic writer shared
+by both editors, which hardcodes '' and takes photos as plain URLs. Changing that
+is a large edit to a mature write path; the URL proves the same thing because the
+bucket grants no write to anon or authenticated.
 
 ## Verifying the live state rather than assuming it
 
