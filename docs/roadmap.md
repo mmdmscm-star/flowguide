@@ -565,6 +565,56 @@ subject line (earns a second variant), or asking for the message somewhere other
 than the publish moment (earns the second placement). Both are cheap once
 observed and speculative before.
 
+## Native packet photo upload — SHIPPED, v1 COMPLETE 2026-08-22
+
+A creator uploads an image from the editor instead of going to an outside
+service, copying a URL and pasting it back. Before this, 407 of 429 live photos
+were hand-uploaded to Cloudinary.
+
+**The v1 scope, as shipped:**
+
+- **Supabase Storage, one `packet-photos` bucket**, public-read, 10MB,
+  jpeg/png/webp/gif. No SVG - it is a script container and these objects are
+  served publicly. Zero write policies: there is no client-side upload path.
+- **Upload OR paste, in the existing photo row.** Both work. A professional who
+  already keeps images somewhere is not forced to re-upload them.
+- **`POST /api/packets/[id]/photos`**: ownership checked before the body is
+  read; type sniffed from magic bytes, never the browser's Content-Type or the
+  filename; object path is 32 random bytes carrying no filename, user id or
+  packet id; `upsert: false`.
+- **No schema migration.** 0029 creates the bucket only. `item_photos.url`,
+  `storage_path` and `sort_order` are unchanged, and storage_path stays ''.
+- **Legacy editor only** - 66 of 67 packets. The block editor is a prototype.
+
+### Uploaded creator media is exempt from source provenance. Pasted URLs are not.
+
+This is the load-bearing rule, stated once in `src/lib/creator-media.ts` and
+consulted by name from `media-ledger.ts` and `media-ownership.ts`.
+
+A photo whose URL sits under the `packet-photos` bucket was uploaded by the
+authenticated creator through a route that verified they own the packet. It is
+creator-supplied content: authorized by construction, requiring no AI source
+provenance, and taking NO part in source accounting.
+
+A pasted external URL gets none of that exemption. It is still subject to the
+existing provenance and accounting rules, including `media_not_in_source`.
+
+**Why it is load-bearing:** without it, the next finalize of ANY run on the
+packet reports an uploaded photo as `media_not_in_source` - a BLOCKING failure -
+parking the packet in review because the professional used the product
+correctly. Verified end to end: an append after an upload finalized clean while a
+pasted external URL absent from the source was still reported, in the same run.
+
+The discriminator is the URL, NOT `storage_path`. See docs/production-state.md.
+
+### Parked, deliberately
+
+Deletion and an orphan reaper (removing bytes another packet may point at is
+worse than an orphaned file); drag reorder; crop and editing; a shared asset
+library with reference counting; migrating the 407 existing Cloudinary photos;
+profile logo/headshot upload (same mechanism, different surface, now cheap);
+and canonical Library photo normalization, **now 0030**.
+
 ## Backlog — recorded, not started
 
 **Copy Link reports success it did not have.** `copyLink()` in
