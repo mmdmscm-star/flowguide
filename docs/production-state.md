@@ -11,6 +11,7 @@ messages. Everything here is live unless it says otherwise.
 | Library semantic enforcement | **OFF by design** — destination guard inside `enforceChunkResult`, not the flag | n/a; see the limitation below |
 | Lossless block in the organize prompts | **LIVE** — commit `fd62712` | `git revert fd62712`, then redeploy |
 | Creator photo upload | **LIVE** — bucket `packet-photos` (0029) + `POST /api/packets/[id]/photos` | see below; two independent steps |
+| Profile logo/headshot upload | **LIVE** — same bucket + `POST /api/profile/images` | revert the code; already-uploaded images keep working |
 | Migrations | `0001`–`0029` applied; local and remote in sync | per-migration; none pending |
 
 Both rollbacks are independent, carry no state, and need no migration.

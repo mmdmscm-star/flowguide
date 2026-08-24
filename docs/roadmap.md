@@ -628,6 +628,31 @@ pasted external URL absent from the source was still reported, in the same run.
 
 The discriminator is the URL, NOT `storage_path`. See docs/production-state.md.
 
+### Profile logo and headshot upload — SHIPPED 2026-08-22
+
+The other half of the same problem. Item photos were native; the professional's
+own logo and headshot - which appear in the contact footer of EVERY published
+FlowGuide - were still URL-paste only.
+
+- Reuses the `packet-photos` bucket. The name is an implementation detail: the
+  object path carries the privacy, and a second bucket is a second policy to
+  keep correct for no gain.
+- `POST /api/profile/images` stores bytes and returns a URL. It does NOT write
+  the profile - which field the URL lands in stays with the existing save path.
+- Ownership differs from the packet route and that is why it is a separate
+  route: a packet must belong to the session; a profile IS the session.
+- One shared `storeCreatorImage` now holds the byte-sniffed type, the
+  32-random-byte object name and the no-upsert rule, so the two upload surfaces
+  cannot drift apart.
+- Upload sits beside the URL box on all four identity fields (account logo and
+  headshot, per-packet custom logo and headshot). Pasted URLs keep working.
+
+**Snapshot behaviour, verified end to end:** updating the profile changes the
+profile; a newly published FlowGuide snapshots the current images; an
+already-published FlowGuide does NOT change when the professional later
+rebrands - its recipient page still served the old logo after the profile had
+moved on. A test pins the snapshot path so it cannot regress silently.
+
 ### Parked, deliberately
 
 Deletion and an orphan reaper (removing bytes another packet may point at is
