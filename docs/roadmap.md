@@ -586,6 +586,9 @@ rather than risking it.
 reliability subsystem before it unless normal use exposes an actual blocker.
 
 
+> **Live production state, rollback commands and known limitations:
+> [docs/production-state.md](production-state.md).**
+
 ## Context-aware ingestion experiment — CLOSED 2026-08-22
 
 Five hypotheses tested offline, ~$17, production untouched throughout. Four
