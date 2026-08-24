@@ -720,6 +720,38 @@ sort controls. 67 rows is a finding problem, not a rendering one.
 development debris rather than behaviour, and search makes a long list navigable
 without saying whether it should be long. Out of scope by instruction.
 
+## Recipient contents index — SHIPPED 2026-08-22
+
+Measured first, at 375x812: an item card is **759-809px against an 812px
+viewport**. A client reads one option per screen and can never see two at once,
+so a twenty-community FlowGuide is twenty screens and "which of these fits?"
+requires holding the previous option in your head.
+
+**v1:** a section with more than one item renders a numbered contents list of
+its item titles, in packet order, each a real anchor to the existing card.
+
+- It says NOTHING about an item - no summary, no chosen "key detail". A test
+  forbids the component from reading any item field except `title`, because the
+  moment it describes an option it becomes a second account of the packet that
+  can disagree with the card.
+- Real `<a href="#item-…">` anchors, so back, keyboard and screen-reader
+  behaviour come for free. `<nav aria-label>`, `<ol>`, numbers `aria-hidden`.
+- The anchor target is a wrapper div; **ItemCard is byte-unchanged**.
+- No data, no schema, no state.
+
+**Row height was the whole design.** The first attempt used `py-2.5`, giving 45px
+rows - twenty items came to ~900px, taller than the viewport it exists to save.
+Tightened to **39px**, so twenty items total 781px and fit one screen. No
+tighter: it is a tap target on a phone for often-older readers.
+
+Verified at 1 (no index), 3, 15 and 20 items, locally and in production.
+
+**Deliberately not built:** collapsible cards, sticky navigation, filtering,
+comparison mode, key-detail selection. This is navigation over the FlowGuide,
+not a new presentation mode. Collapsible cards remain the thing that would
+actually solve comparison, and they need a design decision first - which detail
+earns the collapsed row differs by vertical.
+
 ## Backlog — recorded, not started
 
 **Copy Link reports success it did not have.** `copyLink()` in
