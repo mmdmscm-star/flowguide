@@ -14,6 +14,7 @@ messages. Everything here is live unless it says otherwise.
 | Profile logo/headshot upload | **LIVE** — same bucket + `POST /api/profile/images` | revert the code; already-uploaded images keep working |
 | Copy client message | **LIVE** — post-publish bar; deterministic, never persisted | revert the code; nothing stored |
 | Email-ready FlowGuide | **LIVE** — commit `a5f05a2`; `GET /api/packets/[id]/email`, renders on demand | revert the code; nothing stored, no schema, no flag |
+| Print / Save as PDF | **LIVE** — commit `259724a`; `/p/[slug]/print`, renders on demand | revert the code; nothing stored, no schema, no flag |
 | Migrations | `0001`–`0029` applied; local and remote in sync | per-migration; none pending |
 
 Both rollbacks are independent, carry no state, and need no migration.
@@ -123,9 +124,24 @@ message". Nothing is lost — every photo is one click away and the live link
 appears twice. Photos are deliberately NOT reduced to avoid this. See the
 roadmap entry.
 
-`scripts/ingestion-runtime/verify-email-prod.mts` re-runs the production check
-(31 assertions, disposable data, self-cleaning) whenever this needs proving
-again rather than assuming.
+`scripts/ingestion-runtime/verify-renderers-prod.mts` re-runs the production
+check for BOTH supporting renderers (46 assertions, disposable data,
+self-cleaning) whenever this needs proving again rather than assuming.
+
+## Paper is verified as paper
+
+`/p/[slug]/print` is the third supporting renderer and carries no flag, table
+or migration. What the production check CANNOT prove is pagination — that
+needs a real Letter PDF read page by page, which is how the one real defect
+(details tables splitting across pages) was found. To re-prove it:
+
+```
+"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless=new \
+  --no-pdf-header-footer --run-all-compositor-stages-before-draw \
+  --print-to-pdf=out.pdf https://flowguide-ruddy.vercel.app/p/<slug>/print
+```
+
+Needs `poppler` (`brew install poppler`) to read the pages back.
 
 ## Verifying the live state rather than assuming it
 

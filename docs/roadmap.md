@@ -850,9 +850,90 @@ planted note never appears.
 or any provider integration, delivery tracking, templates, subject lines, AI
 copy, per-channel content, stored email state, and clipping optimisation.
 
+## Print / Save as PDF — SHIPPED, v1 COMPLETE 2026-08-24
+
+The third supporting renderer, and **the last one named in
+product-direction.md** — mobile/web, email, print, copy client message are now
+all real. `/p/[slug]/print` renders the same published packet through the same
+`getPublishedPacket` the live page and the email version use.
+
+**No PDF generator.** The browser's print dialog does both printing and Save as
+PDF, so FlowGuide hands a professional a PDF without owning a PDF pipeline, a
+dependency, or a stored artefact.
+
+### Why it is a dedicated route and not a print stylesheet
+
+The cheap version — `@media print` over the live page — would have been
+**silently wrong**. `PhotoGallery` mounts only the slides within two of the
+current index, so paper would have carried at most five photos per item and
+looked entirely fine doing it. That is the same failure class as the email
+renderer's `photos[0]`, which took a real Gmail paste to catch. A static
+server-rendered route lays every photo out instead.
+
+### Verified as paper, not as a preview
+
+Headless Chrome printed the real 9-item / 51-photo packet to **Letter (8.5x11,
+read from the PDF MediaBox)** and every page was inspected.
+
+**The first proof found a real defect**: details tables split across pages in
+three places, one of them after a single `Type` row, leaving an orphan line in
+a box the page edge had cut open. Prices are the comparison surface, so a table
+divided across a leaf is the worst break this document can make. `.pg-details`
+now avoids breaking. The second proof had no table splits, the **same 12
+pages**, and nothing displaced.
+
+**Fragmentation is tuned per unit, not per card.** An item MAY break internally
+— forcing a dense community whole would either overflow a page or push a
+mostly-empty one ahead of it — while item heads, tables, photo tiles, contacts
+and the footer each stay intact, and `break-after: avoid` keeps a community's
+name from ending a page with its photographs overleaf.
+
+**Known cosmetic cost:** trailing gaps of 1.5–2.5in on four of twelve pages,
+where a photo grid moves to the next page as a unit. That is the price of not
+splitting a grid mid-row, and it costs **no extra pages**. Not worth trading.
+
+### Completeness, checked against the database rather than by eye
+
+9/9 items · 6/6 sections · **60/60 detail labels and values** · 53 embedded
+images (51 photos + logo + headshot, plus one alpha mask) · **0 private notes**.
+A photo-less 11-item packet also prints cleanly: 4 pages, 0 images, no empty
+photo frames.
+
+One flagged "missing" label turned out to be the measurement, not the document:
+the Supabase CLI returned `Washer \u0026 Dryer` JSON-encoded and the harness did
+not decode it. The PDF had it correctly all along.
+
+### Print-specific presentation decisions
+
+- **Links print as URLs.** A hyperlink is inert on paper, so every destination
+  is shown as text a reader can type. The same link, said the only way paper
+  can say it.
+- **The live address is printed twice**, header and footer, and taken from the
+  request so it is right in production, in previews and locally. Paper is a
+  supporting renderer; its job is to lead back to the phone.
+- **No contents index.** On screen it is a jump target; on paper it would be a
+  list of titles with no page numbers beside them, and page numbers are out of
+  scope.
+- **The identity appears once, at the end**, not as a running footer. Repeating
+  it needs `position: fixed`, which reserves its height on every page.
+
+### Deliberately not built
+
+Server-side PDF generation, stored or downloadable PDFs, cover pages, page
+numbers or a table of contents, print-specific content editing, paper-size
+settings, and include/exclude controls. All of those are a document product;
+this is a renderer.
+
+**Adjacent fix, bounded as instructed:** `copyLink()` in `preview-actions.tsx`
+now awaits and catches the clipboard write instead of reporting "Copied!"
+unconditionally, and shows the link when a browser blocks the copy. This clears
+the backlog entry below.
+
 ## Backlog — recorded, not started
 
-**Copy Link reports success it did not have.** `copyLink()` in
+**Copy Link reports success it did not have — FIXED 2026-08-24** (see the print entry above; kept here for the record).
+
+Original report: `copyLink()` in
 `src/components/preview-actions.tsx` calls `navigator.clipboard.writeText()`
 without awaiting or catching it, then sets "Copied!" unconditionally. When the
 clipboard rejects — an insecure context, a denied permission, a browser that
