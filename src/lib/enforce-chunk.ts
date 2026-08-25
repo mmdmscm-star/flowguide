@@ -12,10 +12,14 @@ import { parseClaims } from "./claim-parser.ts";
 import { recordEnvelopes, attributeAll, bindByProvenance } from "./attribution.ts";
 import { reconcile } from "./reconcile.ts";
 import { enforceItem, sourceGrantsPrivacy, contractEnforcementEnabled } from "./enforce.ts";
+import { locate } from "./placement.ts";
+import { specializedValueKind, type Claim } from "./claim-parser.ts";
 import { buildReviewUnits, type ReviewFailure } from "./review-units.ts";
 
 export interface EnforcementTelemetry {
   accepted: number; repaired: number; stripped: number;
+  /** WHOLE-SOURCE FALLBACK. Facts checked without an owner, and how they went. */
+  wholeSourceChecked: number; wholeSourcePresent: number; wholeSourceMissing: number;
   sourceUnresolved: number; attributionUnresolved: number;
   privacyRejected: number; itemsGoverned: number;
   /** Why enforcement did or did not run for this chunk. Recorded even when it
@@ -68,6 +72,9 @@ export interface UnresolvedUnit {
   kind: "privacy-rejected" | "source-unresolved";
   text: string;
   reason: string;
+  /** Absolute source offset where the fact was written, when known. Provenance
+   *  survives even where ownership does not. */
+  offset?: number;
 }
 
 export interface ChunkEnforcement {
@@ -83,6 +90,7 @@ export interface ChunkEnforcement {
 
 const empty = (): EnforcementTelemetry => ({
   accepted: 0, repaired: 0, stripped: 0, sourceUnresolved: 0,
+  wholeSourceChecked: 0, wholeSourcePresent: 0, wholeSourceMissing: 0,
   attributionUnresolved: 0, privacyRejected: 0, itemsGoverned: 0,
 });
 
@@ -107,6 +115,11 @@ function maybeThrowForTest(): void {
   if (process.env.FLOWGUIDE_TEST_ENFORCE_THROW === "1")
     throw new Error("injected enforcement failure (test hook)");
 }
+
+/** The kinds whose canonical form makes presence-matching exact. Deliberately
+ *  small: `labelled` values reshape legitimately, and treating a reshaped value
+ *  as missing would turn nine non-issues into nine warnings. */
+const WHOLE_SOURCE_KINDS: ReadonlySet<string> = new Set(["url", "phone", "email"]);
 
 export function enforceChunkResult(opts: {
   segmentText: string; chunkOrdinal: number; sourceStart: number;
@@ -176,8 +189,59 @@ export function enforceChunkResult(opts: {
     }
     replaced.set(item, e.item);
   }
+  // =========================================================================
+  // WHOLE-SOURCE FALLBACK — an unowned fact is still a fact.
+  //
+  // Record-level governance can only speak for items it could ATTRIBUTE to a
+  // source record. Measured over sixteen ordinary inputs, records were provable
+  // in four of them, so for most sources the contract had nothing to say and a
+  // dropped fact left no trace at all — a bare hostname beside a contact
+  // vanished from six consecutive imports without appearing in any output,
+  // any field, or any telemetry.
+  //
+  // This does NOT invent an owner. It answers a strictly weaker question that
+  // needs no owner to answer: did this fact survive ANYWHERE in the draft?
+  // Present is accounted for; absent becomes visible. Nothing is placed,
+  // because choosing a destination without provable ownership is the silent
+  // decision this whole contract exists to prevent.
+  //
+  // ONLY HIGH-IDENTITY KINDS, and that restriction is the precision.
+  // Canonical matching is exact for these three — squashed comparison for URLs
+  // and emails, digits-only for phones — so a reformatted fact still counts as
+  // present. On the corpus, ten source facts were absent by naive comparison:
+  // NINE were `labelled` claims where a whole line became one claim and the
+  // content survived reshaped, and ONE was a genuine loss. Governing only these
+  // kinds catches that one and none of the nine.
+  const finalItems = items.map((it) => replaced.get(it) ?? it);
+  const ungoverned: Claim[] = [...a.unattributedClaims];
+  for (const [rec, g] of a.byRecord) if (!bound.get(rec)) ungoverned.push(...g.claims);
+
+  const seen = new Set<string>();
+  for (const c of ungoverned) {
+    const kind = specializedValueKind(c);
+    if (!kind || !WHOLE_SOURCE_KINDS.has(kind)) continue;
+    // One fact written twice is one fact.
+    const key = `${kind}:${c.value.trim().toLowerCase().replace(/\s+/g, "")}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    t.wholeSourceChecked++;
+    if (finalItems.some((it) => locate(it, c.value).length > 0)) { t.wholeSourcePresent++; continue; }
+
+    t.wholeSourceMissing++;
+    unresolved.push({
+      // No record: saying -1 is honest where inventing 0 would not be.
+      record: -1,
+      title: null,
+      kind: "source-unresolved",
+      text: c.value.trim(),
+      reason: `${kind} written in the source but not found anywhere in the draft; no record structure to place it`,
+      offset: sourceStart + c.offset,
+    });
+  }
+
   return {
-    result: withItems(result, items.map((it) => replaced.get(it) ?? it)),
+    result: withItems(result, finalItems),
     telemetry: t, unresolved,
     // The SPLIT happens here, at the point of production, so the two channels
     // can never disagree about what is a question and what is a note to self.

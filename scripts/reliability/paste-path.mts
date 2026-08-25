@@ -140,6 +140,15 @@ for (const input of INPUTS) {
     row.repaired = sum("repaired");
     row.stripped = sum("stripped");
     row.sourceUnresolved = sum("sourceUnresolved");
+    row.wholeSourceChecked = sum("wholeSourceChecked");
+    row.wholeSourcePresent = sum("wholeSourcePresent");
+    row.wholeSourceMissing = sum("wholeSourceMissing");
+    // What the fallback actually surfaced, so precision can be judged by value
+    // rather than by count.
+    row.surfaced = (chunks ?? []).flatMap((c: any) =>
+      ((c?.fact_ledger?.unresolved ?? []) as any[])
+        .filter((u) => u?.record === -1)
+        .map((u) => `${u.text}`));
     row.attributionUnresolved = sum("attributionUnresolved");
   }
 
