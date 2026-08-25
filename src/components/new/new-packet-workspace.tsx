@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { TEXT_FILE_ACCEPT, readTextFile, TextFileError } from "@/lib/text-file-import";
 import { useRouter } from "next/navigation";
 
 const PACKET_TYPES = [
@@ -12,6 +13,7 @@ const PACKET_TYPES = [
 export default function NewPacketWorkspace() {
   const router = useRouter();
   const [rawText, setRawText] = useState("");
+  const [fileName, setFileName] = useState("");
   const [packetType, setPacketType] = useState("general");
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState("");
@@ -20,6 +22,25 @@ export default function NewPacketWorkspace() {
   // changing the source mints a new key (a genuinely new import).
   const requestKeyRef = useRef<string | null>(null);
   const keySourceRef = useRef<string>("");
+
+  // A FILE IS A SEED. It is read here, its text goes into the same box a paste
+  // goes into, and the file is never uploaded or stored. What gets organized is
+  // text either way, so nothing downstream can tell the difference.
+  //
+  // The text is SHOWN rather than submitted straight through, so a professional
+  // sees what was actually read — a mangled encoding or a spreadsheet that
+  // exported strangely is visible before anything is created.
+  async function handleFile(file: File) {
+    setError("");
+    try {
+      const text = await readTextFile(file);
+      setRawText((prev) => (prev.trim() ? `${prev.replace(/\s+$/, "")}\n\n${text}` : text));
+      setFileName(file.name);
+    } catch (e) {
+      setFileName("");
+      setError(e instanceof TextFileError ? e.message : "That file couldn’t be read.");
+    }
+  }
 
   async function handleOrganize() {
     const source = rawText.trim();
@@ -139,9 +160,26 @@ export default function NewPacketWorkspace() {
 
         {/* Guidance lives BELOW the field, not inside the placeholder, so it
             survives the first keystroke. */}
-        <p className="border-t border-border bg-surface px-4 py-2.5 text-xs leading-relaxed text-muted">
-          It doesn&rsquo;t need to be tidy. Spreadsheet rows, names, prices, links and contacts all work.
-        </p>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-border bg-surface px-4 py-2.5">
+          <p className="text-xs leading-relaxed text-muted">
+            It doesn&rsquo;t need to be tidy. Spreadsheet rows, names, prices, links and contacts all work.
+          </p>
+          <label className={`ml-auto shrink-0 cursor-pointer text-xs font-medium text-accent hover:text-accent-hover ${processing ? "pointer-events-none opacity-60" : ""}`}>
+            {fileName ? `Added ${fileName} — add another` : "or open a .csv, .txt or .md file"}
+            <input
+              type="file"
+              accept={TEXT_FILE_ACCEPT}
+              className="hidden"
+              disabled={processing}
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                // Cleared so choosing the same file twice still fires.
+                e.target.value = "";
+                if (f) handleFile(f);
+              }}
+            />
+          </label>
+        </div>
       </div>
 
       {error && (

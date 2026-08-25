@@ -79,9 +79,9 @@ export default function Home() {
       <Section title="What goes in, and what comes out">
         <div className="grid gap-4 sm:grid-cols-2">
           <Panel label="In">
-            Whatever you already have. A pasted list, an email you sent yourself, a
-            column from a spreadsheet, bullet points with links and half-finished
-            sentences. Mess is fine &mdash; mess is the normal case.
+            Notes, lists, links, emails, and other material you&rsquo;ve already
+            gathered. FlowGuide helps organize it into a draft you can review and
+            refine.
           </Panel>
           <Panel label="Out">
             A structured guide. Organised into sections, with photos, details, links

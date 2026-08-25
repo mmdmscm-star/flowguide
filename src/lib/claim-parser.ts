@@ -132,6 +132,48 @@ export function looksLikeHostname(token: string): boolean {
 }
 
 const EMAIL_RE = /[\w.+-]+@[\w-]+\.[\w.]+/g;
+
+// A DOCUMENT IS NOT A WEBSITE. `.md` is Moldova, `.sh` is St Helena, `.pl` is
+// Poland — so "notes.md" and "report.pl" are structurally valid hostnames and
+// would otherwise be claimed as links. This is a general guard against
+// filenames, not a rule about any particular source: the cost of getting it
+// wrong is a claim the contract can never satisfy, which turns a silent loss
+// into a spurious one.
+const FILE_EXT = new Set([
+  "md", "txt", "csv", "tsv", "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx",
+  "png", "jpg", "jpeg", "gif", "webp", "svg", "heic", "zip", "gz", "tar",
+  "js", "ts", "tsx", "jsx", "json", "yml", "yaml", "sh", "py", "rb", "go", "rs",
+]);
+
+/**
+ * Every bare hostname in a line, in order, excluding any that sits inside a
+ * scheme-qualified URL or an email address.
+ *
+ * The exclusion is the whole difficulty. "https://northgate.example.com"
+ * contains "northgate.example.com", and "pat@x.example.com" contains
+ * "x.example.com"; claiming those again would produce two url claims for one
+ * fact — the exact double-claiming the previous strict rule existed to avoid.
+ * So the spans already matched by URL_RE and EMAIL_RE are masked out first, and
+ * only what remains is tokenized.
+ */
+export function bareHostnames(text: string): string[] {
+  let masked = String(text ?? "");
+  for (const re of [URL_RE, EMAIL_RE]) {
+    re.lastIndex = 0;
+    masked = masked.replace(re, (m) => " ".repeat(m.length));
+  }
+  const out: string[] = [];
+  for (const rawToken of masked.split(/[\s|,;"'<>()[\]]+/)) {
+    // Trailing sentence punctuation is not part of the hostname; a trailing dot
+    // is legal in one (`example.com.`) and looksLikeHostname keeps it.
+    const token = rawToken.replace(/[.!?:]+$/, (d) => (d === "." ? "." : ""));
+    if (!token || !looksLikeHostname(token)) continue;
+    const ext = token.replace(/\.$/, "").split(".").pop()?.toLowerCase() ?? "";
+    if (FILE_EXT.has(ext)) continue;
+    out.push(token);
+  }
+  return out;
+}
 const PHONE_RE = /\+?1?[-.\s(]*\d{3}[-.\s)]*\d{3}[-.\s]*\d{4}/g;
 
 // A value that trails off mid-clause continues on the next line. Vine Ridge:
@@ -286,16 +328,33 @@ export function parseClaims(segment: string, chunkOrdinal = 0): ParseResult {
     }
     // Unlabelled lines: still claim anything with an unambiguous identity.
     let claimedHere = false;
-    if (looksLikeHostname(text)) {
-      claims.push({ id: id(line), kind: "url", value: text.trim(), line, offset, raw: text });
-      claimedHere = true;
-    }
     for (const [re, kind] of [[URL_RE, "url"], [EMAIL_RE, "email"], [PHONE_RE, "phone"]] as const) {
       re.lastIndex = 0;
       for (const hit of text.match(re) ?? []) {
         claims.push({ id: id(line), kind, value: hit, line, offset, raw: text });
         claimedHere = true;
       }
+    }
+    // A BARE HOSTNAME ANYWHERE IN THE LINE, not only as the whole line.
+    //
+    // This used to require the hostname to BE the entire line, which made the
+    // contract blind to the way professionals actually write a URL:
+    //
+    //   riverbend.example.com | Booking: Nia Patel 646-555-0188
+    //   - Brightwater Apartments — ... 415-555-0132. brightwater.example.com
+    //
+    // Neither produced a url claim, so nothing downstream knew the URL existed
+    // and nothing could report it missing. Measured before this change: a bare
+    // hostname sharing a line survived 0 of 6 imports and was lost in silence,
+    // while a scheme-qualified URL on the same kind of line survived 4 of 4 —
+    // the asymmetry was recognition, not the model.
+    //
+    // Nothing else needed changing: reconcile already routes a url claim to
+    // `links`, enforceItem materializes ACCEPTED and REPAIRED alike, and
+    // canonicalUrl supplies the missing scheme.
+    for (const token of bareHostnames(text)) {
+      claims.push({ id: id(line), kind: "url", value: token, line, offset, raw: text });
+      claimedHere = true;
     }
     if (!claimedHere) {
       // NOT A CLAIM. Room lists like "- $4,090/month One Bedroom" carry real
