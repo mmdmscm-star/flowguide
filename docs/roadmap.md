@@ -752,6 +752,104 @@ not a new presentation mode. Collapsible cards remain the thing that would
 actually solve comparison, and they need a design decision first - which detail
 earns the collapsed row differs by vertical.
 
+## Email-ready FlowGuide — SHIPPED, v1 COMPLETE 2026-08-24
+
+The second delivery method, for a client who would rather read the content in
+the email body than follow a link. **A renderer of the packet, not email
+content**: `src/lib/email-render.ts` reads the packet through
+`getPublishedPacket` — the same function the live recipient page uses — and
+nothing is stored, so an email cannot drift from what the client sees online.
+
+**Both delivery options stand side by side** in the post-publish bar, and both
+are kept deliberately: the short client message + live link (which drives to
+the mobile experience), and the full formatted email version (for the client who
+wants it inline). Neither replaces the other.
+
+### Built for hostile clients
+
+Tables and inlined styles only, one column at 600px, no `<style>`, no classes,
+no flex/grid, no `object-fit`. Gmail strips style blocks and drops classes;
+Outlook renders through Word. Modern CSS here does not degrade, it disappears.
+
+Copying is three-tiered — `ClipboardItem` with `text/html`, then a real
+selection plus `execCommand`, then an honest "your browser blocked the copy".
+**It never silently degrades to plain text**, which would defeat the feature
+while looking like success.
+
+### Every photo, after the first Gmail paste said otherwise
+
+v1 rendered `photos[0]` and dropped the rest — 9 of 51 on the test packet. That
+is not a smaller gallery, it is a different packet.
+
+Now: one hero, the rest as a square thumbnail index, one stated
+`View all N photos` link to the item. That mirrors the live `PhotoGallery`
+(one photo prominent, the rest behind "View all N") rather than inventing an
+email-only idea. Stacking 51 full-width images would have added ~18 phone
+screens and buried the prices under the pictures.
+
+Tiles are cropped square **by the source**, via `squareThumbnailUrl()` beside
+the existing `thumbnailUrl()` in `image-source.ts`. `object-fit` does not exist
+in Outlook and **32 of the 51 photos are not square**, so a CSS-squared tile is
+a stretched tile.
+
+### The professional identity is the live one
+
+The footer carries all nine `professional_snapshot` fields, matching
+`ProfessionalFooter` and `PacketHeader` field for field — logo, business,
+label, headshot, name, phone, text, email, website, custom links. There is no
+email-only identity system.
+
+It is shaped as a **contact card**, and that shape was the fix for a second
+report: a bare "name · phone · email" line reads as an email signature, so a
+personal note ending "Thank you, Ramona" read as signed twice. The note is
+never touched; the footer stopped imitating a sign-off.
+
+The headshot is sized by height alone rather than cropped to the live circle —
+Outlook ignores `object-fit` and would squash a 920x560 portrait, and a rounded
+rectangle is a smaller departure than a distorted face.
+
+### KNOWN CONSTRAINT — Gmail clips a large FlowGuide
+
+Measured on the real 9-item / 51-photo packet: **85,537 bytes of HTML, 83.5% of
+Gmail's reported ~102KB clip threshold.** At roughly 9.5KB per item of that
+richness, **clipping begins around 10–11 items**; a 20-item packet lands near
+190KB.
+
+**Photos were NOT reduced to stay under it, and should not be.** Gmail clips to
+`[Message clipped] View entire message` rather than discarding — every photo
+survives one click away, and the email carries the live link twice. This is a
+presentation blemish, not a fidelity failure.
+
+Two caveats on the number: ~102KB is reported, not measured here, and the
+threshold counts the whole message including quoted history.
+
+**What would earn work:** a professional reporting that a real client hit the
+clip and was confused by it. The fix then is bounding the *markup*, not the
+photos — the per-item text is the larger share above ten items.
+
+Counter-intuitive but measured: preserving all 51 photos made the email
+**lighter** — image payload fell 1.56MB → 1.18MB, because the heroes stopped
+being raw originals and became bounded `q_auto/f_auto` renditions.
+
+### Verified
+
+Two real rich-copy → Gmail pastes into a real mailbox, at desktop and narrow
+width, before and after the photo/identity fixes. In production,
+`scripts/ingestion-runtime/verify-email-prod.mts` drives one disposable
+published packet through the deployed route: 31 checks covering photo count and
+order, source-side square crops, all nine identity fields, both delivery
+options still present, and **private notes not escaping**. It is repeatable and
+cleans up after itself.
+
+The private-note guarantee is enforced three ways: `getPublishedPacket` strips
+`notes` before a recipient surface can see it, a source-level test forbids this
+renderer from reading `.notes` at all, and the production check asserts a
+planted note never appears.
+
+**Explicitly out of scope, and staying there:** sending from FlowGuide, Gmail
+or any provider integration, delivery tracking, templates, subject lines, AI
+copy, per-channel content, stored email state, and clipping optimisation.
+
 ## Backlog — recorded, not started
 
 **Copy Link reports success it did not have.** `copyLink()` in

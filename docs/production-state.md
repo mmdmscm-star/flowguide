@@ -1,4 +1,4 @@
-# Production state — as of 2026-08-22
+# Production state — as of 2026-08-24
 
 One page, so a later session does not have to reconstruct this from commit
 messages. Everything here is live unless it says otherwise.
@@ -12,6 +12,8 @@ messages. Everything here is live unless it says otherwise.
 | Lossless block in the organize prompts | **LIVE** — commit `fd62712` | `git revert fd62712`, then redeploy |
 | Creator photo upload | **LIVE** — bucket `packet-photos` (0029) + `POST /api/packets/[id]/photos` | see below; two independent steps |
 | Profile logo/headshot upload | **LIVE** — same bucket + `POST /api/profile/images` | revert the code; already-uploaded images keep working |
+| Copy client message | **LIVE** — post-publish bar; deterministic, never persisted | revert the code; nothing stored |
+| Email-ready FlowGuide | **LIVE** — commit `a5f05a2`; `GET /api/packets/[id]/email`, renders on demand | revert the code; nothing stored, no schema, no flag |
 | Migrations | `0001`–`0029` applied; local and remote in sync | per-migration; none pending |
 
 Both rollbacks are independent, carry no state, and need no migration.
@@ -103,6 +105,27 @@ JPEG.
 **Left in place deliberately.** v1 has no reaper precisely because deleting
 bytes you cannot account for is the wrong default, and that reasoning applies to
 our own cleanup too. Delete it only if someone can say what it was.
+
+## The email renderer stores nothing, and that is the design
+
+`GET /api/packets/[id]/email` builds the HTML on demand through
+`getPublishedPacket` — the same function the live recipient page uses — and
+persists nothing. A stored copy would be a second source of truth that goes
+stale the moment the packet changes. Rollback is therefore just reverting code:
+there is no flag, no table, no migration and no cached artefact.
+
+**Both delivery options are live and neither replaces the other:** the short
+client message + live link, and the full formatted email version.
+
+**Known constraint:** a FlowGuide beyond roughly 10–11 photo-rich items exceeds
+Gmail's ~102KB clip threshold and arrives as "[Message clipped] View entire
+message". Nothing is lost — every photo is one click away and the live link
+appears twice. Photos are deliberately NOT reduced to avoid this. See the
+roadmap entry.
+
+`scripts/ingestion-runtime/verify-email-prod.mts` re-runs the production check
+(31 assertions, disposable data, self-cleaning) whenever this needs proving
+again rather than assuming.
 
 ## Verifying the live state rather than assuming it
 
