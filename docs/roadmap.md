@@ -1175,10 +1175,23 @@ you on the editor, shows the server's own message, and restores the button.
 Archive, trash or recovery, undo, soft delete, bulk delete, type-the-name
 confirmation, delete from the recipient view, or any lifecycle system.
 
-**Recorded, not fixed:** the existing endpoint returns 200 when it deletes
-nothing — a stranger's scoped delete removes no row but still answers OK. Not a
-security hole (the row survives), but a dishonest response. Left alone because
-the brief was to reuse the endpoint unchanged.
+**Followed up and FIXED same day.** The endpoint used to return 200 when it
+deleted nothing: PostgREST answers happily when a filter matches no rows, so a
+caller could not tell "deleted" from "there was never anything there".
+`.select("id")` makes the delete report what it did, and zero rows now answers
+**404**.
+
+**One answer for two cases, deliberately.** A packet that does not exist and a
+packet belonging to someone else are indistinguishable from inside the route,
+because the filter that found neither is the same filter. Distinguishing them
+would mean asking whether the row exists regardless of owner — and that question
+is the leak. The two 404 bodies are asserted byte-identical at runtime.
+
+The route carries the machine code in `error` and the sentence in `message`
+(matching publish); the shared helper prefers `message`, so a professional reads
+*"This FlowGuide no longer exists, or you no longer have access to it."* rather
+than `not_found`. Proven in both surfaces by deleting a packet out from under an
+open UI.
 
 ## Backlog — recorded, not started
 
