@@ -54,7 +54,7 @@ export async function POST(_request: Request, context: Context) {
   const supabase = createServerClient();
   const { data: run } = await supabase
     .from("ingestion_runs")
-    .select("id, user_id, packet_id, destination, entry_point, status, source_text")
+    .select("id, user_id, packet_id, destination, entry_point, status, source_text, delimiter_hint")
     .eq("id", runId)
     .maybeSingle();
   if (!run || run.user_id !== session.userId) return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -213,6 +213,10 @@ export async function POST(_request: Request, context: Context) {
         // be a second opinion about a fact the database already holds, and the
         // two could disagree exactly when it matters.
         destination: run.destination as string | null,
+        // The PERSISTED hint, for the same reason destination is persisted:
+        // re-deriving it here would be a second opinion about a fact the run
+        // already holds, and a later verification must reach the same answer.
+        delimiterHint: (run.delimiter_hint as string | null) ?? null,
       });
       staged = e.result;
       enforcement = e.telemetry;

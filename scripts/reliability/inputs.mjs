@@ -12,6 +12,8 @@ export const INPUTS = [
   {
     id: "01-tabbed-spreadsheet",
     note: "straight paste out of a spreadsheet column set",
+    // What a .tsv file would declare. Sent only by the hinted arm.
+    hint: "\t",
     expect: { items: 4 },
     text: `Name\tAddress\tDay rate\tCapacity\tContact
 The Foundry\t41 Mill St\t$4,200\t120\tDana Reyes 206-555-0118
@@ -197,6 +199,7 @@ Budget is 40k all in. Need to confirm headcount with Priya before booking anythi
   {
     id: "16-comma-csv",
     note: "a real comma-separated CSV export — the headline new input path",
+    hint: ",",
     expect: { items: 4 },
     text: `Name,Day rate,Capacity,Catering,Contact,Phone
 The Foundry,"$4,200",120,"In-house, from $58/head",Dana Reyes,206-555-0118

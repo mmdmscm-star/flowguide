@@ -1,0 +1,82 @@
+diff --git a/src/lib/bare-hostname-chain.test.mts b/src/lib/bare-hostname-chain.test.mts
+index cdb58a4..8541007 100644
+--- a/src/lib/bare-hostname-chain.test.mts
++++ b/src/lib/bare-hostname-chain.test.mts
+@@ -95,17 +95,17 @@ test("KNOWN GAP: enforcement is inert wherever no source records are found", ()
+   assert.equal(recordEnvelopes(headingShaped), null,
+     "record detection now covers heading-shaped sources — revisit the URL gap there");
+ 
+-  // Verbatim from the reliability run, not a reconstruction — an earlier
+-  // shortened version of this DID produce records, which is exactly why the
+-  // measured text is used.
++  // Verbatim from the reliability run. This one NOW produces records: a row
++  // may be short if it still carries the table's delimiter slots, which is what
++  // an ordinary blank trailing cell looks like.
+   const spreadsheetPaste =
+     "Name\tAddress\tDay rate\tCapacity\tContact\n" +
+     "The Foundry\t41 Mill St\t$4,200\t120\tDana Reyes 206-555-0118\n" +
+     "Harborlight Loft\t9 Pier Rd\t$5,600\t90\tSam Okonjo 206-555-0164\n" +
+     "Cedar & Vine\t388 Vine St\t$3,800\t150\tAlice Fenner 206-555-0177\n" +
+     "Union Hall\t12 Canal St\t$2,900\t220\t";
+-  assert.equal(recordEnvelopes(spreadsheetPaste), null,
+-    "record detection now covers spreadsheet pastes — revisit enforcement coverage there");
++  assert.ok((recordEnvelopes(spreadsheetPaste) ?? []).length >= 4,
++    "spreadsheet pastes with a blank trailing cell stopped being detected");
+ 
+   // The dash-led shape this file exercises DOES produce records, which is why
+   // the repair above is possible at all.
+diff --git a/src/lib/segmentation.ts b/src/lib/segmentation.ts
+index 31fcca0..3f50f8d 100644
+--- a/src/lib/segmentation.ts
++++ b/src/lib/segmentation.ts
+@@ -122,6 +122,10 @@ interface ScannedRecord {
+   start: number;
+   /** Top-level field count with TRAILING EMPTY fields ignored — see below. */
+   fields: number;
++  /** POSITIONAL field count, trailing empties included: how many delimiter
++   *  slots the row actually has. `fields` says how much was filled in; this
++   *  says what shape the row is. */
++  width: number;
+ }
+ 
+ // One left-to-right pass carrying RFC4180 quote state. Inside a quoted field a
+@@ -149,7 +153,7 @@ function scanRecords(source: string, delim: string): ScannedRecord[] | null {
+   };
+   const endRecord = () => {
+     endField();
+-    out.push({ start: recStart, fields: lastNonEmptyField + 1 });
++    out.push({ start: recStart, fields: lastNonEmptyField + 1, width: fieldIndex + 1 });
+     fieldIndex = 0;
+     lastNonEmptyField = -1;
+   };
+@@ -229,6 +233,7 @@ export function detectSourceRecords(source: string): RecordDetection | null {
+       start: r.start,
+       end: k + 1 < scanned.length ? scanned[k + 1].start : source.length,
+       fields: r.fields,
++      width: r.width,
+     }));
+     const nonBlank = spans.filter((r) => source.slice(r.start, r.end).trim().length > 0);
+     const data = nonBlank.filter((r) => !isNoiseRow(r.fields, source.slice(r.start, r.end)));
+@@ -240,7 +245,21 @@ export function detectSourceRecords(source: string): RecordDetection | null {
+     for (const r of data) tally.set(r.fields, (tally.get(r.fields) ?? 0) + 1);
+     const mode = [...tally.entries()].sort((a, b) => b[1] - a[1])[0][0];
+     if (mode < 2) continue;
+-    if (!data.every((r) => r.fields === mode)) continue;
++    // A ROW MAY BE SHORT ONLY IF IT STILL HAS THE TABLE'S SHAPE.
++    //
++    // Trailing empties are excluded from `fields` on purpose (see scanRecords),
++    // which handles a sheet that PADS rows out. This handles the other half of
++    // the same situation: a row whose last cell is genuinely blank counts one
++    // fewer than its neighbours, and requiring exact equality declined an
++    // ordinary five-column paste for it.
++    //
++    // The allowance is narrow on purpose. A short row must still carry the
++    // modal number of delimiter slots — blank cells, not absent ones. A stray
++    // single-field line (a user's "--- Notes ---" between rows) has neither the
++    // count nor the shape, and must still make the detector decline: absorbing
++    // user content into a table as though it were a row is the failure this
++    // uniformity check exists to prevent.
++    if (!data.every((r) => r.fields === mode || (r.fields < mode && r.width === mode))) continue;
+ 
+     // A tab is essentially absent from prose; a comma is not.
+     if (delim !== "\t") {

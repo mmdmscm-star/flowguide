@@ -9,7 +9,7 @@
 // (`detectSourceRecords`), which is the same envelope the chunk planner uses.
 // Re-deriving boundaries here would create a second definition of "a record"
 // that could disagree with the one ingestion actually chunked on.
-import { detectSourceRecords, detectListRecords } from "./segmentation.ts";
+import { detectSourceRecords, detectListRecords, detectDelimitedRecords } from "./segmentation.ts";
 import type { Claim, Fragment, AmbiguousUnit } from "./claim-parser.ts";
 import { looksLikeHostname } from "./claim-parser.ts";
 
@@ -30,12 +30,29 @@ export function recordEnvelopes(source: string, delimiterHint?: string): Envelop
     // structure is a repeated top-level entry marker. Tried only after the
     // tabular strategy declines, so a real table is never reinterpreted.
     const list = detectListRecords(source);
-    if (!list) return null;                  // ownership is not structurally provable
+    if (!list) {
+      // STRATEGY 3, and only here. When the professional picked a .csv or .tsv
+      // the delimiter is a FACT rather than an inference, so the guards that
+      // protect prose from being read as a table — three fields, three rows, a
+      // record spanning a newline — do not apply. Every ordinary CSV is one
+      // line per row, which is exactly what those guards exclude.
+      //
+      // Consulted LAST on purpose. A hint may only ADD structure where none was
+      // provable; it must never override a better answer. A bulleted list saved
+      // as .csv is still a bulleted list, and the list strategy reads it more
+      // faithfully than a comma scan would.
+      const hinted = delimiterHint ? detectDelimitedRecords(source, delimiterHint) : null;
+      if (!hinted) return null;              // ownership is not structurally provable
+      return hinted.records.map((r, index) => {
+        const row = source.slice(r.start, r.end);
+        const first = row.split(hinted.delimiter)[0] ?? "";
+        return { index, start: r.start, end: r.end, name: first.replace(/^"+|"+$/g, "").trim() };
+      });
+    }
     return list.records.map((r, index) => ({
       index, start: r.start, end: r.end, name: (list.labels[index] ?? "").slice(0, 120),
     }));
   }
-  void delimiterHint;
   return d.records.map((r, index) => {
     const row = source.slice(r.start, r.end);
     const first = row.split(d.delimiter)[0] ?? "";

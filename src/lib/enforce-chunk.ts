@@ -114,8 +114,10 @@ export function enforceChunkResult(opts: {
   /** The run's PERSISTED destination. Required: an optional scope argument is
    *  one forgotten call site away from enforcing somewhere nobody checked. */
   destination: string | null | undefined;
+  /** Delimiter declared by the source file, or null for a pasted source. */
+  delimiterHint?: string | null;
 }): ChunkEnforcement {
-  const { segmentText, chunkOrdinal, sourceStart, sourceText, result, runId, destination } = opts;
+  const { segmentText, chunkOrdinal, sourceStart, sourceText, result, runId, destination, delimiterHint } = opts;
   if (!contractEnforcementEnabled()) return { result, telemetry: empty(), unresolved: [], reviewUnits: [] };
 
   // SCOPE BEFORE EVERYTHING ELSE, including the fail-closed test hook: a run
@@ -134,7 +136,7 @@ export function enforceChunkResult(opts: {
   ].filter((x): x is Record<string, unknown> => Boolean(x) && typeof x === "object");
   if (!items.length || !sourceText) return { result, telemetry: { ...empty(), scope }, unresolved: [], reviewUnits: [] };
 
-  const env = recordEnvelopes(sourceText);
+  const env = recordEnvelopes(sourceText, delimiterHint ?? undefined);
   const parsed = parseClaims(segmentText, chunkOrdinal);
   const a = attributeAll(parsed.claims, parsed.ambiguous, parsed.fragments, env, sourceStart);
   const t: EnforcementTelemetry = { ...empty(), scope };

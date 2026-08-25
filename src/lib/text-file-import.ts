@@ -23,6 +23,23 @@ export const MAX_IMPORT_CHARS = 200_000;
 
 export class TextFileError extends Error {}
 
+/**
+ * The delimiter a file EXTENSION declares, or null when it declares none.
+ *
+ * This is the whole point of the hinted path: a professional who picks a .csv
+ * has already told us the delimiter, so nothing has to infer it from the text —
+ * and the inference guards that make ordinary one-line-per-row CSVs invisible
+ * to record detection do not apply.
+ *
+ * .txt and .md declare nothing, and get null rather than a guess.
+ */
+export function delimiterForFile(name: string): string | null {
+  const ext = extensionOf(name);
+  if (ext === "csv") return ",";
+  if (ext === "tsv") return "\t";
+  return null;
+}
+
 function extensionOf(name: string): string {
   const m = /\.([a-z0-9]+)$/i.exec(String(name ?? "").trim());
   return m ? m[1].toLowerCase() : "";

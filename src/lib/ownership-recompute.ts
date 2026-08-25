@@ -13,7 +13,7 @@
 // against. If it cannot prove that, it declines. A wrong ownership accusation
 // against a packet the professional already fixed is worse than no check at all.
 
-import { detectSourceRecords, segmentHash, SEGMENTER_VERSION } from "./segmentation.ts";
+import { detectSourceRecords, detectDelimitedRecords, segmentHash, SEGMENTER_VERSION } from "./segmentation.ts";
 import { verifyOwnership, type ChunkRange, type ProducedItem, type OwnershipReport } from "./media-ownership.ts";
 
 /** A run row, as persisted. */
@@ -22,6 +22,8 @@ export interface RunProvenance {
   sourceHash: string;
   sourceLen: number;
   segmenterVersion: string;
+  /** Delimiter the source file declared, or null for a pasted source. */
+  delimiterHint?: string | null;
   /** NULL when unknown — pre-0014, or voided because raw_input was replaced. */
   sourceOffsetBase: number | null;
 }
@@ -96,7 +98,12 @@ export function recomputeOwnership(opts: {
       detail: `${incomplete.length} item(s) record a run but not a chunk, so they cannot be bound` };
   }
 
-  const detected = detectSourceRecords(source);
+  // Same order as attribution used at import time: infer first, and consult the
+  // declared delimiter only where inference declined. Reaching a DIFFERENT
+  // answer here than the import reached is the failure this whole path guards
+  // against, so the two must ask in the same order with the same knowledge.
+  const detected = detectSourceRecords(source)
+    ?? (run.delimiterHint ? detectDelimitedRecords(source, run.delimiterHint) : null);
   if (!detected) {
     // Prose has no record structure, so there is nothing for a photo to be
     // "on the wrong one" OF. Silence here is honest, not a pass.

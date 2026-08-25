@@ -17,6 +17,10 @@ const { INPUTS } = await import("./inputs.mjs");
 const BASE = process.env.FLOWGUIDE_BASE_URL || "http://localhost:3000";
 const TAG = "flowguide-rel-" + process.pid;
 const ONLY = process.env.ONLY ? process.env.ONLY.split(",") : null;
+// HINTED arm: send the delimiter a .csv/.tsv file would have declared, exactly
+// as the file picker does. Off by default so the pasted path is measured as a
+// professional pasting actually experiences it.
+const USE_HINT = process.env.HINT === "1";
 
 const { data: user, error: uerr } = await svc
   .from("users").insert({ email: `${TAG}@disposable.invalid` }).select("id").single();
@@ -48,7 +52,10 @@ for (const input of INPUTS) {
 
   const org = await api("/api/ingest/organize", {
     method: "POST",
-    body: JSON.stringify({ rawText: input.text, packetType: "general", requestKey: `${TAG}-${input.id}` }),
+    body: JSON.stringify({
+      rawText: input.text, packetType: "general", requestKey: `${TAG}-${input.id}`,
+      ...(USE_HINT && input.hint ? { delimiterHint: input.hint } : {}),
+    }),
   });
   row.organizeStatus = org.status;
   if (org.status !== 201) {
@@ -58,6 +65,13 @@ for (const input of INPUTS) {
   }
   const { packetId, runId, totalChunks } = org.data;
   row.packetId = packetId; row.chunks = totalChunks;
+  row.hintSent = Boolean(USE_HINT && input.hint);
+  // Did the hint actually reach the database? Provenance for a later
+  // verification is the reason it is stored at all.
+  {
+    const { data: r } = await svc.from("ingestion_runs").select("delimiter_hint").eq("id", runId).single();
+    row.hintPersisted = (r as { delimiter_hint: string | null } | null)?.delimiter_hint ?? null;
+  }
 
   // Drive exactly as the editor does: process pending chunks, then finalize.
   let outcome = "unknown";

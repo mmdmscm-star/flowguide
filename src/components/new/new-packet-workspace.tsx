@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { TEXT_FILE_ACCEPT, readTextFile, TextFileError } from "@/lib/text-file-import";
+import { TEXT_FILE_ACCEPT, readTextFile, TextFileError, delimiterForFile } from "@/lib/text-file-import";
 import { useRouter } from "next/navigation";
 
 const PACKET_TYPES = [
@@ -14,6 +14,10 @@ export default function NewPacketWorkspace() {
   const router = useRouter();
   const [rawText, setRawText] = useState("");
   const [fileName, setFileName] = useState("");
+  // Declared by the file the professional chose, not inferred from the text.
+  // Cleared whenever they type, because once the box has been edited by hand
+  // the text is no longer the file we were told about.
+  const [delimiterHint, setDelimiterHint] = useState<string | null>(null);
   const [packetType, setPacketType] = useState("general");
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState("");
@@ -36,6 +40,13 @@ export default function NewPacketWorkspace() {
       const text = await readTextFile(file);
       setRawText((prev) => (prev.trim() ? `${prev.replace(/\s+$/, "")}\n\n${text}` : text));
       setFileName(file.name);
+      setDelimiterHint((prev) => {
+        const declared = delimiterForFile(file.name);
+        // Two files with different delimiters describe one source that is
+        // neither; claiming either would be a hint we cannot stand behind.
+        if (!declared) return prev;
+        return prev && prev !== declared ? null : declared;
+      });
     } catch (e) {
       setFileName("");
       setError(e instanceof TextFileError ? e.message : "That file couldn’t be read.");
@@ -63,7 +74,10 @@ export default function NewPacketWorkspace() {
       const ing = await fetch("/api/ingest/organize", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ rawText: source, packetType, requestKey: requestKeyRef.current }),
+        body: JSON.stringify({
+          rawText: source, packetType, requestKey: requestKeyRef.current,
+          ...(delimiterHint ? { delimiterHint } : {}),
+        }),
       });
       if (ing.status === 401) { router.push("/login"); return; }
       const data = await ing.json();
@@ -151,7 +165,7 @@ export default function NewPacketWorkspace() {
             recipient reading tier was deliberately raised for older eyes. */}
         <textarea
           value={rawText}
-          onChange={(e) => setRawText(e.target.value)}
+          onChange={(e) => { setRawText(e.target.value); setDelimiterHint(null); }}
           placeholder="Paste your notes here…"
           aria-label="Your notes"
           disabled={processing}

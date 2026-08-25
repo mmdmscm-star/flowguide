@@ -20,6 +20,11 @@ export async function POST(request: Request) {
   const body = await request.json();
   const rawText = typeof body.rawText === "string" ? body.rawText.trim() : "";
   const packetType = typeof body.packetType === "string" ? body.packetType : "general";
+  // Only the two delimiters a file extension can actually declare. Anything
+  // else is ignored rather than trusted: the hint's whole value is that it is a
+  // fact about the file the professional chose, not a parameter to be believed.
+  const rawHint = typeof body.delimiterHint === "string" ? body.delimiterHint : "";
+  const delimiterHint = rawHint === "\t" || rawHint === "," ? rawHint : null;
   const requestKey = typeof body.requestKey === "string" ? body.requestKey : "";
 
   if (rawText.length < 10) return NextResponse.json({ error: "Paste more text first." }, { status: 400 });
@@ -40,6 +45,7 @@ export async function POST(request: Request) {
     p_request_key: requestKey,     // idempotency for duplicate/retried POSTs
     p_segmenter_version: SEGMENTER_VERSION,
     p_chunks: chunks,
+    p_delimiter_hint: delimiterHint,
   });
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
 

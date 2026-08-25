@@ -170,7 +170,7 @@ export async function loadPacketOwnership(packetId: string, db?: Db): Promise<Pa
 
   const { data: runRows, error: runErr } = await supabase
     .from("ingestion_runs")
-    .select("id, source_hash, source_len, segmenter_version, source_offset_base")
+    .select("id, source_hash, source_len, segmenter_version, source_offset_base, delimiter_hint")
     .in("id", runIds);
   if (runErr) return unavailable("ingestion_runs", runErr.message);
 
@@ -182,7 +182,7 @@ export async function loadPacketOwnership(packetId: string, db?: Db): Promise<Pa
 
   const runs = (runRows ?? []) as Array<{
     id: string; source_hash: string; source_len: number;
-    segmenter_version: string; source_offset_base: number | null;
+    segmenter_version: string; source_offset_base: number | null; delimiter_hint: string | null;
   }>;
 
   // Items can outlive their run row. Skipping them silently would report the
@@ -203,6 +203,7 @@ export async function loadPacketOwnership(packetId: string, db?: Db): Promise<Pa
       sourceHash: r.source_hash,
       sourceLen: r.source_len,
       segmenterVersion: r.segmenter_version,
+      delimiterHint: r.delimiter_hint,
       sourceOffsetBase: r.source_offset_base,
     };
     // Leaf chunks only, in source order — the same set finalize applied.

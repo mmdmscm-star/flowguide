@@ -122,6 +122,10 @@ interface ScannedRecord {
   start: number;
   /** Top-level field count with TRAILING EMPTY fields ignored — see below. */
   fields: number;
+  /** POSITIONAL field count, trailing empties INCLUDED: how many delimiter
+   *  slots the row has, as opposed to how many were filled in. Read only by
+   *  the hinted detector; `detectSourceRecords` is unchanged. */
+  width: number;
 }
 
 // One left-to-right pass carrying RFC4180 quote state. Inside a quoted field a
@@ -149,7 +153,7 @@ function scanRecords(source: string, delim: string): ScannedRecord[] | null {
   };
   const endRecord = () => {
     endField();
-    out.push({ start: recStart, fields: lastNonEmptyField + 1 });
+    out.push({ start: recStart, fields: lastNonEmptyField + 1, width: fieldIndex + 1 });
     fieldIndex = 0;
     lastNonEmptyField = -1;
   };
@@ -257,6 +261,66 @@ export function detectSourceRecords(source: string): RecordDetection | null {
     return { delimiter: delim, fields: mode, records, separatorRows: nonBlank.length - data.length };
   }
   return null;
+}
+
+/**
+ * Records for a source whose delimiter we KNOW rather than infer.
+ *
+ * `detectSourceRecords` has to work out, from the text alone, whether a comma is
+ * a column separator or a comma. That guess needs guards — at least three
+ * fields, at least three rows, and at least one record spanning a newline —
+ * and those guards are why an ordinary one-line-per-row CSV is never detected:
+ * every record is exactly one line.
+ *
+ * When a professional picks a .csv or .tsv, the guessing problem does not
+ * exist. The guards are not relaxed here because we decided to trust more; they
+ * are absent because the question they answer has already been answered by the
+ * file the professional chose.
+ *
+ * What is NOT relaxed: torn quoting still declines, and a row WIDER than the
+ * modal width still declines. A row may be SHORT provided it carries the
+ * table's delimiter slots — that is a blank trailing cell, which is ordinary in
+ * any real export. A row with neither the count nor the shape is misalignment,
+ * and misalignment is what this detector exists to catch.
+ *
+ * `detectSourceRecords` is deliberately not called and not modified: an
+ * unhinted source must segment byte-for-byte as it did before this existed, so
+ * that no segmenter version bump is owed.
+ */
+export function detectDelimitedRecords(source: string, delimiter: string): RecordDetection | null {
+  if (delimiter !== "\t" && delimiter !== ",") return null;
+  const scanned = scanRecords(source, delimiter);
+  if (!scanned) return null;                       // quoting still open: a torn paste
+
+  const spans = scanned.map((r, k) => ({
+    start: r.start,
+    end: k + 1 < scanned.length ? scanned[k + 1].start : source.length,
+    fields: r.fields,
+    width: r.width,
+  }));
+  const nonBlank = spans.filter((r) => source.slice(r.start, r.end).trim().length > 0);
+  const data = nonBlank.filter((r) => !isNoiseRow(r.fields, source.slice(r.start, r.end)));
+  if (data.length < 1) return null;
+
+  const tally = new Map<number, number>();
+  for (const r of data) tally.set(r.width, (tally.get(r.width) ?? 0) + 1);
+  const mode = [...tally.entries()].sort((a, b) => b[1] - a[1])[0][0];
+  if (mode < 2) return null;                        // one column is not a table
+  // EVERY row must have the table's slots. `width` counts positional fields
+  // including trailing empties, so a row whose last cells are blank still
+  // measures the full width — which is the ordinary export case this exists to
+  // admit. A row with FEWER slots is not a short row, it is a different kind of
+  // line, and a table with a stray line in it is not a table we can attribute
+  // against. (An earlier version of this also allowed narrower rows, which let
+  // ordinary prose through when a hint was supplied.)
+  if (!data.every((r) => r.width === mode)) return null;
+
+  const records: SourceRecord[] = data.map((r, i) => ({
+    start: r.start,
+    end: i + 1 < data.length ? data[i + 1].start : source.length,
+  }));
+  records[0].start = 0;
+  return { delimiter, fields: mode, records, separatorRows: nonBlank.length - data.length };
 }
 
 /** Records as segmenter Blocks, or null when the source is not a table. */
