@@ -11,6 +11,8 @@
 // `expected` per input is one careful human's reading of the source. Drift from
 // it is a signal to look at, not a verdict.
 import { svc, errText } from "../ingestion-runtime/lib.mts";
+import { parseClaims } from "../../src/lib/claim-parser.ts";
+import { recordEnvelopes } from "../../src/lib/attribution.ts";
 import { writeFileSync } from "node:fs";
 const { INPUTS } = await import("./inputs.mjs");
 
@@ -107,9 +109,12 @@ for (const input of INPUTS) {
     : { data: [] as any[] };
   const iids = (items ?? []).map((i: any) => i.id);
   const [dets, lnks, cons] = iids.length ? await Promise.all([
-    svc.from("item_details").select("item_id").in("item_id", iids),
-    svc.from("item_links").select("item_id").in("item_id", iids),
-    svc.from("item_contacts").select("item_id").in("item_id", iids),
+    // VALUES, not just ids: the omission check compares source facts against
+    // what actually landed, and an id column proves nothing about a phone
+    // number. Selecting only item_id here made every fact look missing.
+    svc.from("item_details").select("item_id, label, value").in("item_id", iids),
+    svc.from("item_links").select("item_id, url, label").in("item_id", iids),
+    svc.from("item_contacts").select("item_id, name, role, phone, email, website").in("item_id", iids),
   ]) : [{ data: [] }, { data: [] }, { data: [] }] as any;
 
   row.sections = (secs ?? []).length;
@@ -121,6 +126,47 @@ for (const input of INPUTS) {
   row.contacts = (cons.data ?? []).length;
   row.itemTitles = (items ?? []).map((i: any) => i.title);
   row.ms = Math.round(performance.now() - t0);
+
+  // ---- what the contract actually did, read back off the chunks -----------
+  {
+    const { data: chunks } = await svc.from("ingestion_chunks")
+      .select("fact_ledger").eq("run_id", runId);
+    const tel = (chunks ?? []).map((c: any) => c?.fact_ledger?.enforcement).filter(Boolean);
+    const sum = (k: string) => tel.reduce((n: number, t: any) => n + Number(t?.[k] ?? 0), 0);
+    row.enforcementRan = tel.length > 0;
+    row.scope = tel[0]?.scope ?? null;
+    row.itemsGoverned = sum("itemsGoverned");
+    row.accepted = sum("accepted");
+    row.repaired = sum("repaired");
+    row.stripped = sum("stripped");
+    row.sourceUnresolved = sum("sourceUnresolved");
+    row.attributionUnresolved = sum("attributionUnresolved");
+  }
+
+  // ---- SILENT OMISSIONS, measured directly ---------------------------------
+  // Every high-identity fact the parser can name in the source, checked against
+  // the whole finished packet. A fact that is nowhere in the draft and nowhere
+  // in the telemetry is exactly the silent disappearance we are trying to end.
+  {
+    const parsed: any = parseClaims(input.text, 0);
+    const claims = (parsed.claims ?? []) as { kind: string; value: string }[];
+    const hay = JSON.stringify({ items, dets: dets.data, lnks: lnks.data, cons: cons.data, secs });
+    const norm = (v: string) => v.toLowerCase().replace(/[^a-z0-9@.]/g, "");
+    const haystack = norm(hay);
+    const missing = claims.filter((c) => {
+      const v = norm(c.value);
+      if (!v) return false;
+      // Phones are reformatted on purpose; compare digits only.
+      if (c.kind === "phone") return !haystack.includes(v.replace(/[^0-9]/g, ""));
+      // A bare hostname may be stored with a scheme and a trailing slash.
+      if (c.kind === "url") return !haystack.includes(v.replace(/^https?/, "").replace(/\/$/, ""));
+      return !haystack.includes(v);
+    });
+    row.claims = claims.length;
+    row.claimsMissing = missing.length;
+    row.missingValues = missing.map((m) => `${m.kind}:${m.value.trim().slice(0, 40)}`);
+    row.recordsDetected = (recordEnvelopes(input.text, USE_HINT && input.hint ? input.hint : undefined) ?? []).length;
+  }
 
   // Can it actually be published? An import that finishes but cannot ship is
   // still a failed creation attempt from the professional's side.
