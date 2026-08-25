@@ -1,5 +1,6 @@
 import type { Packet, Item, Section } from "./types.ts";
 import { resolveCardLinks } from "./item-links.ts";
+import { thumbnailUrl, squareThumbnailUrl } from "./image-source.ts";
 
 // AN EMAIL-READY RENDERING OF THE SAME PACKET.
 //
@@ -35,6 +36,18 @@ const safeUrl = (v: unknown): string | null => {
   return /^https?:\/\//i.test(s) ? s : null;
 };
 
+/** As tolerant as the live footer, which accepts a bare domain typed into the
+ *  profile form ("example.com") and prefixes it. Anything carrying some OTHER
+ *  scheme is refused outright rather than prefixed, so `javascript:alert(1)`
+ *  cannot become `https://javascript:alert(1)` or survive as itself. */
+const href = (v: unknown): string | null => {
+  const s = String(v ?? "").trim();
+  if (!s) return null;
+  if (/^https?:\/\//i.test(s)) return s;
+  if (/^[a-z][a-z0-9+.-]*:/i.test(s)) return null;
+  return `https://${s}`;
+};
+
 const FONT = "-apple-system, 'Segoe UI', Roboto, Arial, Helvetica, sans-serif";
 const INK = "#1f2328";
 const MUTED = "#5b6570";
@@ -46,14 +59,69 @@ const W = 600;
 const p = (text: string, style = "") =>
   `<p style="margin:0 0 12px;font-family:${FONT};font-size:16px;line-height:1.5;color:${INK};${style}">${text}</p>`;
 
-function photoBlock(item: Item): string {
-  const url = safeUrl(item.photos?.[0]);
-  if (!url) return "";
+const CONTENT = W - 48;   // 552px, inside the card's padding
+const COLS = 4;           // three columns makes an eight-photo item ~530px taller
+const GAP = 8;
+const THUMB = Math.floor((CONTENT - GAP * (COLS - 1)) / COLS);   // 132px
+
+// EVERY RECIPIENT-VISIBLE PHOTO, in packet order.
+//
+// Showing photos[0] alone was not a smaller gallery, it was a different packet:
+// eight photographs of a community reduced to one is the renderer deciding what
+// the client gets to see.
+//
+// The shape mirrors the live gallery rather than inventing an email-only one.
+// PhotoGallery shows ONE photo prominently and puts the rest behind "View all
+// N"; this shows one photo prominently and lays the rest out as an index. Same
+// information architecture, expressed in the only vocabulary email has.
+//
+// Stacking all of them full-width was the obvious alternative and is much
+// worse: measured on this packet it would add ~14,500px of phone scrolling,
+// roughly eighteen extra screens, and bury the prices and phone numbers under
+// the pictures.
+function photoBlock(item: Item, liveUrl: string | null): string {
+  const photos = (item.photos ?? []).map(safeUrl).filter((u): u is string => Boolean(u));
+  if (!photos.length) return "";
+
+  const [hero, ...rest] = photos;
+
   // width is an ATTRIBUTE as well as a style: Outlook ignores the style.
   // alt carries the item's own name, so a blocked image still says what it is.
-  return `<tr><td style="padding:0 0 14px">
-    <img src="${esc(url)}" alt="${esc(item.title)}" width="${W - 48}"
-         style="display:block;width:100%;max-width:${W - 48}px;height:auto;border:1px solid ${LINE};border-radius:4px" />
+  // The rendition is bounded at 2x the display width - the same pixels a
+  // recipient could see, at a quarter of the bytes of the stored original.
+  const heroRow = `<tr><td style="padding:0 0 ${rest.length ? 8 : 14}px">
+    <img src="${esc(thumbnailUrl(hero, CONTENT * 2))}" alt="${esc(item.title)}" width="${CONTENT}"
+         style="display:block;width:100%;max-width:${CONTENT}px;height:auto;border:1px solid ${LINE};border-radius:4px" />
+  </td></tr>`;
+
+  if (!rest.length) return heroRow;
+
+  const rows: string[] = [];
+  for (let i = 0; i < rest.length; i += COLS) {
+    const slice = rest.slice(i, i + COLS);
+    // The tile is square because the SOURCE cropped it. Squaring it here with
+    // object-fit would look right in Gmail and arrive stretched in Outlook.
+    // Not linked individually: forty-two hrefs are real bytes against Gmail's
+    // clipping threshold, and a thumbnail that is silently tappable is not an
+    // affordance. One stated link below leads better than forty-two hidden ones.
+    const cells = slice.map((url, k) => `<td width="${THUMB}" style="padding:0 ${
+      k === COLS - 1 ? 0 : GAP}px ${GAP}px 0"><img src="${esc(squareThumbnailUrl(url, THUMB * 2))}" alt="" width="${THUMB}" height="${THUMB}"
+      style="display:block;border:1px solid ${LINE};border-radius:3px" /></td>`);
+    // Pad the short row so its tiles keep their width instead of stretching.
+    while (cells.length < COLS) cells.push(`<td width="${THUMB}">&nbsp;</td>`);
+    rows.push(`<tr>${cells.join("")}</tr>`);
+  }
+
+  const anchor = liveUrl ? `${liveUrl}#item-${item.id}` : null;
+  const more = anchor
+    ? `<tr><td colspan="${COLS}" style="padding:2px 0 0">${p(
+        `<a href="${esc(anchor)}" style="color:${LINK};text-decoration:underline">View all ${photos.length} photos</a>`,
+        "font-size:14px;margin:0")}</td></tr>`
+    : "";
+
+  return `${heroRow}<tr><td style="padding:0 0 14px">
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0"
+           style="border-collapse:collapse">${rows.join("")}${more}</table>
   </td></tr>`;
 }
 
@@ -118,14 +186,14 @@ function contactsBlock(item: Item): string {
   </td></tr>`;
 }
 
-function itemBlock(item: Item): string {
+function itemBlock(item: Item, liveUrl: string | null): string {
   const address = String(item.address ?? "").trim();
   const mapHref = address ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}` : null;
   return `<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%"
      style="border-collapse:collapse;border:1px solid ${LINE};border-radius:6px;margin:0 0 16px">
     <tr><td style="padding:20px 24px">
       <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse:collapse">
-        ${photoBlock(item)}
+        ${photoBlock(item, liveUrl)}
         <tr><td style="padding:0 0 6px">
           <h3 style="margin:0;font-family:${FONT};font-size:19px;line-height:1.3;color:${INK};font-weight:700">${esc(item.title)}</h3>
         </td></tr>
@@ -142,14 +210,14 @@ function itemBlock(item: Item): string {
   </table>`;
 }
 
-function sectionBlock(section: Section): string {
+function sectionBlock(section: Section, liveUrl: string | null): string {
   const head = [
     String(section.title ?? "").trim()
       ? `<h2 style="margin:0 0 4px;font-family:${FONT};font-size:22px;line-height:1.25;color:${INK};font-weight:700">${esc(section.title)}</h2>` : "",
     String(section.description ?? "").trim() ? p(esc(section.description), `color:${MUTED};margin:0 0 14px`) : "",
   ].join("");
   return `${head ? `<tr><td style="padding:8px 0 10px">${head}</td></tr>` : ""}
-    <tr><td>${section.items.map(itemBlock).join("")}</td></tr>`;
+    <tr><td>${section.items.map((it) => itemBlock(it, liveUrl)).join("")}</td></tr>`;
 }
 
 export interface EmailRenderOptions {
@@ -164,7 +232,13 @@ export function renderPacketEmail(packet: Packet, opts: EmailRenderOptions): str
   const business = String(pro.businessName ?? "").trim();
   const client = String(packet.clientName ?? "").trim();
 
+  // The logo the live PacketHeader leads with. It was dropped here, which made
+  // the email the one place the professional's brand did not appear.
+  const logo = safeUrl(pro.logoUrl);
+
   const header = `<tr><td style="padding:28px 24px 8px">
+    ${logo ? `<img src="${esc(logo)}" alt="${esc(business || "Logo")}" height="40"
+         style="display:block;height:40px;width:auto;max-width:180px;margin:0 0 14px" />` : ""}
     ${business ? p(esc(business).toUpperCase(), `font-size:12px;letter-spacing:1px;color:${MUTED};margin:0 0 6px`) : ""}
     <h1 style="margin:0;font-family:${FONT};font-size:26px;line-height:1.2;color:${INK};font-weight:700">${esc(packet.title)}</h1>
     ${client ? p(`Prepared for ${esc(client)}`, `color:${MUTED};margin:6px 0 0`) : ""}
@@ -180,20 +254,79 @@ export function renderPacketEmail(packet: Packet, opts: EmailRenderOptions): str
 
   const body = `<tr><td style="padding:18px 24px 0">
       <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse:collapse">
-        ${packet.sections.map(sectionBlock).join("")}
+        ${packet.sections.map((s) => sectionBlock(s, live)).join("")}
       </table>
     </td></tr>`;
 
-  const contactLines = [
-    String(pro.name ?? "").trim() ? esc(pro.name) : "",
-    String(pro.phone ?? "").trim() ? `<a href="tel:${esc(String(pro.phone).replace(/[^\d+]/g, ""))}" style="color:${LINK};text-decoration:underline">${esc(pro.phone)}</a>` : "",
-    String(pro.email ?? "").trim() ? `<a href="mailto:${esc(pro.email)}" style="color:${LINK};text-decoration:underline">${esc(pro.email)}</a>` : "",
-  ].filter(Boolean).join(" &nbsp;·&nbsp; ");
+  // THE SAME IDENTITY THE LIVE PAGE SHOWS, in email-safe HTML - not a second,
+  // email-only signature. Field for field this mirrors ProfessionalFooter:
+  // label, headshot, name, business, then every way to make contact.
+  //
+  // It is a CONTACT CARD, and that shape is the point. A bare
+  // "Ramona Maurer - phone - email" line at the foot of an email is shaped
+  // exactly like an email signature, so a personal note that already ends
+  // "Thank you, Ramona" reads as signed twice. The note is not the problem and
+  // is never touched; the footer just has to stop imitating a sign-off. A
+  // labelled card with a photograph and buttons reads as what it is - how to
+  // reach this person - which is also how it reads on the live page.
+  const headshot = safeUrl(pro.headshotUrl);
+  const proName = String(pro.name ?? "").trim();
+  const proPhone = String(pro.phone ?? "").trim();
+  const proEmail = String(pro.email ?? "").trim();
+  const proSite = href(pro.websiteUrl);
+  const tel = proPhone.replace(/[^\d+]/g, "");
 
-  const footer = `<tr><td style="padding:8px 24px 28px;border-top:1px solid ${LINE}">
-    ${String(pro.footerLabel ?? "").trim() ? p(esc(pro.footerLabel).toUpperCase(), `font-size:12px;letter-spacing:1px;color:${MUTED};margin:14px 0 6px`) : `<div style="height:14px;line-height:14px">&nbsp;</div>`}
-    ${contactLines ? p(contactLines, "font-size:15px;margin:0 0 10px") : ""}
-    ${live ? p(`<a href="${esc(live)}" style="color:${LINK};text-decoration:underline">View this FlowGuide online</a>`, `font-size:14px;color:${MUTED};margin:0`) : ""}
+  // A table cell IS the button: no border-radius in Outlook, which squares the
+  // corners and changes nothing else.
+  const btn = (target: string, label: string, primary: boolean) =>
+    `<td style="padding:0 8px 8px 0"><table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse:separate">
+      <tr><td style="background:${primary ? LINK : "#eef2ff"};border:1px solid ${primary ? LINK : "#dbe3ff"};border-radius:6px">
+        <a href="${esc(target)}" style="display:inline-block;padding:9px 16px;font-family:${FONT};font-size:15px;font-weight:600;line-height:1;color:${primary ? "#ffffff" : LINK};text-decoration:none">${esc(label)}</a>
+      </td></tr></table></td>`;
+
+  const buttons: string[] = [];
+  if (tel) buttons.push(btn(`tel:${tel}`, proName ? `Call ${proName.split(" ")[0]}` : "Call", true));
+  // sms: acts on a phone and is inert in most desktop clients. Kept because the
+  // live footer offers it and a dead button costs less than a missing one.
+  if (tel) buttons.push(btn(`sms:${tel}`, "Text", false));
+  if (proEmail) buttons.push(btn(`mailto:${proEmail}`, "Email", false));
+  if (proSite) buttons.push(btn(proSite, "Website", false));
+  for (const l of pro.links ?? []) {
+    const target = href(l?.url);
+    if (target) buttons.push(btn(target, String(l?.label ?? "").trim() || target, false));
+  }
+  const buttonRows = buttons.length
+    ? `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse"><tr>${buttons.join("")}</tr></table>`
+    : "";
+
+  // Sized by HEIGHT ALONE, keeping the photo's own proportions. The live page
+  // crops a circle with object-fit, which Outlook does not implement - forcing
+  // 56x56 there would squash a 920x560 portrait into a distorted face. A
+  // rounded rectangle is a small departure from the live shape; a stretched
+  // photograph of someone is not a small departure.
+  const identity = `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse">
+      <tr>
+        ${headshot ? `<td style="padding:0 14px 0 0;vertical-align:top">
+          <img src="${esc(thumbnailUrl(headshot, 168))}" alt="${esc(proName)}" height="56"
+               style="display:block;height:56px;width:auto;border-radius:6px;border:1px solid ${LINE}" />
+        </td>` : ""}
+        <td style="vertical-align:top">
+          ${proName ? p(esc(proName), "font-size:16px;font-weight:600;margin:0") : ""}
+          ${business ? p(esc(business), `font-size:14px;color:${MUTED};margin:2px 0 0`) : ""}
+        </td>
+      </tr>
+    </table>`;
+
+  const footer = `<tr><td style="padding:8px 24px 28px">
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%"
+           style="border-collapse:collapse;background:${PAGE};border:1px solid ${LINE};border-radius:8px">
+      <tr><td style="padding:16px 18px">
+        ${String(pro.footerLabel ?? "").trim() ? p(esc(pro.footerLabel).toUpperCase(), `font-size:12px;letter-spacing:1px;color:${MUTED};margin:0 0 10px`) : ""}
+        ${identity}
+        ${buttonRows ? `<div style="height:14px;line-height:14px">&nbsp;</div>${buttonRows}` : ""}
+      </td></tr>
+    </table>
+    ${live ? p(`<a href="${esc(live)}" style="color:${LINK};text-decoration:underline">View this FlowGuide online</a>`, `font-size:14px;color:${MUTED};margin:12px 0 0`) : ""}
   </td></tr>`;
 
   return `<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse:collapse;background:${PAGE}">
@@ -235,8 +368,17 @@ export function renderPacketEmailText(packet: Packet, opts: EmailRenderOptions):
       }
     }
   }
-  const tail = [pro.name, pro.phone, pro.email].map((v) => String(v ?? "").trim()).filter(Boolean).join(" · ");
+  // The same identity fields the HTML footer carries, so the two flavours of
+  // one email do not introduce the professional differently.
+  const tail = [pro.name, pro.businessName, pro.phone, pro.email]
+    .map((v) => String(v ?? "").trim()).filter(Boolean).join(" · ");
   if (tail) out.push("", "", tail);
+  const site = href(pro.websiteUrl);
+  if (site) out.push(site);
+  for (const l of pro.links ?? []) {
+    const target = href(l?.url);
+    if (target) out.push(`${String(l?.label ?? "").trim() || target}: ${target}`);
+  }
   if (opts.liveUrl) out.push(opts.liveUrl);
   return out.join("\n");
 }

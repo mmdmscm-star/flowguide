@@ -114,3 +114,122 @@ test("the plain-text flavour carries the same facts", () => {
     assert.ok(text.includes(needed), `missing from plain text: ${needed}`);
   }
 });
+
+// ---------------------------------------------------------------------------
+// EVERY PHOTO, AND THE WHOLE PROFESSIONAL IDENTITY.
+//
+// The fixture above has one photo per item and a minimal professional, so it
+// passed unchanged both before and after this behaviour existed. A test that
+// cannot fail cannot protect anything, hence a second fixture that actually
+// exercises a gallery and a full identity.
+// ---------------------------------------------------------------------------
+
+const CLD = "https://res.cloudinary.com/demo/image/upload";
+const GALLERY_LIVE = "https://flowguide.example.com/p/xyz";
+const GALLERY = {
+  slug: "xyz",
+  title: "Communities",
+  clientName: "Rick",
+  personalNote: "Hi Rick,\n\nHave a look.\n\nThank you,\n\nRamona",
+  compositionMode: "legacy",
+  professional: {
+    name: "Ramona Maurer", email: "r@example.com", phone: "(707) 391-0111",
+    businessName: "Assisted Living Locators", footerLabel: "Your Advisor",
+    logoUrl: "https://brand.example.com/logo.png",
+    headshotUrl: "https://people.example.com/ramona.jpg",
+    websiteUrl: "santarosa.example.com",
+    links: [{ url: "https://reviews.example.com/ramona", label: "Reviews" }],
+  },
+  sections: [{
+    id: "s1", title: "Sonoma", items: [
+      { id: "itemA", title: "Cogir of Sonoma",
+        photos: [`${CLD}/v1/one.jpg`, `${CLD}/v1/two.jpg`, `${CLD}/v1/three.jpg`,
+                 `${CLD}/v1/four.jpg`, `${CLD}/v1/five.jpg`, "https://elsewhere.example.com/six.jpg"] },
+      { id: "itemB", title: "Single Photo Place", photos: [`${CLD}/v1/only.jpg`] },
+      { id: "itemC", title: "No Photos Place" },
+    ],
+  }],
+} as unknown as Packet;
+
+const g = renderPacketEmail(GALLERY, { liveUrl: GALLERY_LIVE });
+
+test("EVERY recipient-visible photo survives, in packet order", () => {
+  for (const name of ["one", "two", "three", "four", "five", "six", "only"]) {
+    assert.ok(g.includes(name), `photo dropped from the email: ${name}`);
+  }
+  // Order, not merely presence.
+  const at = (n: string) => g.indexOf(n);
+  const seq = ["one", "two", "three", "four", "five", "six"].map(at);
+  assert.ok(seq.every((v, i) => v > -1 && (i === 0 || v > seq[i - 1])), "photo order not preserved");
+  // 6 + 1 photos, plus the logo and the headshot.
+  assert.equal((g.match(/<img /g) ?? []).length, 9);
+});
+
+test("the hero is bounded, the rest are squared BY THE SOURCE", () => {
+  // object-fit does not exist in Outlook, so a tile squared in CSS arrives
+  // stretched. The crop has to be in the URL.
+  assert.doesNotMatch(g, /object-fit/, "a CSS-squared tile is a stretched tile in Outlook");
+  assert.match(g, /c_limit,w_1104,q_auto,f_auto\/v1\/one\.jpg/, "hero rendition missing");
+  for (const n of ["two", "three", "four", "five"]) {
+    assert.ok(g.includes(`c_fill,g_auto,ar_1:1,w_264,q_auto,f_auto/v1/${n}.jpg`), `tile not squared: ${n}`);
+  }
+  // A source with no rendition service still renders — just uncropped.
+  assert.ok(g.includes("https://elsewhere.example.com/six.jpg"));
+});
+
+test("one stated way into the gallery, not forty-two silent ones", () => {
+  const all = g.match(/View all \d+ photos/g) ?? [];
+  assert.deepEqual(all, ["View all 6 photos"], "expected exactly one gallery link, naming the true total");
+  assert.ok(g.includes(`${GALLERY_LIVE}#item-itemA`), "the gallery link does not reach the item");
+  // A single-photo item has nothing to expand, and an item with no photos
+  // contributes no gallery at all.
+  assert.doesNotMatch(g, /View all 1 photos/);
+  assert.ok(g.indexOf("No Photos Place") > -1);
+});
+
+test("the professional identity matches the live page, field for field", () => {
+  for (const needed of [
+    "https://brand.example.com/logo.png",      // header logo
+    "ASSISTED LIVING LOCATORS",                // header eyebrow
+    "YOUR ADVISOR",                            // footer label
+    "ramona.jpg",                              // headshot
+    "Ramona Maurer",                           // name
+    "Assisted Living Locators",                // business, under the name
+    "tel:7073910111", "Call Ramona",
+    "sms:7073910111", ">Text<",
+    "mailto:r@example.com", ">Email<",
+    "https://santarosa.example.com", ">Website<",   // bare domain, prefixed
+    "https://reviews.example.com/ramona", ">Reviews<",
+  ]) {
+    assert.ok(g.includes(needed), `missing from the professional identity: ${needed}`);
+  }
+});
+
+test("the headshot keeps its own proportions rather than being forced square", () => {
+  // Deliberate: the live page crops a circle with object-fit, which Outlook
+  // ignores — forcing 56x56 there would squash a 920x560 portrait.
+  const img = /<img[^>]+ramona\.jpg[^>]*>/.exec(g)?.[0] ?? "";
+  assert.ok(img, "headshot not rendered");
+  assert.match(img, /height:56px/);
+  assert.match(img, /width:auto/);
+  assert.doesNotMatch(img, /width="\d+"/, "a width attribute would distort a non-square headshot");
+});
+
+test("the personal note keeps its own sign-off, untouched", () => {
+  assert.ok(g.includes("Thank you,"), "the note was rewritten");
+  assert.ok(g.includes("Ramona"), "the note's sign-off was removed");
+  // And the footer is a labelled card rather than a second signature line.
+  assert.ok(g.indexOf("YOUR ADVISOR") > g.indexOf("Thank you,"));
+});
+
+test("a hostile professional URL cannot become a live link", () => {
+  const hostile = renderPacketEmail({
+    ...GALLERY,
+    professional: { ...(GALLERY as Packet).professional,
+      websiteUrl: "javascript:alert(1)",
+      links: [{ url: "data:text/html,<script>", label: "Bad" }] },
+  } as unknown as Packet, { liveUrl: GALLERY_LIVE });
+  assert.doesNotMatch(hostile, /href="javascript:/i);
+  assert.doesNotMatch(hostile, /href="data:/i);
+  assert.doesNotMatch(hostile, /https:\/\/javascript:/i, "a bad scheme must be refused, not prefixed");
+});
