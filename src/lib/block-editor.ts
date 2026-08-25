@@ -13,14 +13,17 @@ import type { PacketBlock } from "./types";
 export type BlockEditorLoad =
   | { found: false }
   | { found: true; mode: "legacy" }
-  | { found: true; mode: "blocks"; status: string; title: string; blocks: PacketBlock[] };
+  | { found: true; mode: "blocks"; status: string; title: string;
+      clientName: string; createdAt: string; blocks: PacketBlock[] };
 
 export async function getBlockEditorData(packetId: string, userId: string): Promise<BlockEditorLoad> {
   const supabase = createServerClient();
 
   const { data: packet, error } = await supabase
     .from("packets")
-    .select("id, title, status, composition_mode")
+    // client_name and created_at identify the packet in the delete
+    // confirmation; nothing else reads them here.
+    .select("id, title, status, composition_mode, client_name, created_at")
     .eq("id", packetId)
     .eq("user_id", userId)
     .single();
@@ -56,5 +59,10 @@ export async function getBlockEditorData(packetId: string, userId: string): Prom
     }
   }
 
-  return { found: true, mode: "blocks", status: packet.status, title: packet.title, blocks };
+  return {
+    found: true, mode: "blocks", status: packet.status, title: packet.title,
+    clientName: (packet as { client_name?: string }).client_name || "",
+    createdAt: (packet as { created_at?: string }).created_at || "",
+    blocks,
+  };
 }

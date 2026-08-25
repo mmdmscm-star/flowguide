@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { CreatorNav } from "@/components/nav/creator-nav";
+import DeletePacketAction from "./delete-packet-action";
 import {
   DndContext,
   closestCenter,
@@ -200,11 +201,14 @@ async function errorFrom(res: Response): Promise<string> {
 }
 
 export function BlockPacketEditor({
-  packetId, title, status, initialBlocks, justConverted,
+  packetId, title, status, clientName, createdAt, initialBlocks, justConverted,
 }: {
   packetId: string;
   title: string;
   status: string;
+  /** Identify the packet in the delete confirmation; nothing else reads these. */
+  clientName?: string;
+  createdAt?: string;
   initialBlocks: PacketBlock[];
   justConverted?: boolean;
 }) {
@@ -425,6 +429,13 @@ export function BlockPacketEditor({
         {blocks.length === 0 && (
           <p className="text-center text-sm text-muted py-8">This packet has no blocks yet.</p>
         )}
+
+        {/* Same component the legacy editor mounts — one delete, wherever the
+            professional happens to be. */}
+        <DeletePacketAction
+          packetId={packetId}
+          packet={{ title, clientName, status, createdAt }}
+        />
       </div>
 
       {editingItem && (

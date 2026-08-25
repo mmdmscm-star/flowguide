@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback, useRef, type ReactNode } from "react";
 import ImageUploadField from "./image-upload-field";
 import ProfessionalProfileFields from "./professional-profile-fields";
+import DeletePacketAction from "./delete-packet-action";
 import { PHOTO_ACCEPT_ATTR } from "@/lib/photo-upload";
 import { useRouter, useParams, useSearchParams } from "next/navigation";
 import { CompositionModeControl } from "@/components/editor/composition-mode-control";
@@ -121,6 +122,7 @@ interface PacketData {
   identityMode: IdentityMode;
   customIdentity: EditorProfile | null;
   showQuickNav: boolean;
+  createdAt: string;
 }
 
 // ============================================================
@@ -285,6 +287,7 @@ export function LegacyPacketEditor() {
       mapUrl: p.map_url || "",
       rawInput: p.raw_input || "",
       status: p.status,
+      createdAt: p.created_at || "",
       identityMode: (p.identity_mode as IdentityMode) || "default",
       // Absent or null reads as ON, matching the recipient renderer.
       showQuickNav: p.show_quick_nav !== false,
@@ -1573,6 +1576,16 @@ export function LegacyPacketEditor() {
           </p>
         )}
       </div>
+
+      <DeletePacketAction
+        packetId={packet.id}
+        packet={{
+          title: packet.title,
+          clientName: packet.clientName,
+          status: packet.status,
+          createdAt: packet.createdAt,
+        }}
+      />
 
       {/* Action bar */}
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-border px-5 py-3">

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import { deleteConfirmMessage, deletePacketRequest } from "@/lib/delete-packet";
 import { useRouter } from "next/navigation";
 import { UseLibraryPicker } from "@/components/library/use-library-picker";
 import { filterPackets, isPublished, type StatusFilter } from "@/lib/packet-filter";
@@ -22,6 +23,7 @@ interface PacketSummary {
 export default function DashboardWorkspace() {
   const router = useRouter();
   const [packets, setPackets] = useState<PacketSummary[]>([]);
+  const [deleteError, setDeleteError] = useState("");
   const [loading, setLoading] = useState(true);
   const [userEmail, setUserEmail] = useState("");
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -71,10 +73,25 @@ export default function DashboardWorkspace() {
     }
   }
 
-  async function deletePacket(id: string, title: string) {
-    if (!confirm(`Delete "${title || "Untitled Packet"}"? This cannot be undone.`)) return;
-    await fetch(`/api/packets/${id}`, { method: "DELETE" });
-    loadPackets();
+  // THE SAME mechanism the editors use: same confirmation wording, same request
+  // helper. Previously this discarded the response entirely — a 500 or a 401
+  // was indistinguishable from success, because the list simply reloaded with
+  // the packet still in it and nothing said why.
+  async function deletePacket(packet: PacketSummary) {
+    if (!confirm(deleteConfirmMessage({
+      title: packet.title,
+      clientName: packet.client_name,
+      status: packet.status,
+      createdAt: packet.created_at,
+    }))) return;
+
+    setDeleteError("");
+    try {
+      await deletePacketRequest(packet.id);
+      loadPackets();
+    } catch (e) {
+      setDeleteError(e instanceof Error ? e.message : "Could not delete that FlowGuide.");
+    }
   }
 
   async function duplicatePacket(id: string) {
@@ -230,6 +247,12 @@ export default function DashboardWorkspace() {
       )}
 
       {/* Packet list */}
+      {deleteError && (
+        <p role="alert" className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+          {deleteError}
+        </p>
+      )}
+
       {packets.length === 0 ? (
         <div className="text-center py-16">
           <div className="text-4xl mb-4">📦</div>
@@ -339,7 +362,7 @@ export default function DashboardWorkspace() {
                     {duplicatingId === packet.id ? "Duplicating…" : "Duplicate"}
                   </button>
                   <button
-                    onClick={() => deletePacket(packet.id, packet.title)}
+                    onClick={() => deletePacket(packet)}
                     className="px-3 py-1.5 text-xs font-medium text-red-500 hover:bg-red-50 rounded-lg transition-colors"
                   >
                     Delete

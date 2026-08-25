@@ -32,6 +32,8 @@ export default async function EditPacketPage({ params, searchParams }: Props) {
         packetId={id}
         title={data.title}
         status={data.status}
+        clientName={data.clientName}
+        createdAt={data.createdAt}
         initialBlocks={data.blocks}
         justConverted={sp.converted === "1"}
       />
