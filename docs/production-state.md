@@ -15,6 +15,7 @@ messages. Everything here is live unless it says otherwise.
 | Copy client message | **LIVE** — post-publish bar; deterministic, never persisted | revert the code; nothing stored |
 | Email-ready FlowGuide | **LIVE** — commit `a5f05a2`; `GET /api/packets/[id]/email`, renders on demand | revert the code; nothing stored, no schema, no flag |
 | Print / Save as PDF | **LIVE** — commit `259724a`; `/p/[slug]/print`, renders on demand | revert the code; nothing stored, no schema, no flag |
+| Professional identity surface | **LIVE** — commit `ddeb494`; `/settings`, existing `PATCH /api/profile` | revert the code; no schema, no flag |
 | Migrations | `0001`–`0029` applied; local and remote in sync | per-migration; none pending |
 
 Both rollbacks are independent, carry no state, and need no migration.
@@ -127,6 +128,19 @@ roadmap entry.
 `scripts/ingestion-runtime/verify-renderers-prod.mts` re-runs the production
 check for BOTH supporting renderers (46 assertions, disposable data,
 self-cleaning) whenever this needs proving again rather than assuming.
+
+## One rule decides whether a profile is ready
+
+`src/lib/professional-identity.ts` is the single answer to "is this professional
+ready to publish?" — a name, and at least one way to reply. **The publish route
+and the dashboard's first-run prompt both call it**, so onboarding cannot tell
+someone they are set up while publish refuses them. Changing that rule changes
+both at once, which is the point; do not reintroduce a local check in either
+place.
+
+`scripts/ingestion-runtime/verify-identity.mts` proves it end to end (26 checks,
+disposable, self-cleaning), including that an already-published packet keeps its
+snapshot when the profile later changes.
 
 ## Paper is verified as paper
 

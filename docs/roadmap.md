@@ -929,6 +929,69 @@ now awaits and catches the clipboard write instead of reporting "Copied!"
 unconditionally, and shows the link when a browser blocks the copy. This clears
 the backlog entry below.
 
+## Professional identity surface (/settings) — SHIPPED 2026-08-24
+
+**The problem was reachability, not capability.** The nine profile fields were
+always editable — inside the 2,131-line legacy packet editor and nowhere else.
+So a **block-editor user had no route to them at all**, and a new professional
+had to open a packet to discover they existed. Every renderer FlowGuide has —
+web, email, print — reads that profile, and a professional who never found it
+published anonymous FlowGuides.
+
+### One rule
+
+"Is this profile ready?" now has a single answer in
+`src/lib/professional-identity.ts`, and **the publish route asks it** rather
+than keeping its own copy. The rule is unchanged and is publish's own: **a name,
+and at least one way to reply** (email or phone).
+
+This was the explicit instruction and it matters: a separate "has a name"
+heuristic for onboarding could tell a professional they were set up and then
+have publish refuse them, or nag someone whose profile publish would accept.
+A `null` contact stays ready — that is `identity_mode: "none"`, a deliberate
+absence, not an omission.
+
+### One form
+
+The fields moved into `professional-profile-fields.tsx`, rendered by **both**
+the legacy editor and `/settings`. It is presentational — it renders and
+reports, never saves — so the editor keeps its own debounced PATCH and its own
+save indicator, and its behaviour is unchanged. The **per-packet custom
+identity's** logo and headshot stayed in the editor, because those save to the
+PACKET, not to `/api/profile`. Per-packet identity semantics are untouched.
+
+The block editor gained `CreatorNav` — a link to the one form, never a second
+one.
+
+### The prompt
+
+One line, in the **server shell** rather than the client workspace: a first-run
+prompt that appears after a spinner is one the new professional has already
+scrolled past. It names the actual gap, advances when the first gap closes, and
+disappears for good when there is none.
+
+No wizard, no completeness score, no repeated nudges, nothing to dismiss.
+
+### Verified — 26 checks, disposable professional, local and production
+
+Brand-new with no profile row · half-configured · fully configured, with **the
+prompt and the publish refusal naming the same gap at every step**; an
+already-published packet keeping its snapshot across a later profile edit while
+the next publish picks the change up; skip-profile publishing still storing an
+empty snapshot; image upload unchanged; both editors still loading.
+
+Five checks first "failed" against server-rendered HTML because the dashboard
+and block editor draw client-side — a `fetch` sees only `Loading...`, and
+`BLOCK COMPOSITION` is uppercased by CSS. Confirmed in a real browser, and the
+prompt was moved to the shell so the server can answer for it honestly.
+`scripts/ingestion-runtime/verify-identity.mts` re-runs the whole thing.
+
+### Deliberately not built
+
+Onboarding wizard, profile scoring, repeated nudges, billing or plans, teams or
+roles, starter content, a marketing or signup funnel, and any change to
+per-packet identity semantics.
+
 ## Backlog — recorded, not started
 
 **Copy Link reports success it did not have — FIXED 2026-08-24** (see the print entry above; kept here for the record).
