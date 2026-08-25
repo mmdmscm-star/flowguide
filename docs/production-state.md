@@ -132,24 +132,41 @@ roadmap entry.
 check for BOTH supporting renderers (46 assertions, disposable data,
 self-cleaning) whenever this needs proving again rather than assuming.
 
-## Packet counts are not a usage trend right now
+## THE DATABASE IS A LAB NOTEBOOK, NOT A USAGE LOG
 
-**From 2026-08-24 the founder is deliberately deleting old test and unused
-FlowGuides.** Totals are falling for housekeeping reasons, not product ones.
+Nearly everything in this database exists because the founder was **building and
+probing the software** — learning what it could do, where it broke, and what
+commercial use would require — with a few genuinely real client FlowGuides
+mixed in (which served a real purpose and also taught something).
 
-Do not infer adoption, engagement, funnel behaviour or decline from raw packet
-count, draft count, or the draft-to-published ratio during this period. Deletion
-is a hard delete and cascades cleanly, so there is no audit trail to reconstruct
-what an earlier count included.
+That makes almost any behavioural inference from this data unsound, not just
+counts. What looks like usage is mostly the record of someone testing their own
+tool.
 
-Counts have been cited as evidence before — "67 packets, 46 of them drafts", and
-"51 general vs 16 senior-placement" as proof the product generalised beyond its
-origin vertical. The *composition* ratio may still be informative; the totals
-and their direction are not.
+**Two specific claims made from it, both retracted:**
 
-Prefer published-packet counts, recipient `viewed` data (noting that owner views
-were only excluded from 2026-08-19, so rows older than that are unreliable), or
-evidence from an actual external professional.
+- *"67 packets, 46 of them drafts"* — a draft ratio produced by
+  experimentation, not by professionals abandoning work.
+- *"51 general vs 16 senior-placement, so the product has generalised beyond its
+  origin vertical"* — the general-typed packets are largely test material chosen
+  to probe the software against different content shapes (a training plan, a
+  food test), not evidence of demand outside the origin vertical.
+
+The horizontal public positioning does **not** rest on that second claim and is
+unaffected: it was decided on noncompete grounds, which is a constraint rather
+than an inference. But the statistic must not be re-used as supporting evidence.
+
+**Also true from 2026-08-24:** the founder is deliberately deleting old test and
+unused FlowGuides, so totals are falling for housekeeping reasons. Deletion is
+hard and cascades cleanly, so there is no audit trail to reconstruct what an
+earlier count included.
+
+**What to reach for instead.** Published-packet counts are steadier. Recipient
+`viewed` data is usable only for rows created after 2026-08-19, when owner views
+stopped being counted. Neither substitutes for the real thing: **evidence from a
+professional who is not the founder.** Until that exists, say "we don't know"
+rather than dressing a development artefact as a finding.
+
 
 ## show_quick_nav is presentation, and must stay that way
 
