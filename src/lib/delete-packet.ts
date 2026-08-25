@@ -90,9 +90,13 @@ export async function deletePacketRequest(id: string): Promise<void> {
     throw new Error("Could not reach FlowGuide. Check your connection and try again.");
   }
   if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
+    const body = (await res.json().catch(() => ({}))) as { message?: string; error?: string };
+    // `message` first, `error` second. Routes here carry a machine code in
+    // `error` ("not_found") and the sentence a professional should read in
+    // `message`; preferring `error` would put the code on screen.
     throw new Error(
-      (body as { error?: string })?.error?.trim() ||
+      body?.message?.trim() ||
+        body?.error?.trim() ||
         `Could not delete this FlowGuide (${res.status}).`
     );
   }

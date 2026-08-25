@@ -149,3 +149,71 @@ test("no lifecycle system crept in", () => {
     assert.doesNotMatch(lib + action, forbidden, `scope crept: ${forbidden}`);
   }
 });
+
+// ---------------------------------------------------------------------------
+// THE HELPER SURFACES THE SERVER'S SENTENCE
+//
+// The route answers a machine code in `error` and a human sentence in
+// `message`. Both editors and the dashboard render whatever this throws, so
+// preferring the wrong key would put "not_found" in front of a professional.
+// ---------------------------------------------------------------------------
+
+/** Run deletePacketRequest against a stubbed fetch, return the thrown message. */
+async function messageFor(response: Response | Error): Promise<string> {
+  const { deletePacketRequest } = await import("./delete-packet.ts");
+  const real = globalThis.fetch;
+  globalThis.fetch = (async () => {
+    if (response instanceof Error) throw response;
+    return response;
+  }) as typeof fetch;
+  try {
+    await deletePacketRequest("some-id");
+    return "";               // resolved — no error thrown
+  } catch (e) {
+    return e instanceof Error ? e.message : String(e);
+  } finally {
+    globalThis.fetch = real;
+  }
+}
+
+const json = (status: number, body: unknown) =>
+  new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
+
+test("a 404 surfaces the sentence, not the code", async () => {
+  const msg = await messageFor(json(404, {
+    error: "not_found",
+    message: "This FlowGuide no longer exists, or you no longer have access to it.",
+  }));
+  assert.equal(msg, "This FlowGuide no longer exists, or you no longer have access to it.");
+  assert.doesNotMatch(msg, /not_found/, "the machine code reached the professional");
+});
+
+test("a body with only `error` still says something useful", async () => {
+  assert.equal(await messageFor(json(401, { error: "Unauthorized" })), "Unauthorized");
+});
+
+test("a body with neither falls back to naming the status", async () => {
+  assert.match(await messageFor(json(500, {})), /Could not delete this FlowGuide \(500\)\./);
+  assert.match(await messageFor(new Response("boom", { status: 502 })), /\(502\)\./);
+});
+
+test("a network failure is reported as one, not as a silent success", async () => {
+  assert.match(await messageFor(new TypeError("network down")), /Check your connection/);
+});
+
+test("a 200 resolves — success is still success", async () => {
+  assert.equal(await messageFor(json(200, { ok: true })), "");
+});
+
+test("THE ROUTE REPORTS WHAT IT DELETED", () => {
+  const route = codeOf("src/app/api/packets/[id]/route.ts");
+  const del = route.slice(route.indexOf("export async function DELETE"));
+  // Without .select() PostgREST answers happily on zero rows.
+  assert.match(del, /\.select\("id"\)/, "the delete does not report which rows it removed");
+  assert.match(del, /data\.length === 0[\s\S]{0,220}status: 404/, "zero rows still answers success");
+  // The owner scope must survive the change.
+  assert.match(del, /\.eq\("user_id", session\.userId\)/, "the delete lost its owner scope");
+  // And nothing may ask whether the row exists regardless of owner — that is
+  // the query that leaks whether a stranger's id is real.
+  assert.doesNotMatch(del, /\.select\([^)]*\)\s*\.eq\("id", id\)\s*\.single/, "an existence probe was added");
+});

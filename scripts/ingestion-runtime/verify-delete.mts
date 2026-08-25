@@ -71,17 +71,47 @@ try {
   check("AND THE SHARED LINK NOW 404s — which is what the warning promises",
     after.status === 404, `status ${after.status}`);
 
-  // === 3. Somebody else's FlowGuide ========================================
+  // === 3. Somebody else's FlowGuide, and one that never existed =============
   const mine = await makePacket(`${TAG}-mine`, "Not Yours", "");
-  const d3 = await fetch(`${BASE}/api/packets/${mine}`, {
+
+  const asStranger = await fetch(`${BASE}/api/packets/${mine}`, {
     method: "DELETE", headers: { Cookie: stranger.cookie } });
+  const strangerBody = await asStranger.text();
   check("a stranger's delete does not remove it", await exists(mine),
     "another user deleted a packet they do not own");
-  check("and the endpoint required a session at all",
+  check("AND IT NO LONGER CLAIMS SUCCESS — 404, not 200",
+    asStranger.status === 404, `status ${asStranger.status}`);
+
+  const ghost = "00000000-0000-4000-8000-000000000000";
+  const asGhost = await fetch(`${BASE}/api/packets/${ghost}`, {
+    method: "DELETE", headers: { Cookie: owner.cookie } });
+  const ghostBody = await asGhost.text();
+  check("a packet that never existed also 404s", asGhost.status === 404, `status ${asGhost.status}`);
+
+  // The whole point of answering 404 for both: an id that is real-but-not-yours
+  // must be indistinguishable from an id that is not real at all.
+  check("NO LEAKAGE — the two 404s are byte-identical",
+    strangerBody === ghostBody, `"${strangerBody}" vs "${ghostBody}"`);
+
+  check("and the endpoint still requires a session",
     (await fetch(`${BASE}/api/packets/${mine}`, { method: "DELETE" })).status === 401,
     "signed-out delete was not rejected");
-  check("the owner-scoped delete still returns a non-error to the stranger",
-    d3.status === 200, `status ${d3.status} — recorded, not asserted as desirable`);
+
+  // Deleting the same packet twice: the second attempt is a 404, not a silent OK.
+  const twice = await makePacket(`${TAG}-twice`, "Delete Me Twice", "");
+  const first = await fetch(`${BASE}/api/packets/${twice}`, {
+    method: "DELETE", headers: { Cookie: owner.cookie } });
+  const second = await fetch(`${BASE}/api/packets/${twice}`, {
+    method: "DELETE", headers: { Cookie: owner.cookie } });
+  check("deleting an owned packet succeeds once", first.status === 200, `status ${first.status}`);
+  check("and the SECOND attempt reports 404 rather than success",
+    second.status === 404, `status ${second.status}`);
+
+  // What a professional would actually read.
+  const shown = JSON.parse(ghostBody || "{}");
+  check("the 404 carries a sentence a professional can read",
+    typeof shown.message === "string" && /no longer exists/.test(shown.message),
+    JSON.stringify(shown));
 
   // === 4. The editor still loads a packet that is gone ======================
   const goneEditor = await fetch(`${BASE}/edit/${draft}`, {

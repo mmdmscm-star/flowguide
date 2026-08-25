@@ -129,13 +129,30 @@ export async function DELETE(_request: Request, context: Context) {
   const { id } = await context.params;
   const supabase = createServerClient();
 
-  const { error } = await supabase
+  // `.select()` so the delete REPORTS WHAT IT DID. Without it PostgREST answers
+  // happily when the owner-scoped filter matched nothing, and this route
+  // returned `{ ok: true }` for a packet that was never touched — a caller
+  // could not tell "deleted" from "there was nothing there".
+  const { data, error } = await supabase
     .from("packets")
     .delete()
     .eq("id", id)
-    .eq("user_id", session.userId);
+    .eq("user_id", session.userId)
+    .select("id");
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // ONE ANSWER FOR TWO CASES, deliberately. A packet that does not exist and a
+  // packet belonging to someone else are indistinguishable from here, because
+  // the filter that found neither is the same filter. Telling them apart would
+  // require asking whether the row exists regardless of owner, which is exactly
+  // the question that leaks whether a stranger's packet id is real.
+  if (!data || data.length === 0) {
+    return NextResponse.json({
+      error: "not_found",
+      message: "This FlowGuide no longer exists, or you no longer have access to it.",
+    }, { status: 404 });
+  }
 
   return NextResponse.json({ ok: true });
 }
