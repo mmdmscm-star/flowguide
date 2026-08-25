@@ -16,6 +16,7 @@ messages. Everything here is live unless it says otherwise.
 | Email-ready FlowGuide | **LIVE** — commit `a5f05a2`; `GET /api/packets/[id]/email`, renders on demand | revert the code; nothing stored, no schema, no flag |
 | Print / Save as PDF | **LIVE** — commit `259724a`; `/p/[slug]/print`, renders on demand | revert the code; nothing stored, no schema, no flag |
 | Professional identity surface | **LIVE** — commit `ddeb494`; `/settings`, existing `PATCH /api/profile` | revert the code; no schema, no flag |
+| Public landing page + neutral demo | **LIVE** — commit `89fd869`; `/`, `/p/demo`, `/og.png` | revert the code; no schema, no flag |
 | Migrations | `0001`–`0029` applied; local and remote in sync | per-migration; none pending |
 
 Both rollbacks are independent, carry no state, and need no migration.
@@ -128,6 +129,17 @@ roadmap entry.
 `scripts/ingestion-runtime/verify-renderers-prod.mts` re-runs the production
 check for BOTH supporting renderers (46 assertions, disposable data,
 self-cleaning) whenever this needs proving again rather than assuming.
+
+## The public surface is horizontal, deliberately
+
+Nothing public names a vertical. Senior-living data is fine internally; it must
+not appear in the landing page, the demo, or anything a stranger can read. The
+demo's entities and facts are wholly invented — reserved `555-01xx` numbers and
+`.example.com` domains — because the demo it replaced attached invented prices
+and staff to four real companies on a live URL.
+
+Public copy says "guide"; `packet` is internal only. `src/lib/public-surface.test.mts`
+pins all of it, including that the demo carries no private note.
 
 ## One rule decides whether a profile is ready
 

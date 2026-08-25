@@ -992,7 +992,70 @@ Onboarding wizard, profile scoring, repeated nudges, billing or plans, teams or
 roles, starter content, a marketing or signup funnel, and any change to
 per-packet identity semantics.
 
+## Public front door — SHIPPED 2026-08-24
+
+One landing page, a neutral public demo, a gate on `/new`, rewritten metadata
+and one static OG card. Built so that approaching another professional does not
+require explaining the product first.
+
+### The demo replacement was the urgent part
+
+Not for positioning reasons. The old `/p/demo` attributed **invented prices,
+invented staff and invented phone numbers to four real companies** — Sunrise,
+Brookdale, Oakmont, Pacifica — on a public URL. It also **leaked its own private
+note**: `/p/demo` resolves the fixture directly rather than through
+`getPublishedPacket`, so the note stripping never ran, and `ItemCard` is a
+client component, so the note sat in the RSC payload and was readable in
+view-source. Both were verified live before replacing them.
+
+The replacement is an event consultant presenting offsite venues to a company.
+**Every entity and every fact is invented** — venues, people, addresses, prices,
+capacities. Phone numbers use the `555-01xx` block reserved for fiction, domains
+use `.example.com` (RFC 2606, unregistrable), photographs are generic interiors
+so no identifiable building is presented as an invented venue. It carries **no
+`notes` field at all**, which is the safe shape for a fixture on that code path.
+
+### POSITIONING IS HORIZONTAL, AND THAT IS A CONSTRAINT
+
+No vertical is named anywhere public. Senior-living data remains fine as
+internal test data; it must not appear in marketing copy, the hero, the demo,
+screenshots, the "why it exists" story, or examples. Gating `/new` also removed
+"Senior placement" from the publicly visible packet-type selector.
+
+Public copy says **guide**, never *packet*. `packet` stays the internal name in
+the schema, API, and docs.
+
+### The `/new` dead end
+
+`/new` used to render for anyone: a signed-out visitor could paste real client
+notes, press Organize, get a 401, and be pushed to `/login` with the text gone.
+Preserving the draft was considered and **rejected as the wrong shape for magic
+links** — request, open email, often on another device — so carrying it through
+would mean redesigning the token. The box now never renders before there is a
+session to save it to, and login says why they arrived.
+
+### Trust-model language
+
+The page does not claim the model "doesn't invent facts". It claims the review
+step the product actually enforces: FlowGuide organises the material you give
+it, and nothing reaches a client until the professional has read and corrected
+it. Absolute claims about model output are not ones we can stand behind.
+
+### Deliberately not built
+
+Pricing, blog, SEO programme, CMS, testimonials, logos, customer counts,
+animation system, multi-page marketing site, OG generation system, or any
+change to the application's design.
+
 ## Backlog — recorded, not started
+
+**`/p/demo` bypasses the recipient payload path.** `resolvePacket` returns
+`samplePacket` directly, so `getPublishedPacket`'s stripping of `notes` never
+runs for the demo. The current fixture carries nothing private and a test
+enforces that, so there is nothing to leak today — but the *mechanism* is still
+there for any future fixture. Closing it properly means routing the demo through
+the same shaping as a real packet. Not urgent; recorded so it is not
+rediscovered.
 
 **Copy Link reports success it did not have — FIXED 2026-08-24** (see the print entry above; kept here for the record).
 
