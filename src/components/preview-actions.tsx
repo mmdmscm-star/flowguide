@@ -20,6 +20,7 @@ export function PreviewActions({ packetId, slug, initialStatus, title, clientNam
   const [publishing, setPublishing] = useState(false);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
+  const [copyFailed, setCopyFailed] = useState(false);
   // Set only by a publish that was actually blocked on ownership. The panel is
   // driven by the 409 rather than mounted speculatively, so a professional whose
   // packet is fine never sees a photo-checking screen at all.
@@ -112,10 +113,22 @@ export function PreviewActions({ packetId, slug, initialStatus, title, clientNam
     }
   }
 
-  function copyLink() {
-    navigator.clipboard.writeText(shareUrl);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  // AWAITED AND CAUGHT. This used to fire writeText() without awaiting it and
+  // set "Copied!" unconditionally, so an insecure context, a denied permission
+  // or a browser that refuses without a user gesture all reported success the
+  // professional did not have — observed live, in a browser that denies
+  // clipboard writes. The failure now says so, in the same shape the client
+  // message and email panels already use.
+  async function copyLink() {
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setCopyFailed(false);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setCopied(false);
+      setCopyFailed(true);
+    }
   }
 
   if (status === "published") {
@@ -155,6 +168,26 @@ export function PreviewActions({ packetId, slug, initialStatus, title, clientNam
             {emailError && <p className="mt-1 text-sm text-red-600">{emailError}</p>}
           </div>
         )}
+
+        {copyFailed && (
+          <p className="mt-1 text-sm text-red-600">
+            Your browser blocked the copy — the link is {shareUrl}
+          </p>
+        )}
+
+        {/* A THIRD way to deliver the same packet, for the professional who
+            hands over paper. Opened in a new tab rather than navigated to, so
+            the publish confirmation this bar is part of stays put. */}
+        <div className="mt-2">
+          <a
+            href={`/p/${slug}/print`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-sm text-green-700 hover:text-green-900 underline"
+          >
+            Print / Save as PDF
+          </a>
+        </div>
 
         <div className="mt-3">
           <a

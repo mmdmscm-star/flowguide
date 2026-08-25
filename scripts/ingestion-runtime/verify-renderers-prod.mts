@@ -1,7 +1,8 @@
-// PRODUCTION VERIFICATION for the email-ready FlowGuide renderer.
+// PRODUCTION VERIFICATION for the supporting renderers: the email version and
+// the paper/PDF version.
 //
 //   FLOWGUIDE_RT_CONFIRM=1 FLOWGUIDE_BASE_URL=https://flowguide-ruddy.vercel.app \
-//     npx tsx scripts/ingestion-runtime/verify-email-prod.mts
+//     npx tsx scripts/ingestion-runtime/verify-renderers-prod.mts
 //
 // Disposable data only: one throwaway user, its profile and packet, all removed
 // in the finally block. No live client packet is read or written.
@@ -137,6 +138,31 @@ try {
     !/<style/i.test(html) && !/class=/i.test(html) && !/display:\s*(flex|grid)/i.test(html)
       && !/object-fit/.test(html), "unsafe CSS present");
 
+  // -- the PAPER renderer -----------------------------------------------------
+  // Same packet, same source, a third presentation. What cannot be checked from
+  // here is pagination: that needs a real Letter PDF, printed and read page by
+  // page. This asserts the things that would make such a proof pointless -
+  // missing photos, a leaked note, a cached or indexable page.
+  const printRes = await fetch(`${BASE}/p/${TAG}/print`, { headers: { Cookie: COOKIE } });
+  const printHtml = await printRes.text();
+  check("the print route answers 200 in production", printRes.status === 200, `status ${printRes.status}`);
+  check("PRIVATE NOTES DO NOT REACH THE PAPER", !printHtml.includes(SECRET), "the private note reached print");
+  for (const n of ["one", "two", "three", "four", "five", "six", "only"]) {
+    check(`print keeps photo "${n}"`, printHtml.includes(`${n}.jpg`), "photo dropped from print");
+  }
+  check("print squares its tiles at the source",
+    printHtml.includes("c_fill,g_auto,ar_1:1"), "square crop missing from print");
+  check("print carries the professional identity",
+    printHtml.includes("Dana Whitfield") && printHtml.includes("Your Advisor"),
+    "identity missing from print");
+  check("print keeps the personal note's sign-off", printHtml.includes("Thank you,"), "note altered");
+  check("the print page is not indexable", /noindex/.test(printHtml), "print page is indexable");
+  check("the print toolbar is marked no-print", printHtml.includes("pg-noprint"), "toolbar would print");
+
+  const printOnly = await fetch(`${BASE}/p/${TAG}/print`);
+  check("and the print page is reachable by the RECIPIENT too, like the packet itself",
+    printOnly.status === 200, `status ${printOnly.status}`);
+
   console.log(`\n  html: ${Buffer.byteLength(html, "utf8")} bytes, ${(html.match(/<img /g) ?? []).length} images\n`);
 } finally {
   await svc.from("packets").delete().eq("user_id", UID);
@@ -146,4 +172,4 @@ try {
   const { count } = await svc.from("packets").select("id", { count: "exact", head: true }).eq("user_id", UID);
   console.log(`cleanup: ${count ?? 0} packets remaining — ${count ? "NOT CLEAN" : "clean"}`);
 }
-summary("email renderer production verification");
+summary("renderer production verification");

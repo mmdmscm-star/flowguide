@@ -1,0 +1,204 @@
+/* THE PAPER RENDERER'S STYLESHEET.
+ *
+ * Scoped to this route by importing it from the route's page. Unlike the email
+ * renderer, print goes through a REAL browser engine, so modern CSS is
+ * available here - object-fit, grid and flex all work. The constraint that
+ * replaces "will Outlook understand this" is FRAGMENTATION: how a box behaves
+ * when the page runs out.
+ *
+ * Flex and grid containers fragment badly across pages, so anything that has to
+ * survive a page break is block or inline-block. Flex/grid are used only INSIDE
+ * units small enough never to break.
+ */
+
+@page {
+  size: Letter;
+  /* Chrome adds its own header/footer only if the user asks for it; these are
+     the document's own margins. 0.55in leaves a printable 7.4 x 10in. */
+  margin: 0.55in 0.6in;
+}
+
+.pg-doc {
+  color: #1f2328;
+  font: 10.5pt/1.5 -apple-system, "Segoe UI", Roboto, Arial, Helvetica, sans-serif;
+  max-width: 7.4in;
+  margin: 0 auto;
+}
+
+/* On screen the route should already look like paper, so what a professional
+   previews is what comes out of the printer. */
+@media screen {
+  body { background: #f4f5f7; }
+  .pg-doc {
+    background: #fff;
+    margin: 24px auto;
+    padding: 0.55in 0.6in;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, .12);
+  }
+}
+
+@media print {
+  /* Borders and tints carry the document's structure; without this Chrome
+     drops every background and the details table becomes a list of orphaned
+     values. */
+  .pg-doc, .pg-doc * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .pg-noprint { display: none !important; }
+  body { background: #fff; }
+}
+
+/* ---- fragmentation ------------------------------------------------------ */
+/* An ITEM may break internally. Forcing a dense community - eight photos, a
+ * seven-row price table, two contacts - onto one page would either overflow it
+ * or push a mostly-empty page ahead of it. Graceful internal breaks beat both,
+ * so the rules below protect the SMALL units instead and let the card flow. */
+
+.pg-item { break-inside: auto; }
+
+/* A heading must never be the last thing on a page. */
+.pg-section-head,
+.pg-item-head,
+.pg-doc h1, .pg-doc h2, .pg-doc h3 {
+  break-after: avoid;
+  break-inside: avoid;
+}
+
+/* Units small enough to always fit, so they never straddle a break. */
+.pg-photo,
+.pg-hero,
+.pg-detail-row,
+.pg-contact,
+.pg-links,
+.pg-note,
+.pg-footer { break-inside: avoid; }
+
+/* THE PRICE TABLE STAYS WHOLE. Keeping only the ROWS unbreakable was not
+ * enough: the first Letter proof split three tables, one of them after a single
+ * "Type" row, which left an orphan line in a box the page edge had cut open.
+ * Prices are what a reader compares, so a table divided across a leaf is the
+ * worst break this document can make. The tallest real table is eight rows
+ * (~2.7in), so whole tables fit comfortably; `avoid` is a hint, so a table too
+ * tall for any page still breaks rather than overflowing. */
+.pg-details { break-inside: avoid; }
+
+/* Keep at least two lines together when a paragraph does break. */
+.pg-doc p { orphans: 2; widows: 2; }
+
+/* ---- header ------------------------------------------------------------- */
+.pg-logo { display: block; height: 0.42in; width: auto; max-width: 2.2in; margin-bottom: 10px; }
+.pg-business { font-size: 8.5pt; letter-spacing: .09em; text-transform: uppercase; color: #5b6570; margin: 0 0 4px; }
+.pg-title { font-size: 19pt; line-height: 1.2; font-weight: 700; margin: 0; white-space: pre-line; }
+.pg-for { font-size: 10pt; color: #5b6570; margin: 6px 0 0; }
+.pg-live { font-size: 9.5pt; color: #5b6570; margin: 8px 0 0; }
+.pg-live b { color: #1f2328; font-weight: 600; }
+.pg-rule { border: 0; border-top: 1px solid #d8dce1; margin: 14px 0 18px; }
+
+.pg-note {
+  background: #f4f5f7;
+  border: 1px solid #e3e6ea;
+  border-radius: 6px;
+  padding: 12px 14px;
+  margin: 0 0 20px;
+  white-space: pre-wrap;
+}
+
+/* ---- sections and items -------------------------------------------------- */
+.pg-section { margin: 0 0 6px; }
+.pg-section-title { font-size: 14pt; font-weight: 700; margin: 18px 0 2px; }
+.pg-section-desc { color: #5b6570; margin: 0 0 10px; }
+
+.pg-item {
+  border: 1px solid #e3e6ea;
+  border-radius: 6px;
+  padding: 12px 14px;
+  margin: 0 0 14px;
+}
+.pg-item-title { font-size: 12.5pt; font-weight: 700; margin: 0 0 2px; }
+.pg-address { font-size: 10pt; color: #3a4450; margin: 0 0 6px; }
+.pg-desc { margin: 0 0 10px; }
+
+/* ---- photos --------------------------------------------------------------
+ * inline-block, not grid: a wrapped run of inline-blocks fragments line by line
+ * across a page boundary, which is exactly the behaviour paper needs. */
+.pg-hero {
+  display: block;
+  width: 100%;
+  height: 2.6in;
+  object-fit: cover;
+  border: 1px solid #e3e6ea;
+  border-radius: 4px;
+  margin: 0 0 6px;
+}
+.pg-photos { font-size: 0; margin: 0 0 10px; }
+.pg-photo {
+  display: inline-block;
+  vertical-align: top;
+  width: 23.5%;
+  height: auto;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+  margin: 0 2% 2% 0;
+  border: 1px solid #e3e6ea;
+  border-radius: 3px;
+}
+.pg-photo:nth-child(4n) { margin-right: 0; }
+
+/* ---- details -------------------------------------------------------------- */
+.pg-details {
+  border: 1px solid #e3e6ea;
+  border-radius: 4px;
+  margin: 0 0 10px;
+  overflow: hidden;
+}
+.pg-detail-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0 24px;
+  padding: 6px 12px;
+  font-size: 10pt;
+}
+.pg-detail-row + .pg-detail-row { border-top: 1px solid #e3e6ea; }
+.pg-detail-label { color: #5b6570; font-weight: 500; min-width: 0; }
+.pg-detail-value { text-align: right; overflow-wrap: anywhere; }
+
+/* ---- links and contacts ---------------------------------------------------
+ * A hyperlink is useless on paper, so every destination is printed as its URL.
+ * That is presentation, not new content: the same link, said in the only way
+ * paper can say it. */
+.pg-links { font-size: 9.5pt; margin: 0 0 10px; }
+.pg-link { margin: 0 0 2px; }
+.pg-link b { font-weight: 600; }
+.pg-url { color: #5b6570; overflow-wrap: anywhere; }
+
+.pg-contact {
+  border: 1px solid #e3e6ea;
+  border-radius: 4px;
+  padding: 8px 12px;
+  margin: 0 0 8px;
+  font-size: 10pt;
+}
+.pg-contact-name { font-weight: 600; margin: 0 0 1px; }
+.pg-contact-line { color: #3a4450; margin: 0; overflow-wrap: anywhere; }
+
+/* ---- footer ---------------------------------------------------------------
+ * One block at the end of the document, not a running footer on every page:
+ * repeating it would need `position: fixed`, which reserves its height on every
+ * page and pushes content around unpredictably. The professional's details
+ * belong once, where a reader looks for them. */
+.pg-footer {
+  border: 1px solid #e3e6ea;
+  background: #f4f5f7;
+  border-radius: 6px;
+  padding: 14px 16px;
+  margin: 18px 0 0;
+}
+.pg-footer-label { font-size: 8.5pt; letter-spacing: .09em; text-transform: uppercase; color: #5b6570; margin: 0 0 8px; }
+.pg-ident { display: flex; align-items: flex-start; gap: 12px; }
+.pg-headshot { height: 0.62in; width: auto; border-radius: 5px; border: 1px solid #e3e6ea; }
+.pg-pro-name { font-size: 11.5pt; font-weight: 600; margin: 0; }
+.pg-pro-biz { color: #5b6570; font-size: 10pt; margin: 1px 0 0; }
+.pg-pro-line { margin: 2px 0 0; font-size: 10pt; overflow-wrap: anywhere; }
+.pg-tail { text-align: center; color: #8b949e; font-size: 8.5pt; margin: 14px 0 0; }
