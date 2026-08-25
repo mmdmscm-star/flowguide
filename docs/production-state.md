@@ -132,6 +132,25 @@ roadmap entry.
 check for BOTH supporting renderers (46 assertions, disposable data,
 self-cleaning) whenever this needs proving again rather than assuming.
 
+## Packet counts are not a usage trend right now
+
+**From 2026-08-24 the founder is deliberately deleting old test and unused
+FlowGuides.** Totals are falling for housekeeping reasons, not product ones.
+
+Do not infer adoption, engagement, funnel behaviour or decline from raw packet
+count, draft count, or the draft-to-published ratio during this period. Deletion
+is a hard delete and cascades cleanly, so there is no audit trail to reconstruct
+what an earlier count included.
+
+Counts have been cited as evidence before — "67 packets, 46 of them drafts", and
+"51 general vs 16 senior-placement" as proof the product generalised beyond its
+origin vertical. The *composition* ratio may still be informative; the totals
+and their direction are not.
+
+Prefer published-packet counts, recipient `viewed` data (noting that owner views
+were only excluded from 2026-08-19, so rows older than that are unreliable), or
+evidence from an actual external professional.
+
 ## show_quick_nav is presentation, and must stay that way
 
 `packets.show_quick_nav` (0030) is deliberately absent from the column list in

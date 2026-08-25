@@ -721,6 +721,11 @@ sort controls. 67 rows is a finding problem, not a rendering one.
 development debris rather than behaviour, and search makes a long list navigable
 without saying whether it should be long. Out of scope by instruction.
 
+> **Stale as a signal (2026-08-24).** The founder is now deliberately deleting
+> old test and unused FlowGuides, so this ratio and the totals behind it are
+> being changed by housekeeping. Do not read adoption or decline into packet
+> counts during this period — see production-state.md.
+
 ## Recipient contents index — SHIPPED 2026-08-22
 
 Measured first, at 375x812: an item card is **759-809px against an 812px
