@@ -184,6 +184,48 @@ for (const input of INPUTS) {
   row.publishStatus = pub.status;
   if (pub.status >= 400) row.publishError = JSON.stringify(pub.data).slice(0, 200);
 
+  // ---- WHAT THE RECIPIENT ACTUALLY SEES ------------------------------------
+  // The measurement above reads the database. This one fetches the published
+  // page as a client would and measures against THAT — so a fact that reached
+  // the tables but is dropped, hidden or never rendered by the recipient view
+  // still counts as lost. It is the only vantage point from which "the fact
+  // survived" means what the professional means by it.
+  //
+  // Both the visible text AND every href are searched: a link's destination is
+  // the fact, and it lives in an attribute rather than in the prose.
+  if (pub.status < 400) {
+    const { data: pk } = await svc.from("packets").select("slug").eq("id", packetId).single();
+    const slug = (pk as { slug: string } | null)?.slug ?? null;
+    row.slug = slug;
+    if (slug) {
+      const r = await fetch(`${BASE}/p/${slug}`);
+      row.recipientStatus = r.status;
+      const html = await r.text();
+      const hrefs = [...html.matchAll(/href="([^"]*)"/g)].map((m) => m[1]).join(" ");
+      const visible = html.replace(/<script[\s\S]*?<\/script>/gi, " ")
+                          .replace(/<style[\s\S]*?<\/style>/gi, " ")
+                          .replace(/<[^>]+>/g, " ");
+      // Entities the renderer emits must not read as a missing fact.
+      const decoded = (visible + " " + hrefs)
+        .replace(/&amp;/g, "&").replace(/&#x27;|&#39;/g, "'").replace(/&quot;/g, '"')
+        .replace(/&nbsp;/g, " ").replace(/&lt;/g, "<").replace(/&gt;/g, ">");
+      const parsed2: any = parseClaims(input.text, 0);
+      const claims2 = (parsed2.claims ?? []) as { kind: string; value: string }[];
+      const norm2 = (v: string) => v.toLowerCase().replace(/[^a-z0-9@.]/g, "");
+      const seen = norm2(decoded);
+      const gone = claims2.filter((c) => {
+        const v = norm2(c.value);
+        if (!v) return false;
+        if (c.kind === "phone") return !seen.includes(v.replace(/[^0-9]/g, ""));
+        if (c.kind === "url") return !seen.includes(v.replace(/^https?/, "").replace(/\/$/, ""));
+        return !seen.includes(v);
+      });
+      row.recipientClaims = claims2.length;
+      row.recipientMissing = gone.length;
+      row.recipientMissingValues = gone.map((m) => `${m.kind}:${m.value.trim().slice(0, 40)}`);
+    }
+  }
+
   rows.push(row);
   process.stdout.write(`${outcome}  items=${row.items}/${row.expectedItems}  publish=${row.publishStatus}  ${row.ms}ms`);
 }
