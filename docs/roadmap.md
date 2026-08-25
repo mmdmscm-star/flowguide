@@ -390,10 +390,11 @@ in, not a priority ranking.
    visually: reaching it needs an item inserted from the Library, edited in a
    packet, then saved back.
 
-2. **Canonical Library photo normalization, and historical repair — 0030.**
+2. **Canonical Library photo normalization, and historical repair — 0031.**
    Migration numbers follow APPLICATION order, so parked work loses its
    reservation every time something else ships first: this was pencilled in as
-   0024, then 0025, then 0026, then 0027, then 0028, then 0029, and is now **0030** — 0025
+   0024, then 0025, then 0026, then 0027, then 0028, then 0029, then 0030, and is now
+   **0031** — 0025
    is the observe-only fact ledger, 0026 is packet-path evidence retention, 0027
    is review-unit resolution, and 0028 is the dedicated per-chunk review-unit
    channel. No applied migration
@@ -690,7 +691,7 @@ Deletion and an orphan reaper (removing bytes another packet may point at is
 worse than an orphaned file); drag reorder; crop and editing; a shared asset
 library with reference counting; migrating the 407 existing Cloudinary photos;
 profile logo/headshot upload (same mechanism, different surface, now cheap);
-and canonical Library photo normalization, **now 0030**.
+and canonical Library photo normalization, **now 0031**.
 
 ## Dashboard at scale — SHIPPED 2026-08-22
 
@@ -1046,6 +1047,71 @@ it. Absolute claims about model output are not ones we can stand behind.
 Pricing, blog, SEO programme, CMS, testimonials, logos, customer counts,
 animation system, multi-page marketing site, OG generation system, or any
 change to the application's design.
+
+## Quick navigation, per FlowGuide — SHIPPED 2026-08-24
+
+A section with more than one item renders a clickable index of its item titles.
+That is navigation over a long FlowGuide and it earns its place on a twenty-item
+packet; on a short or deliberately narrative one a professional may not want it.
+**One packet-level toggle, default on** — "Show quick navigation", in the legacy
+editor between the map link and the sections it governs.
+
+### Presentation, not content — and the schema already knew
+
+Migration `0030` adds `packets.show_quick_nav boolean not null default true`.
+
+`ingest_bump_packet_self()` bumps `content_rev` for an explicit list of columns —
+title, client_name, personal_note, map_url, identity_mode, custom_identity,
+composition_mode. **`show_quick_nav` is deliberately outside it**, so toggling
+disturbs no ingestion revision state, no offsets, and not the block/item
+bijection that revision guards. The migration header carries that reasoning and
+tells the next person not to add it to that list.
+
+### Mutable after publish
+
+Unlike `professional_snapshot`, frozen at publish because a recipient must keep
+seeing the identity they were actually sent, this changes what an
+**already-shared link renders next time it is opened** — the same contract
+`title` and `personal_note` already have. Verified: still published, no
+republish, change live immediately.
+
+### Off is opt-in at every layer
+
+`NOT NULL DEFAULT TRUE` so all 62 existing packets were on at write time with no
+backfill; both read paths use `!== false` so a null or missing column reads as
+ON; the `SectionGroup` prop defaults to true so a caller that forgets it behaves
+as before. Every failure mode is "behaves as it does today".
+
+### Two rules, two homes
+
+**`SectionContents` is byte-unchanged.** "A single item needs no index" is a fact
+about the content and stays inside it. "This professional turned it off" is a
+preference about the packet and is decided in `SectionGroup`. Merging them into
+one condition would force one place to explain both.
+
+### Scope
+
+Preview honours it, so what the creator sees stays recipient-truthful. **No
+block-editor control** — `PacketBlockBody` has no index to hide. Email and print
+untouched, for the same reason. No per-section control. No second presentation
+setting.
+
+### Verified — 23 checks, local and production
+
+Default on for a new packet · index present then absent on both the live view
+and the preview · single-item sections never indexed either way · content and
+ordering unchanged by the toggle · a non-boolean rejected 400 · email and print
+still building with every item · `content_rev` unmoved by the toggle but still
+bumped by a content field through the same route.
+
+Also checked against a real published FlowGuide: **3 rendered indexes for the 3
+sections that have two or more items**, exactly as the data predicts, unchanged
+by this work.
+
+One check failed first and was the harness, not the product: `content_rev`
+0 → 6 measured across the whole fixture build rather than the toggle. Triggers
+on sections, items, details, links, photos, contacts and blocks also bump it,
+and 2 sections + 4 items is exactly 6.
 
 ## Backlog — recorded, not started
 

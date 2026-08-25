@@ -17,7 +17,8 @@ messages. Everything here is live unless it says otherwise.
 | Print / Save as PDF | **LIVE** — commit `259724a`; `/p/[slug]/print`, renders on demand | revert the code; nothing stored, no schema, no flag |
 | Professional identity surface | **LIVE** — commit `ddeb494`; `/settings`, existing `PATCH /api/profile` | revert the code; no schema, no flag |
 | Public landing page + neutral demo | **LIVE** — commit `89fd869`; `/`, `/p/demo`, `/og.png` | revert the code; no schema, no flag |
-| Migrations | `0001`–`0029` applied; local and remote in sync | per-migration; none pending |
+| Quick navigation toggle | **LIVE** — commit `eba04b3`; `packets.show_quick_nav` (0030), default true | set the column back to true; the code default is also true |
+| Migrations | `0001`–`0030` applied; local and remote in sync | per-migration; none pending |
 
 Both rollbacks are independent, carry no state, and need no migration.
 
@@ -129,6 +130,18 @@ roadmap entry.
 `scripts/ingestion-runtime/verify-renderers-prod.mts` re-runs the production
 check for BOTH supporting renderers (46 assertions, disposable data,
 self-cleaning) whenever this needs proving again rather than assuming.
+
+## show_quick_nav is presentation, and must stay that way
+
+`packets.show_quick_nav` (0030) is deliberately absent from the column list in
+`ingest_bump_packet_self()`, so toggling it does not bump `content_rev` and
+cannot disturb ingestion offsets or the block/item bijection. **Do not add it to
+that list** — that would reclassify a display preference as content. The
+migration header says the same thing at the point someone would change it.
+
+It is also mutable after publish, unlike `professional_snapshot`: the toggle
+changes what an already-shared link renders. `scripts/ingestion-runtime/verify-quick-nav.mts`
+proves both properties (23 checks, disposable, self-cleaning).
 
 ## The public surface is horizontal, deliberately
 
