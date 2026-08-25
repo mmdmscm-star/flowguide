@@ -18,6 +18,7 @@ messages. Everything here is live unless it says otherwise.
 | Professional identity surface | **LIVE** — commit `ddeb494`; `/settings`, existing `PATCH /api/profile` | revert the code; no schema, no flag |
 | Public landing page + neutral demo | **LIVE** — commit `89fd869`; `/`, `/p/demo`, `/og.png` | revert the code; no schema, no flag |
 | Quick navigation toggle | **LIVE** — commit `eba04b3`; `packets.show_quick_nav` (0030), default true | set the column back to true; the code default is also true |
+| Delete from the editor | **LIVE** — commit `bb18833`; reuses `DELETE /api/packets/:id` | revert the code; the endpoint is unchanged |
 | Migrations | `0001`–`0030` applied; local and remote in sync | per-migration; none pending |
 
 Both rollbacks are independent, carry no state, and need no migration.

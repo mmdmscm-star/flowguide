@@ -1113,6 +1113,73 @@ One check failed first and was the harness, not the product: `content_rev`
 on sections, items, details, links, photos, contacts and blocks also bump it,
 and 2 sections + 4 items is exactly 6.
 
+## Delete from the editor — SHIPPED 2026-08-24
+
+You open a draft to decide whether you want it, decide you don't, and then have
+to go back to My FlowGuides and work out which of several untitled rows was the
+one you just had open. The delete now lives where the decision happens.
+
+### The premise needed correcting first
+
+The brief assumed the legacy editor was an old-cleanup path and the block editor
+was the forward one. **It is the other way round today.** Since `0007` a trigger
+enforces that packets must be **created** in legacy mode; no code path creates a
+blocks packet, and the only way in is `convert_packet_to_blocks`. At the time:
+**61 legacy packets, newest three days old; 1 blocks packet, converted once five
+weeks earlier.** Shipping to the block editor alone would have built something
+unreachable.
+
+So: **one component, mounted by both editors.** It works where a professional
+actually is now, and needs no rework when block mode graduates.
+
+### One mechanism
+
+`src/lib/delete-packet.ts` holds the request *and* the confirmation wording. The
+editors and the dashboard all go through it.
+
+The dashboard previously did `await fetch(..., DELETE)` and **discarded the
+response** — a 500 or a 401 was indistinguishable from success, because the list
+reloaded with the packet still in it and nothing said why. The helper throws, so
+a caller that forgets to check gets a visible failure rather than a silent one.
+
+### The confirmation's job is identification
+
+Title and client name when present · `this untitled FlowGuide` when there is no
+title, never an invented name · and when there is **neither** a title nor a
+client, it says so plainly and gives the creation date, which is the only thing
+left that distinguishes one blank draft from another. A published FlowGuide adds
+that anyone holding the link will no longer be able to open it.
+
+The date is read off the stored ISO string rather than through `new Date`, which
+parses a date-only value as UTC midnight — **the previous day in every western
+timezone**. A draft created on the 12th must never offer to delete one "created
+11 August".
+
+### Placement
+
+A text link at the end of the editor's scrollable content, behind a full scroll.
+Never in the fixed bar, which still holds only Preview and Publish — asserted at
+runtime, not just in review.
+
+### Verified — 11 checks, local and production
+
+A draft deleted by its owner · a published FlowGuide deleted and **its shared
+link really 404ing afterwards** · a stranger unable to delete someone else's
+packet · signed-out delete rejected 401 · a deleted packet's editor not 500ing.
+
+The failure path was driven live rather than reasoned about: a forced 500 keeps
+you on the editor, shows the server's own message, and restores the button.
+
+### Deliberately not built
+
+Archive, trash or recovery, undo, soft delete, bulk delete, type-the-name
+confirmation, delete from the recipient view, or any lifecycle system.
+
+**Recorded, not fixed:** the existing endpoint returns 200 when it deletes
+nothing — a stranger's scoped delete removes no row but still answers OK. Not a
+security hole (the row survives), but a dishonest response. Left alone because
+the brief was to reuse the endpoint unchanged.
+
 ## Backlog — recorded, not started
 
 **`/p/demo` bypasses the recipient payload path.** `resolvePacket` returns
