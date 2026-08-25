@@ -1,112 +1,132 @@
-import { Packet } from "./types";
+import type { Packet } from "./types.ts";
 
+// THE PUBLIC DEMO, at /p/demo.
+//
+// This is the first real thing a prospective professional sees, and the landing
+// page's primary call to action points straight at it. It has to read like work
+// somebody actually did, which is why the planner below has opinions: she says
+// one venue is too small and includes it anyway with a reason, and admits the
+// cheapest option is loud. A feature showcase without judgement reads as a
+// brochure.
+//
+// EVERY ENTITY AND EVERY FACT HERE IS INVENTED. Not just the names — the
+// venues, people, addresses, prices, capacities, phone numbers and domains are
+// all fictional, and none of them is attached to a real business. The previous
+// demo attributed invented rates and invented staff to four real companies,
+// which is a liability rather than a rough edge.
+//
+//   * phone numbers use 555-01xx, the range reserved for fiction;
+//   * domains use .example.com, reserved by RFC 2606 and unregistrable;
+//   * photographs are generic interiors, chosen so no identifiable real
+//     building is presented as one of these invented venues.
+//
+// NO `notes` FIELD ANYWHERE, deliberately. /p/demo resolves this object
+// directly rather than through getPublishedPacket, so the usual stripping of
+// the professional's private note never runs — and ItemCard is a client
+// component, so anything handed to it is serialised into the RSC payload and
+// readable in view-source even when it is not drawn. The old demo leaked its
+// note exactly that way. The safe fix for a fixture is to carry nothing
+// private in the first place; a test enforces it.
 export const samplePacket: Packet = {
   slug: "demo",
-  title: "Senior Living Options for Mom",
-  clientName: "Sarah Johnson",
+  title: "Offsite Venue Options",
+  clientName: "the Northbeam team",
   personalNote:
-    "Hi Sarah, it was wonderful speaking with you and your brother about your mom's care needs. Based on everything you shared — her love of gardening, her need for light memory support, and your preference to stay close to the Riverside area — I've put together my top recommendations. Each community below has been personally visited and vetted. Please don't hesitate to call me with any questions. I'm here to help make this transition as smooth as possible.",
+    "Hi Priya,\n\nHere are the five venues I looked at for the March offsite, with the three I'd put in front of you first. I've listed day rates, capacity and what's included so you can compare them properly rather than digging through five websites.\n\nTwo things worth knowing now: The Foundry will only hold March 12–13 until the 28th, and Cedar & Vine's catering minimum goes up in January.\n\nHave a look and tell me which two you'd like to tour — I'll arrange them.\n\nThanks,\nMaya",
   sections: [
     {
       id: "s1",
-      title: "Top Recommended Communities",
-      description:
-        "These three communities are my strongest recommendations based on your family's priorities.",
+      title: "Recommended",
+      description: "The three I'd shortlist, in the order I'd rank them.",
       items: [
         {
           id: "i1",
-          title: "Sunrise of Riverside",
+          title: "The Foundry at Mill Street",
+          address: "41 Mill Street, Harlow Bend",
           description:
-            "A warm, boutique-style community with an outstanding memory care program. Their garden courtyard is one of the best I've seen — your mom would love it. Staff-to-resident ratio is excellent at 1:5 during daytime hours.",
+            "A converted textile works with exposed brick and a glass roof over the main hall. Warm, informal, and the best natural light of anything I saw. The breakout rooms are on the same floor as the main space, which matters more than it sounds when you're moving 100 people between sessions.",
           photos: [
-            "https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?w=800&q=80",
-            "https://images.unsplash.com/photo-1558618666-fcd25c85f82e?w=800&q=80",
+            "https://images.unsplash.com/photo-1497366754035-f200968a6e72?w=800&q=80",
+            "https://images.unsplash.com/photo-1524758631624-e2822e304c36?w=800&q=80",
+            "https://images.unsplash.com/photo-1517457373958-b7bdd4587205?w=800&q=80",
+            "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=800&q=80",
           ],
           details: [
-            { label: "Care Level", value: "Assisted Living + Memory Care" },
-            { label: "Monthly Cost", value: "$4,800 - $6,200" },
-            { label: "Room Types", value: "Private Studio, One Bedroom" },
-            { label: "Move-in Availability", value: "2 studios available now" },
-            { label: "Distance from You", value: "8 minutes" },
+            { label: "Capacity", value: "120 seated · 180 standing" },
+            { label: "Day rate", value: "$4,200" },
+            { label: "Catering", value: "In-house, from $58 per head" },
+            { label: "A/V", value: "Included — two screens, house sound" },
+            { label: "Breakout rooms", value: "3, same floor" },
+            { label: "Distance", value: "12 minutes from your office" },
           ],
-          notes:
-            "I'd suggest scheduling a lunch visit — their dining program is a real highlight. Ask for Maria at the front desk; she'll give you the full tour.",
-          links: [
-            {
-              url: "https://www.sunriseseniorliving.com",
-              label: "Community Website",
-            },
-          ],
+          links: [{ url: "https://foundrymill.example.com", label: "Venue website" }],
           contacts: [
             {
-              name: "Maria Santos, Community Director",
-              phone: "(951) 555-0142",
-              email: "msantos@sunrise.example.com",
+              name: "Dana Reyes",
+              role: "Events Manager",
+              phone: "(206) 555-0118",
+              email: "dana@foundrymill.example.com",
             },
           ],
         },
         {
           id: "i2",
-          title: "Oakmont Senior Living",
+          title: "Harborlight Loft",
+          address: "9 Pier Road, Alder Quay",
           description:
-            "A larger community with a resort-style feel. They have a dedicated memory care wing called 'The Terrace' that's separate from assisted living, which provides a calm environment. Excellent activities program with daily music therapy.",
+            "Top-floor space with water on three sides. The view does a lot of the work, and it films well if you're recording any of the day. Honestly a little tight at 120 seated — comfortable at 90.",
           photos: [
-            "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=800&q=80",
+            "https://images.unsplash.com/photo-1519167758481-83f550bb49b3?w=800&q=80",
+            "https://images.unsplash.com/photo-1505373877841-8d25f7d46678?w=800&q=80",
+            "https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=800&q=80",
+            "https://images.unsplash.com/photo-1511578314322-379afb476865?w=800&q=80",
           ],
           details: [
-            { label: "Care Level", value: "Memory Care (The Terrace)" },
-            { label: "Monthly Cost", value: "$5,500 - $7,100" },
-            { label: "Room Types", value: "Private Suite" },
-            { label: "Move-in Availability", value: "Waitlist — approx. 3 weeks" },
-            { label: "Distance from You", value: "14 minutes" },
+            { label: "Capacity", value: "90 seated · 140 standing" },
+            { label: "Day rate", value: "$5,600" },
+            { label: "Catering", value: "External, from their approved list" },
+            { label: "A/V", value: "Screens and mics included, no house sound" },
+            { label: "Breakout rooms", value: "1" },
+            { label: "Distance", value: "20 minutes" },
           ],
-          notes:
-            "Slightly higher price point but their memory care program is one of the best in the county. The waitlist moves fast — I'd recommend getting on it now even if you're still deciding.",
-          links: [
-            {
-              url: "https://www.oakmontseniorliving.com",
-              label: "Community Website",
-            },
-            {
-              url: "https://www.oakmontseniorliving.com/the-terrace",
-              label: "The Terrace Memory Care",
-            },
-          ],
+          links: [{ url: "https://harborlightloft.example.com", label: "Venue website" }],
           contacts: [
             {
-              name: "David Chen, Admissions",
-              phone: "(951) 555-0287",
-              email: "dchen@oakmont.example.com",
+              name: "Sam Okonjo",
+              role: "Venue Director",
+              phone: "(206) 555-0164",
+              email: "sam@harborlightloft.example.com",
             },
           ],
         },
         {
           id: "i3",
-          title: "Garden Villas Memory Care",
+          title: "Cedar & Vine",
+          address: "388 Vine Street, Harlow Bend",
           description:
-            "A smaller, home-like community specializing exclusively in memory care. Only 24 residents, so the staff really knows everyone by name. Their outdoor garden program is therapeutic and structured — perfect for your mom.",
+            "The most straightforward of the three. Purpose-built for corporate days, so nothing needs solving — but it has less character than the other two. Best food by some distance.",
           photos: [
-            "https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?w=800&q=80",
+            "https://images.unsplash.com/photo-1431540015161-0bf868a2d407?w=800&q=80",
+            "https://images.unsplash.com/photo-1478147427282-58a87a120781?w=800&q=80",
+            "https://images.unsplash.com/photo-1533090161767-e6ffed986c88?w=800&q=80",
+            "https://images.unsplash.com/photo-1521737604893-d14cc237f11d?w=800&q=80",
+            "https://images.unsplash.com/photo-1552664730-d307ca884978?w=800&q=80",
           ],
           details: [
-            { label: "Care Level", value: "Memory Care Only" },
-            { label: "Monthly Cost", value: "$5,200 - $5,800" },
-            { label: "Room Types", value: "Private Room, Shared Common Areas" },
-            { label: "Move-in Availability", value: "1 room available now" },
-            { label: "Distance from You", value: "11 minutes" },
+            { label: "Capacity", value: "150 seated" },
+            { label: "Day rate", value: "$3,800" },
+            { label: "Catering", value: "In-house, $2,400 minimum" },
+            { label: "A/V", value: "Full house rig, technician included" },
+            { label: "Breakout rooms", value: "4" },
+            { label: "Distance", value: "15 minutes" },
           ],
-          notes:
-            "This is my personal favorite for your mom's situation. The small size means she won't feel overwhelmed, and the garden program aligns perfectly with her interests.",
-          links: [
-            {
-              url: "https://www.gardenvillas.example.com",
-              label: "Community Website",
-            },
-          ],
+          links: [{ url: "https://cedarandvine.example.com", label: "Venue website" }],
           contacts: [
             {
-              name: "Patricia Nguyen, Owner/Director",
-              phone: "(951) 555-0319",
+              name: "Alice Fenner",
+              role: "Sales Manager",
+              phone: "(206) 555-0177",
+              email: "alice@cedarandvine.example.com",
             },
           ],
         },
@@ -114,88 +134,70 @@ export const samplePacket: Packet = {
     },
     {
       id: "s2",
-      title: "Also Worth Considering",
-      description:
-        "These communities are solid options if the top three don't feel like the right fit.",
+      title: "Also considered",
+      description: "Ruled out for this one, but worth knowing about.",
       items: [
         {
           id: "i4",
-          title: "Brookdale Riverside",
+          title: "Union Hall",
+          address: "12 Canal Street, Alder Quay",
           description:
-            "A well-known national brand with consistent quality. Larger community with more social activities and amenities. Their memory care wing was recently renovated.",
-          details: [
-            { label: "Care Level", value: "Assisted Living + Memory Care" },
-            { label: "Monthly Cost", value: "$4,200 - $5,900" },
-            { label: "Move-in Availability", value: "Available now" },
-            { label: "Distance from You", value: "18 minutes" },
+            "Large and noticeably cheaper, but the main room is one open box with no breakout space and a ceiling that makes it loud. Worth keeping in mind if the group grows past 150.",
+          photos: [
+            "https://images.unsplash.com/photo-1416339306562-f3d12fefd36f?w=800&q=80",
+            "https://images.unsplash.com/photo-1487958449943-2429e8be8625?w=800&q=80",
           ],
-          notes:
-            "Good value option. Less intimate than Garden Villas but more amenities. They frequently run move-in specials.",
-          contacts: [
-            {
-              name: "Admissions Office",
-              phone: "(951) 555-0445",
-            },
+          details: [
+            { label: "Capacity", value: "220 seated" },
+            { label: "Day rate", value: "$2,900" },
+            { label: "Catering", value: "External, no restrictions" },
+            { label: "Breakout rooms", value: "None" },
           ],
         },
         {
           id: "i5",
-          title: "Pacifica Senior Living",
+          title: "The Glasshouse",
+          address: "5 Orchard Lane, Harlow Bend",
           description:
-            "Mid-range option with a strong rehabilitation program. Good choice if your mom's needs might increase over time, as they offer a full continuum of care.",
-          details: [
-            { label: "Care Level", value: "Full Continuum" },
-            { label: "Monthly Cost", value: "$4,500 - $6,400" },
-            { label: "Move-in Availability", value: "Available now" },
-            { label: "Distance from You", value: "22 minutes" },
+            "Genuinely lovely, and genuinely too small — 60 seated at most. I've left it in because I think it's right for the leadership offsite in the autumn.",
+          photos: [
+            "https://images.unsplash.com/photo-1502920917128-1aa500764cbd?w=800&q=80",
+            "https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?w=800&q=80",
           ],
-          contacts: [
-            {
-              name: "Jennifer Walsh, Community Relations",
-              phone: "(951) 555-0518",
-              email: "jwalsh@pacifica.example.com",
-            },
+          details: [
+            { label: "Capacity", value: "60 seated" },
+            { label: "Day rate", value: "$3,100" },
+            { label: "Catering", value: "In-house" },
+            { label: "Breakout rooms", value: "2" },
           ],
         },
       ],
     },
     {
       id: "s3",
-      title: "Next Steps",
-      description: "Here's what I recommend doing over the next two weeks.",
+      title: "Next steps",
       items: [
         {
           id: "i6",
-          title: "Schedule Tours",
+          title: "Pick two to tour",
           description:
-            "I'd recommend visiting your top 2-3 choices in person. Weekday lunch visits give you the best feel for daily life. I'm happy to accompany you on any tour.",
+            "Tell me which two you'd like to see and I'll arrange visits for the week of the 8th. Most venues want about a week's notice.",
         },
         {
           id: "i7",
-          title: "Financial Planning",
+          title: "Hold dates by the 28th",
           description:
-            "If you haven't already, connect with a senior care financial advisor. Many families use long-term care insurance, VA benefits, or bridge loans to cover costs. I can recommend an advisor if helpful.",
-          links: [
-            {
-              url: "https://www.eldercare.acl.gov",
-              label: "Eldercare Locator (Free Resource)",
-            },
-          ],
-        },
-        {
-          id: "i8",
-          title: "Questions to Ask on Tours",
-          description:
-            "Staff-to-resident ratio on nights and weekends. How they handle medical emergencies. What's included in the base rate vs. add-on charges. How they personalize care for memory care residents. Activity schedule for the specific wing your mom would be in.",
+            "The Foundry is holding March 12–13 for us until the 28th. After that it opens back up. The others have wider availability through March.",
         },
       ],
     },
   ],
   professional: {
-    name: "Linda Martinez",
-    businessName: "Riverside Senior Placement Services",
-    phone: "(951) 555-0100",
-    email: "linda@riversideplacement.example.com",
-    footerLabel: "Your Advisor",
+    name: "Maya Ellison",
+    businessName: "Ellison & Co.",
+    footerLabel: "Your Planner",
+    phone: "(206) 555-0143",
+    email: "maya@ellisonco.example.com",
+    websiteUrl: "https://ellisonco.example.com",
   },
 };

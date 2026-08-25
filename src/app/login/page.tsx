@@ -11,6 +11,9 @@ function LoginForm() {
   const [loading, setLoading] = useState(false);
   const searchParams = useSearchParams();
   const urlError = searchParams.get("error");
+  // /new redirects here before its paste box renders, so say WHY rather than
+  // presenting a bare form to someone who was mid-task.
+  const next = searchParams.get("next");
 
   const errorMessages: Record<string, string> = {
     "missing-token": "Invalid sign-in link.",
@@ -53,6 +56,7 @@ function LoginForm() {
         </p>
         <p className="text-sm text-muted max-w-xs">
           Click the link in the email to sign in. It expires in 15 minutes.
+          {next === "new" && " Then choose New FlowGuide from the top of your dashboard."}
         </p>
         <button
           onClick={() => {
@@ -71,7 +75,11 @@ function LoginForm() {
     <main className="flex flex-col items-center justify-center min-h-screen px-5">
       <div className="w-full max-w-sm">
         <h1 className="text-2xl font-bold text-foreground text-center mb-2">FlowGuide</h1>
-        <p className="text-base text-muted text-center mb-8">Sign in to your account</p>
+        <p className="text-base text-muted text-center mb-8">
+          {next === "new"
+            ? "Sign in to start a new FlowGuide. It’ll be waiting on your dashboard."
+            : "Sign in to your account"}
+        </p>
 
         {urlError && errorMessages[urlError] && (
           <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
