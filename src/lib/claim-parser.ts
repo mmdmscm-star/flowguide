@@ -156,6 +156,14 @@ const FILE_EXT = new Set([
  * So the spans already matched by URL_RE and EMAIL_RE are masked out first, and
  * only what remains is tokenized.
  */
+/** Does this token name a DOCUMENT rather than a host? `.md` is Moldova and
+ *  `.sh` is St Helena, so "notes.md" is a structurally valid hostname; treating
+ *  one as a link would be a link that goes nowhere. */
+export function isLikelyFilename(token: string): boolean {
+  const ext = String(token ?? "").trim().replace(/\.$/, "").split(".").pop()?.toLowerCase() ?? "";
+  return FILE_EXT.has(ext);
+}
+
 export function bareHostnames(text: string): string[] {
   let masked = String(text ?? "");
   for (const re of [URL_RE, EMAIL_RE]) {

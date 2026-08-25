@@ -7,6 +7,7 @@ import { nextFault, injectPrivateNote } from "@/lib/test-faults";
 import { buildChunkLedger } from "@/lib/fact-ledger";
 import { buildChunkAccounting } from "@/lib/chunk-accounting";
 import { enforceChunkResult } from "@/lib/enforce-chunk";
+import { normalizeStagedLinks } from "@/lib/normalize-staged-links";
 import { contractEnforcementEnabled } from "@/lib/enforce";
 
 export const maxDuration = 60;
@@ -198,7 +199,10 @@ export async function POST(_request: Request, context: Context) {
   // unprotected output must NOT reach staging. The chunk is marked failed with
   // a permanent contract error, the segment and the raw result are preserved in
   // the ledger for diagnosis, and every other chunk in the run continues.
-  let staged: unknown = outcome.result;
+  // BEFORE anything is staged, and regardless of whether enforcement runs: the
+  // writer will only persist a link whose url is LIKE 'http%', so a bare
+  // hostname is qualified here or it is lost silently at finalize.
+  let staged: unknown = normalizeStagedLinks(outcome.result);
   let enforcement: ReturnType<typeof enforceChunkResult>["telemetry"] | null = null;
   let unresolved: ReturnType<typeof enforceChunkResult>["unresolved"] = [];
   let reviewUnits: ReturnType<typeof enforceChunkResult>["reviewUnits"] = [];
@@ -218,7 +222,7 @@ export async function POST(_request: Request, context: Context) {
         // already holds, and a later verification must reach the same answer.
         delimiterHint: (run.delimiter_hint as string | null) ?? null,
       });
-      staged = e.result;
+      staged = normalizeStagedLinks(e.result);
       enforcement = e.telemetry;
       unresolved = e.unresolved;
       reviewUnits = e.reviewUnits;
