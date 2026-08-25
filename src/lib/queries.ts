@@ -228,6 +228,10 @@ function buildPacket(
     personalNote: packet.personal_note || undefined,
     mapUrl: packet.map_url || undefined,
     compositionMode: "legacy",
+    // `!== false` rather than `=== true`: a null, a missing column or an older
+    // cached row must all read as ON, so the failure mode is "behaves as it
+    // does today" rather than "the index silently vanished".
+    showQuickNav: packet.show_quick_nav !== false,
     sections,
     professional: professionalFromProfileRow(profile),
   };
@@ -469,6 +473,9 @@ function buildPacketWithId(packet: any, profile: any, sections: Section[]): Pack
     personalNote: packet.personal_note || undefined,
     mapUrl: packet.map_url || undefined,
     status: packet.status,
+    // The creator's preview must be recipient-truthful, so it reads the same
+    // preference the live page does.
+    showQuickNav: packet.show_quick_nav !== false,
     sections,
     professional: resolveProfessional(packet, profile),
   };

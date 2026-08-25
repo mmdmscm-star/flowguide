@@ -69,7 +69,7 @@ export default async function PreviewPage({ params }: Props) {
       )}
 
       {packet.sections.map((section) => (
-        <SectionGroup key={section.id} section={section} />
+        <SectionGroup key={section.id} section={section} showQuickNav={packet.showQuickNav !== false} />
       ))}
 
       {packet.professional.name && (

@@ -111,7 +111,7 @@ export default async function PacketPage({ params }: Props) {
           <PacketBlockBody blocks={packet.blocks ?? []} />
         ) : (
           packet.sections.map((section) => (
-            <SectionGroup key={section.id} section={section} />
+            <SectionGroup key={section.id} section={section} showQuickNav={packet.showQuickNav !== false} />
           ))
         )}
 

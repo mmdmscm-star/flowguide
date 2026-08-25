@@ -2,7 +2,15 @@ import { Section } from "@/lib/types";
 import { ItemCard } from "./item-card";
 import { SectionContents } from "./section-contents";
 
-export function SectionGroup({ section }: { section: Section }) {
+export function SectionGroup({
+  section,
+  showQuickNav = true,
+}: {
+  section: Section;
+  /** Packet-level presentation preference (migration 0030). Defaults to true so
+   *  every existing caller and every existing packet behaves as before. */
+  showQuickNav?: boolean;
+}) {
   return (
     <section className="mb-8">
       {(section.title || section.description) && (
@@ -17,9 +25,13 @@ export function SectionGroup({ section }: { section: Section }) {
           )}
         </div>
       )}
-      {/* Contents first, then the cards it points at. Only for a section with
-          more than one item - see SectionContents. */}
-      <SectionContents items={section.items} sectionTitle={section.title} />
+      {/* Contents first, then the cards it points at.
+          TWO RULES, TWO HOMES, deliberately. "A single item needs no index" is a
+          fact about the content and stays inside SectionContents. "This
+          professional turned it off" is a preference about the packet and is
+          decided here. Merging them into one condition would force one place to
+          explain both. */}
+      {showQuickNav && <SectionContents items={section.items} sectionTitle={section.title} />}
 
       <div className="px-5 space-y-4">
         {section.items.map((item) => (

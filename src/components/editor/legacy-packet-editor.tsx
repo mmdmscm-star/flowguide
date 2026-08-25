@@ -120,6 +120,7 @@ interface PacketData {
   status: string;
   identityMode: IdentityMode;
   customIdentity: EditorProfile | null;
+  showQuickNav: boolean;
 }
 
 // ============================================================
@@ -285,6 +286,8 @@ export function LegacyPacketEditor() {
       rawInput: p.raw_input || "",
       status: p.status,
       identityMode: (p.identity_mode as IdentityMode) || "default",
+      // Absent or null reads as ON, matching the recipient renderer.
+      showQuickNav: p.show_quick_nav !== false,
       customIdentity: p.custom_identity
         ? {
             name: p.custom_identity.name || "",
@@ -415,6 +418,14 @@ export function LegacyPacketEditor() {
     } catch {
       setSaveStatus("error");
     }
+  }
+
+  // A discrete presentation toggle. Saved immediately for the same reason the
+  // identity mode is: the shared debounce timer is reset by any later edit, so
+  // a click followed by typing could otherwise lose the click.
+  function setShowQuickNav(next: boolean) {
+    setPacket((prev) => (prev ? { ...prev, showQuickNav: next } : prev));
+    savePacketFields({ showQuickNav: next });
   }
 
   // ============================================================
@@ -1118,6 +1129,26 @@ export function LegacyPacketEditor() {
           placeholder="Paste a Google My Maps or any map link"
           className="w-full px-3.5 py-2.5 rounded-lg border border-border bg-white text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent placeholder:text-gray-300"
         />
+      </div>
+
+      {/* PRESENTATION, not content — placed here because it governs how the
+          sections below it render. Default on, so every existing FlowGuide is
+          unchanged. There is deliberately no per-section version of this. */}
+      <div className="mb-8">
+        <label className="flex items-start gap-3 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={packet.showQuickNav}
+            onChange={(e) => setShowQuickNav(e.target.checked)}
+            className="mt-0.5 h-4 w-4 shrink-0 rounded border-border text-accent focus:ring-2 focus:ring-accent"
+          />
+          <span className="min-w-0">
+            <span className="block text-sm font-medium text-foreground">Show quick navigation</span>
+            <span className="mt-0.5 block text-sm text-muted">
+              Display a clickable list of items at the top of sections with multiple items.
+            </span>
+          </span>
+        </label>
       </div>
 
       {/* Sections */}

@@ -82,6 +82,8 @@ export async function PATCH(request: Request, context: Context) {
     personalNote: "personal_note",
     mapUrl: "map_url",
     identityMode: "identity_mode",
+    // Presentation only (0030). Deliberately not part of the content_rev list.
+    showQuickNav: "show_quick_nav",
   };
 
   const updates: Record<string, unknown> = {};
@@ -96,6 +98,12 @@ export async function PATCH(request: Request, context: Context) {
 
   if ("identityMode" in body && !["default", "none", "custom"].includes(body.identityMode)) {
     return NextResponse.json({ error: "Invalid identity_mode" }, { status: 400 });
+  }
+
+  // The column is NOT NULL, so a non-boolean here would fail at the database
+  // with a message no professional could act on.
+  if ("showQuickNav" in body && typeof body.showQuickNav !== "boolean") {
+    return NextResponse.json({ error: "Invalid show_quick_nav" }, { status: 400 });
   }
 
   if (Object.keys(updates).length === 0) {

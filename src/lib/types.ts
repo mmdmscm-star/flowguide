@@ -70,6 +70,10 @@ export interface Packet {
   // body. `compositionMode` selects which the renderer reads. Defaults to
   // "legacy" so every existing code path and packet behaves exactly as before.
   compositionMode?: "legacy" | "blocks";
+  /** Recipient PRESENTATION only: render the multi-item section index.
+   *  Defaults to true, so an absent value behaves exactly as before. Not
+   *  content — see migration 0030 and ingest_bump_packet_self(). */
+  showQuickNav?: boolean;
   sections: Section[];
   blocks?: PacketBlock[];
   professional: ProfessionalContact;
