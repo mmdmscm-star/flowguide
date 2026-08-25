@@ -16,7 +16,9 @@ const ROUTE = read("src/app/api/packets/from-library/route.ts");
 const EXISTING = read("src/app/api/packets/[id]/items/from-library/route.ts");
 const PICKER = read("src/components/library/use-library-picker.tsx");
 const WORKSPACE = read("src/components/library/library-workspace.tsx");
-const DASHBOARD = read("src/app/dashboard/page.tsx");
+// The dashboard gained a thin server shell (for the first-run identity
+// prompt); its menu and list live in the workspace component now.
+const DASHBOARD = read("src/components/dashboard/dashboard-workspace.tsx");
 
 // ---------------------------------------------------------------------------
 // Atomicity is the DATABASE's, not the route's

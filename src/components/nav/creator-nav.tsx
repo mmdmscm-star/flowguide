@@ -1,21 +1,24 @@
 "use client";
 import Link from "next/link";
 
-// The three places a professional moves between while authoring: their packets,
-// their Library, and starting a new FlowGuide.
+// The places a professional moves between while authoring: their packets,
+// their Library, starting a new FlowGuide — and their own details, which used
+// to be reachable only by opening a packet in the legacy editor and scrolling
+// to the bottom.
 //
 // CREATOR-SIDE ONLY. This is never rendered on /p/[slug] — a recipient's page is
 // the client's view of one FlowGuide, and putting authoring navigation on it
 // would turn a shared link into a half-visible admin surface.
 //
-// Deliberately three plain links rather than a chrome bar with a logo, account
-// menu and sections. The Library was reachable from the dashboard and nowhere
+// Deliberately plain links rather than a chrome bar with a logo, account menu
+// and sections. The Library was reachable from the dashboard and nowhere
 // else, which meant that from inside an editor — where saving to the Library
 // actually happens — there was no way to go look at it.
 const TABS = [
   { key: "packets", href: "/dashboard", label: "My FlowGuides" },
   { key: "library", href: "/library", label: "Library" },
   { key: "new", href: "/new", label: "New FlowGuide" },
+  { key: "settings", href: "/settings", label: "Your details" },
 ] as const;
 
 export type CreatorNavTab = (typeof TABS)[number]["key"];

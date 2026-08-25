@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { CreatorNav } from "@/components/nav/creator-nav";
 import {
   DndContext,
   closestCenter,
@@ -208,7 +208,6 @@ export function BlockPacketEditor({
   initialBlocks: PacketBlock[];
   justConverted?: boolean;
 }) {
-  const router = useRouter();
   const readOnly = status !== "draft";
   const [blocks, setBlocks] = useState<EditorBlock[]>(() => toEditorBlocks(initialBlocks));
   const [saving, setSaving] = useState(false);
@@ -352,7 +351,11 @@ export function BlockPacketEditor({
     <div className="min-h-screen bg-background">
       <div className="sticky top-0 z-20 bg-white border-b border-border">
         <div className="max-w-lg mx-auto px-5 py-3 flex items-center gap-3">
-          <button onClick={() => router.push("/dashboard")} className="text-sm text-muted hover:text-foreground">← Dashboard</button>
+          {/* A block-editor user previously had NO route to their own details:
+              the profile fields lived inside the legacy editor and nowhere
+              else. This is the same nav the legacy editor carries, pointing at
+              the one shared form — not a second copy of it. */}
+          <CreatorNav />
           <span className={`ml-auto text-xs font-medium px-2 py-1 rounded-full ${statusPill.cls}`}>{statusPill.text}</span>
         </div>
         {!saving && errorMsg && (

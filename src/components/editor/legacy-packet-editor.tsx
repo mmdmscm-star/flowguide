@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef, type ReactNode } from "react";
 import ImageUploadField from "./image-upload-field";
+import ProfessionalProfileFields from "./professional-profile-fields";
 import { PHOTO_ACCEPT_ATTR } from "@/lib/photo-upload";
 import { useRouter, useParams, useSearchParams } from "next/navigation";
 import { CompositionModeControl } from "@/components/editor/composition-mode-control";
@@ -491,18 +492,6 @@ export function LegacyPacketEditor() {
         body: JSON.stringify({ links }),
       }).then((r) => { if (!r.ok) throw new Error(); })
     );
-  }
-
-  function addProfileLink() {
-    saveProfileLinks([...profile.links, { label: "", url: "" }]);
-  }
-
-  function updateProfileLink(index: number, field: "label" | "url", value: string) {
-    saveProfileLinks(profile.links.map((l, i) => (i === index ? { ...l, [field]: value } : l)));
-  }
-
-  function removeProfileLink(index: number) {
-    saveProfileLinks(profile.links.filter((_, i) => i !== index));
   }
 
   // ============================================================
@@ -1385,115 +1374,11 @@ export function LegacyPacketEditor() {
           <p className="text-xs text-muted mb-3">
             Editing these updates your profile on <strong>every</strong> FlowGuide set to “My default profile.”
           </p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <input
-              type="text"
-              value={profile.name}
-              onChange={(e) => updateProfile("name", e.target.value)}
-              placeholder="Your name"
-              className="px-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:ring-2 focus:ring-accent"
-            />
-            <input
-              type="text"
-              value={profile.businessName}
-              onChange={(e) => updateProfile("businessName", e.target.value)}
-              placeholder="Business name (optional)"
-              className="px-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:ring-2 focus:ring-accent"
-            />
-            <input
-              type="email"
-              value={profile.email}
-              onChange={(e) => updateProfile("email", e.target.value)}
-              placeholder="Email"
-              className="px-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:ring-2 focus:ring-accent"
-            />
-            <input
-              type="tel"
-              value={profile.phone}
-              onChange={(e) => updateProfile("phone", e.target.value)}
-              placeholder="Phone"
-              className="px-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:ring-2 focus:ring-accent"
-            />
-          </div>
-          <div className="mt-3">
-            <input
-              type="text"
-              value={profile.footerLabel}
-              onChange={(e) => updateProfile("footerLabel", e.target.value)}
-              placeholder="Footer label (e.g. Your Advisor)"
-              className="w-full px-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:ring-2 focus:ring-accent"
-            />
-            <p className="mt-1 text-xs text-muted">
-              Shown above your name on the packet. Leave blank to hide it.
-            </p>
-          </div>
-          <div className="mt-3">
-            <ImageUploadField
-              value={profile.logoUrl}
-              onChange={(url) => updateProfile("logoUrl", url)}
-              placeholder="Logo URL, or upload"
-              preview={<img src={profile.logoUrl} alt="Logo" className="h-10 w-auto max-w-[120px] object-contain rounded" />}
-            />
-            <div className="mt-2">
-              <ImageUploadField
-                value={profile.headshotUrl}
-                onChange={(url) => updateProfile("headshotUrl", url)}
-                placeholder="Headshot URL, or upload"
-                preview={<img src={profile.headshotUrl} alt="Headshot" className="w-10 h-10 rounded-full object-cover flex-shrink-0 border border-border" />}
-              />
-            </div>
-            <input
-              type="url"
-              value={profile.websiteUrl}
-              onChange={(e) => updateProfile("websiteUrl", e.target.value)}
-              placeholder="Website URL (optional)"
-              className="mt-2 w-full px-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:ring-2 focus:ring-accent"
-            />
-          </div>
-
-          {/* Links (optional) — e.g. Facebook, LinkedIn, Calendly */}
-          <div className="mt-4">
-            <label className="block text-xs font-medium uppercase tracking-widest text-muted mb-2">
-              Links (optional)
-            </label>
-            {profile.links.length > 0 && (
-              <div className="space-y-2 mb-2">
-                {profile.links.map((link, index) => (
-                  <div key={index} className="flex items-center gap-2">
-                    <input
-                      type="text"
-                      value={link.label}
-                      onChange={(e) => updateProfileLink(index, "label", e.target.value)}
-                      placeholder="Label (e.g. Facebook)"
-                      className="w-36 flex-shrink-0 px-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:ring-2 focus:ring-accent"
-                    />
-                    <input
-                      type="url"
-                      value={link.url}
-                      onChange={(e) => updateProfileLink(index, "url", e.target.value)}
-                      placeholder="https://..."
-                      className="flex-1 min-w-0 px-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:ring-2 focus:ring-accent"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => removeProfileLink(index)}
-                      aria-label="Remove link"
-                      className="text-muted hover:text-red-600 px-1 flex-shrink-0"
-                    >
-                      ×
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-            <button
-              type="button"
-              onClick={addProfileLink}
-              className="text-sm text-accent hover:text-accent-hover font-medium"
-            >
-              + Add link
-            </button>
-          </div>
+          <ProfessionalProfileFields
+            value={profile}
+            onField={updateProfile}
+            onLinks={saveProfileLinks}
+          />
         </div>
       )}
 

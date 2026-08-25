@@ -10,6 +10,7 @@ const packetRoute = readFileSync("src/app/api/packets/[id]/photos/route.ts", "ut
 const helper = readFileSync("src/lib/photo-upload.ts", "utf8");
 const field = readFileSync("src/components/editor/image-upload-field.tsx", "utf8");
 const editor = readFileSync("src/components/editor/legacy-packet-editor.tsx", "utf8");
+const sharedForm = readFileSync("src/components/editor/professional-profile-fields.tsx", "utf8");
 const publish = readFileSync("src/app/api/packets/[id]/publish/route.ts", "utf8");
 const strip = (t: string) => t.split("\n").filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join("\n");
 
@@ -39,8 +40,15 @@ test("the route stores bytes and does NOT write the profile", () => {
 });
 
 test("all four identity fields accept upload AND still accept a pasted URL", () => {
-  assert.equal((editor.match(/<ImageUploadField/g) ?? []).length, 4,
-    "expected profile logo + headshot and custom logo + headshot");
+  // The four still exist, now across two files: the ACCOUNT profile's logo and
+  // headshot moved into the shared form (rendered by both the legacy editor and
+  // Settings), while the PER-PACKET custom identity's pair stayed in the editor
+  // because it saves to the packet, not to /api/profile. Counted separately so
+  // neither half can quietly lose one.
+  assert.equal((sharedForm.match(/<ImageUploadField/g) ?? []).length, 2,
+    "expected the account profile's logo + headshot in the shared form");
+  assert.equal((editor.match(/<ImageUploadField/g) ?? []).length, 2,
+    "expected the per-packet custom identity's logo + headshot in the editor");
   // The url box is still there inside the shared field.
   assert.match(field, /type="url"/);
   assert.match(field, /onChange=\{\(e\) => onChange\(e\.target\.value\)\}/);

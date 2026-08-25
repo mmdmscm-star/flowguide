@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase";
 import { loadPacketOwnership } from "@/lib/ownership-service";
+import { identityGap, IDENTITY_GAP_MESSAGE } from "@/lib/professional-identity";
 
 type Context = { params: Promise<{ id: string }> };
 
@@ -193,17 +194,17 @@ export async function POST(request: Request, context: Context) {
 
     // Validate contact info unless the user chose to skip (or the packet
     // intentionally has no identity). Applies to whichever identity is presented.
-    if (!skipProfileCheck && contact) {
-      if (!contact.name?.trim()) {
+    //
+    // The rule itself lives in lib/professional-identity so the dashboard's
+    // first-run prompt asks the SAME question. Same codes, same messages, same
+    // behaviour as before — what changed is that there is now one copy of it,
+    // and onboarding cannot tell a professional they are ready while this route
+    // refuses them.
+    if (!skipProfileCheck) {
+      const gap = identityGap(contact);
+      if (gap) {
         return NextResponse.json(
-          { error: "no_profile", message: "No professional contact information" },
-          { status: 422 }
-        );
-      }
-
-      if (!contact.email?.trim() && !contact.phone?.trim()) {
-        return NextResponse.json(
-          { error: "no_contact", message: "No email or phone in professional contact" },
+          { error: gap, message: IDENTITY_GAP_MESSAGE[gap] },
           { status: 422 }
         );
       }
