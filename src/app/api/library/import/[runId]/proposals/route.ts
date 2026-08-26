@@ -7,6 +7,7 @@ import { planContinuationMerges } from "@/lib/library-continuation";
 import { priceWarningsFor, sourceTextFor } from "@/lib/library-price-gate";
 import { completenessWarnings, missingFromChunk } from "@/lib/source-completeness";
 import { noteWarningsFor } from "@/lib/library-notes-gate";
+import { attributePhotos, unplacedPhotos } from "@/lib/photo-attribution";
 
 type Context = { params: Promise<{ runId: string }> };
 
@@ -100,9 +101,23 @@ export async function POST(_request: Request, context: Context) {
   // never states is written onto the proposal so the review shows it. This is
   // the UX half only — `save` audits again from source and does not trust it.
   const chunkTexts = await loadChunkTexts(supabase, runId);
+
+  // PHOTOS ARE ATTRIBUTED FROM THE FULL SOURCE, not from the chunk and not by
+  // the model. A community's Pictures block can cross a chunk boundary, so its
+  // tail arrives beside the NEXT community and is attached there or dropped.
+  // A photo URL appears verbatim in exactly one block, so its owner is a fact.
+  const { data: runRow } = await supabase
+    .from("ingestion_runs").select("source_text").eq("id", runId).maybeSingle();
+  const fullSource = String((runRow as { source_text?: string } | null)?.source_text ?? "");
+  const allTitles = proposals.map((q) => String((q as { title?: unknown }).title ?? ""));
+
   for (const p of proposals) {
     const { id, ordinal: _o, idx: _i, selected: _s, ...payload } = p as Record<string, unknown>;
     void _o; void _i; void _s;
+    const attrib = fullSource
+      ? attributePhotos(payload as { title?: unknown; photos?: unknown }, fullSource, allTitles)
+      : { photos: (payload as { photos?: unknown }).photos as string[], resolved: false, removed: [], added: [] };
+    if (attrib.resolved) (payload as { photos?: unknown }).photos = attrib.photos;
     const withOrdinal = { ...payload, ordinal: (p as { ordinal: number }).ordinal };
     const warnings = priceWarningsFor(withOrdinal, chunkTexts);
     // A fact the source LABELS and the record does not carry — surfaced, not
@@ -130,7 +145,8 @@ export async function POST(_request: Request, context: Context) {
       ? ((payload as { completenessWarnings: unknown[] }).completenessWarnings as string[]) : [];
     const hadN = Array.isArray((payload as { noteWarnings?: unknown }).noteWarnings)
       ? ((payload as { noteWarnings: unknown[] }).noteWarnings as string[]) : [];
-    if (warnings.join("|") === had.join("|") && missing.join("|") === hadM.join("|")
+    const photosChanged = attrib.resolved && (attrib.added.length > 0 || attrib.removed.length > 0);
+    if (!photosChanged && warnings.join("|") === had.join("|") && missing.join("|") === hadM.join("|")
         && noteWarn.join("|") === hadN.join("|")) continue;
     await supabase.from("library_import_proposals")
       .update({ payload: { ...payload, priceWarnings: warnings, completenessWarnings: missing, noteWarnings: noteWarn } })
@@ -138,10 +154,17 @@ export async function POST(_request: Request, context: Context) {
   }
   proposals = await proposalsFor(supabase, runId);
 
+  // A source photo that reaches no record at all. With span attribution this
+  // should be empty; if it is not, it is reported rather than left to be found
+  // by counting rows later.
+  const finalRows = await proposalsFor(supabase, runId);
+  const unplaced = fullSource ? unplacedPhotos(finalRows as { photos?: unknown }[], fullSource) : [];
+
   return NextResponse.json({
     inserted: Number(data ?? 0),
     merged: plans.length,
+    unplacedPhotos: unplaced.length,
     phase: "review",
-    proposals: orderProposals(proposals, chunks),
+    proposals: orderProposals(finalRows, chunks),
   });
 }

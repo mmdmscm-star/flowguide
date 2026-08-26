@@ -3,6 +3,7 @@
 import { readFileSync } from "node:fs";
 import { planContinuationMerges, communityKey } from "../../src/lib/library-continuation.ts";
 import { auditPrices, pricesIn } from "../../src/lib/price-provenance.ts";
+import { photosIn } from "../../src/lib/photo-attribution.ts";
 
 const props = JSON.parse(readFileSync(process.argv[2], "utf8")).proposals as any[];
 const sheet = JSON.parse(readFileSync(process.argv[3], "utf8")) as string[][];
@@ -30,6 +31,15 @@ function sourceFor(title: string): { i: number; blob: string } | null {
   used.add(i); return { i, blob: srcRows[i].blob };
 }
 
+function sourceForByTitle(title: string): string | null {
+  const k = communityKey(title);
+  let i = srcRows.findIndex((s) => communityKey(s.title) === k);
+  if (i === -1) i = srcRows.findIndex((s) => {
+    const sk = communityKey(s.title);
+    return sk.length > 5 && k.length > 5 && (sk.startsWith(k) || k.startsWith(sk));
+  });
+  return i === -1 ? null : srcRows[i].blob;
+}
 console.log(`proposals in: ${props.length}   merges applied: ${plans.length}   FINAL RECORDS: ${final.length}   source communities: ${data.length}`);
 for (const p of plans) console.log(`   merged: "${p.keep.title}" + "${p.absorb.title}" -> "${(p.merged as any).title}"`);
 
@@ -60,4 +70,23 @@ console.log(`communities failing the price audit : ${priceFail}/${final.length}`
 console.log(`source dollar values not shown      : ${lostVals}`);
 console.log(`records unmatched to a source row   : ${unmatched.length} ${unmatched.length ? JSON.stringify(unmatched) : ""}`);
 console.log(`records with thin description/details: ${thin.length} ${thin.length ? JSON.stringify(thin) : ""}`);
+// PHOTOS BY IDENTITY, not by "has at least one" — the check whose absence let
+// 29 source photos vanish while every record still showed a picture.
+{
+  const srcAll = new Set<string>();
+  for (const r of srcRows) for (const u of photosIn(r.blob)) srcAll.add(u);
+  const got = new Set<string>();
+  for (const f of final) for (const u of (f.photos ?? [])) got.add(String(u).trim());
+  const absent = [...srcAll].filter(u => !got.has(u));
+  const invented = [...got].filter(u => !srcAll.has(u));
+  let misplaced = 0;
+  for (const f of final) {
+    const s2 = sourceForByTitle(String(f.title ?? ""));
+    if (!s2) continue;
+    const mine = new Set(photosIn(s2));
+    misplaced += (f.photos ?? []).filter((u: string) => !mine.has(String(u).trim())).length;
+  }
+  console.log(`source photos ${srcAll.size}  in records ${got.size}  ABSENT ${absent.length}  INVENTED ${invented.length}  MISPLACED ${misplaced}`);
+  if (absent.length) for (const u of absent.slice(0, 8)) console.log(`   absent: ${u.slice(-52)}`);
+}
 console.log(`with photos ${final.filter(f=>(f.photos??[]).length).length}  contacts ${final.filter(f=>(f.contacts??[]).length).length}  links ${final.filter(f=>(f.links??[]).length).length}`);
