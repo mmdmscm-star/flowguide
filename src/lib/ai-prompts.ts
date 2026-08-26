@@ -116,7 +116,6 @@ ${URL_RULES}
 
 Rules: do not invent; preserve all specifics; keep every person + their own phone/email; titles < 60 chars.
 ${NOTES_RULE}
-${NOTES_RULE}
 ${NOTHING_RULE}
 Respond with ONLY valid JSON (no markdown), items is the ONLY top-level key:
 { "items": [ { "title": "string", "address": "string?", "description": "string?", "notes": "string?", "details": [{"label":"string","value":"string"}], "links": [{"url":"string","label":"string"}], "photos": ["string"], "contacts": [{"name":"string?","role":"string?","phone":"string?","email":"string?","website":"string?"}] } ] }`;
