@@ -206,12 +206,29 @@ test("0025 changes nothing about what the re-issued functions DO", () => {
   for (const name of reissued) {
     const was = before.get(name), now = after.get(name);
     assert.ok(was && now, `${name} missing`);
-    // finalize and discard were re-issued again by 0026 for packet retention;
-    // library close and purge are still last touched by 0025.
-    const expectFile = ["finalize_ingestion_run", "discard_ingestion_run"].includes(name)
-      ? "0026_packet_evidence_retention.sql" : "0025_ingestion_fact_ledger.sql";
+    // finalize was re-issued again by 0034 (the structural_rev guard); discard
+    // by 0026 for packet retention; library close and purge are still last
+    // touched by 0025.
+    // Every one of the four has been deliberately re-issued since 0025. The
+    // `return` bug below hid that: these expectations had been stale since
+    // 0028 landed and nothing failed, because the loop exited on the first
+    // entry. Corrected to what is actually live.
+    const expectFile =
+      name === "finalize_ingestion_run" ? "0034_structural_rev.sql"
+      : name === "discard_ingestion_run" ? "0026_packet_evidence_retention.sql"
+      : "0028_chunk_review_units.sql";
     assert.equal(now!.file, expectFile, `${name} last re-issued by ${now!.file}`);
-    if (expectFile !== "0025_ingestion_fact_ledger.sql") return;   // 0026 changes behaviour on purpose
+    // `continue`, NOT `return`. This was a `return`, which exited the whole
+    // test on the first entry — finalize — so the byte-identical comparison
+    // below never ran for ANY function. The guard read as four checks and was
+    // none.
+    //
+    // WHAT THIS TEST STILL PROVES: that no function is re-issued without
+    // someone updating this map. That is the useful half, and it now runs for
+    // all four. The byte-identical comparison below is inert today because
+    // every one of them has since been re-issued on purpose; it revives the
+    // moment a function is left at 0025 again.
+    if (expectFile !== "0025_ingestion_fact_ledger.sql") continue;
     const stripped = now!.body
       .replace(/fact_ledger = null, /g, "")
       .replace(/ or c\.fact_ledger is not null/g, "");
