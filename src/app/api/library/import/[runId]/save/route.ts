@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase";
 import { loadImportRun } from "@/lib/library-import-service";
+import { loadChunkTexts } from "@/lib/library-import-service";
+import { auditProposal, priceBlockMessage } from "@/lib/library-price-gate";
 
 type Context = { params: Promise<{ runId: string }> };
 
@@ -40,9 +42,28 @@ export async function POST(request: Request, context: Context) {
     return NextResponse.json({ error: "nothing_selected", message: "Select at least one item to save." }, { status: 400 });
   }
 
+  // THE INTEGRITY BOUNDARY.
+  //
+  // The audit runs AGAIN here, from the chunk text, and deliberately ignores
+  // the `priceWarnings` stored on the payload. Those warnings are UX: they live
+  // in a payload the client can PATCH, so gating on them would mean the gate
+  // could be cleared by editing the very thing it guards. A price the community
+  //'s own source never states must not become a Library item, because from
+  // there it reaches a client as a quote.
+  const chunkTexts = await loadChunkTexts(supabase, runId);
+
   const results: { id: string; title: string; outcome: string; libraryItemId?: string; message?: string }[] = [];
   for (const t of targets) {
     const title = String(t.payload?.title ?? "").trim();
+
+    const audit = auditProposal({ ...t.payload }, chunkTexts);
+    if (!audit.ok) {
+      const offending = [...audit.unsupported, ...audit.unsupportedRanges];
+      results.push({ id: t.id, title, outcome: "unsupported_price",
+                     message: priceBlockMessage(title, offending) });
+      continue;
+    }
+
     const { data, error: rpcErr } = await supabase.rpc("library_save_proposal", {
       p_owner: session.userId, p_run_id: runId, p_proposal_id: t.id,
     });
@@ -61,8 +82,9 @@ export async function POST(request: Request, context: Context) {
   }
 
   const saved = results.filter((r) => r.outcome === "saved").length;
+  const blocked = results.filter((r) => r.outcome === "unsupported_price").length;
   const { count: remaining } = await supabase
     .from("library_import_proposals").select("id", { count: "exact", head: true }).eq("run_id", runId);
 
-  return NextResponse.json({ saved, remaining: remaining ?? 0, results });
+  return NextResponse.json({ saved, blocked, remaining: remaining ?? 0, results });
 }

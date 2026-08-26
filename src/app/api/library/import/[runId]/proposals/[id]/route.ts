@@ -3,6 +3,8 @@ import { getSession } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase";
 import { normalizeItemContent } from "@/lib/item-content";
 import { loadImportRun } from "@/lib/library-import-service";
+import { loadChunkTexts } from "@/lib/library-import-service";
+import { priceWarningsFor, sourceOrdinalsOf } from "@/lib/library-price-gate";
 
 type Context = { params: Promise<{ runId: string; id: string }> };
 
@@ -29,7 +31,25 @@ export async function PATCH(request: Request, context: Context) {
   if (body.item !== undefined) {
     // The SAME normaliser the Library's own write paths use, so an edited
     // proposal and a hand-written entry cannot end up shaped differently.
-    patch.payload = normalizeItemContent(body.item as Record<string, unknown>);
+    const next = normalizeItemContent(body.item as Record<string, unknown>) as Record<string, unknown>;
+
+    // RE-AUDIT AFTER THE EDIT. An edit is exactly when a price becomes right —
+    // or newly wrong — so the warning is recomputed rather than carried over.
+    // The client cannot set this: whatever it sent is discarded and replaced.
+    const { data: existing } = await supabase
+      .from("library_import_proposals").select("ordinal, payload").eq("id", id).eq("run_id", runId).maybeSingle();
+    const prev = (existing as { ordinal?: number; payload?: Record<string, unknown> } | null) ?? {};
+    const carried = {
+      ...next,
+      ordinal: Number(prev.ordinal ?? 0),
+      // Provenance is not the professional's to edit: which chunks produced
+      // this record is a fact about the import, not about the content.
+      sourceOrdinals: sourceOrdinalsOf({ ...(prev.payload ?? {}), ordinal: prev.ordinal }),
+    };
+    const chunkTexts = await loadChunkTexts(supabase, runId);
+    const warnings = priceWarningsFor(carried, chunkTexts);
+    delete (carried as { ordinal?: number }).ordinal;
+    patch.payload = { ...carried, priceWarnings: warnings };
   }
   if (typeof body.selected === "boolean") patch.selected = body.selected;
   if (patch.payload === undefined && patch.selected === undefined) {

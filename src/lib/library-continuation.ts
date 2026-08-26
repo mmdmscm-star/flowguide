@@ -72,8 +72,16 @@ function union<T>(a: T[], b: T[], key: (x: T) => string): T[] {
  *  takes the fuller of the two, and every list is unioned. */
 export function mergeProposals(a: ProposalLike, b: ProposalLike): ProposalLike {
   const longer = (x: unknown, y: unknown) => (str(x).length >= str(y).length ? str(x) : str(y));
+  // BOTH halves' chunks are authoritative for the merged record. Without this
+  // the price gate would audit a merged community against one half only and
+  // report the other half's real prices as unsupported.
+  const ordinals = [...new Set([
+    ...(Array.isArray(a.sourceOrdinals) ? (a.sourceOrdinals as number[]) : [a.ordinal]),
+    ...(Array.isArray(b.sourceOrdinals) ? (b.sourceOrdinals as number[]) : [b.ordinal]),
+  ])].sort((x, y) => x - y);
   return {
     ...a,
+    sourceOrdinals: ordinals,
     // The fuller title wins: "Cogir of North Bay — Vallejo" over "Cogir of
     // North Bay", because the qualifier is information the other half lost.
     title: longer(a.title, b.title),

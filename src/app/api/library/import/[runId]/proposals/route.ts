@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase";
-import { loadImportRun, loadImportChunks } from "@/lib/library-import-service";
+import { loadImportRun, loadImportChunks, loadChunkTexts } from "@/lib/library-import-service";
 import { derivePhase, orderProposals } from "@/lib/library-import";
 import { planContinuationMerges } from "@/lib/library-continuation";
+import { priceWarningsFor } from "@/lib/library-price-gate";
 
 type Context = { params: Promise<{ runId: string }> };
 
@@ -92,6 +93,23 @@ export async function POST(_request: Request, context: Context) {
       .delete().eq("run_id", runId).eq("id", plan.absorb.id as string);
   }
   if (plans.length) proposals = await proposalsFor(supabase, runId);
+
+  // PRICE PROVENANCE, surfaced. A value or range the community's own source
+  // never states is written onto the proposal so the review shows it. This is
+  // the UX half only — `save` audits again from source and does not trust it.
+  const chunkTexts = await loadChunkTexts(supabase, runId);
+  for (const p of proposals) {
+    const { id, ordinal: _o, idx: _i, selected: _s, ...payload } = p as Record<string, unknown>;
+    void _o; void _i; void _s;
+    const warnings = priceWarningsFor({ ...payload, ordinal: (p as { ordinal: number }).ordinal }, chunkTexts);
+    const had = Array.isArray((payload as { priceWarnings?: unknown }).priceWarnings)
+      ? ((payload as { priceWarnings: unknown[] }).priceWarnings as string[]) : [];
+    if (warnings.join("|") === had.join("|")) continue;
+    await supabase.from("library_import_proposals")
+      .update({ payload: { ...payload, priceWarnings: warnings } })
+      .eq("run_id", runId).eq("id", id as string);
+  }
+  proposals = await proposalsFor(supabase, runId);
 
   return NextResponse.json({
     inserted: Number(data ?? 0),

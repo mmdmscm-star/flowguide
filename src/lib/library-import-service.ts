@@ -48,3 +48,29 @@ export async function loadImportChunks(db: Db, runId: string): Promise<ImportChu
     status: c.status as string,
   }));
 }
+
+/**
+ * Chunk TEXT, for the price gate only.
+ *
+ * Deliberately separate from `loadImportChunks`, which deliberately does not
+ * select `segment_text`: phase and ordering do not need it, and every caller
+ * would otherwise pull the entire pasted source on every poll.
+ *
+ * The separation is also why this is worth stating out loud — auditing a price
+ * against a chunk list that carries no text finds NO supporting value and
+ * condemns every price in the import. An empty result here is a broken audit,
+ * not a clean one.
+ */
+export async function loadChunkTexts(
+  db: Db, runId: string,
+): Promise<Array<{ ordinal: number; segment_text: string }>> {
+  const { data } = await db
+    .from("ingestion_chunks")
+    .select("ordinal, segment_text")
+    .eq("run_id", runId)
+    .order("ordinal");
+  return (data ?? []).map((c: Record<string, unknown>) => ({
+    ordinal: Number(c.ordinal),
+    segment_text: String(c.segment_text ?? ""),
+  }));
+}
