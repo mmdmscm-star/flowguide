@@ -35,9 +35,9 @@ export async function POST(request: Request, context: Context) {
   const explicit: string[] | null = Array.isArray(body.proposalIds) ? body.proposalIds : null;
 
   const query = supabase
-    .from("library_import_proposals").select("id, payload").eq("run_id", runId);
+    .from("library_import_proposals").select("id, ordinal, payload").eq("run_id", runId);
   const { data: rows } = explicit ? await query.in("id", explicit) : await query.eq("selected", true);
-  const targets = (rows ?? []) as { id: string; payload: Record<string, unknown> }[];
+  const targets = (rows ?? []) as { id: string; ordinal: number; payload: Record<string, unknown> }[];
 
   if (targets.length === 0) {
     return NextResponse.json({ error: "nothing_selected", message: "Select at least one item to save." }, { status: 400 });
@@ -65,14 +65,21 @@ export async function POST(request: Request, context: Context) {
     const title = String(t.payload?.title ?? "").trim();
 
     // Re-derived from authoritative source, ignoring any stored warning.
-    const noteV = auditProposalNote({ ...t.payload }, allProposals as never, chunkTexts);
+    // ORDINAL IS A COLUMN, NOT PART OF THE PAYLOAD. Without it
+    // sourceOrdinalsOf resolves nothing, the source text comes back empty, and
+    // both gates condemn every record they are asked about — an empty source
+    // supports no price and proves no note private. Production smoke caught
+    // exactly that: a supported price and a genuinely private note were both
+    // refused, because neither gate could see any source at all.
+    const withProvenance = { ordinal: Number(t.ordinal), ...t.payload };
+    const noteV = auditProposalNote(withProvenance, allProposals as never, chunkTexts);
     if (!noteV.ok) {
       results.push({ id: t.id, title, outcome: "private_note_unverified",
                      message: noteBlockMessage(title, noteV) });
       continue;
     }
 
-    const audit = auditProposal({ ...t.payload }, chunkTexts);
+    const audit = auditProposal(withProvenance, chunkTexts);
     if (!audit.ok) {
       const offending = [...audit.unsupported, ...audit.unsupportedRanges];
       results.push({ id: t.id, title, outcome: "unsupported_price",

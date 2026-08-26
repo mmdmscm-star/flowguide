@@ -126,7 +126,7 @@ const bodyOf = (p: string) => readFileSync(p, "utf8")
 
 test("SAVE RE-DERIVES THE SPAN AND RE-CHECKS — it does not trust noteWarnings", () => {
   const save = bodyOf("src/app/api/library/import/[runId]/save/route.ts");
-  assert.match(save, /auditProposalNote\(\{ \.\.\.t\.payload \}, allProposals as never, chunkTexts\)/,
+  assert.match(save, /auditProposalNote\(withProvenance, allProposals as never, chunkTexts\)/,
     "save does not re-audit notes from source");
   assert.match(save, /outcome: "private_note_unverified"/, "a blocked note is not distinguishable");
   assert.ok(!/noteWarnings/.test(save),

@@ -23,7 +23,7 @@ const CH = [
 test("SAVE RE-AUDITS FROM SOURCE — it does not trust priceWarnings", () => {
   // The stored array lives in a payload the client can PATCH. Gating on it
   // would let the gate be cleared by editing the thing it guards.
-  assert.match(SAVE, /auditProposal\(\{ \.\.\.t\.payload \}, chunkTexts\)/,
+  assert.match(SAVE, /auditProposal\(withProvenance, chunkTexts\)/,
     "save does not re-audit from the chunk text");
   assert.match(SAVE, /loadChunkTexts\(supabase, runId\)/, "save never loads the authoritative source");
   assert.ok(!/priceWarnings/.test(bodyOf("src/app/api/library/import/[runId]/save/route.ts")),
@@ -140,4 +140,25 @@ test("REAL DATA: the other 64 communities are unaffected", () => {
   }
   assert.deepEqual(blocked, ["Windsong of Sonoma"],
     `the gate blocks communities it should not: ${JSON.stringify(blocked)}`);
+});
+
+test("SAVE CARRIES THE ORDINAL — a payload alone has no provenance", () => {
+  // ordinal is a COLUMN, not part of the payload. Selecting only the payload
+  // leaves sourceOrdinalsOf with nothing to resolve, sourceTextFor returns "",
+  // and every gate condemns every record. Production smoke caught this: a
+  // supported price and a genuinely private note were both refused.
+  const save = codeOf("src/app/api/library/import/[runId]/save/route.ts");
+  assert.match(save, /select\("id, ordinal, payload"\)/, "save does not read the ordinal");
+  assert.match(save, /const withProvenance = \{ ordinal: Number\(t\.ordinal\), \.\.\.t\.payload \}/,
+    "the audited object has no ordinal");
+  assert.ok(!/auditProposal\(\{ \.\.\.t\.payload \}/.test(save), "the price gate still audits a bare payload");
+  assert.ok(!/auditProposalNote\(\{ \.\.\.t\.payload \}/.test(save), "the notes gate still audits a bare payload");
+
+  // And the behaviour itself: a payload with no ordinal resolves to no source,
+  // which must not read as a clean bill of health.
+  const bare = { title: "X", details: [{ label: "Studio", value: "$5,595/month" }] };
+  const withOrd = { ordinal: 4, ...bare };
+  const chunks = [{ ordinal: 4, segment_text: "X\n Studio - $5,595/month" }];
+  assert.equal(auditProposal(bare, chunks).ok, false, "a provenance-less payload passed");
+  assert.equal(auditProposal(withOrd, chunks).ok, true, "a real price was refused");
 });
