@@ -250,6 +250,8 @@ export function LegacyPacketEditor() {
   // set, an import is in progress: the ImportProgress panel drives it and publish
   // is blocked. Detected on load so a refresh mid-import reconnects and resumes.
   const [importRunId, setImportRunId] = useState<string | null>(null);
+  /** Why the last section delete was refused, shown where the sections are. */
+  const [sectionError, setSectionError] = useState("");
 
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const titleRef = useRef<HTMLTextAreaElement>(null);
@@ -543,11 +545,21 @@ export function LegacyPacketEditor() {
   async function deleteSection(sectionId: string) {
     const sectionItems = items.filter((i) => i.sectionId === sectionId);
     if (sectionItems.length > 0 && !confirm("Delete this section and all its items?")) return;
-    await fetch("/api/sections", {
+    const res = await fetch("/api/sections", {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id: sectionId }),
     });
+    // The response was previously discarded and the section removed from local
+    // state regardless, so a REFUSED delete looked like it had worked until the
+    // next reload. It matters more now that a refusal is a real outcome: the
+    // server blocks deleting a section AI is writing into.
+    if (!res.ok) {
+      const body = (await res.json().catch(() => ({}))) as { message?: string };
+      setSectionError(body?.message?.trim() || "Could not delete this section.");
+      return;
+    }
+    setSectionError("");
     setSections((prev) => prev.filter((s) => s.id !== sectionId));
     setItems((prev) => prev.filter((i) => i.sectionId !== sectionId));
   }
@@ -1163,6 +1175,13 @@ export function LegacyPacketEditor() {
         collisionDetection={closestCenter}
         onDragEnd={handleSectionDragEnd}
       >
+        {/* A refused section delete, said where the sections are — the server
+            blocks deleting a section AI is actively writing into. */}
+        {sectionError && (
+          <p className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+            {sectionError}
+          </p>
+        )}
         <SortableContext
           items={sortedSections.map((s) => s.id)}
           strategy={verticalListSortingStrategy}

@@ -22,7 +22,7 @@ export default function ImportProgress({
    *  only way out. */
   onNeedsReview?: () => void;
 }) {
-  const { state, resume, retry, discard, resolveUnit } = useIngestion(packetId, { onComplete: onDone, onNeedsReview });
+  const { state, resume, retry, discard, resolveUnit, applyAnyway } = useIngestion(packetId, { onComplete: onDone, onNeedsReview });
   const started = useRef(false);
 
   useEffect(() => {
@@ -31,7 +31,7 @@ export default function ImportProgress({
     resume(runId);
   }, [runId, resume]);
 
-  const { phase, done, total, subdividing, error, reviewSummary, reviewExit, reviewFailures, resolving } = state;
+  const { phase, done, total, subdividing, error, reviewSummary, reviewExit, reviewFailures, resolving, recovery } = state;
   const needsReview = phase === "needs_review";
   // Held content the professional can decide about, still outstanding.
   const open = reviewFailures.filter((f) => isResolvable(f) && (f.status ?? "unresolved") === "unresolved");
@@ -58,6 +58,47 @@ export default function ImportProgress({
     : phase === "error" ? "Import paused"
     : total > 0 ? `Processing part ${Math.min(done + 1, total)} of ${total}…`
     : "Reading your notes…";
+
+
+  // THE FLOWGUIDE CHANGED WHILE AI WAS WORKING.
+  //
+  // This used to be terminal: the run stayed active, the completed work was
+  // unreachable, and the only exit was discarding it. It is a CHOICE now — but
+  // "Add the organized content" appears only when the server said it can be
+  // reconciled. Offering an action that finalizes and then leaves the FlowGuide
+  // unpublishable would be worse than not offering one.
+  if (phase === "conflict") {
+    const canApply = recovery?.canApply === true;
+    return (
+      <div className="rounded-xl border border-amber-300 bg-amber-50/70 p-4 mb-5">
+        <p className="text-sm font-medium text-foreground">This FlowGuide changed while AI was working</p>
+        <p className="mt-1 text-sm text-muted">{error}</p>
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          {canApply && (
+            <button
+              onClick={applyAnyway}
+              className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover"
+            >
+              Add the organized content
+            </button>
+          )}
+          <button
+            onClick={() => { discard(); onDiscarded(); }}
+            className={canApply
+              ? "text-sm font-medium text-muted underline-offset-4 hover:underline"
+              : "rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover"}
+          >
+            Discard this import
+          </button>
+        </div>
+        {canApply && (
+          <p className="mt-2 text-xs text-muted">
+            It will be added after your existing sections. Nothing already in this FlowGuide is changed or replaced.
+          </p>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className={`rounded-xl border p-4 mb-5 ${needsReview ? "border-amber-300 bg-amber-50/70" : "border-border bg-blue-50/60"}`}>

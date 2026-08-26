@@ -107,6 +107,17 @@ export async function DELETE(request: Request) {
 
   const { error } = await supabase.from("sections").delete().eq("id", id);
 
+  // FG001 is the contract with 0035, not a message to match. The trigger
+  // refuses a DIRECT delete of a section a section_append run is writing into,
+  // because the run — and its completed AI work — would be cascade-deleted
+  // with it. Deleting the whole FlowGuide is a different, still-supported act
+  // and never reaches here.
+  if (error && (error as { code?: string }).code === "FG001") {
+    return NextResponse.json({
+      error: "import_in_progress",
+      message: "AI is currently adding content to this section. Finish or discard that import before deleting the section.",
+    }, { status: 409 });
+  }
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   return NextResponse.json({ ok: true });

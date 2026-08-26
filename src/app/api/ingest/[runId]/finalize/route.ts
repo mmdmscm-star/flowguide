@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { assessRecovery, recoveryMessage, type RecoveryVerdict } from "@/lib/ingest-recovery";
 import { getSession } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase";
 import { buildMediaLedger, describeMediaFailures, type StoredMedia } from "@/lib/media-ledger";
@@ -43,6 +44,33 @@ export async function POST(_request: Request, context: Context) {
     createdThisPacket = (prePacket as { origin_ingestion_run_id?: string | null } | null)?.origin_ingestion_run_id === runId;
   }
 
+  // THE PROFESSIONAL'S DECISION, carried in the request rather than inferred.
+  // Set only by the recovery panel, after it was told recovery is possible.
+  // rebaseline_ingestion_run re-checks the invariants itself: this flag moves a
+  // baseline, it does not grant permission to ignore anything.
+  let acceptStructuralChange = false;
+  try {
+    const body = (await _request.json().catch(() => ({}))) as { acceptStructuralChange?: unknown };
+    acceptStructuralChange = body?.acceptStructuralChange === true;
+  } catch { /* no body is the normal case */ }
+
+  if (acceptStructuralChange) {
+    const { error: rebaseErr } = await supabase.rpc("rebaseline_ingestion_run", {
+      p_run_id: runId,
+      p_owner: session.userId,
+    });
+    if (rebaseErr) {
+      console.error("[finalize] rebaseline error:", rebaseErr.message);
+      const gone = /target section no longer valid/i.test(rebaseErr.message);
+      return NextResponse.json({
+        error: gone ? "target_section_missing" : "rebaseline_failed",
+        message: gone
+          ? "The section this content was being added to no longer exists. Discard this import and run it again on the section you want."
+          : "Could not re-check this FlowGuide. Try again.",
+      }, { status: 409 });
+    }
+  }
+
   const { data, error } = await supabase.rpc("finalize_ingestion_run", {
     p_run_id: runId,
     p_owner: session.userId,
@@ -52,13 +80,33 @@ export async function POST(_request: Request, context: Context) {
     // editor banner. Map the known conditions to something a professional can
     // act on; keep the original in the logs for diagnosis.
     const incomplete = /not completed|coverage|cover the whole/i.test(error.message);
-    const changed = /changed since the import began|content_rev/i.test(error.message);
+    const changed = /structure changed since the import began|changed since the import began|structural_rev|content_rev/i.test(error.message);
+    const targetGone = /target section no longer valid/i.test(error.message);
     console.error("[finalize] rpc error:", error.message);
+
+    // THE STRUCTURAL CONFLICT IS RECOVERABLE, so it is not reported as a
+    // failure. The completed work is still there; the professional is asked
+    // what to do with it. Whether "add it anyway" may be OFFERED is decided by
+    // assessRecovery, never assumed — applying over unaccountable media would
+    // finalize successfully and leave the FlowGuide unpublishable.
+    if (changed && !targetGone) {
+      const verdict = await assessRunRecovery(supabase, runId);
+      return NextResponse.json({
+        error: "structure_changed",
+        message: recoveryMessage(verdict),
+        recovery: { canApply: verdict.canApply, blockers: verdict.blockers },
+      }, { status: 409 });
+    }
+    if (targetGone) {
+      return NextResponse.json({
+        error: "target_section_missing",
+        message: "The section this content was being added to no longer exists. Discard this import and run it again on the section you want.",
+        recovery: { canApply: false, blockers: [{ code: "target_section_missing" }] },
+      }, { status: 409 });
+    }
     const message = incomplete
       ? "Some parts haven't finished yet. Resume the import to finish them."
-      : changed
-        ? "This packet changed while the import was running, so it wasn't combined. Discard the import and try again."
-        : "Could not combine the results. You can retry.";
+      : "Could not combine the results. You can retry.";
     return NextResponse.json({ error: "finalize_failed", message }, { status: incomplete ? 409 : 400 });
   }
   // ---- Exact media accounting (Stage 1).
@@ -250,4 +298,62 @@ export async function POST(_request: Request, context: Context) {
   }
 
   return NextResponse.json({ ok: true, ...(data as object), review });
+}
+
+/**
+ * Gather what the recovery decision needs, then decide.
+ *
+ * Reads the CURRENT packet, because that is the state "apply anyway" would
+ * apply into. The projection inside assessRecovery mirrors what finalize will
+ * write to raw_input; a test asserts the two agree for both entry points, so
+ * this cannot drift into falsely blocking ordinary FlowGuides.
+ */
+async function assessRunRecovery(
+  supabase: ReturnType<typeof createServerClient>,
+  runId: string,
+): Promise<RecoveryVerdict> {
+  const { data: runRow } = await supabase
+    .from("ingestion_runs")
+    .select("packet_id, entry_point, source_text, target_section_id")
+    .eq("id", runId).maybeSingle();
+  const run = runRow as {
+    packet_id?: string; entry_point?: string;
+    source_text?: string; target_section_id?: string | null;
+  } | null;
+  // Without the run we cannot judge, and the SAFE answer is to withhold the
+  // override rather than offer one we could not check.
+  if (!run?.packet_id) return { canApply: false, blockers: [] };
+
+  const { data: packet } = await supabase
+    .from("packets").select("raw_input").eq("id", run.packet_id).maybeSingle();
+
+  const { data: sections } = await supabase.from("sections").select("id").eq("packet_id", run.packet_id);
+  const sectionIds = (sections ?? []).map((x: { id: string }) => x.id);
+  const stored: Array<{ url: string; itemId: string }> = [];
+  if (sectionIds.length > 0) {
+    const { data: items } = await supabase.from("items").select("id").in("section_id", sectionIds);
+    const itemIds = (items ?? []).map((x: { id: string }) => x.id);
+    if (itemIds.length > 0) {
+      const { data: photos } = await supabase
+        .from("item_photos").select("item_id, url").in("item_id", itemIds);
+      for (const ph of (photos ?? []) as Array<{ item_id: string; url: string }>) {
+        stored.push({ url: ph.url, itemId: ph.item_id });
+      }
+    }
+  }
+
+  let targetSectionValid: boolean | undefined;
+  if (run.entry_point === "section_append") {
+    targetSectionValid = run.target_section_id
+      ? sectionIds.includes(run.target_section_id)
+      : false;
+  }
+
+  return assessRecovery({
+    entryPoint: String(run.entry_point ?? ""),
+    rawInput: (packet as { raw_input?: string } | null)?.raw_input ?? "",
+    sourceText: run.source_text ?? "",
+    storedPhotos: stored,
+    targetSectionValid,
+  });
 }

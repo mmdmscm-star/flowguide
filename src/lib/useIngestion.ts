@@ -9,7 +9,13 @@ import type { ReviewFailure } from "./review-units.ts";
 // and finalizes when every leaf chunk is done. Safe to stop and reconnect: the
 // server holds the truth, so resume() re-drives from the persisted cursor.
 
-export type IngestPhase = "idle" | "preparing" | "processing" | "combining" | "done" | "needs_review" | "error";
+export type IngestPhase = "idle" | "preparing" | "processing" | "combining" | "done" | "needs_review" | "conflict" | "error";
+
+/** Why a finished run could not be applied, and whether it still can be. */
+export interface RecoveryInfo {
+  canApply: boolean;
+  blockers: Array<{ code: string; urls?: string[] }>;
+}
 
 export interface IngestState {
   phase: IngestPhase;
@@ -27,6 +33,7 @@ export interface IngestState {
   /** The individual blockers. Each resolvable one carries the verbatim source
    *  excerpt - a professional cannot decide about content they cannot read. */
   reviewFailures: ReviewFailure[];
+  recovery: RecoveryInfo | null;
   /** The unit currently being decided, so its buttons can show they are working
    *  and cannot be pressed twice. "" when idle. */
   resolving: string;
@@ -68,7 +75,7 @@ async function processChunk(runId: string, ordinal: number): Promise<ChunkOutcom
 }
 
 export function useIngestion(packetId: string, opts?: { onComplete?: () => void; onNeedsReview?: () => void }) {
-  const [state, setState] = useState<IngestState>({ phase: "idle", runId: null, done: 0, total: 0, subdividing: false, error: "", reviewSummary: "", reviewExit: "", reviewFailures: [], resolving: "" });
+  const [state, setState] = useState<IngestState>({ phase: "idle", runId: null, done: 0, total: 0, subdividing: false, error: "", reviewSummary: "", reviewExit: "", reviewFailures: [], resolving: "", recovery: null });
   const cancelled = useRef(false);
   const runIdRef = useRef<string | null>(null);
 
@@ -118,6 +125,15 @@ export function useIngestion(packetId: string, opts?: { onComplete?: () => void;
           }
           setState((s) => ({ ...s, phase: "done", done: run.totalChunks, total: run.totalChunks })); opts?.onComplete?.(); return;
         }
+        // A STRUCTURAL CONFLICT IS NOT "NOT DONE YET". Both arrive as 409, and
+        // treating this one as "keep driving" would spin the loop against a
+        // condition that can never clear on its own. It stops and asks.
+        if (fin.data?.error === "structure_changed" || fin.data?.error === "target_section_missing") {
+          setState((s) => ({ ...s, phase: "conflict",
+            error: String(fin.data?.message ?? ""),
+            recovery: (fin.data?.recovery as RecoveryInfo | undefined) ?? { canApply: false, blockers: [] } }));
+          return;
+        }
         // 409 means "not every part is done yet" — recoverable, so keep driving
         // instead of surfacing it as a failure.
         if (fin.status === 409) { await sleep(RETRY_BACKOFF_MS); continue; }
@@ -136,7 +152,7 @@ export function useIngestion(packetId: string, opts?: { onComplete?: () => void;
 
   const start = useCallback(async (args: StartArgs) => {
     cancelled.current = false;
-    setState({ phase: "preparing", runId: null, done: 0, total: 0, subdividing: false, error: "", reviewSummary: "", reviewExit: "", reviewFailures: [], resolving: "" });
+    setState({ phase: "preparing", runId: null, done: 0, total: 0, subdividing: false, error: "", reviewSummary: "", reviewExit: "", reviewFailures: [], resolving: "", recovery: null });
     const res = await postJSON(`/api/packets/${packetId}/ingest`, args);
     if (res.status === 409 && res.data?.runId) { await drive(res.data.runId); return; }
     if (!res.data?.runId) { setState((s) => ({ ...s, phase: "error", error: res.data?.message || res.data?.error || "Could not start the import." })); return; }
@@ -144,12 +160,25 @@ export function useIngestion(packetId: string, opts?: { onComplete?: () => void;
   }, [packetId, drive]);
 
   const resume = useCallback(async (runId: string) => { cancelled.current = false; await drive(runId); }, [drive]);
+
+  /** Apply a run whose structural guard tripped, after the professional chose
+   *  to. The server re-baselines and finalizes; it re-checks the invariants
+   *  itself, so this is a request, not an instruction. */
+  const applyAnyway = useCallback(async () => {
+    const runId = runIdRef.current; if (!runId) return;
+    setState((s) => ({ ...s, phase: "combining", error: "" }));
+    const fin = await postJSON(`/api/ingest/${runId}/finalize`, { acceptStructuralChange: true });
+    if (fin.data?.ok) { cancelled.current = false; await drive(runId); return; }
+    setState((s) => ({ ...s, phase: "conflict",
+      error: String(fin.data?.message ?? "Could not add the organized content."),
+      recovery: (fin.data?.recovery as RecoveryInfo | undefined) ?? s.recovery }));
+  }, [drive]);
   const retry = useCallback(async () => { if (runIdRef.current) { cancelled.current = false; await drive(runIdRef.current); } }, [drive]);
   const discard = useCallback(async () => {
     const runId = runIdRef.current; if (!runId) return;
     cancelled.current = true;
     await postJSON(`/api/ingest/${runId}/discard`, {});
-    setState({ phase: "idle", runId: null, done: 0, total: 0, subdividing: false, error: "", reviewSummary: "", reviewExit: "", reviewFailures: [], resolving: "" });
+    setState({ phase: "idle", runId: null, done: 0, total: 0, subdividing: false, error: "", reviewSummary: "", reviewExit: "", reviewFailures: [], resolving: "", recovery: null });
   }, []);
   /** Record one decision about one held unit.
    *
@@ -181,5 +210,5 @@ export function useIngestion(packetId: string, opts?: { onComplete?: () => void;
 
   const cancel = useCallback(() => { cancelled.current = true; }, []);
 
-  return { state, start, resume, retry, discard, cancel, resolveUnit };
+  return { state, start, resume, retry, discard, cancel, resolveUnit, applyAnyway };
 }
