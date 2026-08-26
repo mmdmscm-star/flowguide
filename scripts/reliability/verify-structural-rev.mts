@@ -176,24 +176,29 @@ try {
     });
     const RUN = rid as unknown as string;
     await stage(RUN, APPEND, { items: [{ title: "orphan", details: [], links: [], photos: [], contacts: [] }] });
-    await svc.from("sections").delete().eq("id", SECID);
+    // SUPERSEDED BY 0035, and this section is kept to prove it.
+    //
+    // Before 0035 this delete succeeded and CASCADE-DELETED the run and its
+    // completed chunk results — the professional lost finished AI work without
+    // ever seeing a conflict. It is now refused at the database with SQLSTATE
+    // FG001, so the work survives and the section stays put.
+    const { error: del } = await svc.from("sections").delete().eq("id", SECID);
+    check("DELETING THE TARGETED SECTION IS REFUSED (0035)",
+      !!del && (del as { code?: string }).code === "FG001",
+      del ? `code=${(del as { code?: string }).code} ${errText(del).slice(0, 70)}` : "the delete succeeded — 0035 is not in force");
 
-    // WHAT ACTUALLY HAPPENS, which is not what the recovery design assumed:
-    // ingestion_runs.target_section_id is `references sections(id) ON DELETE
-    // CASCADE`, so deleting the target section deletes the RUN and its chunks.
-    // There is therefore no run to recover, and no way for the items to land
-    // somewhere the professional did not choose - which was the concern. The
-    // cost is that the completed work is destroyed rather than offered back.
-    const { data: still } = await svc.from("ingestion_runs").select("id").eq("id", RUN).maybeSingle();
-    check("deleting the target section CASCADE-DELETES the run", still === null,
-      "the run survived — re-check the FK, the blocker below is then load-bearing");
+    const { data: secStill } = await svc.from("sections").select("id").eq("id", SECID).maybeSingle();
+    check("the section survives", !!secStill, "");
+    const { data: runStill } = await svc.from("ingestion_runs").select("status").eq("id", RUN).maybeSingle();
+    check("THE RUN AND ITS WORK SURVIVE", (runStill as { status: string } | null)?.status === "active",
+      JSON.stringify(runStill));
+    const { data: chStill } = await svc.from("ingestion_chunks").select("result").eq("run_id", RUN);
+    check("the completed chunk result survives", (chStill ?? []).length === 1 && !!(chStill ?? [])[0]?.result,
+      `${(chStill ?? []).length} chunk rows`);
 
-    const { error: rb } = await svc.rpc("rebaseline_ingestion_run", { p_run_id: RUN, p_owner: UID });
-    check("rebaseline refuses a run that no longer exists", !!rb && /not found/i.test(errText(rb)),
-      rb ? errText(rb).slice(0, 110) : "NO ERROR");
+    // And the run is still finalizable — nothing was stranded by the refusal.
     const { error: f } = await fin(RUN);
-    check("and finalize refuses too — items can never land in a chosen-for-them section",
-      !!f, f ? errText(f).slice(0, 90) : "NO ERROR");
+    check("the import can still be finished afterwards", !f, f ? errText(f).slice(0, 90) : "");
   }
 } finally {
   await svc.from("packets").delete().eq("user_id", UID);
