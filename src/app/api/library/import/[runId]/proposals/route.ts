@@ -5,7 +5,7 @@ import { loadImportRun, loadImportChunks, loadChunkTexts } from "@/lib/library-i
 import { derivePhase, orderProposals } from "@/lib/library-import";
 import { planContinuationMerges } from "@/lib/library-continuation";
 import { priceWarningsFor, sourceTextFor } from "@/lib/library-price-gate";
-import { completenessWarnings } from "@/lib/source-completeness";
+import { completenessWarnings, missingFromChunk } from "@/lib/source-completeness";
 
 type Context = { params: Promise<{ runId: string }> };
 
@@ -107,7 +107,19 @@ export async function POST(_request: Request, context: Context) {
     // A fact the source LABELS and the record does not carry — surfaced, not
     // blocked. An unsupported price is a false statement to a client; a missing
     // phone is an omission, and the professional decides what to do about it.
-    const missing = completenessWarnings(payload, sourceTextFor(withOrdinal, chunkTexts));
+    // Chunk-scoped: a labelled fact is lost only when NO record from that
+    // chunk carries it. Auditing a record against the whole chunk reports its
+    // neighbours' facts as missing — a chunk usually holds several communities.
+    const ord = (p as { ordinal: number }).ordinal;
+    const siblings = proposals.filter((q) => (q as { ordinal: number }).ordinal === ord)
+      .map((q) => { const { id: _id, ordinal: _oo, idx: _ii, selected: _ss, ...rest } = q as Record<string, unknown>;
+                    void _id; void _oo; void _ii; void _ss; return rest; });
+    const m = missingFromChunk(siblings, sourceTextFor(withOrdinal, chunkTexts));
+    const missing = [
+      ...m.phones.map((x) => `phone not carried over: ${x}`),
+      ...m.emails.map((x) => `email not carried over: ${x}`),
+      ...m.websites.map((x) => `website not carried over: ${x}`),
+    ];
     const had = Array.isArray((payload as { priceWarnings?: unknown }).priceWarnings)
       ? ((payload as { priceWarnings: unknown[] }).priceWarnings as string[]) : [];
     const hadM = Array.isArray((payload as { completenessWarnings?: unknown }).completenessWarnings)

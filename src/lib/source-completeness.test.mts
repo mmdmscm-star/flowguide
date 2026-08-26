@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { missingFrom, completenessWarnings, siteKey } from "./source-completeness.ts";
+import { missingFrom, missingFromChunk, completenessWarnings, siteKey } from "./source-completeness.ts";
 
 const SRC = `Aegis Living Corte Madera
 Type: AL, MC
@@ -73,7 +73,7 @@ test("the warnings say what did not survive", () => {
 
 test("materialisation surfaces completeness, and does not block on it", () => {
   const r = readFileSync("src/app/api/library/import/[runId]/proposals/route.ts", "utf8");
-  assert.match(r, /completenessWarnings\(payload, sourceTextFor\(/, "completeness is never computed");
+  assert.match(r, /missingFromChunk\(siblings, sourceTextFor\(/, "completeness is never computed, or is not chunk-scoped");
   assert.match(r, /completenessWarnings: missing/, "it is computed but never stored");
   const save = readFileSync("src/app/api/library/import/[runId]/save/route.ts", "utf8");
   assert.ok(!/completenessWarnings/.test(save), "an omission BLOCKS a save — it should surface, not block");
@@ -84,4 +84,39 @@ test("the prompts carry the two-phones rule", () => {
   assert.match(src, /A community's MAIN phone and a named person's DIRECT phone are different facts/);
   assert.match(src, /do NOT invent one/, "the N/A case is not covered");
   assert.equal((src.match(/\$\{CONTACTS_RULE\}/g) ?? []).length, 3);
+});
+
+test("A NEIGHBOUR'S FACTS ARE NOT REPORTED AS THIS RECORD'S LOSS", () => {
+  // The bug this exists for: a chunk holds several communities, so auditing one
+  // record against the whole chunk reported its neighbours' phones and emails
+  // as missing. Aegis Living Corte Madera was warned about Solano Life House's
+  // email. A fact is lost only when NO record from the chunk carries it.
+  const chunk = `Aegis Living Corte Madera
+ Community Phone: (415) 927-4200
+ Email Address: Leslye.Peterson@aegisliving.com
+Solano Life House
+ Community Phone: (707) 678-1652
+ Email Address: Mary@solanolifehouse.com`;
+  const aegis = { title: "Aegis Living Corte Madera",
+    contacts: [{ role: "Community", phone: "(415) 927-4200", email: "Leslye.Peterson@aegisliving.com" }] };
+  const solano = { title: "Solano Life House",
+    contacts: [{ role: "Community", phone: "(707) 678-1652", email: "Mary@solanolifehouse.com" }] };
+
+  // Record-scoped — the WRONG unit — blames each for the other's facts.
+  assert.ok(!missingFrom(aegis, chunk).ok, "the record-scoped check is no longer wrong (update this test)");
+  // Chunk-scoped — the right unit — reports nothing, because between them the
+  // records carry everything the chunk states.
+  const m = missingFromChunk([aegis, solano], chunk);
+  assert.deepEqual(m.phones, [], `a neighbour's phone was blamed: ${JSON.stringify(m.phones)}`);
+  assert.deepEqual(m.emails, [], `a neighbour's email was blamed: ${JSON.stringify(m.emails)}`);
+  assert.equal(m.ok, true);
+});
+
+test("a fact NO record in the chunk carries is still reported", () => {
+  const chunk = `A Place
+ Community Phone: (415) 927-4200
+ Cell Phone: (781) 635-6032`;
+  const only = { title: "A Place", contacts: [{ role: "Community", phone: "(415) 927-4200" }] };
+  assert.deepEqual(missingFromChunk([only], chunk).phones, ["(781) 635-6032"],
+    "a genuinely dropped second phone was not reported");
 });

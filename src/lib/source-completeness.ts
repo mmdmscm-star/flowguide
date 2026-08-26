@@ -65,6 +65,20 @@ export function missingFrom(record: unknown, source: string): Completeness {
   return { phones, emails, websites, ok: !phones.length && !emails.length && !websites.length };
 }
 
+/**
+ * Facts a chunk's source states that NONE of the records it produced carry.
+ *
+ * THE UNIT OF AUDIT IS THE CHUNK, not the record — and getting that wrong is
+ * how this check first reported nonsense. A chunk routinely holds several
+ * communities (15 of 49 did on the real source), so comparing ONE record
+ * against the WHOLE chunk reports its NEIGHBOURS' phones and emails as missing:
+ * Aegis Living Corte Madera was warned about Solano Life House's email. A fact
+ * is only lost when no record from that chunk carries it.
+ */
+export function missingFromChunk(records: unknown[], chunkText: string): Completeness {
+  return missingFrom(records, chunkText);
+}
+
 /** What the professional reads when something did not survive. */
 export function completenessWarnings(record: unknown, source: string): string[] {
   const m = missingFrom(record, source);
