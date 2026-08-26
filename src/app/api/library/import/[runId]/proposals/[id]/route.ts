@@ -5,6 +5,7 @@ import { normalizeItemContent } from "@/lib/item-content";
 import { loadImportRun } from "@/lib/library-import-service";
 import { loadChunkTexts } from "@/lib/library-import-service";
 import { priceWarningsFor, sourceOrdinalsOf } from "@/lib/library-price-gate";
+import { noteWarningsFor } from "@/lib/library-notes-gate";
 
 type Context = { params: Promise<{ runId: string; id: string }> };
 
@@ -48,8 +49,15 @@ export async function PATCH(request: Request, context: Context) {
     };
     const chunkTexts = await loadChunkTexts(supabase, runId);
     const warnings = priceWarningsFor(carried, chunkTexts);
+    // Notes are re-checked on edit for the same reason prices are: an edit is
+    // exactly when a note becomes legitimate — or newly wrong.
+    const { data: allRows } = await supabase
+      .from("library_import_proposals").select("ordinal, payload").eq("run_id", runId);
+    const allProposals = ((allRows ?? []) as { ordinal: number; payload: Record<string, unknown> }[])
+      .map((r) => ({ ordinal: Number(r.ordinal), ...r.payload }));
+    const noteWarn = noteWarningsFor(carried, allProposals as never, chunkTexts);
     delete (carried as { ordinal?: number }).ordinal;
-    patch.payload = { ...carried, priceWarnings: warnings };
+    patch.payload = { ...carried, priceWarnings: warnings, noteWarnings: noteWarn };
   }
   if (typeof body.selected === "boolean") patch.selected = body.selected;
   if (patch.payload === undefined && patch.selected === undefined) {

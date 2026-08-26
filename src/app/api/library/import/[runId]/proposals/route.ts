@@ -6,6 +6,7 @@ import { derivePhase, orderProposals } from "@/lib/library-import";
 import { planContinuationMerges } from "@/lib/library-continuation";
 import { priceWarningsFor, sourceTextFor } from "@/lib/library-price-gate";
 import { completenessWarnings, missingFromChunk } from "@/lib/source-completeness";
+import { noteWarningsFor } from "@/lib/library-notes-gate";
 
 type Context = { params: Promise<{ runId: string }> };
 
@@ -120,13 +121,19 @@ export async function POST(_request: Request, context: Context) {
       ...m.emails.map((x) => `email not carried over: ${x}`),
       ...m.websites.map((x) => `website not carried over: ${x}`),
     ];
+    // A private note must trace to source that says it is private, for THIS
+    // record. Surfaced here; save re-derives and re-checks.
+    const noteWarn = noteWarningsFor(withOrdinal, proposals as never, chunkTexts);
     const had = Array.isArray((payload as { priceWarnings?: unknown }).priceWarnings)
       ? ((payload as { priceWarnings: unknown[] }).priceWarnings as string[]) : [];
     const hadM = Array.isArray((payload as { completenessWarnings?: unknown }).completenessWarnings)
       ? ((payload as { completenessWarnings: unknown[] }).completenessWarnings as string[]) : [];
-    if (warnings.join("|") === had.join("|") && missing.join("|") === hadM.join("|")) continue;
+    const hadN = Array.isArray((payload as { noteWarnings?: unknown }).noteWarnings)
+      ? ((payload as { noteWarnings: unknown[] }).noteWarnings as string[]) : [];
+    if (warnings.join("|") === had.join("|") && missing.join("|") === hadM.join("|")
+        && noteWarn.join("|") === hadN.join("|")) continue;
     await supabase.from("library_import_proposals")
-      .update({ payload: { ...payload, priceWarnings: warnings, completenessWarnings: missing } })
+      .update({ payload: { ...payload, priceWarnings: warnings, completenessWarnings: missing, noteWarnings: noteWarn } })
       .eq("run_id", runId).eq("id", id as string);
   }
   proposals = await proposalsFor(supabase, runId);

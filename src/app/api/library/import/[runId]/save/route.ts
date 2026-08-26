@@ -4,6 +4,7 @@ import { createServerClient } from "@/lib/supabase";
 import { loadImportRun } from "@/lib/library-import-service";
 import { loadChunkTexts } from "@/lib/library-import-service";
 import { auditProposal, priceBlockMessage } from "@/lib/library-price-gate";
+import { auditProposalNote, noteBlockMessage } from "@/lib/library-notes-gate";
 
 type Context = { params: Promise<{ runId: string }> };
 
@@ -51,10 +52,25 @@ export async function POST(request: Request, context: Context) {
   //'s own source never states must not become a Library item, because from
   // there it reaches a client as a quote.
   const chunkTexts = await loadChunkTexts(supabase, runId);
+  // Every proposal of the run, not just the selected ones: a record's span ends
+  // where its NEIGHBOUR begins, so the neighbours are needed even when they are
+  // not being saved.
+  const { data: allRows } = await supabase
+    .from("library_import_proposals").select("ordinal, payload").eq("run_id", runId);
+  const allProposals = ((allRows ?? []) as { ordinal: number; payload: Record<string, unknown> }[])
+    .map((r) => ({ ordinal: Number(r.ordinal), ...r.payload }));
 
   const results: { id: string; title: string; outcome: string; libraryItemId?: string; message?: string }[] = [];
   for (const t of targets) {
     const title = String(t.payload?.title ?? "").trim();
+
+    // Re-derived from authoritative source, ignoring any stored warning.
+    const noteV = auditProposalNote({ ...t.payload }, allProposals as never, chunkTexts);
+    if (!noteV.ok) {
+      results.push({ id: t.id, title, outcome: "private_note_unverified",
+                     message: noteBlockMessage(title, noteV) });
+      continue;
+    }
 
     const audit = auditProposal({ ...t.payload }, chunkTexts);
     if (!audit.ok) {
@@ -82,7 +98,7 @@ export async function POST(request: Request, context: Context) {
   }
 
   const saved = results.filter((r) => r.outcome === "saved").length;
-  const blocked = results.filter((r) => r.outcome === "unsupported_price").length;
+  const blocked = results.filter((r) => r.outcome === "unsupported_price" || r.outcome === "private_note_unverified").length;
   const { count: remaining } = await supabase
     .from("library_import_proposals").select("id", { count: "exact", head: true }).eq("run_id", runId);
 
