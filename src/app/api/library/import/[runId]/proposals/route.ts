@@ -4,7 +4,8 @@ import { createServerClient } from "@/lib/supabase";
 import { loadImportRun, loadImportChunks, loadChunkTexts } from "@/lib/library-import-service";
 import { derivePhase, orderProposals } from "@/lib/library-import";
 import { planContinuationMerges } from "@/lib/library-continuation";
-import { priceWarningsFor } from "@/lib/library-price-gate";
+import { priceWarningsFor, sourceTextFor } from "@/lib/library-price-gate";
+import { completenessWarnings } from "@/lib/source-completeness";
 
 type Context = { params: Promise<{ runId: string }> };
 
@@ -101,12 +102,19 @@ export async function POST(_request: Request, context: Context) {
   for (const p of proposals) {
     const { id, ordinal: _o, idx: _i, selected: _s, ...payload } = p as Record<string, unknown>;
     void _o; void _i; void _s;
-    const warnings = priceWarningsFor({ ...payload, ordinal: (p as { ordinal: number }).ordinal }, chunkTexts);
+    const withOrdinal = { ...payload, ordinal: (p as { ordinal: number }).ordinal };
+    const warnings = priceWarningsFor(withOrdinal, chunkTexts);
+    // A fact the source LABELS and the record does not carry — surfaced, not
+    // blocked. An unsupported price is a false statement to a client; a missing
+    // phone is an omission, and the professional decides what to do about it.
+    const missing = completenessWarnings(payload, sourceTextFor(withOrdinal, chunkTexts));
     const had = Array.isArray((payload as { priceWarnings?: unknown }).priceWarnings)
       ? ((payload as { priceWarnings: unknown[] }).priceWarnings as string[]) : [];
-    if (warnings.join("|") === had.join("|")) continue;
+    const hadM = Array.isArray((payload as { completenessWarnings?: unknown }).completenessWarnings)
+      ? ((payload as { completenessWarnings: unknown[] }).completenessWarnings as string[]) : [];
+    if (warnings.join("|") === had.join("|") && missing.join("|") === hadM.join("|")) continue;
     await supabase.from("library_import_proposals")
-      .update({ payload: { ...payload, priceWarnings: warnings } })
+      .update({ payload: { ...payload, priceWarnings: warnings, completenessWarnings: missing } })
       .eq("run_id", runId).eq("id", id as string);
   }
   proposals = await proposalsFor(supabase, runId);

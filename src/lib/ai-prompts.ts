@@ -27,6 +27,19 @@ const NOTES_RULE = `notes is PRIVATE and is for the professional only. Put somet
 // document supports. A client can be quoted a floor price that does not exist.
 const PRICING_RULE = `Copy every price EXACTLY as the source writes it. Never combine, average, interpolate, round, or build a range out of two different figures. If the source gives conflicting prices for the same room or care type — for example an original table and an updated one — keep them as SEPARATE details, labelled so the difference is visible (e.g. "Studio" and "Studio (updated pricing)"). Never merge them into one number or one range.`;
 
+// TWO PHONES ARE TWO FACTS.
+//
+// The source lists a community's MAIN line separately from a named person's
+// direct line:
+//     Community Phone: (415) 927-4200
+//     Contact Name: Leslye Peterson
+//     Cell Phone: (781) 635-6032
+// Measured on a real 65-community import, 43 of them lost one of the two — the
+// model emitted a single contact and discarded the other number. Nothing in the
+// schema forces that: item_contacts has allowed multiple rows per item since
+// 0011, and live data already holds items with two and three contacts.
+const CONTACTS_RULE = `A community's MAIN phone and a named person's DIRECT phone are different facts — keep BOTH. Emit the community's own number ("Community Phone", "Phone", "Main") as its own contact with role "Community" and NO name. Emit a named person ("Contact Name" + "Contact Title" + "Cell Phone" + "Email Address") as a SEPARATE contact carrying their own phone and email. If the contact name is "N/A", missing, or not a person, do NOT invent one — emit only the community contact. Never drop one phone because another is present, and never move a person's cell onto the community contact.`;
+
 const ITEM_FIELDS = `Each item: title (required), address, description, notes,
 details [{label,value}], links [{url,label}], photos [url], contacts (ORDERED
 array of people/businesses; every person a SEPARATE entry, never merged, never
@@ -92,6 +105,7 @@ ${URL_RULES}
 Rules: preserve ALL specifics (addresses, phones, prices, hours, names); do not invent; full street addresses -> address; keep every person + their own phone/email; keep titles < 60 chars; a label for every link.
 ${NOTES_RULE}
 ${PRICING_RULE}
+${CONTACTS_RULE}
 ${NOTHING_RULE}
 
 Respond with ONLY valid JSON (no markdown):
@@ -111,6 +125,7 @@ ${URL_RULES}
 Rules: preserve ALL specifics; do not invent; full addresses -> address; keep every person + their own phone/email; titles < 60 chars; a label for every link.
 ${NOTES_RULE}
 ${PRICING_RULE}
+${CONTACTS_RULE}
 ${NOTHING_RULE}
 If a section heading is provided as context, use it as the section title so items group consistently.
 
@@ -129,6 +144,7 @@ ${URL_RULES}
 Rules: do not invent; preserve all specifics; keep every person + their own phone/email; titles < 60 chars.
 ${NOTES_RULE}
 ${PRICING_RULE}
+${CONTACTS_RULE}
 ${NOTHING_RULE}
 Respond with ONLY valid JSON (no markdown), items is the ONLY top-level key:
 { "items": [ { "title": "string", "address": "string?", "description": "string?", "notes": "string?", "details": [{"label":"string","value":"string"}], "links": [{"url":"string","label":"string"}], "photos": ["string"], "contacts": [{"name":"string?","role":"string?","phone":"string?","email":"string?","website":"string?"}] } ] }`;
