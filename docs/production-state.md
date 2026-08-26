@@ -1,4 +1,4 @@
-# Production state — as of 2026-08-24
+# Production state — as of 2026-08-25
 
 One page, so a later session does not have to reconstruct this from commit
 messages. Everything here is live unless it says otherwise.
@@ -19,7 +19,8 @@ messages. Everything here is live unless it says otherwise.
 | Public landing page + neutral demo | **LIVE** — commit `89fd869`; `/`, `/p/demo`, `/og.png` | revert the code; no schema, no flag |
 | Quick navigation toggle | **LIVE** — commit `eba04b3`; `packets.show_quick_nav` (0030), default true | set the column back to true; the code default is also true |
 | Delete from the editor | **LIVE** — commit `bb18833`; reuses `DELETE /api/packets/:id` | revert the code; the endpoint is unchanged |
-| Migrations | `0001`–`0030` applied; local and remote in sync | per-migration; none pending |
+| Bare hostname persisted as a link | **LIVE** — commit `74511a1`; staging-time normalization, no schema | revert the code; nothing stored differently |
+| Migrations | `0001`–`0032` applied; local and remote in sync | per-migration; none pending |
 
 Both rollbacks are independent, carry no state, and need no migration.
 
@@ -240,6 +241,64 @@ building somewhere its held units are shown FIRST.
 `ENFORCED_DESTINATIONS` / `KNOWN_DESTINATIONS` are exhaustive and pinned against
 0020's check constraint, so a new destination fails the suite rather than
 inheriting packet behaviour.
+
+## The silent-loss workstream is CLOSED, and the conclusion is bounded
+
+Recorded exactly as the founder worded it, on 2026-08-25:
+
+> Zero genuine silent omissions were found in the 16-input reliability corpus
+> when measured against the persisted recipient-visible FlowGuide.
+
+**Do not restate this as a universal claim that FlowGuide can never lose
+information.** It is 16 inputs, measured one way, on one date.
+
+What "measured against the persisted recipient-visible FlowGuide" means: the
+published `/p/<slug>` page was fetched as a client would fetch it, and both the
+visible text and every `href` were searched — a link's destination is the fact,
+and it lives in an attribute rather than in the prose. A positive control ran
+first, because "0 missing" is otherwise indistinguishable from a broken metric:
+the page renders real content rather than an SSR loading shell, present facts
+are found, and fabricated ones are correctly reported absent.
+
+Nine reported misses were all `labelled` claims and all artifacts. The parser
+splits on a colon, so `Mon 9:00 — Kickoff, 90 min` becomes label `Mon 9` and
+value `00 — Kickoff, 90 min` — a string that never existed in the source. One
+was an email `Subject:` header, which belongs in no packet. `4.1k` -> `$4,100`
+is canonicalisation, not loss. A follow-up pass checked the CONSTITUENT facts on
+the real pages: 49 of 50 present, and the fiftieth was that `$4,100`.
+
+**`03-numbered-prose` counts as CORRECT BEHAVIOUR.** It was held at
+`needs_review` — "1 piece of information needs a decision before publishing" —
+and publish returned 409. The import was held for a decision rather than
+silently published. That is the objective working, not a failure, and it must
+not be recorded as one.
+
+**The founder's 2026-08-24 creation failure remains OPEN.** It is neither
+resolved nor disproven. The corpus never contained that input, so a clean
+corpus is not evidence against it.
+
+**No further reliability expansion** — no detector heuristics, no TSV
+investigation, no PDF or image/OCR work, no additional synthetic corpus
+building — unless a NEW REAL failure gives a reason. The next input is real use.
+If normal creation attempts are stable, the next step is the external
+professional sessions.
+
+## A dropped function signature drops its grants
+
+Migration 0031 added `p_delimiter_hint` to `create_organize_run`, which meant
+dropping the nine-argument signature and creating a ten-argument one. 0012's
+`revoke ... from public, anon, authenticated` was attached to the signature that
+no longer existed, and a newly created function is granted `EXECUTE` to `PUBLIC`
+by default. The function is `SECURITY DEFINER` and the anon key ships in every
+browser, so for about a day anon could execute it as the owner, bypassing RLS.
+
+Fixed by **0032** (grants only, no behaviour change). It was found by probing
+rather than by reading: anon reached the function BODY and was stopped only by a
+foreign key on `packets.user_id` — a data constraint, not an authorization
+control — while its untouched siblings answered "permission denied for
+function". **A validation or constraint error means the body RAN.** Only
+"permission denied for function" proves a grant is closed.
+`scripts/security/verify-0032-grants.mts` encodes that distinction.
 
 ## Known limitation, deliberately not fixed
 
