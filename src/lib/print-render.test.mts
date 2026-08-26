@@ -14,6 +14,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { recipientMetadata } from "./recipient-metadata.ts";
 
 /** Source with comments stripped: a rule must be asserted against the CODE,
  *  never against a comment that happens to mention it. */
@@ -57,8 +58,16 @@ test("the packet comes from the SAME source as the live page", () => {
 });
 
 test("the print URL is private-by-link, like the page it prints", () => {
+  // The route now shares ONE metadata constant with /p/[slug] — the two were
+  // drifting, and the live page's marketing-OG leak was present here too. So
+  // follow the indirection rather than grepping this file for `index: false`:
+  // assert the route uses the shared object, and that the object is noindex.
   const src = codeOf(ROUTE);
-  assert.match(src, /index:\s*false/, "the print route is indexable");
+  assert.match(src, /export const metadata: Metadata = recipientMetadata;/,
+    "the print route does not use the shared recipient metadata");
+  const r = recipientMetadata.robots as { index?: boolean; follow?: boolean };
+  assert.equal(r?.index, false, "the print route is indexable");
+  assert.equal(r?.follow, false, "the print route is followable");
 });
 
 test("only http(s) may be printed as a destination", () => {

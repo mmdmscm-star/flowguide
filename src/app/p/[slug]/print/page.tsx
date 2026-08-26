@@ -7,6 +7,7 @@ import { PrintPacket } from "@/components/print/print-packet";
 import PrintToolbar from "@/components/print/print-toolbar";
 import type { Packet } from "@/lib/types";
 import "./print.css";
+import { recipientMetadata } from "@/lib/recipient-metadata";
 
 // /p/[slug]/print — the same published packet, rendered for paper.
 //
@@ -25,13 +26,10 @@ type Props = { params: Promise<{ slug: string }> };
 const isSupabaseConfigured =
   !!process.env.NEXT_PUBLIC_SUPABASE_URL && !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-// Generic, and noindex, for exactly the reasons the live recipient page is:
-// this URL carries a client's name and a personal note.
-export const metadata: Metadata = {
-  title: "FlowGuide",
-  description: "A packet prepared for you.",
-  robots: { index: false, follow: false },
-};
+// The SAME constant the live recipient page uses. This URL is shareable and
+// carries a client's name and a personal note, so it inherited the marketing
+// OpenGraph card for exactly the same reason /p/[slug] did.
+export const metadata: Metadata = recipientMetadata;
 
 async function resolvePacket(slug: string): Promise<Packet | null> {
   if (slug === "demo") return samplePacket;

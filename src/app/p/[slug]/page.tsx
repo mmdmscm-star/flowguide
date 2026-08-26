@@ -10,6 +10,7 @@ import { ProfessionalFooter } from "@/components/professional-footer";
 import type { Packet } from "@/lib/types";
 import { ownedPacketId } from "@/lib/packet-owner";
 import { OwnerBar } from "@/components/nav/owner-bar";
+import { recipientMetadata } from "@/lib/recipient-metadata";
 
 // Render on every request — never serve a cached copy. This is what makes
 // unpublish/delete take effect immediately: there is no stored HTML that could
@@ -37,17 +38,11 @@ async function resolvePacket(slug: string): Promise<Packet | null> {
 }
 
 // Recipient packet pages are private-by-link and may contain a client's name and
-// a personal note. Metadata is therefore ENTIRELY generic — no packet or client
-// content ever reaches page titles, descriptions, or OpenGraph tags (which are
-// exactly what search crawlers and link-unfurl bots ingest). `robots: noindex`
-// tells any crawler that does reach the URL not to index it. This is a static
-// export (not a per-packet generateMetadata) so it can never leak content and
-// avoids a duplicate packet fetch on every render.
-export const metadata: Metadata = {
-  title: "FlowGuide",
-  description: "A packet prepared for you.",
-  robots: { index: false, follow: false },
-};
+// a personal note. The metadata is a shared CONSTANT — see recipient-metadata.ts
+// for why it takes no packet and why openGraph/twitter are declared there in
+// full rather than partially. Setting title and description here without
+// openGraph is what let the marketing card unfurl on a client's text message.
+export const metadata: Metadata = recipientMetadata;
 
 export default async function PacketPage({ params }: Props) {
   const { slug } = await params;
