@@ -196,13 +196,49 @@ test("the professional identity matches the live page, field for field", () => {
     "Ramona Maurer",                           // name
     "Assisted Living Locators",                // business, under the name
     "tel:7073910111", "Call Ramona",
-    "sms:7073910111", ">Text<",
     "mailto:r@example.com", ">Email<",
     "https://santarosa.example.com", ">Website<",   // bare domain, prefixed
     "https://reviews.example.com/ramona", ">Reviews<",
   ]) {
     assert.ok(g.includes(needed), `missing from the professional identity: ${needed}`);
   }
+});
+
+test("NO TEXT BUTTON IN EMAIL — a control that does nothing is worse than none", () => {
+  // Tested on a real phone in a real mail client: tapping Text did nothing.
+  // The live FlowGuide keeps it; this renderer must not offer it.
+  assert.ok(!g.includes("sms:"), "the email still renders an sms: link");
+  assert.ok(!g.includes(">Text<"), "the email still renders a Text button");
+  // The three that DO work must survive — removing Text must not remove a
+  // working way to reach the professional.
+  for (const kept of ["Call Ramona", ">Email<", ">Website<"]) {
+    assert.ok(g.includes(kept), `removing Text also removed ${kept}`);
+  }
+  // And the order the professional expects: Call · Email · Website.
+  assert.ok(g.indexOf("Call Ramona") < g.indexOf(">Email<"), "Call is not first");
+  assert.ok(g.indexOf(">Email<") < g.indexOf(">Website<"), "Email does not precede Website");
+});
+
+test("removing Text leaves no gap — every button carries its own spacing", () => {
+  // Each button IS a <td> with padding:0 8px 8px 0, so the remaining cells sit
+  // adjacent with the same rhythm. A gap would mean spacing lived somewhere
+  // else and the removal had a visual side effect.
+  // Each button is its own nested table, so match the button CELL directly
+  // rather than trying to capture the row around them.
+  const cells = g.match(/<td style="padding:0 8px 8px 0">/g) ?? [];
+  // Call, Email, Website, Reviews — four, not five.
+  assert.equal(cells.length, 4, `expected 4 buttons, found ${cells.length}`);
+  // And no cell was left empty where Text used to be.
+  assert.ok(!/<td style="padding:0 8px 8px 0">\s*<\/td>/.test(g),
+    "an empty cell was left where Text used to be");
+  // The spacing itself is unchanged: every button still carries the same
+  // padding, so the row keeps its rhythm with one fewer cell.
+  assert.equal((g.match(/padding:9px 16px/g) ?? []).length, 4, "button padding changed");
+});
+
+test("THE LIVE FOOTER STILL OFFERS TEXT — this change is renderer-scoped", () => {
+  const live = readFileSync("src/components/professional-footer.tsx", "utf8");
+  assert.match(live, /sms:\$\{professional\.phone\}/, "the live page lost its Text action");
 });
 
 test("the headshot keeps its own proportions rather than being forced square", () => {

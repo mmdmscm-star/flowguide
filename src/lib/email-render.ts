@@ -286,9 +286,18 @@ export function renderPacketEmail(packet: Packet, opts: EmailRenderOptions): str
 
   const buttons: string[] = [];
   if (tel) buttons.push(btn(`tel:${tel}`, proName ? `Call ${proName.split(" ")[0]}` : "Call", true));
-  // sms: acts on a phone and is inert in most desktop clients. Kept because the
-  // live footer offers it and a dead button costs less than a missing one.
-  if (tel) buttons.push(btn(`sms:${tel}`, "Text", false));
+  // NO TEXT BUTTON IN EMAIL. This previously rendered `sms:` on the reasoning
+  // that "a dead button costs less than a missing one". Tested on a real phone,
+  // in a real mail client, that reasoning was wrong: tapping Text did nothing.
+  // A control that looks live and does nothing spends the recipient's trust at
+  // the exact moment they are trying to reach their advisor, and they cannot
+  // tell it is the medium's fault rather than the professional's.
+  //
+  // RENDERER-SPECIFIC, deliberately. `sms:` works on the live FlowGuide, so the
+  // live footer keeps Text and the professional's profile is untouched. This is
+  // one packet shown many ways: a renderer may present less than the packet
+  // holds when its medium cannot honour it — it may never present something
+  // different. Nothing here removes a fact; it removes a broken affordance.
   if (proEmail) buttons.push(btn(`mailto:${proEmail}`, "Email", false));
   if (proSite) buttons.push(btn(proSite, "Website", false));
   for (const l of pro.links ?? []) {
