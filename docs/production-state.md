@@ -20,6 +20,7 @@ messages. Everything here is live unless it says otherwise.
 | Quick navigation toggle | **LIVE** — commit `eba04b3`; `packets.show_quick_nav` (0030), default true | set the column back to true; the code default is also true |
 | Delete from the editor | **LIVE** — commit `bb18833`; reuses `DELETE /api/packets/:id` | revert the code; the endpoint is unchanged |
 | Bare hostname persisted as a link | **LIVE** — commit `74511a1`; staging-time normalization, no schema | revert the code; nothing stored differently |
+| Neutral recipient link previews | **LIVE** — commit `3975048`; `src/lib/recipient-metadata.ts` + `/og-recipient.png` | revert the code; no schema, no flag |
 | Migrations | `0001`–`0032` applied; local and remote in sync | per-migration; none pending |
 
 Both rollbacks are independent, carry no state, and need no migration.
@@ -299,6 +300,40 @@ control — while its untouched siblings answered "permission denied for
 function". **A validation or constraint error means the body RAN.** Only
 "permission denied for function" proves a grant is closed.
 `scripts/security/verify-0032-grants.mts` encodes that distinction.
+
+## Marketing and recipient link previews are separate, deliberately
+
+A FlowGuide was about to be texted to a client in a sensitive family situation,
+and iMessage previewed it as *"Everything you found, in one thing your client
+can actually use."* The send was stopped by hand. Fixed 2026-08-25.
+
+**Why it was invisible:** Next.js merges metadata SHALLOWLY. `/p/[slug]` and
+`/p/[slug]/print` each set `title`, `description` and `robots` but omitted
+`openGraph`, so both inherited the root layout's ENTIRE marketing OpenGraph
+block — the promotional description, `/og.png`, and an `og:url` pointing at the
+homepage rather than the packet. The routes looked correct and carried a comment
+claiming their metadata was "entirely generic". The leak was in what they did
+not declare. **Declaring `openGraph` partially would re-inherit the rest.**
+
+`src/lib/recipient-metadata.ts` is the single source for both routes:
+title `FlowGuide`, description `Information has been shared with you in
+FlowGuide.`, `/og-recipient.png`, `noindex, nofollow`, and no `og:url`.
+
+**It is a CONSTANT, and that is the point.** It takes no packet, no slug and no
+arguments, so there is no code path by which a packet title, a client name, a
+personal note or a subject matter could reach a preview card. One neutral image
+serves every recipient link. **Do not build per-packet OG images** — a generated
+card leaks private content into unfurl caches FlowGuide does not control and
+cannot retract.
+
+Verified on production against a disposable published packet whose title,
+client name and note were deliberately sensitive, fetched with the user agents
+that actually generate previews — Apple Messages (`facebookexternalhit/1.1
+Facebot Twitterbot/1.0`), Slack, WhatsApp, Discord, Signal. All five: neutral
+card, no leak, no marketing. The homepage keeps its marketing card.
+
+The OG image is a static PNG. `docs/og-recipient-source.html` is the HTML it was
+rendered from at 1200x630, so it can be regenerated rather than reverse-engineered.
 
 ## Known limitation, deliberately not fixed
 
