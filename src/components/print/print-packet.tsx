@@ -7,7 +7,9 @@ import { thumbnailUrl, squareThumbnailUrl } from "@/lib/image-source";
 // A renderer, like the email version: it reads the packet and presents it, and
 // authors nothing. The source is `getPublishedPacket` - the same function the
 // live recipient page uses - so paper cannot drift from what the client sees
-// online, and `notes` is already gone before the data arrives here.
+// online, and `notes` is already gone before the data arrives here. The client
+// HIGHLIGHT is the opposite field and does print: it was written for the person
+// holding the page.
 //
 // STATIC BY CONSTRUCTION. No "use client", no carousel, no state. That is not
 // only a simplification: PhotoGallery mounts only the slides within two of the
@@ -79,6 +81,10 @@ function ItemBlock({ item }: { item: Item }) {
         {has(item.address) && <p className="pg-address">{txt(item.address)}</p>}
         {has(item.description) && <p className="pg-desc">{txt(item.description)}</p>}
       </div>
+
+      {/* Written for this reader, so it belongs on their copy. Guarded on
+          has() so an empty value prints no box. */}
+      {has(item.highlight) && <p className="pg-highlight">{txt(item.highlight)}</p>}
 
       <PhotoBlock item={item} />
 

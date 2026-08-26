@@ -35,6 +35,7 @@ export function BlockItemEditor({
   const [address, setAddress] = useState(item.address || "");
   const [description, setDescription] = useState(item.description || "");
   const [notes, setNotes] = useState(item.notes || "");
+  const [highlight, setHighlight] = useState(item.highlight || "");
   const [details, setDetails] = useState<Detail[]>(item.details ? item.details.map((d) => ({ label: d.label, value: d.value })) : []);
   const [links, setLinks] = useState<Link[]>(item.links ? item.links.map((l) => ({ url: l.url, label: l.label || "" })) : []);
   const [photos, setPhotos] = useState<Photo[]>(item.photos ? item.photos.map((u) => ({ url: u })) : []);
@@ -69,7 +70,7 @@ export function BlockItemEditor({
       .some((k) => String((c as Record<string, unknown>)?.[k] ?? "").trim()));
 
     const payload: ItemContentPayload = {
-      title, description, notes, address,
+      title, description, notes, highlight, address,
       details: cleanDetails, links: cleanLinks, photos: cleanPhotos, contacts: cleanContacts,
     };
     const updatedItem: Item = {
@@ -78,6 +79,7 @@ export function BlockItemEditor({
       address: address || undefined,
       description: description || undefined,
       notes: notes || undefined,
+      highlight: highlight || undefined,
       photos: cleanPhotos.length ? cleanPhotos.map((p) => p.url) : undefined,
       details: cleanDetails.length ? cleanDetails : undefined,
       links: cleanLinks.length ? cleanLinks.map((l) => ({ url: l.url, label: l.label || undefined })) : undefined,
@@ -121,9 +123,24 @@ export function BlockItemEditor({
             <textarea value={description} disabled={busy} onChange={(e) => setDescription(e.target.value)} rows={2} placeholder="Description" className={field} />
           </label>
 
+          {/* Two audiences, said out loud in both labels — see the same pair
+              in the legacy editor for why the wording is load-bearing. */}
           <label className="block">
-            <span className="text-xs font-medium text-muted">Notes</span>
-            <textarea value={notes} disabled={busy} onChange={(e) => setNotes(e.target.value)} rows={2} placeholder="Private notes" className={field} />
+            <span className="text-xs font-medium text-amber-800">
+              Highlight for Client
+              <span className="ml-1.5 font-normal text-amber-700/80">Shown to your client.</span>
+            </span>
+            <textarea value={highlight} disabled={busy} onChange={(e) => setHighlight(e.target.value)} rows={2}
+              placeholder="Something you want your client to notice" className={field} />
+          </label>
+
+          <label className="block">
+            <span className="text-xs font-medium text-muted">
+              Private Notes
+              <span className="ml-1.5 font-normal text-muted/80">Only you see this.</span>
+            </span>
+            <textarea value={notes} disabled={busy} onChange={(e) => setNotes(e.target.value)} rows={2}
+              placeholder="For your reference only" className={field} />
           </label>
 
           {/* Details */}

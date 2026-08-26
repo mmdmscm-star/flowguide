@@ -139,8 +139,12 @@ export function ItemCard({ item, audience = "recipient" }: { item: Item; audienc
           </a>
         )}
 
+        {/* whitespace-pre-line keeps the paragraph breaks the professional
+            typed. Without it HTML collapses every newline to a space and three
+            paragraphs arrive as one block. `pre-line` (not `pre-wrap`) also
+            collapses runs of spaces, which is what prose wants. */}
         {item.description && (
-          <p className="text-base leading-relaxed text-foreground/80 mb-4">
+          <p className="text-base leading-relaxed text-foreground/80 mb-4 whitespace-pre-line">
             {item.description}
           </p>
         )}
@@ -208,12 +212,23 @@ export function ItemCard({ item, audience = "recipient" }: { item: Item; audienc
           </div>
         )}
 
+        {/* HIGHLIGHT FOR CLIENT — the opposite of the private note below it.
+            Written by the professional FOR this reader, so it renders on every
+            audience including the recipient. Guarded on trim() so an empty or
+            whitespace-only value produces no callout at all rather than an
+            empty amber box. React escapes the text; it is never HTML. */}
+        {item.highlight?.trim() && (
+          <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3.5 py-3">
+            <p className="text-sm text-amber-900 leading-relaxed whitespace-pre-line">{item.highlight}</p>
+          </div>
+        )}
+
         {/* PRIVATE. Shown only on an explicitly professional surface, and said
             out loud there, because the Library promises "Only you see this" and
             that promise has to be true wherever the note appears. The recipient
             never receives this field — queries.ts drops it before the data
             reaches the page — so this guard is defence in depth, not the fix. */}
-        {audience === "professional" && item.notes && (
+        {audience === "professional" && item.notes?.trim() && (
           <div className="mb-4 rounded-lg border border-border bg-surface px-3.5 py-3">
             <p className="text-xs font-medium text-muted">Private note · only you see this</p>
             <p className="mt-1 text-sm text-foreground leading-relaxed whitespace-pre-wrap">{item.notes}</p>

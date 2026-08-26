@@ -23,6 +23,7 @@ export interface ItemContentPayload {
   title?: string;
   description?: string;
   notes?: string;
+  highlight?: string;
   address?: string;
   links?: { url: string; label?: string }[];
   details?: { label: string; value: string }[];
@@ -62,6 +63,7 @@ export function normalizeItemContent(body: Record<string, unknown>): ItemContent
   const title = str(body.title);             if (title !== undefined) out.title = title;
   const description = str(body.description); if (description !== undefined) out.description = description;
   const notes = str(body.notes);             if (notes !== undefined) out.notes = notes;
+  const highlight = str(body.highlight);     if (highlight !== undefined) out.highlight = highlight;
   const address = str(body.address);         if (address !== undefined) out.address = address;
 
   const details = rows<{ label: string; value: string }>(body.details);
@@ -106,6 +108,7 @@ export async function applyItemContentUpdate(
     p_title: payload.title ?? null,
     p_description: payload.description ?? null,
     p_notes: payload.notes ?? null,
+    p_highlight: payload.highlight ?? null,
     p_address: payload.address ?? null,
     // Children: undefined -> null -> untouched; an array (even []) REPLACES.
     p_details: payload.details ?? null,

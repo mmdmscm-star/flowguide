@@ -21,7 +21,11 @@ export interface Item {
   title: string;
   address?: string;
   description?: string;
+  /** PRIVATE to the professional. Never assembled into recipient data. */
   notes?: string;
+  /** Recipient-facing highlighted callout, written by the professional for this
+   *  client. Distinct from `notes`: this one IS shown to the client. */
+  highlight?: string;
   photos?: string[];
   details?: ItemDetail[];
   links?: ItemLink[];

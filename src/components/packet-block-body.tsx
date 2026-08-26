@@ -10,11 +10,11 @@ import { ItemCard } from "./item-card";
 //
 // Heading/subheading text styling mirrors the legacy SectionGroup header so a
 // converted packet reads identically to its legacy form.
-function renderBlock(b: PacketBlock) {
+function renderBlock(b: PacketBlock, audience: "recipient" | "professional") {
   if (b.kind === "item") {
     return (
       <div key={b.id} className="px-5 mb-4">
-        <ItemCard item={b.item} />
+        <ItemCard item={b.item} audience={audience} />
       </div>
     );
   }
@@ -39,11 +39,19 @@ function renderBlock(b: PacketBlock) {
   return (
     <div key={b.id} className="px-5 mt-7 mb-4 first:mt-2">
       {b.text && <h2 className="text-xl font-bold text-foreground">{b.text}</h2>}
-      {b.subtext && <p className="mt-1 text-base text-gray-600 leading-relaxed">{b.subtext}</p>}
+      {b.subtext && <p className="mt-1 text-base text-gray-600 leading-relaxed whitespace-pre-line">{b.subtext}</p>}
     </div>
   );
 }
 
-export function PacketBlockBody({ blocks }: { blocks: PacketBlock[] }) {
-  return <>{blocks.map((b) => renderBlock(b))}</>;
+export function PacketBlockBody({
+  blocks,
+  audience = "recipient",
+}: {
+  blocks: PacketBlock[];
+  /** Defaults to "recipient" so a caller that forgets stays safe — the same
+   *  fail-safe default that kept the private note hidden here before. */
+  audience?: "recipient" | "professional";
+}) {
+  return <>{blocks.map((b) => renderBlock(b, audience))}</>;
 }

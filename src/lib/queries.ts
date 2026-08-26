@@ -172,7 +172,10 @@ export async function getPublishedPacket(slug: string): Promise<Packet | null> {
       address: item.address || undefined,
       description: item.description || undefined,
       // RECIPIENT PATH. The private note is deliberately not assembled here at
-      // all — see the Audience note above assembleItemsByIds.
+      // all — see the Audience note above assembleItemsByIds. `highlight` is the
+      // OTHER field and the opposite rule: it was written FOR this reader, so it
+      // is assembled for every audience.
+      highlight: item.highlight || undefined,
       photos: itemPhotos.length > 0 ? itemPhotos : undefined,
       links: itemLinks.length > 0 ? itemLinks : undefined,
       details: itemDetails.length > 0 ? itemDetails : undefined,
@@ -352,6 +355,8 @@ export async function assembleItemsByIds(
       // Present only for the professional. Absent — not empty — for a recipient,
       // so the key never reaches the serialized payload.
       ...(audience === "professional" ? { notes: it.notes || undefined } : {}),
+      // Recipient-facing by design, so it is NOT gated on audience.
+      highlight: it.highlight || undefined,
       photos: itemPhotos.length > 0 ? itemPhotos : undefined,
       links: itemLinks.length > 0 ? itemLinks : undefined,
       details: itemDetails.length > 0 ? itemDetails : undefined,
@@ -443,6 +448,7 @@ export async function getPacketForEditor(
     address: item.address || undefined,
     description: item.description || undefined,
     notes: item.notes || undefined,
+    highlight: item.highlight || undefined,
     photos: photos.filter((p) => p.item_id === item.id).map((p) => p.url),
     links: links.filter((l) => l.item_id === item.id).map((l) => ({ url: l.url, label: l.label || undefined })),
     details: details.filter((d) => d.item_id === item.id).map((d) => ({ label: d.label, value: d.value })),

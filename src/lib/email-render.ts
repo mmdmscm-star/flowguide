@@ -23,6 +23,11 @@ import { thumbnailUrl, squareThumbnailUrl } from "./image-source.ts";
 // PRIVATE NOTES ARE NEVER RENDERED. `item.notes` is professional-only on the
 // web card (audience === "professional"), and this is a recipient surface. The
 // field is not read anywhere in this file, and a test enforces that.
+//
+// `item.highlight` IS rendered, and the two must not be confused: it is the
+// note the professional wrote FOR this reader. It is escaped first and only
+// then given <br />, so authored line breaks survive and authored markup
+// cannot.
 
 const esc = (v: unknown) =>
   String(v ?? "")
@@ -55,6 +60,14 @@ const LINE = "#e3e6ea";
 const LINK = "#1a56db";
 const PAGE = "#f4f5f7";
 const W = 600;
+
+/** Escaped text with authored newlines turned into <br />.
+ *
+ *  ORDER MATTERS: esc() first, THEN the <br />. Escaping afterwards would
+ *  escape the tags we just inserted; inserting before escaping is how a
+ *  description becomes an injection point. Email has no white-space:pre-line
+ *  worth trusting across clients, so the break has to be a real tag. */
+const escLines = (v: unknown) => esc(v).replace(/\r\n?|\n/g, "<br />");
 
 const p = (text: string, style = "") =>
   `<p style="margin:0 0 12px;font-family:${FONT};font-size:16px;line-height:1.5;color:${INK};${style}">${text}</p>`;
@@ -201,7 +214,15 @@ function itemBlock(item: Item, liveUrl: string | null): string {
           mapHref ? `<a href="${esc(mapHref)}" style="color:${LINK};text-decoration:underline">${esc(address)}</a>` : esc(address),
           "font-size:15px;margin:0")}</td></tr>` : ""}
         ${String(item.description ?? "").trim()
-          ? `<tr><td style="padding:0 0 14px">${p(esc(item.description).replace(/\n/g, "<br />"), "margin:0")}</td></tr>` : ""}
+          ? `<tr><td style="padding:0 0 14px">${p(escLines(item.description), "margin:0")}</td></tr>` : ""}
+        ${String(item.highlight ?? "").trim()
+          ? `<tr><td style="padding:0 0 14px">
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse:collapse">
+                <tr><td style="background:#fdf8ec;border:1px solid #e8d9a8;border-left:3px solid #c8a951;border-radius:4px;padding:10px 13px">
+                  ${p(escLines(item.highlight), `color:#6b5518;margin:0`)}
+                </td></tr>
+              </table>
+            </td></tr>` : ""}
         ${detailsTable(item)}
         ${linksBlock(item)}
         ${contactsBlock(item)}
@@ -214,7 +235,7 @@ function sectionBlock(section: Section, liveUrl: string | null): string {
   const head = [
     String(section.title ?? "").trim()
       ? `<h2 style="margin:0 0 4px;font-family:${FONT};font-size:22px;line-height:1.25;color:${INK};font-weight:700">${esc(section.title)}</h2>` : "",
-    String(section.description ?? "").trim() ? p(esc(section.description), `color:${MUTED};margin:0 0 14px`) : "",
+    String(section.description ?? "").trim() ? p(escLines(section.description), `color:${MUTED};margin:0 0 14px`) : "",
   ].join("");
   return `${head ? `<tr><td style="padding:8px 0 10px">${head}</td></tr>` : ""}
     <tr><td>${section.items.map((it) => itemBlock(it, liveUrl)).join("")}</td></tr>`;
@@ -366,6 +387,9 @@ export function renderPacketEmailText(packet: Packet, opts: EmailRenderOptions):
       out.push("", item.title);
       if (String(item.address ?? "").trim()) out.push(String(item.address));
       if (String(item.description ?? "").trim()) out.push(String(item.description));
+      // The client highlight travels in the plain-text flavour too, or a
+      // recipient whose client strips HTML loses a note written for them.
+      if (String(item.highlight ?? "").trim()) out.push(String(item.highlight).trim());
       for (const d of item.details ?? []) {
         if (String(d?.value ?? "").trim()) out.push(`  ${d.label}: ${d.value}`);
       }

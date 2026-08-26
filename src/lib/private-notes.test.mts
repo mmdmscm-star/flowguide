@@ -57,19 +57,57 @@ test("only the editor opts in — at the data layer and in the view", () => {
 });
 
 test("no recipient surface opts in", () => {
-  // /p/[slug] is the recipient. /preview/[id] is the professional looking at
-  // what the recipient sees, so it must behave identically — it is listed here
-  // deliberately, not by accident.
+  // /p/[slug] is the recipient and must never opt in.
+  //
+  // /preview/[id] USED TO BE ON THIS LIST, on the reasoning that Preview is the
+  // professional looking at what the recipient sees and must behave
+  // identically. That was reversed on 2026-08-26 by an explicit product
+  // decision: Preview now shows the professional BOTH their client-facing
+  // highlight and their private note, the latter labelled "only you see this".
+  //
+  // The trade is deliberate and worth naming, because it is the thing this list
+  // was protecting: Preview is no longer a byte-for-byte rehearsal of the
+  // client's view. What keeps that safe is the LABEL — the private note is the
+  // only element on the page that announces it is not going to the client — and
+  // the fact that the recipient DATA path still cannot carry the field at all
+  // (see the getPublishedPacket test above). If that label is ever removed,
+  // put /preview/[id] back on this list.
   for (const f of [
     "src/app/p/[slug]/page.tsx",
-    "src/app/preview/[id]/page.tsx",
     "src/app/prototype/persisted-blocks/[packetId]/page.tsx",
     "src/components/section-group.tsx",
     "src/components/packet-block-body.tsx",
     "src/lib/block-preview.ts",
   ]) {
-    assert.doesNotMatch(read(f), /"professional"/, `${f} opts into private notes`);
+    // DECLARING the type is not OPTING IN. These files now accept an
+    // `audience?: "recipient" | "professional"` prop and forward it, so the
+    // union mentions the word in TYPE position. What must never appear is the
+    // value being PASSED — `audience="professional"` in JSX or as an argument.
+    // Matching the bare string would fail on a type annotation and pass on a
+    // hardcoded opt-in written any other way, which is the wrong way round.
+    const src = read(f)
+      .replace(/\/\*[\s\S]*?\*\//g, "")                       // block comments
+      .replace(/^\s*\/\/.*$/gm, "")                            // line comments
+      .replace(/"recipient"\s*\|\s*"professional"/g, "<Union>"); // the type
+    assert.doesNotMatch(src, /"professional"/, `${f} opts into private notes`);
   }
+});
+
+test("PREVIEW IS THE ONLY NON-EDITOR SURFACE THAT MAY OPT IN", () => {
+  // The list above says who must not. This says who may — so a THIRD surface
+  // quietly opting in still fails, which is the protection that was lost when
+  // /preview/[id] came off the list.
+  const optIns = files.filter((f) => /audience="professional"/.test(read(f)));
+  assert.deepEqual(optIns.sort(), [
+    "src/app/preview/[id]/page.tsx",
+    "src/components/editor/block-packet-editor.tsx",
+  ].sort(), `unexpected surface opting into private notes: ${optIns.join(", ")}`);
+});
+
+test("and Preview says out loud that the note is private", () => {
+  // The label is what makes the reversal above safe. It is not decoration.
+  assert.match(read("src/components/item-card.tsx"), /only you see this/i,
+    "the private note lost the label that distinguishes it from client content");
 });
 
 test("ItemCard is still a client component — the reason data-layer stripping is required", () => {

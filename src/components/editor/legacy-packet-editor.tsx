@@ -67,6 +67,7 @@ interface EditorItem {
   address: string;
   description: string;
   notes: string;
+  highlight: string;
   sortOrder: number;
   libraryItemId?: string | null;
   photos: EditorPhoto[];
@@ -322,6 +323,7 @@ export function LegacyPacketEditor() {
       address: i.address || "",
       description: i.description || "",
       notes: i.notes || "",
+      highlight: i.highlight || "",
       sortOrder: i.sort_order,
       // Inert lineage. Nothing renders differently because of it — it only
       // decides WHICH Library action this item is offered.
@@ -572,6 +574,7 @@ export function LegacyPacketEditor() {
           address: "",
           description: "",
           notes: "",
+          highlight: "",
           sortOrder: data.item.sort_order,
           photos: [],
           links: [],
@@ -1984,14 +1987,47 @@ function ItemEditor({
             {photoError && <p className="text-sm text-red-600 mt-1">{photoError}</p>}
           </div>
 
-          {/* Notes */}
-          <textarea
-            value={item.notes}
-            onChange={(e) => onUpdateField(item.id, "notes", e.target.value)}
-            placeholder="Notes (shown as a highlighted callout)"
-            rows={2}
-            className="w-full px-3 py-2 rounded-lg border border-amber-200 bg-amber-50 text-sm resize-y focus:outline-none focus:ring-2 focus:ring-amber-300 placeholder:text-amber-300"
-          />
+          {/* TWO FIELDS, TWO AUDIENCES — and the labels have to make that
+              unmistakable. The single field that used to live here said
+              "shown as a highlighted callout" long after the callout stopped
+              reaching recipients (8bcb0ab), so it promised the opposite of what
+              it did. Each field now states its audience above the box. */}
+
+          {/* Shown to the client. */}
+          <div>
+            <label className="block text-xs font-medium text-amber-800 mb-1">
+              Highlight for Client
+              <span className="ml-1.5 font-normal text-amber-700/80">
+                Shown to your client as a highlighted callout.
+              </span>
+            </label>
+            <textarea
+              value={item.highlight}
+              onChange={(e) => onUpdateField(item.id, "highlight", e.target.value)}
+              placeholder="e.g. I checked and they heat their pool to 82 degrees, because you asked."
+              rows={2}
+              className="w-full px-3 py-2 rounded-lg border border-amber-200 bg-amber-50 text-sm resize-y focus:outline-none focus:ring-2 focus:ring-amber-300 placeholder:text-amber-400/70"
+            />
+          </div>
+
+          {/* NOT shown to the client. Deliberately styled differently from the
+              amber box above so the two are not mistaken for each other at a
+              glance — same shape would invite writing a client note here. */}
+          <div>
+            <label className="block text-xs font-medium text-muted mb-1">
+              Private Notes
+              <span className="ml-1.5 font-normal text-muted/80">
+                Only you see this. Never shown to your client, or in print or email.
+              </span>
+            </label>
+            <textarea
+              value={item.notes}
+              onChange={(e) => onUpdateField(item.id, "notes", e.target.value)}
+              placeholder="For your reference only"
+              rows={2}
+              className="w-full px-3 py-2 rounded-lg border border-border bg-surface text-sm resize-y focus:outline-none focus:ring-2 focus:ring-gray-300 placeholder:text-gray-400"
+            />
+          </div>
 
           {/* Contacts — an ordered list; an item may have multiple people. */}
           <div>

@@ -5,11 +5,16 @@ import { SectionContents } from "./section-contents";
 export function SectionGroup({
   section,
   showQuickNav = true,
+  audience = "recipient",
 }: {
   section: Section;
   /** Packet-level presentation preference (migration 0030). Defaults to true so
    *  every existing caller and every existing packet behaves as before. */
   showQuickNav?: boolean;
+  /** Who is looking. DEFAULTS TO "recipient" ON PURPOSE: a surface that forgets
+   *  to declare itself gets the SAFE answer and the private note stays hidden.
+   *  Only an explicitly professional surface passes "professional". */
+  audience?: "recipient" | "professional";
 }) {
   return (
     <section className="mb-8">
@@ -19,7 +24,7 @@ export function SectionGroup({
             <h2 className="text-xl font-bold text-foreground">{section.title}</h2>
           )}
           {section.description && (
-            <p className="mt-1 text-base text-gray-600 leading-relaxed">
+            <p className="mt-1 text-base text-gray-600 leading-relaxed whitespace-pre-line">
               {section.description}
             </p>
           )}
@@ -39,7 +44,7 @@ export function SectionGroup({
           // scroll-mt keeps the card's top edge off the very top of the
           // viewport after a jump.
           <div key={item.id} id={`item-${item.id}`} className="scroll-mt-4">
-            <ItemCard item={item} />
+            <ItemCard item={item} audience={audience} />
           </div>
         ))}
       </div>

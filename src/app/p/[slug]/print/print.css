@@ -107,7 +107,7 @@
 /* ---- sections and items -------------------------------------------------- */
 .pg-section { margin: 0 0 6px; }
 .pg-section-title { font-size: 14pt; font-weight: 700; margin: 18px 0 2px; }
-.pg-section-desc { color: #5b6570; margin: 0 0 10px; }
+.pg-section-desc { color: #5b6570; margin: 0 0 10px; white-space: pre-line; }
 
 .pg-item {
   border: 1px solid #e3e6ea;
@@ -117,7 +117,21 @@
 }
 .pg-item-title { font-size: 12.5pt; font-weight: 700; margin: 0 0 2px; }
 .pg-address { font-size: 10pt; color: #3a4450; margin: 0 0 6px; }
-.pg-desc { margin: 0 0 10px; }
+.pg-desc { margin: 0 0 10px; white-space: pre-line; }
+
+/* HIGHLIGHT FOR CLIENT. Amber survives a mono laser printer as a light grey
+   panel, and the border carries the emphasis when colour does not print. */
+.pg-highlight {
+  margin: 0 0 12px;
+  padding: 9px 12px;
+  border: 1px solid #e8d9a8;
+  border-left: 3px solid #c8a951;
+  background: #fdf8ec;
+  border-radius: 4px;
+  white-space: pre-line;
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
 
 /* ---- photos --------------------------------------------------------------
  * inline-block, not grid: a wrapped run of inline-blocks fragments line by line

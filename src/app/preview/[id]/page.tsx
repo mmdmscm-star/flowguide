@@ -69,7 +69,11 @@ export default async function PreviewPage({ params }: Props) {
       )}
 
       {packet.sections.map((section) => (
-        <SectionGroup key={section.id} section={section} showQuickNav={packet.showQuickNav !== false} />
+        // PROFESSIONAL SURFACE. This is the owner looking at their own draft,
+        // so it declares itself and shows the private note alongside the client
+        // highlight. Every recipient surface leaves this prop off and gets the
+        // safe default.
+        <SectionGroup key={section.id} section={section} showQuickNav={packet.showQuickNav !== false} audience="professional" />
       ))}
 
       {packet.professional.name && (
