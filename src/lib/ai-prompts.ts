@@ -17,6 +17,16 @@ const URL_RULES = `URL CLASSIFICATION — route each URL by pattern:
 // privacy, and a private field is not an overflow bin.
 const NOTES_RULE = `notes is PRIVATE and is for the professional only. Put something there ONLY when the source itself says it is private, internal, confidential or not for the client. Never put ordinary information there because you are unsure where it belongs — if you cannot place something, leave it in description rather than notes.`;
 
+// A PRICE IS A QUOTE, NOT AN ESTIMATE.
+//
+// One community's source carried two pricing tables — an original and an
+// "Additional PDF entry / possible updated pricing" — and the model returned
+// ranges assembled from one number of each: "$5,200-$6,250" where the source
+// says "$5,595-$6,250" in one table and "$5,200/month" in the other. Nothing
+// was invented from nothing; two real tables were blended into a figure no
+// document supports. A client can be quoted a floor price that does not exist.
+const PRICING_RULE = `Copy every price EXACTLY as the source writes it. Never combine, average, interpolate, round, or build a range out of two different figures. If the source gives conflicting prices for the same room or care type — for example an original table and an updated one — keep them as SEPARATE details, labelled so the difference is visible (e.g. "Studio" and "Studio (updated pricing)"). Never merge them into one number or one range.`;
+
 const ITEM_FIELDS = `Each item: title (required), address, description, notes,
 details [{label,value}], links [{url,label}], photos [url], contacts (ORDERED
 array of people/businesses; every person a SEPARATE entry, never merged, never
@@ -81,6 +91,7 @@ ${URL_RULES}
 
 Rules: preserve ALL specifics (addresses, phones, prices, hours, names); do not invent; full street addresses -> address; keep every person + their own phone/email; keep titles < 60 chars; a label for every link.
 ${NOTES_RULE}
+${PRICING_RULE}
 ${NOTHING_RULE}
 
 Respond with ONLY valid JSON (no markdown):
@@ -99,6 +110,7 @@ ${URL_RULES}
 
 Rules: preserve ALL specifics; do not invent; full addresses -> address; keep every person + their own phone/email; titles < 60 chars; a label for every link.
 ${NOTES_RULE}
+${PRICING_RULE}
 ${NOTHING_RULE}
 If a section heading is provided as context, use it as the section title so items group consistently.
 
@@ -116,6 +128,7 @@ ${URL_RULES}
 
 Rules: do not invent; preserve all specifics; keep every person + their own phone/email; titles < 60 chars.
 ${NOTES_RULE}
+${PRICING_RULE}
 ${NOTHING_RULE}
 Respond with ONLY valid JSON (no markdown), items is the ONLY top-level key:
 { "items": [ { "title": "string", "address": "string?", "description": "string?", "notes": "string?", "details": [{"label":"string","value":"string"}], "links": [{"url":"string","label":"string"}], "photos": ["string"], "contacts": [{"name":"string?","role":"string?","phone":"string?","email":"string?","website":"string?"}] } ] }`;

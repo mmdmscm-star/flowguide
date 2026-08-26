@@ -3,6 +3,7 @@ import { getSession } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase";
 import { loadImportRun, loadImportChunks } from "@/lib/library-import-service";
 import { derivePhase, orderProposals } from "@/lib/library-import";
+import { planContinuationMerges } from "@/lib/library-continuation";
 
 type Context = { params: Promise<{ runId: string }> };
 
@@ -71,9 +72,30 @@ export async function POST(_request: Request, context: Context) {
   });
   if (rpcErr) return NextResponse.json({ error: "materialize_failed", message: rpcErr.message }, { status: 400 });
 
-  const proposals = await proposalsFor(supabase, runId);
+  // ONE COMMUNITY, ONE PROPOSAL.
+  //
+  // materialise expands every item of every chunk, so a community whose text
+  // straddles a chunk boundary arrives as two half-populated records. Folded
+  // here — PERSISTED, not merely presented, because `save` reads the table and
+  // a read-time merge would still write two Library items.
+  //
+  // Idempotent: once a pair is folded there is no adjacent duplicate left to
+  // find, so a reconnect that calls this again changes nothing.
+  let proposals = await proposalsFor(supabase, runId);
+  const plans = planContinuationMerges(orderProposals(proposals, chunks));
+  for (const plan of plans) {
+    const { id: keepId, ordinal: _o, idx: _i, selected: _s, ...payload } = plan.merged as Record<string, unknown>;
+    void _o; void _i; void _s;
+    await supabase.from("library_import_proposals")
+      .update({ payload }).eq("run_id", runId).eq("id", keepId as string);
+    await supabase.from("library_import_proposals")
+      .delete().eq("run_id", runId).eq("id", plan.absorb.id as string);
+  }
+  if (plans.length) proposals = await proposalsFor(supabase, runId);
+
   return NextResponse.json({
     inserted: Number(data ?? 0),
+    merged: plans.length,
     phase: "review",
     proposals: orderProposals(proposals, chunks),
   });

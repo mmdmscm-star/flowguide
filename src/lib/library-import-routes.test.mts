@@ -95,8 +95,14 @@ test("materialisation is refused until extraction is actually finished", () => {
 // Contract 3 — source order, not identity order
 // ---------------------------------------------------------------------------
 test("proposals are returned in SOURCE order on both paths", () => {
-  assert.equal((PROPOSALS.match(/orderProposals\(/g) ?? []).length, 2,
+  // Assert the CONTRACT, not an occurrence count. Counting broke the moment a
+  // third, legitimate caller appeared: the continuation merge planner compares
+  // NEIGHBOURS, so it needs source order too — ordinal order would hand it the
+  // wrong pairs. What matters is that both RESPONSES are ordered.
+  assert.equal((PROPOSALS.match(/proposals: orderProposals\(/g) ?? []).length, 2,
     "the GET restore and the POST materialise must both order by source position");
+  assert.match(PROPOSALS, /planContinuationMerges\(orderProposals\(/,
+    "the merge planner must see source order, or it compares the wrong neighbours");
   assert.doesNotMatch(PROPOSALS, /\.order\("ordinal"\)/,
     "ordinal order is identity order; a split chunk's children carry higher ordinals");
 });
