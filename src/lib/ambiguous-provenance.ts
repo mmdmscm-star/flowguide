@@ -121,6 +121,42 @@ export function withoutAmbiguous(fullSource: string, ranges: SourceRange[]): str
   return out.join("");
 }
 
+/**
+ * The chunks that produced a record the source cannot confirm.
+ *
+ * The private-note gate is deliberately CHUNK-scoped: it bounds a record by the
+ * siblings produced from the same chunk, searching that chunk's own text. So
+ * blanking the full source does not reach it — an unfindable same-chunk sibling
+ * still lets its "Private note:" directive fall inside its neighbour's span and
+ * authorise a note that is not the neighbour's to keep. The chunk text has to
+ * be blanked on that path too.
+ */
+export function unresolvedOrdinals(
+  proposals: Array<{ title?: unknown; ordinal?: unknown; sourceOrdinals?: unknown }>,
+  fullSource: string,
+): Set<number> {
+  const titles = proposals.map((p) => String(p.title ?? "")).filter(Boolean);
+  const out = new Set<number>();
+  for (const p of proposals) {
+    const title = String(p.title ?? "");
+    if (!title) continue;
+    if (spanRangeOf(fullSource, title, titles) !== null) continue;
+    for (const o of ordinalsOf(p)) out.add(o);
+  }
+  return out;
+}
+
+/** The same chunk texts with those chunks blanked — evidence from them proves
+ *  nothing for anybody, including the records that share them. */
+export function withoutAmbiguousChunks<T extends { ordinal: number; segment_text?: unknown }>(
+  chunks: T[], ordinals: Set<number>,
+): T[] {
+  if (!ordinals.size) return chunks;
+  return chunks.map((c) => ordinals.has(Number(c.ordinal))
+    ? { ...c, segment_text: String(c.segment_text ?? "").replace(/[^\n]/g, " ") }
+    : c);
+}
+
 export interface ProvenanceDoubt {
   /** True when this record's own identity could not be confirmed. */
   unresolved: boolean;

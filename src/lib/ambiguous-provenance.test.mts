@@ -5,7 +5,9 @@ import { recordSpan } from "./notes-provenance.ts";
 import { attributePhotos, photosIn } from "./photo-attribution.ts";
 import { auditAttribution } from "./attribution-conflict.ts";
 import { privateRegions } from "./notes-provenance.ts";
-import { ambiguousRanges, withoutAmbiguous, doubtFor, provenanceWarningsFor, spanRangeOf } from "./ambiguous-provenance.ts";
+import { ambiguousRanges, withoutAmbiguous, doubtFor, provenanceWarningsFor, spanRangeOf,
+         unresolvedOrdinals, withoutAmbiguousChunks } from "./ambiguous-provenance.ts";
+import { auditProposalNote } from "./library-notes-gate.ts";
 
 const codeOf = (p: string) => readFileSync(p, "utf8");
 const bodyOf = (p: string) => codeOf(p).replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
@@ -210,4 +212,31 @@ test("MATERIALISATION surfaces it for review", () => {
 test("SPAN RANGES are real offsets into the source", () => {
   const r = spanRangeOf(SOURCE, A_TITLE, TITLES)!;
   assert.equal(SOURCE.slice(r.start, r.end), recordSpan(SOURCE, A_TITLE, TITLES.filter((t) => t !== A_TITLE)));
+});
+
+test("PART B (3): the CHUNK-scoped note gate is contained too", () => {
+  // A and B share ONE chunk, which is where the full-source blanking cannot
+  // help: the note gate bounds a record by its same-chunk siblings and reads
+  // that chunk's own text.
+  const chunkText = SOURCE.slice(0, SOURCE.indexOf("Gamma House"));
+  const chunks = [{ ordinal: 0, segment_text: chunkText }];
+  const all = [{ ordinal: 0, title: A_TITLE }, { ordinal: 0, title: B_LOST }];
+  const a = { ordinal: 0, title: A_TITLE, notes: "the director retires in March." };
+
+  const naive = auditProposalNote(a as never, all as never, chunks as never);
+  assert.equal(naive.ok, true, "the fixture no longer shows B's directive authorising A's note");
+
+  const guarded = auditProposalNote(a as never, all as never,
+    withoutAmbiguousChunks(chunks, unresolvedOrdinals([{ title: A_TITLE, ordinal: 0 }, { title: B_LOST, ordinal: 0 }], SOURCE)) as never);
+  assert.equal(guarded.ok, false, "a directive in an unconfirmable record's chunk still authorises its neighbour's note");
+});
+
+test("BOTH ROUTES send the note gate the contained chunks", () => {
+  for (const f of ["src/app/api/library/import/[runId]/proposals/route.ts",
+                   "src/app/api/library/import/[runId]/save/route.ts"]) {
+    const body = bodyOf(f);
+    assert.match(body, /withoutAmbiguousChunks\(/, `${f} does not contain the chunk-scoped note path`);
+    assert.ok(!/auditProposalNote\([^)]*chunkTexts\)/.test(body) && !/noteWarningsFor\([^)]*chunkTexts\)/.test(body),
+      `${f} still audits notes against unblanked chunk text`);
+  }
 });

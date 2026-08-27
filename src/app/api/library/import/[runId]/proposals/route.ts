@@ -9,7 +9,8 @@ import { completenessWarnings, missingFromChunk } from "@/lib/source-completenes
 import { noteWarningsFor } from "@/lib/library-notes-gate";
 import { attributionWarningsFor } from "@/lib/attribution-conflict";
 import { attributePhotos, unplacedPhotos } from "@/lib/photo-attribution";
-import { ambiguousRanges, withoutAmbiguous, provenanceWarningsFor } from "@/lib/ambiguous-provenance";
+import { ambiguousRanges, withoutAmbiguous, provenanceWarningsFor,
+         unresolvedOrdinals, withoutAmbiguousChunks } from "@/lib/ambiguous-provenance";
 
 type Context = { params: Promise<{ runId: string }> };
 
@@ -130,6 +131,11 @@ export async function POST(_request: Request, context: Context) {
   }));
   const ambiguous = fullSource ? ambiguousRanges(proposals as never, fullSource, chunkRanges) : [];
   const provenanceSource = withoutAmbiguous(fullSource, ambiguous);
+  // The note gate is chunk-scoped, so the full-source blanking above does not
+  // reach it. Blank the chunks themselves for the same reason.
+  const provenanceChunks = fullSource
+    ? withoutAmbiguousChunks(chunkTexts, unresolvedOrdinals(proposals as never, fullSource))
+    : chunkTexts;
 
   for (const p of proposals) {
     const { id, ordinal: _o, idx: _i, selected: _s, ...payload } = p as Record<string, unknown>;
@@ -164,7 +170,7 @@ export async function POST(_request: Request, context: Context) {
     const attribWarn = fullSource
       ? attributionWarningsFor(payload as { title?: unknown; description?: unknown }, provenanceSource, allTitles)
       : [];
-    const noteWarn = noteWarningsFor(withOrdinal, proposals as never, chunkTexts);
+    const noteWarn = noteWarningsFor(withOrdinal, proposals as never, provenanceChunks);
     // An identity FlowGuide cannot confirm, or a span reaching into a range one
     // of those records may own. Either way the boundary is unknown, so the
     // record is surfaced rather than trusted.

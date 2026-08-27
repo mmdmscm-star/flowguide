@@ -6,7 +6,8 @@ import { loadChunkTexts, loadImportChunks } from "@/lib/library-import-service";
 import { auditProposal, priceBlockMessage } from "@/lib/library-price-gate";
 import { auditProposalNote, noteBlockMessage } from "@/lib/library-notes-gate";
 import { auditAttribution } from "@/lib/attribution-conflict";
-import { ambiguousRanges, withoutAmbiguous, doubtFor, provenanceWarningsFor } from "@/lib/ambiguous-provenance";
+import { ambiguousRanges, withoutAmbiguous, doubtFor, provenanceWarningsFor,
+         unresolvedOrdinals, withoutAmbiguousChunks } from "@/lib/ambiguous-provenance";
 
 type Context = { params: Promise<{ runId: string }> };
 
@@ -86,6 +87,11 @@ export async function POST(request: Request, context: Context) {
   const ambiguous = fullSource ? ambiguousRanges(allProposals as never, fullSource, chunkRanges) : [];
   // Positive evidence only ever comes from source nobody else may own.
   const provenanceSource = withoutAmbiguous(fullSource, ambiguous);
+  // Same reason as the full source: the note gate reads chunk text, so an
+  // unconfirmable record's chunk must prove nothing there either.
+  const provenanceChunks = fullSource
+    ? withoutAmbiguousChunks(chunkTexts, unresolvedOrdinals(allProposals as never, fullSource))
+    : chunkTexts;
 
   const results: { id: string; title: string; outcome: string; libraryItemId?: string; message?: string }[] = [];
   for (const t of targets) {
@@ -99,7 +105,7 @@ export async function POST(request: Request, context: Context) {
     // exactly that: a supported price and a genuinely private note were both
     // refused, because neither gate could see any source at all.
     const withProvenance = { ordinal: Number(t.ordinal), ...t.payload };
-    const noteV = auditProposalNote(withProvenance, allProposals as never, chunkTexts);
+    const noteV = auditProposalNote(withProvenance, allProposals as never, provenanceChunks);
     if (!noteV.ok) {
       results.push({ id: t.id, title, outcome: "private_note_unverified",
                      message: noteBlockMessage(title, noteV) });
