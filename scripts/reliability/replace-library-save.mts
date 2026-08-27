@@ -82,7 +82,12 @@ try {
 
   const titles = newRows.map((r) => String(r.title));
   const oldTitles = rows.filter((r) => OLD_IDS.includes(String(r.id))).map((r) => String(r.title));
-  const key = (t: string) => t.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 20);
+  // Identity is the COMMUNITY NAME. Source headers and model titles disagree
+  // about the city suffix and about parenthetical asides, so keying on the raw
+  // string reported 20 false mismatches — and rolled back a save that had in
+  // fact succeeded 65 times out of 65.
+  const key = (t: string) => t.split(/\s[—–]\s/)[0].replace(/\([^)]*\)/g, "")
+    .replace(/\d+.*$/, "").toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 22);
   const missingT = oldTitles.filter((t) => !titles.some((n) => key(n) === key(t)));
   check("[5] every original community is represented in the new set", missingT.length === 0, JSON.stringify(missingT));
   check("[5] no duplicate titles in the new set", new Set(titles).size === 65, "");
@@ -106,7 +111,18 @@ try {
 
   console.log(`\nOLD IDS (${OLD_IDS.length}) -> ${process.env.TMPDIR}OLD_IDS.json`);
   console.log(`NEW IDS (${newIds.length}) -> ${process.env.TMPDIR}NEW_IDS.json`);
-  if (bad) await rollback(`${bad} verification check(s) failed`);
+  // A FAILED CHECK HERE IS NOT A FAILED SAVE. Rollback exists for a save that
+  // errored or was blocked; every record went in cleanly. Discarding 65 good
+  // records because a verification helper disagreed is exactly what happened
+  // the first time, and it cost the whole set. Stop and report instead — the
+  // originals are untouched either way, which is what makes stopping safe.
+  if (bad) {
+    console.error(`\nSTEP 5: ${bad} verification check(s) failed.`);
+    console.error(`The save itself succeeded; NOTHING has been rolled back and NOTHING deleted.`);
+    console.error(`The library holds both cohorts. Inspect before deciding.`);
+    await svc.from("sessions").delete().eq("token", token);
+    process.exit(1);
+  }
   console.log(`\nSTEP 5 VERIFICATION: clean — the originals are still present and untouched.`);
   console.log(`Deletion is STEP 6 and is deliberately not performed here.`);
 } finally {
