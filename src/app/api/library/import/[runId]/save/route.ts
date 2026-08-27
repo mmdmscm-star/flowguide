@@ -5,6 +5,7 @@ import { loadImportRun } from "@/lib/library-import-service";
 import { loadChunkTexts } from "@/lib/library-import-service";
 import { auditProposal, priceBlockMessage } from "@/lib/library-price-gate";
 import { auditProposalNote, noteBlockMessage } from "@/lib/library-notes-gate";
+import { auditAttribution } from "@/lib/attribution-conflict";
 
 type Context = { params: Promise<{ runId: string }> };
 
@@ -52,6 +53,12 @@ export async function POST(request: Request, context: Context) {
   //'s own source never states must not become a Library item, because from
   // there it reaches a client as a quote.
   const chunkTexts = await loadChunkTexts(supabase, runId);
+
+  // Attribution is re-derived from the run's own source text, not read from the
+  // stored warning: the warning lives in a payload the client can PATCH.
+  const { data: runSrc } = await supabase
+    .from("ingestion_runs").select("source_text").eq("id", runId).maybeSingle();
+  const fullSource = String((runSrc as { source_text?: string } | null)?.source_text ?? "");
   // Every proposal of the run, not just the selected ones: a record's span ends
   // where its NEIGHBOUR begins, so the neighbours are needed even when they are
   // not being saved.
@@ -59,6 +66,9 @@ export async function POST(request: Request, context: Context) {
     .from("library_import_proposals").select("ordinal, payload").eq("run_id", runId);
   const allProposals = ((allRows ?? []) as { ordinal: number; payload: Record<string, unknown> }[])
     .map((r) => ({ ordinal: Number(r.ordinal), ...r.payload }));
+  // The same list, as titles: a record's span ends where its NEIGHBOUR begins,
+  // so every title is needed to bound one span — not only the selected ones.
+  const allTitles = allProposals.map((q) => String((q as { title?: unknown }).title ?? "")).filter(Boolean);
 
   const results: { id: string; title: string; outcome: string; libraryItemId?: string; message?: string }[] = [];
   for (const t of targets) {
@@ -77,6 +87,22 @@ export async function POST(request: Request, context: Context) {
       results.push({ id: t.id, title, outcome: "private_note_unverified",
                      message: noteBlockMessage(title, noteV) });
       continue;
+    }
+
+    // A provable cross-record attribution conflict blocks the save. FlowGuide
+    // does not move the content back and does not delete it: the source may be
+    // mistaken, or it may be a legitimate cross-reference between communities
+    // under one operator. Only the professional can say.
+    if (fullSource) {
+      const attrib = auditAttribution(t.payload as { title?: unknown; description?: unknown }, fullSource, allTitles);
+      if (!attrib.ok) {
+        const owner = attrib.conflicts[0]?.owner;
+        results.push({ id: t.id, title, outcome: "attribution_conflict",
+          message: attrib.resolved
+            ? `Part of ${title || "this record"}'s description appears in your source under “${owner}”, not under this community. Confirm where it belongs before saving.`
+            : `FlowGuide could not locate ${title || "this record"} in your source, so it cannot confirm the description belongs to it. Check it before saving.` });
+        continue;
+      }
     }
 
     const audit = auditProposal(withProvenance, chunkTexts);

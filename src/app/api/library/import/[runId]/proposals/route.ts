@@ -7,6 +7,7 @@ import { planContinuationMerges } from "@/lib/library-continuation";
 import { priceWarningsFor, sourceTextFor } from "@/lib/library-price-gate";
 import { completenessWarnings, missingFromChunk } from "@/lib/source-completeness";
 import { noteWarningsFor } from "@/lib/library-notes-gate";
+import { attributionWarningsFor } from "@/lib/attribution-conflict";
 import { attributePhotos, unplacedPhotos } from "@/lib/photo-attribution";
 
 type Context = { params: Promise<{ runId: string }> };
@@ -138,6 +139,12 @@ export async function POST(_request: Request, context: Context) {
     ];
     // A private note must trace to source that says it is private, for THIS
     // record. Surfaced here; save re-derives and re-checks.
+    // Content sourced from another identifiable record must not quietly become
+    // this record's client-facing description. Verbatim evidence only — a NAME
+    // appearing is never evidence, since related communities cite each other.
+    const attribWarn = fullSource
+      ? attributionWarningsFor(payload as { title?: unknown; description?: unknown }, fullSource, allTitles)
+      : [];
     const noteWarn = noteWarningsFor(withOrdinal, proposals as never, chunkTexts);
     const had = Array.isArray((payload as { priceWarnings?: unknown }).priceWarnings)
       ? ((payload as { priceWarnings: unknown[] }).priceWarnings as string[]) : [];
@@ -145,11 +152,13 @@ export async function POST(_request: Request, context: Context) {
       ? ((payload as { completenessWarnings: unknown[] }).completenessWarnings as string[]) : [];
     const hadN = Array.isArray((payload as { noteWarnings?: unknown }).noteWarnings)
       ? ((payload as { noteWarnings: unknown[] }).noteWarnings as string[]) : [];
+    const hadA = Array.isArray((payload as { attributionWarnings?: unknown }).attributionWarnings)
+      ? ((payload as { attributionWarnings: unknown[] }).attributionWarnings as string[]) : [];
     const photosChanged = attrib.resolved && (attrib.added.length > 0 || attrib.removed.length > 0);
     if (!photosChanged && warnings.join("|") === had.join("|") && missing.join("|") === hadM.join("|")
-        && noteWarn.join("|") === hadN.join("|")) continue;
+        && noteWarn.join("|") === hadN.join("|") && attribWarn.join("|") === hadA.join("|")) continue;
     await supabase.from("library_import_proposals")
-      .update({ payload: { ...payload, priceWarnings: warnings, completenessWarnings: missing, noteWarnings: noteWarn } })
+      .update({ payload: { ...payload, priceWarnings: warnings, completenessWarnings: missing, noteWarnings: noteWarn, attributionWarnings: attribWarn } })
       .eq("run_id", runId).eq("id", id as string);
   }
   proposals = await proposalsFor(supabase, runId);
