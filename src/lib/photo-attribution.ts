@@ -1,4 +1,5 @@
 import { recordSpan } from "./notes-provenance.ts";
+import type { SourceRange } from "./ambiguous-provenance.ts";
 
 // A PHOTO BELONGS TO THE COMMUNITY WHOSE SOURCE BLOCK CONTAINS IT.
 //
@@ -40,6 +41,15 @@ export interface Attribution {
   removed: string[];
   /** Photos from its own block that the model had missed. */
   added: string[];
+  /**
+   * Photos inside this span that sit in a range some UNRESOLVED record may own.
+   *
+   * They are neither attributed nor discarded: the span reaches across a
+   * boundary FlowGuide cannot locate, so ownership is genuinely unknown. They
+   * are named here so the professional decides, rather than the span deciding
+   * by accident.
+   */
+  withheld: string[];
 }
 
 /**
@@ -52,17 +62,32 @@ export function attributePhotos(
   proposal: { title?: unknown; photos?: unknown },
   fullSource: string,
   allTitles: string[],
+  ambiguous: SourceRange[] = [],
 ): Attribution {
   const title = String(proposal.title ?? "");
   const had = Array.isArray(proposal.photos) ? (proposal.photos as unknown[]).map((p) => String(p).trim()) : [];
   const span = recordSpan(fullSource, title, allTitles.filter((t) => t !== title));
-  if (span === null) return { photos: had, resolved: false, removed: [], added: [] };
+  if (span === null) return { photos: had, resolved: false, removed: [], added: [], withheld: [] };
   const mine = photosIn(span);
+
+  // A span that crosses a range some unlocatable record may own is not
+  // authoritative over that range. Those photos are withheld rather than
+  // claimed — and rather than dropped, since the span may well be right.
+  const start = fullSource.indexOf(span);
+  const doubtful = ambiguous.length && start >= 0
+    ? new Set(mine.filter((u) => {
+        const at = fullSource.indexOf(u, start);
+        return at >= 0 && at < start + span.length && ambiguous.some((r) => at >= r.start && at < r.end);
+      }))
+    : new Set<string>();
+
+  const kept = mine.filter((u) => !doubtful.has(u));
   return {
-    photos: mine,
+    photos: kept,
     resolved: true,
-    removed: had.filter((p) => !mine.includes(p)),
-    added: mine.filter((p) => !had.includes(p)),
+    removed: had.filter((p) => !kept.includes(p) && !doubtful.has(p)),
+    added: kept.filter((p) => !had.includes(p)),
+    withheld: [...doubtful],
   };
 }
 

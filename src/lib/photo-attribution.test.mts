@@ -73,7 +73,7 @@ test("'every record has a photo' IS NOT THE CHECK", () => {
 
 test("materialisation attributes from the FULL source, not the chunk", () => {
   const r = codeOf("src/app/api/library/import/[runId]/proposals/route.ts");
-  assert.match(r, /attributePhotos\(payload as \{ title\?: unknown; photos\?: unknown \}, fullSource, allTitles\)/,
+  assert.match(r, /attributePhotos\(payload as \{ title\?: unknown; photos\?: unknown \}, fullSource, allTitles, ambiguous\)/,
     "photos are not attributed, or not from the full source");
   assert.match(r, /select\("source_text"\)/, "the run's full source is never loaded");
   assert.match(r, /unplacedPhotos\(/, "an unplaced source photo would go unreported");

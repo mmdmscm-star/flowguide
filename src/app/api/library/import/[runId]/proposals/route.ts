@@ -9,6 +9,7 @@ import { completenessWarnings, missingFromChunk } from "@/lib/source-completenes
 import { noteWarningsFor } from "@/lib/library-notes-gate";
 import { attributionWarningsFor } from "@/lib/attribution-conflict";
 import { attributePhotos, unplacedPhotos } from "@/lib/photo-attribution";
+import { ambiguousRanges, withoutAmbiguous, provenanceWarningsFor } from "@/lib/ambiguous-provenance";
 
 type Context = { params: Promise<{ runId: string }> };
 
@@ -112,12 +113,30 @@ export async function POST(_request: Request, context: Context) {
   const fullSource = String((runRow as { source_text?: string } | null)?.source_text ?? "");
   const allTitles = proposals.map((q) => String((q as { title?: unknown }).title ?? ""));
 
+  // AN UNRESOLVED RECORD POISONS ITS NEIGHBOUR'S BOUNDARY. A proposal whose
+  // title the source cannot confirm stops bounding the record before it, which
+  // then absorbs its block and is trusted for photos, notes and description
+  // alike. The range it was READ from is known, so that range is treated as
+  // owned by nobody: `provenanceSource` is the same text with those ranges
+  // blanked, and is used wherever source text is POSITIVE evidence.
+  // Chunks tile the source exactly, so a chunk ends where the next begins and
+  // the last ends at the source end. Derived rather than selected: the chunk
+  // loader deliberately fetches no more than it needs.
+  const ordered = [...chunks].sort((a, b) => a.sourceStart - b.sourceStart);
+  const chunkRanges = ordered.map((c, i) => ({
+    ordinal: c.ordinal,
+    start: c.sourceStart,
+    end: i + 1 < ordered.length ? ordered[i + 1].sourceStart : fullSource.length,
+  }));
+  const ambiguous = fullSource ? ambiguousRanges(proposals as never, fullSource, chunkRanges) : [];
+  const provenanceSource = withoutAmbiguous(fullSource, ambiguous);
+
   for (const p of proposals) {
     const { id, ordinal: _o, idx: _i, selected: _s, ...payload } = p as Record<string, unknown>;
     void _o; void _i; void _s;
     const attrib = fullSource
-      ? attributePhotos(payload as { title?: unknown; photos?: unknown }, fullSource, allTitles)
-      : { photos: (payload as { photos?: unknown }).photos as string[], resolved: false, removed: [], added: [] };
+      ? attributePhotos(payload as { title?: unknown; photos?: unknown }, fullSource, allTitles, ambiguous)
+      : { photos: (payload as { photos?: unknown }).photos as string[], resolved: false, removed: [], added: [], withheld: [] };
     if (attrib.resolved) (payload as { photos?: unknown }).photos = attrib.photos;
     const withOrdinal = { ...payload, ordinal: (p as { ordinal: number }).ordinal };
     const warnings = priceWarningsFor(withOrdinal, chunkTexts);
@@ -143,9 +162,15 @@ export async function POST(_request: Request, context: Context) {
     // this record's client-facing description. Verbatim evidence only — a NAME
     // appearing is never evidence, since related communities cite each other.
     const attribWarn = fullSource
-      ? attributionWarningsFor(payload as { title?: unknown; description?: unknown }, fullSource, allTitles)
+      ? attributionWarningsFor(payload as { title?: unknown; description?: unknown }, provenanceSource, allTitles)
       : [];
     const noteWarn = noteWarningsFor(withOrdinal, proposals as never, chunkTexts);
+    // An identity FlowGuide cannot confirm, or a span reaching into a range one
+    // of those records may own. Either way the boundary is unknown, so the
+    // record is surfaced rather than trusted.
+    const provWarn = fullSource
+      ? provenanceWarningsFor(withOrdinal, fullSource, allTitles, ambiguous)
+      : [];
     const had = Array.isArray((payload as { priceWarnings?: unknown }).priceWarnings)
       ? ((payload as { priceWarnings: unknown[] }).priceWarnings as string[]) : [];
     const hadM = Array.isArray((payload as { completenessWarnings?: unknown }).completenessWarnings)
@@ -154,11 +179,17 @@ export async function POST(_request: Request, context: Context) {
       ? ((payload as { noteWarnings: unknown[] }).noteWarnings as string[]) : [];
     const hadA = Array.isArray((payload as { attributionWarnings?: unknown }).attributionWarnings)
       ? ((payload as { attributionWarnings: unknown[] }).attributionWarnings as string[]) : [];
+    const hadP = Array.isArray((payload as { provenanceWarnings?: unknown }).provenanceWarnings)
+      ? ((payload as { provenanceWarnings: unknown[] }).provenanceWarnings as string[]) : [];
+    const withheld = attrib.withheld ?? [];
     const photosChanged = attrib.resolved && (attrib.added.length > 0 || attrib.removed.length > 0);
     if (!photosChanged && warnings.join("|") === had.join("|") && missing.join("|") === hadM.join("|")
-        && noteWarn.join("|") === hadN.join("|") && attribWarn.join("|") === hadA.join("|")) continue;
+        && noteWarn.join("|") === hadN.join("|") && attribWarn.join("|") === hadA.join("|")
+        && provWarn.join("|") === hadP.join("|") && withheld.length === 0) continue;
     await supabase.from("library_import_proposals")
-      .update({ payload: { ...payload, priceWarnings: warnings, completenessWarnings: missing, noteWarnings: noteWarn, attributionWarnings: attribWarn } })
+      .update({ payload: { ...payload, priceWarnings: warnings, completenessWarnings: missing,
+                           noteWarnings: noteWarn, attributionWarnings: attribWarn,
+                           provenanceWarnings: provWarn, withheldPhotos: withheld } })
       .eq("run_id", runId).eq("id", id as string);
   }
   proposals = await proposalsFor(supabase, runId);

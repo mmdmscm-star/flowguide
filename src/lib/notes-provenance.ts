@@ -86,6 +86,26 @@ export function recordSpan(chunkText: string, title: string, siblingTitles: stri
     return -1;
   };
 
+  // Lines that BEGIN with `needle` AND end the name there. "Acme" must not
+  // identify "Acme North": a longer name continuing into another word is a
+  // different community, so only a real title boundary — end of line, an
+  // aside, a city separator, or a field/list punctuation mark — counts.
+  const lineStartsWithBoundary = (needle: string): number[] => {
+    const k = needle.toLowerCase();
+    const out: number[] = [];
+    let off = 0;
+    for (const ln of hay.split("\n")) {
+      const lead = ln.length - ln.trimStart().length;
+      const body = ln.trimStart();
+      if (body.toLowerCase().startsWith(k)) {
+        const rest = body.slice(k.length);
+        if (rest.trim() === "" || /^\s*[(—–\-,:|]/.test(rest)) out.push(off + lead);
+      }
+      off += ln.length + 1;
+    }
+    return out;
+  };
+
   const find = (t: string): number => {
     const full = String(t).trim();
     const key = full.split(/\s[—–-]\s/)[0].trim();
@@ -105,10 +125,29 @@ export function recordSpan(chunkText: string, title: string, siblingTitles: stri
     const k = key.toLowerCase().replace(/[^a-z0-9]/g, "");
     if (!k) return -1;
     const j = flat.indexOf(k);
-    if (j < 0) return -1;
-    let count = 0;
-    for (let p = 0; p < hay.length; p++) {
-      if (/[a-z0-9]/i.test(hay[p])) { if (count === j) return p; count++; }
+    if (j >= 0) {
+      let count = 0;
+      for (let p = 0; p < hay.length; p++) {
+        if (/[a-z0-9]/i.test(hay[p])) { if (count === j) return p; count++; }
+      }
+    }
+
+    // LAST RESORT: the model abbreviated a parenthetical aside.
+    //
+    // Observed: a source header reading "Napa Valley Senior Care (formerly
+    // called Nazareth Classic Care of Napa)" came back as "Napa Valley Senior
+    // Care (formerly Nazareth Classic Care)". Every route above fails on it,
+    // and an unlocatable record does not merely fail closed for itself — its
+    // neighbour's span then runs straight through its block.
+    //
+    // The parenthetical is dropped STRUCTURALLY, not by vocabulary, and the
+    // remainder is accepted only when it identifies exactly one line in the
+    // whole source. One match is identification; two is a guess, and a guess
+    // here would hand one record's content to another.
+    const bare = key.replace(/\s*\([^)]*\)\s*/g, " ").replace(/\s+/g, " ").trim();
+    if (bare && bare !== key && bare.length >= 4) {
+      const hits = lineStartsWithBoundary(bare);
+      if (hits.length === 1) return hits[0];
     }
     return -1;
   };

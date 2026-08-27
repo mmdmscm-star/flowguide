@@ -2,10 +2,11 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase";
 import { loadImportRun } from "@/lib/library-import-service";
-import { loadChunkTexts } from "@/lib/library-import-service";
+import { loadChunkTexts, loadImportChunks } from "@/lib/library-import-service";
 import { auditProposal, priceBlockMessage } from "@/lib/library-price-gate";
 import { auditProposalNote, noteBlockMessage } from "@/lib/library-notes-gate";
 import { auditAttribution } from "@/lib/attribution-conflict";
+import { ambiguousRanges, withoutAmbiguous, doubtFor, provenanceWarningsFor } from "@/lib/ambiguous-provenance";
 
 type Context = { params: Promise<{ runId: string }> };
 
@@ -70,6 +71,22 @@ export async function POST(request: Request, context: Context) {
   // so every title is needed to bound one span — not only the selected ones.
   const allTitles = allProposals.map((q) => String((q as { title?: unknown }).title ?? "")).filter(Boolean);
 
+  // A record whose identity the source cannot confirm does not only fail for
+  // itself: it stops bounding its neighbour, whose span then runs through its
+  // block and is trusted for photos, notes and description alike. Re-derived
+  // here from the run's own chunks — the stored warning lives in a payload the
+  // client can PATCH, so it is evidence of nothing.
+  const chunkRows = await loadImportChunks(supabase, runId);
+  const orderedChunks = [...chunkRows].sort((a, b) => a.sourceStart - b.sourceStart);
+  const chunkRanges = orderedChunks.map((c, i) => ({
+    ordinal: c.ordinal,
+    start: c.sourceStart,
+    end: i + 1 < orderedChunks.length ? orderedChunks[i + 1].sourceStart : fullSource.length,
+  }));
+  const ambiguous = fullSource ? ambiguousRanges(allProposals as never, fullSource, chunkRanges) : [];
+  // Positive evidence only ever comes from source nobody else may own.
+  const provenanceSource = withoutAmbiguous(fullSource, ambiguous);
+
   const results: { id: string; title: string; outcome: string; libraryItemId?: string; message?: string }[] = [];
   for (const t of targets) {
     const title = String(t.payload?.title ?? "").trim();
@@ -93,8 +110,19 @@ export async function POST(request: Request, context: Context) {
     // does not move the content back and does not delete it: the source may be
     // mistaken, or it may be a legitimate cross-reference between communities
     // under one operator. Only the professional can say.
+    // PROVENANCE DOUBT BLOCKS BEFORE ANYTHING ELSE IS JUDGED. Whatever this
+    // record appears to own, the boundary that decides it is unknown.
     if (fullSource) {
-      const attrib = auditAttribution(t.payload as { title?: unknown; description?: unknown }, fullSource, allTitles);
+      const doubt = doubtFor(withProvenance, fullSource, allTitles, ambiguous);
+      if (doubt.unresolved || doubt.overlapping) {
+        results.push({ id: t.id, title, outcome: "ambiguous_provenance",
+          message: provenanceWarningsFor(withProvenance, fullSource, allTitles, ambiguous)[0] });
+        continue;
+      }
+    }
+
+    if (fullSource) {
+      const attrib = auditAttribution(t.payload as { title?: unknown; description?: unknown }, provenanceSource, allTitles);
       if (!attrib.ok) {
         const owner = attrib.conflicts[0]?.owner;
         results.push({ id: t.id, title, outcome: "attribution_conflict",

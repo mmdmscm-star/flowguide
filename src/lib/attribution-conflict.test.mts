@@ -115,8 +115,14 @@ test("IT HAS NO MOVE AND NO DELETE", () => {
 
 test("SAVE RE-DERIVES FROM SOURCE and does not trust the stored warning", () => {
   const save = bodyOf("src/app/api/library/import/[runId]/save/route.ts");
-  assert.match(save, /auditAttribution\(t\.payload as \{ title\?: unknown; description\?: unknown \}, fullSource, allTitles\)/,
+  assert.match(save, /auditAttribution\(t\.payload as \{ title\?: unknown; description\?: unknown \}, provenanceSource, allTitles\)/,
     "save does not re-audit attribution from source");
+  // Positive evidence comes from source no unresolved record may own, and that
+  // set is re-derived here rather than read off the payload.
+  assert.match(save, /const provenanceSource = withoutAmbiguous\(fullSource, ambiguous\)/,
+    "save judges attribution against ranges an unlocatable record may own");
+  assert.match(save, /ambiguousRanges\(allProposals as never, fullSource, chunkRanges\)/,
+    "save trusts a stored ambiguity instead of re-deriving it");
   assert.match(save, /select\("source_text"\)/, "save never loads the authoritative source");
   assert.ok(!/attributionWarnings/.test(save), "save reads the stored warning — clearing it would bypass the gate");
   assert.match(save, /outcome: "attribution_conflict"/);
