@@ -240,3 +240,17 @@ test("BOTH ROUTES send the note gate the contained chunks", () => {
       `${f} still audits notes against unblanked chunk text`);
   }
 });
+
+test("SAVE JUDGES PROVENANCE DOUBT FIRST, so the reason points at the real problem", () => {
+  const save = bodyOf("src/app/api/library/import/[runId]/save/route.ts");
+  const doubt = save.indexOf('outcome: "ambiguous_provenance"');
+  const note = save.indexOf('outcome: "private_note_unverified"');
+  const attr = save.indexOf('outcome: "attribution_conflict"');
+  const price = save.indexOf('outcome: "unsupported_price"');
+  assert.ok(doubt > 0, "save never blocks on provenance doubt");
+  for (const [name, at] of [["note", note], ["attribution", attr], ["price", price]] as const) {
+    assert.ok(at > doubt,
+      `the ${name} gate is judged before provenance doubt, so a record with an unlocatable ` +
+      `neighbour reports that downstream symptom instead of the boundary problem`);
+  }
+});

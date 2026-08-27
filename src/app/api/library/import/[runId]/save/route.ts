@@ -105,19 +105,12 @@ export async function POST(request: Request, context: Context) {
     // exactly that: a supported price and a genuinely private note were both
     // refused, because neither gate could see any source at all.
     const withProvenance = { ordinal: Number(t.ordinal), ...t.payload };
-    const noteV = auditProposalNote(withProvenance, allProposals as never, provenanceChunks);
-    if (!noteV.ok) {
-      results.push({ id: t.id, title, outcome: "private_note_unverified",
-                     message: noteBlockMessage(title, noteV) });
-      continue;
-    }
-
-    // A provable cross-record attribution conflict blocks the save. FlowGuide
-    // does not move the content back and does not delete it: the source may be
-    // mistaken, or it may be a legitimate cross-reference between communities
-    // under one operator. Only the professional can say.
-    // PROVENANCE DOUBT BLOCKS BEFORE ANYTHING ELSE IS JUDGED. Whatever this
-    // record appears to own, the boundary that decides it is unknown.
+    // PROVENANCE DOUBT IS JUDGED FIRST. Every gate below asks what this record's
+    // source says about it; that question is meaningless while the boundary
+    // deciding which source is its own remains unknown. Reporting a downstream
+    // symptom instead — production smoke saw "the private note is unverified",
+    // which was true but told the professional to go and look at the note —
+    // sends them to the wrong place. The unlocatable neighbour is the problem.
     if (fullSource) {
       const doubt = doubtFor(withProvenance, fullSource, allTitles, ambiguous);
       if (doubt.unresolved || doubt.overlapping) {
@@ -125,6 +118,18 @@ export async function POST(request: Request, context: Context) {
           message: provenanceWarningsFor(withProvenance, fullSource, allTitles, ambiguous)[0] });
         continue;
       }
+    }
+
+    // A private note must trace to source that says it is private, for THIS
+    // record. A provable cross-record attribution conflict blocks the save.
+    // FlowGuide does not move the content back and does not delete it: the
+    // source may be mistaken, or it may be a legitimate cross-reference between
+    // communities under one operator. Only the professional can say.
+    const noteV = auditProposalNote(withProvenance, allProposals as never, provenanceChunks);
+    if (!noteV.ok) {
+      results.push({ id: t.id, title, outcome: "private_note_unverified",
+                     message: noteBlockMessage(title, noteV) });
+      continue;
     }
 
     if (fullSource) {
