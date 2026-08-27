@@ -39,7 +39,7 @@ try {
   const runId = sd.runId;
   console.log(`run ${String(runId).slice(0,8)}  chunks=${sd.totalChunks}`);
 
-  let done = 0, failed = 0, waits = 0, budgetWaits = 0;
+  let done = 0, failed = 0, waits = 0, budgetWaits = 0, capacityWaits = 0;
   for (let step = 0; step < 400; step++) {
     const st = await (await api(`/api/ingest/${runId}`)).json();
     const run = st?.run; if (!run) { console.log("run lost"); break; }
@@ -57,6 +57,17 @@ try {
     }
     const r = await api(`/api/ingest/${runId}/chunks/${next.ordinal}`, { method: "POST" });
     if (r.status >= 500) failed++;
+    if (r.status === 429) {
+      // The server now recognises temporary provider capacity and keeps the
+      // chunk retryable. Honour its Retry-After and come back to it.
+      const b = await r.json().catch(() => ({}));
+      const wait = Math.min(Number(b?.retryAfterSeconds ?? 120), 180) * 1000;
+      capacityWaits++;
+      console.log(`\n  capacity 429 on chunk ${next.ordinal} (${capacityWaits}) — waiting ${wait/1000}s`);
+      if (capacityWaits > 12) { console.log("  capacity waits exhausted"); halted = "capacity_exhausted"; break; }
+      await new Promise((res) => setTimeout(res, wait));
+      continue;
+    }
     if (r.status === 402) {
       // Either the in-flight budget or a genuinely empty account. Wait for the
       // Retry-After window, then probe once with a tiny request: if that

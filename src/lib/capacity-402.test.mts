@@ -99,3 +99,20 @@ test("the capacity refusal answers 429, not 402", () => {
   // refusal must not look like that.
   assert.match(ROUTE, /mark === CAPACITY_MARK \? 429 :/, "a capacity failure still answers 402");
 });
+
+test("THE CLASSIFICATION SURVIVES THE MIDDLE OF THE CHAIN", () => {
+  // The bug my other tests could not see: they asserted the wiring at each END
+  // — ai-structure produces the code, the route consumes it — while
+  // processSegment dropped it in between. The MESSAGE survived, so the
+  // professional read "temporarily at capacity" while the classifier saw a bare
+  // 402 and poisoned the chunk anyway.
+  const ing = codeOf("src/lib/ingestion.ts");
+  assert.match(ing, /code\?: string; retryAfterSeconds\?: number/,
+    "ProcessOutcome cannot carry the model layer's classification");
+  assert.match(ing, /code: res\.error,/, "processSegment drops the error code");
+  assert.match(ing, /res\.retryAfterSeconds \? \{ retryAfterSeconds: res\.retryAfterSeconds \}/,
+    "the retry timing is dropped");
+  // And the route must read that field, not a differently-named one.
+  assert.match(ROUTE, /failureMark\(outcome\.status, \(outcome as \{ code\?: string \}\)\.code\)/,
+    "the route reads a field processSegment never sets");
+});

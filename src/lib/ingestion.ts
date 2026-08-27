@@ -69,7 +69,12 @@ export function shouldPresplit(segmentText: string): boolean {
 export type ProcessOutcome =
   | { kind: "ok"; result: Record<string, unknown>; title?: string; clientName?: string }
   | { kind: "split" } // too big / truncated — subdivide and retry the pieces
-  | { kind: "error"; status: number; message: string };
+  // `code` carries the model layer's own classification (e.g.
+  // "ai_capacity_temporary") through to the route. Dropping it here is what
+  // made a recoverable capacity 402 look permanent: the MESSAGE survived, so
+  // the professional read "temporarily at capacity", while the classifier saw
+  // only a bare 402 and poisoned the chunk.
+  | { kind: "error"; status: number; message: string; code?: string; retryAfterSeconds?: number };
 
 // Process ONE segment through the model. Bounded: a ~10-item segment stays well
 // under the route's 60s limit. Truncation (finish_reason=length) => split.
@@ -93,7 +98,11 @@ export async function processSegment(opts: {
   const res = await callStructuringModel({ systemPrompt, rawText: userText, apiKey, tag: `ingest-${entryPoint}` });
   if (!res.ok) {
     if (res.error === "output_truncated") return { kind: "split" };
-    return { kind: "error", status: res.status, message: res.message || res.error };
+    return {
+      kind: "error", status: res.status, message: res.message || res.error,
+      code: res.error,
+      ...(res.retryAfterSeconds ? { retryAfterSeconds: res.retryAfterSeconds } : {}),
+    };
   }
 
   const data = res.data as Record<string, unknown>;

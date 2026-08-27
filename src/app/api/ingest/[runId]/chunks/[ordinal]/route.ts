@@ -204,7 +204,7 @@ export async function POST(_request: Request, context: Context) {
   if (outcome.kind === "error") {
     // Tag transient provider failures so the next attempt retries this segment
     // instead of subdividing it (see MAX_TRANSIENT_ATTEMPTS).
-    const mark = failureMark(outcome.status, (outcome as { error?: string }).error);
+    const mark = failureMark(outcome.status, (outcome as { code?: string }).code);
     await supabase.rpc("mark_chunk_failed", {
       p_run_id: runId, p_owner: session.userId, p_ordinal: ordinal, p_attempt: attempt,
       p_error: (mark ? `${mark} ` : "") + outcome.message,
