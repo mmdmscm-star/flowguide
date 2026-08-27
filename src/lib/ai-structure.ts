@@ -49,7 +49,7 @@ export interface StructuredSection {
 export type ModelResult =
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   | { ok: true; data: any }
-  | { ok: false; status: number; error: string; message?: string };
+  | { ok: false; status: number; error: string; message?: string; retryAfterSeconds?: number };
 
 // ============================================================
 // Call the model and return parsed JSON — or fail closed.
@@ -137,12 +137,48 @@ export async function callStructuringModel(opts: {
         };
       }
 
-      // Billing/auth failures are PERMANENT for this key — retrying cannot fix
-      // them. Flattening them to a generic 502 made the ingestion orchestrator
-      // treat them as transient: it retried, then subdivided, then subdivided
-      // again until split_depth was exhausted and the whole import died with
-      // "too small to subdivide further". Surface them as their own condition so
-      // the caller fails fast with something the professional can act on.
+      // A 402 HAS TWO MEANINGS, and only one of them is permanent.
+      //
+      // OpenRouter answers 402 both for a genuinely empty account AND for
+      // `in_flight_budget_exhausted` — "this request would exceed your available
+      // credits GIVEN YOUR CURRENT IN-FLIGHT REQUESTS. Retry after in-flight
+      // requests settle" — which carries a Retry-After and clears on its own.
+      //
+      // Treating the second as permanent cost a whole benchmark run: one blip
+      // marked the chunk `[permanent]`, and every later attempt replayed the
+      // stored error WITHOUT calling the provider again, so the chunk could
+      // never recover and the run died. A single call succeeded throughout.
+      //
+      // CLASSIFIED BY THE STRUCTURED REASON, not by the presence of
+      // Retry-After. A header can accompany conditions this does not understand,
+      // and guessing wrong in that direction re-opens the subdivide-until-death
+      // failure the permanent path exists to prevent. Anything not positively
+      // identified stays permanent.
+      let providerReason = "";
+      let retryAfterSeconds = 0;
+      try {
+        const parsed = JSON.parse(errText);
+        providerReason = String(parsed?.error?.metadata?.reason ?? "");
+        const hdr = parsed?.error?.metadata?.headers?.["Retry-After"]
+          ?? parsed?.error?.metadata?.headers?.["retry-after"];
+        const fromHeader = Number(aiRes.headers?.get?.("retry-after") ?? 0);
+        retryAfterSeconds = Number(hdr ?? 0) || fromHeader || 0;
+      } catch { /* non-JSON body: no reason, so not positively identified */ }
+
+      const isTemporaryCapacity =
+        (structuredCode === 402 || aiRes.status === 402) &&
+        providerReason === "in_flight_budget_exhausted";
+      if (isTemporaryCapacity) {
+        return {
+          ok: false,
+          status: 402,
+          error: "ai_capacity_temporary",
+          retryAfterSeconds: retryAfterSeconds > 0 ? retryAfterSeconds : undefined,
+          message:
+            "The AI service is temporarily at capacity for this account, so this part couldn't be organized yet. It will retry shortly — your text was not lost.",
+        };
+      }
+
       const billingOrAuth = structuredCode === 402 || aiRes.status === 402
         ? "credits" : structuredCode === 401 || aiRes.status === 401 || structuredCode === 403 || aiRes.status === 403
         ? "auth" : null;

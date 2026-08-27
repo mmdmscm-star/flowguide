@@ -34,9 +34,21 @@ const TRANSIENT_MARK = "[transient]";
 // OR by subdividing — every child would fail identically. Fail fast instead of
 // shredding the run.
 const PERMANENT_MARK = "[permanent]";
+// TEMPORARY PROVIDER CAPACITY — its own mark, deliberately not [transient].
+//
+// A 402 the provider identifies as `in_flight_budget_exhausted` clears on its
+// own, so the chunk must be retried. But the error says NOTHING about segment
+// size, so it must never reach doSplit() — the [transient] path subdivides once
+// its attempts run out, which is how a provider blip previously shredded a
+// 110-item import. Bounded separately, and never recorded as permanent, so a
+// later resume can still finish the run.
+const CAPACITY_MARK = "[capacity]";
+const MAX_CAPACITY_ATTEMPTS = 6;
 const isTransientStatus = (s: number) => s === 429 || (s >= 500 && s <= 599);
 const isPermanentStatus = (s: number) => s === 401 || s === 402 || s === 403;
-function failureMark(status: number) {
+function failureMark(status: number, errorCode?: string) {
+  // Positive identification only: an unrecognised 402 stays permanent.
+  if (errorCode === "ai_capacity_temporary") return CAPACITY_MARK;
   if (isPermanentStatus(status)) return PERMANENT_MARK;
   if (isTransientStatus(status)) return TRANSIENT_MARK;
   return "";
@@ -113,9 +125,25 @@ export async function POST(_request: Request, context: Context) {
         { status: 402 },
       );
     }
-    const wasTransient = prevErr.startsWith(TRANSIENT_MARK);
-    if (!wasTransient || attempt > MAX_TRANSIENT_ATTEMPTS) return doSplit();
-    // else: fall through and retry the same segment against the model.
+    // Temporary capacity: retry the SAME segment, never subdivide. Bounded, so
+    // a provider that is down for the whole run cannot loop forever — but the
+    // chunk is left retryable rather than poisoned, so a later resume finishes.
+    if (prevErr.startsWith(CAPACITY_MARK)) {
+      if (attempt > MAX_CAPACITY_ATTEMPTS) {
+        await supabase.rpc("mark_chunk_failed", {
+          p_run_id: runId, p_owner: session.userId, p_ordinal: ordinal, p_attempt: attempt, p_error: prevErr,
+        });
+        return NextResponse.json({
+          error: "chunk_failed", permanent: false,
+          message: "The AI service is still at capacity for this account. Resume this import in a few minutes — your text was not lost.",
+        }, { status: 429 });
+      }
+      // fall through: call the model again.
+    } else {
+      const wasTransient = prevErr.startsWith(TRANSIENT_MARK);
+      if (!wasTransient || attempt > MAX_TRANSIENT_ATTEMPTS) return doSplit();
+      // else: fall through and retry the same segment against the model.
+    }
   }
 
   const apiKey = process.env.OPENROUTER_API_KEY;
@@ -176,14 +204,22 @@ export async function POST(_request: Request, context: Context) {
   if (outcome.kind === "error") {
     // Tag transient provider failures so the next attempt retries this segment
     // instead of subdividing it (see MAX_TRANSIENT_ATTEMPTS).
-    const mark = failureMark(outcome.status);
+    const mark = failureMark(outcome.status, (outcome as { error?: string }).error);
     await supabase.rpc("mark_chunk_failed", {
       p_run_id: runId, p_owner: session.userId, p_ordinal: ordinal, p_attempt: attempt,
       p_error: (mark ? `${mark} ` : "") + outcome.message,
     });
     return NextResponse.json(
-      { error: "chunk_failed", message: outcome.message, permanent: mark === PERMANENT_MARK },
-      { status: outcome.status >= 400 ? outcome.status : 502 },
+      {
+        error: "chunk_failed", message: outcome.message,
+        permanent: mark === PERMANENT_MARK,
+        ...(mark === CAPACITY_MARK
+          ? { retryAfterSeconds: (outcome as { retryAfterSeconds?: number }).retryAfterSeconds ?? 120 }
+          : {}),
+      },
+      // A capacity refusal is 429, not 402: it is "come back shortly", and 402
+      // is what the client is told to read as "add credits".
+      { status: mark === CAPACITY_MARK ? 429 : outcome.status >= 400 ? outcome.status : 502 },
     );
   }
 
