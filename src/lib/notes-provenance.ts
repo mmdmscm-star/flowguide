@@ -59,9 +59,44 @@ export function factTokens(text: string): string[] {
  */
 export function recordSpan(chunkText: string, title: string, siblingTitles: string[]): string | null {
   const hay = String(chunkText ?? "");
+  // Where does this record's own block BEGIN?
+  //
+  // A record header starts a line AND carries the whole title, city suffix and
+  // all. A community named in prose has neither property; a stray line
+  // describing a sibling has only the first. Both occur in real sources —
+  // communities under one operator cite each other, and one community's
+  // description gets typed into another's row, which is the St Michael's /
+  // Greenwood entry error itself.
+  //
+  // Matching the bare community name anywhere, as this did, let either of
+  // those pull a span start into the middle of another record's block,
+  // truncating that record and handing its text to this one. Take the most
+  // specific evidence available and fall back only where the source lacks it.
+  //
+  // Measured against the real 65-community source: spans are identical for all
+  // 65, because every mention there happens to follow its own header. This
+  // changes no current result; it stops depending on that ordering.
+  const lineStartOf = (needle: string): number => {
+    const k = needle.toLowerCase();
+    let off = 0;
+    for (const ln of hay.split("\n")) {
+      if (ln.trimStart().toLowerCase().startsWith(k)) return off + (ln.length - ln.trimStart().length);
+      off += ln.length + 1;
+    }
+    return -1;
+  };
+
   const find = (t: string): number => {
-    const key = String(t).split(/\s[—–-]\s/)[0].trim();
+    const full = String(t).trim();
+    const key = full.split(/\s[—–-]\s/)[0].trim();
     if (key.length < 4) return -1;
+
+    const titled = full.length > key.length ? lineStartOf(full) : -1;
+    if (titled >= 0) return titled;
+
+    const anchored = lineStartOf(key);
+    if (anchored >= 0) return anchored;
+
     const i = hay.toLowerCase().indexOf(key.toLowerCase());
     if (i >= 0) return i;
     // Fall back to a normalised scan so punctuation differences do not lose a
