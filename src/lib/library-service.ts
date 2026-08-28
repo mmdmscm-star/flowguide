@@ -16,15 +16,23 @@ import { createServerClient } from "./supabase.ts";
 import type { ItemContentPayload } from "./item-content.ts";
 import { REVISION_CONFLICT, type LibraryAncestry } from "./library.ts";
 
+import { cursorFilter, cursorFrom, vocabularyOf, type LibraryCursor } from "./library-organization";
+
 type Db = ReturnType<typeof createServerClient>;
 
 export interface LibraryItem extends ItemContentPayload {
   id: string;
   revision: number;
   updatedAt: string;
+  /** Library ORGANIZATION. Never copied into a FlowGuide, never shown to a
+   *  recipient — how a professional files their own shelf is not information
+   *  about the thing on it. */
+  category: string;
+  labels: string[];
+  isFavorite: boolean;
 }
 
-const COLUMNS = "id, title, address, description, notes, details, links, photos, contacts, revision, updated_at";
+const COLUMNS = "id, title, address, description, notes, details, links, photos, contacts, revision, updated_at, category, labels, is_favorite";
 
 /** Rows carry snake_case; the payload shape is shared with the packet writers. */
 function toLibraryItem(row: Record<string, unknown>): LibraryItem {
@@ -32,6 +40,9 @@ function toLibraryItem(row: Record<string, unknown>): LibraryItem {
     id: String(row.id),
     revision: Number(row.revision),
     updatedAt: String(row.updated_at),
+    category: String(row.category ?? ""),
+    labels: Array.isArray(row.labels) ? (row.labels as unknown[]).map(String) : [],
+    isFavorite: row.is_favorite === true,
     title: String(row.title ?? ""),
     address: String(row.address ?? ""),
     description: String(row.description ?? ""),
@@ -44,16 +55,104 @@ function toLibraryItem(row: Record<string, unknown>): LibraryItem {
 }
 
 /** Search, or list most-recently-updated when the query is empty. */
+export interface LibraryQuery {
+  q?: string;
+  category?: string;
+  /** AND semantics: an item must carry every label asked for. */
+  labels?: string[];
+  favorite?: boolean;
+  cursor?: LibraryCursor | null;
+  limit?: number;
+}
+
+export interface LibraryPage {
+  items: LibraryItem[];
+  hasMore: boolean;
+  nextCursor: LibraryCursor | null;
+  error?: string;
+}
+
+/**
+ * One page of the Library, filtered and keyset-paginated.
+ *
+ * `hasMore` is EXPLICIT rather than inferred from a short page. A caller that
+ * guesses "fewer than I asked for means the end" is right until a filter
+ * changes the page shape, and then it silently hides the rest of someone's
+ * Library — which is the defect this replaces, in a new costume. One extra row
+ * is fetched and discarded so the answer is observed, not assumed.
+ */
 export async function searchLibrary(
-  db: Db, userId: string, q: string, limit = 50,
-): Promise<{ items: LibraryItem[]; error?: string }> {
-  let query = db.from("library_items").select(COLUMNS).eq("user_id", userId);
+  db: Db, userId: string, query: LibraryQuery = {},
+): Promise<LibraryPage> {
+  const limit = Math.min(Math.max(query.limit ?? 30, 1), 100);
+  let q = db.from("library_items").select(COLUMNS).eq("user_id", userId);
+
   // websearch_to_tsquery tolerates whatever a professional actually types —
   // quotes, stray operators — instead of erroring on it.
-  if (q.trim()) query = query.textSearch("search_tsv", q.trim(), { type: "websearch" });
-  const { data, error } = await query.order("updated_at", { ascending: false }).limit(limit);
-  if (error) return { items: [], error: error.message };
-  return { items: (data ?? []).map((r) => toLibraryItem(r as Record<string, unknown>)) };
+  const text = String(query.q ?? "").trim();
+  if (text) q = q.textSearch("search_tsv", text, { type: "websearch" });
+
+  const category = String(query.category ?? "").trim();
+  if (category) q = q.eq("category", category);
+
+  const labels = (query.labels ?? []).map((l) => String(l).trim()).filter(Boolean);
+  if (labels.length) q = q.contains("labels", labels);
+
+  if (query.favorite) q = q.eq("is_favorite", true);
+
+  if (query.cursor) q = q.or(cursorFilter(query.cursor));
+
+  const { data, error } = await q
+    .order("updated_at", { ascending: false })
+    .order("id", { ascending: false })
+    .limit(limit + 1);
+
+  if (error) return { items: [], hasMore: false, nextCursor: null, error: error.message };
+
+  const rows = (data ?? []) as Record<string, unknown>[];
+  const hasMore = rows.length > limit;
+  const page = (hasMore ? rows.slice(0, limit) : rows).map((r) => toLibraryItem(r));
+  const last = page[page.length - 1];
+  return { items: page, hasMore, nextCursor: hasMore && last ? cursorFrom(last) : null };
+}
+
+/**
+ * Set a Library item's ORGANIZATION, and nothing else.
+ *
+ * Deliberately not part of updateLibraryItem. That bumps `revision`, which is
+ * the save-back comparator: a descendant records the revision it was copied
+ * from, and a mismatch means "the base moved on". Filing 65 items into
+ * categories would otherwise tell the professional that 65 FlowGuides had
+ * diverged — because they tidied their shelf.
+ *
+ * `updated_at` is left alone for the same reason in miniature: it is the
+ * Library's ordering, and organizing must not reshuffle the list.
+ */
+export async function setLibraryOrganization(
+  db: Db, userId: string, id: string,
+  patch: { category?: string; labels?: string[]; isFavorite?: boolean },
+): Promise<{ item?: LibraryItem; error?: string }> {
+  const update: Record<string, unknown> = {};
+  if (patch.category !== undefined) update.category = patch.category;
+  if (patch.labels !== undefined) update.labels = patch.labels;
+  if (patch.isFavorite !== undefined) update.is_favorite = patch.isFavorite;
+  if (!Object.keys(update).length) return { error: "nothing_to_change" };
+
+  const { data, error } = await db.from("library_items")
+    .update(update)                       // no revision, no updated_at, on purpose
+    .eq("id", id).eq("user_id", userId)
+    .select(COLUMNS).maybeSingle();
+  if (error) return { error: error.message };
+  if (!data) return { error: "not_found" };
+  return { item: toLibraryItem(data as Record<string, unknown>) };
+}
+
+/** The professional's own vocabulary, for filter chips and spelling reuse. */
+export async function libraryVocabulary(
+  db: Db, userId: string,
+): Promise<{ categories: string[]; labels: string[] }> {
+  const { data } = await db.from("library_items").select("category, labels").eq("user_id", userId);
+  return vocabularyOf((data ?? []) as Array<{ category?: unknown; labels?: unknown }>);
 }
 
 export async function getLibraryItem(

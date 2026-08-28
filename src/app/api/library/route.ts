@@ -3,9 +3,12 @@ import { getSession } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase";
 import { normalizeItemContent } from "@/lib/item-content";
 import { isDuplicateCandidate } from "@/lib/library";
-import { searchLibrary, createLibraryItem, readItemAsPayload } from "@/lib/library-service";
+import { searchLibrary, createLibraryItem, readItemAsPayload, libraryVocabulary } from "@/lib/library-service";
 
-// GET  /api/library?q=   — search, or most-recently-updated when q is empty
+// GET  /api/library?q=&category=&labels=a,b&favorite=1&cursorUpdatedAt=&cursorId=
+//      One PAGE of the Library, newest first. Search and the organization
+//      filters compose; paging is keyset, so nothing is skipped or repeated
+//      when an item is edited mid-scroll.
 // POST /api/library      — add an entry, from a packet item OR written directly
 //
 // Ownership is enforced HERE, from the session, never from the request body.
@@ -17,11 +20,32 @@ export async function GET(request: Request) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const q = new URL(request.url).searchParams.get("q") ?? "";
+  const sp = new URL(request.url).searchParams;
   const supabase = createServerClient();
-  const { items, error } = await searchLibrary(supabase, session.userId, q);
+
+  // The cursor carries the RAW timestamp string the previous page returned. It
+  // is never parsed into a Date here: timestamptz is microsecond precision and
+  // a Date is milliseconds, so a round-trip would truncate it and the page
+  // boundary would repeat or skip a row.
+  const cursorUpdatedAt = sp.get("cursorUpdatedAt");
+  const cursorId = sp.get("cursorId");
+  const cursor = cursorUpdatedAt && cursorId ? { updatedAt: cursorUpdatedAt, id: cursorId } : null;
+
+  const { items, hasMore, nextCursor, error } = await searchLibrary(supabase, session.userId, {
+    q: sp.get("q") ?? "",
+    category: sp.get("category") ?? "",
+    labels: (sp.get("labels") ?? "").split(",").map((l) => l.trim()).filter(Boolean),
+    favorite: sp.get("favorite") === "1",
+    cursor,
+    limit: Number(sp.get("limit")) || undefined,
+  });
   if (error) return NextResponse.json({ error }, { status: 500 });
-  return NextResponse.json({ items });
+
+  // The vocabulary rides along with the FIRST page only. It describes the whole
+  // Library rather than this page, so re-sending it with every scroll would be
+  // the same answer repeated.
+  const vocabulary = cursor ? undefined : await libraryVocabulary(supabase, session.userId);
+  return NextResponse.json({ items, hasMore, nextCursor, vocabulary });
 }
 
 export async function POST(request: Request) {
@@ -63,7 +87,7 @@ export async function POST(request: Request) {
   // different things can share a name, and silently merging a professional's
   // content is unrecoverable. `force` is the professional saying so explicitly.
   if (!force) {
-    const { items } = await searchLibrary(supabase, session.userId, payload.title ?? "", 25);
+    const { items } = await searchLibrary(supabase, session.userId, { q: payload.title ?? "", limit: 25 });
     const existing = items.find((i) => isDuplicateCandidate(i, payload));
     if (existing) {
       return NextResponse.json({

@@ -27,13 +27,27 @@ const ROUTER = {
 };
 
 // The Library the fake server holds. Search filters it, exactly as the API does.
+// updatedAt is present because the server pages on (updated_at, id) and hands
+// the pair back as a cursor — a fake that omitted it could not reproduce the
+// contract the list actually depends on.
+const stamp = (n: number) => `2026-08-28 12:00:${String(n).padStart(2, "0")}.000000+00`;
 const LIBRARY = [
-  { id: "brookdale-windsor", title: "Brookdale Windsor", address: "907 Adele Dr. Windsor, CA" },
-  { id: "brookdale-paulin", title: "Brookdale Paulin Creek", address: "2375 Range Ave, Santa Rosa, CA" },
-  { id: "brookdale-chanate", title: "Brookdale Chanate", address: "3250 Chanate Rd. Santa Rosa, CA" },
-  { id: "varenna", title: "Varenna at Fountaingrove", address: "1401 Fountaingrove Pkwy" },
-  { id: "oakmont", title: "Oakmont Gardens", address: "301 White Oak Dr" },
+  { id: "brookdale-windsor", title: "Brookdale Windsor", address: "907 Adele Dr. Windsor, CA", updatedAt: stamp(5) },
+  { id: "brookdale-paulin", title: "Brookdale Paulin Creek", address: "2375 Range Ave, Santa Rosa, CA", updatedAt: stamp(4) },
+  { id: "brookdale-chanate", title: "Brookdale Chanate", address: "3250 Chanate Rd. Santa Rosa, CA", updatedAt: stamp(3) },
+  { id: "varenna", title: "Varenna at Fountaingrove", address: "1401 Fountaingrove Pkwy", updatedAt: stamp(2) },
+  { id: "oakmont", title: "Oakmont Gardens", address: "301 White Oak Dr", updatedAt: stamp(1) },
 ];
+
+// A LIBRARY THE SIZE OF THE REAL ONE. 65 is the number that exposed the defect:
+// the old code capped at 50 and said nothing, so fifteen were unreachable.
+const BIG = Array.from({ length: 65 }, (_, i) => ({
+  id: `item-${String(i + 1).padStart(2, "0")}`,
+  title: `Community ${String(i + 1).padStart(2, "0")}`,
+  address: `${i + 1} Example Ave`,
+  updatedAt: `2026-08-20 12:00:00.000000+00`,   // ALL TIED, so the id tiebreak carries the paging
+}));
+let useBig = false;
 let failNextLoad = false;
 const createdWith: string[][] = [];
 
@@ -57,9 +71,28 @@ before(async () => {
     const href = String(url);
     if (href.startsWith("/api/library")) {
       if (failNextLoad) { failNextLoad = false; return { ok: false, json: async () => ({ message: "Could not load your Library." }) }; }
-      const q = decodeURIComponent(new URL(href, "https://flowguide.test").searchParams.get("q") ?? "").toLowerCase();
-      const items = LIBRARY.filter((i) => !q || i.title.toLowerCase().includes(q));
-      return { ok: true, json: async () => ({ items }) };
+      const sp = new URL(href, "https://flowguide.test").searchParams;
+      const q = decodeURIComponent(sp.get("q") ?? "").toLowerCase();
+      // The real ordering and the real cursor rule: updated_at desc, id desc,
+      // compared as a PAIR. A fake that ordered by id alone would let a broken
+      // cursor pass.
+      const all = (useBig ? BIG : LIBRARY)
+        .filter((i) => !q || i.title.toLowerCase().includes(q))
+        .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt) || b.id.localeCompare(a.id));
+      const cu = sp.get("cursorUpdatedAt"); const ci = sp.get("cursorId");
+      const after = cu && ci
+        ? all.filter((i) => i.updatedAt < cu || (i.updatedAt === cu && i.id < ci))
+        : all;
+      const limit = Number(sp.get("limit")) || 30;
+      const page = after.slice(0, limit);
+      const hasMore = after.length > limit;
+      const last = page[page.length - 1];
+      return { ok: true, json: async () => ({
+        items: page,
+        hasMore,
+        nextCursor: hasMore && last ? { updatedAt: last.updatedAt, id: last.id } : null,
+        ...(cu ? {} : { vocabulary: { categories: [], labels: [] } }),
+      }) };
     }
     if (href.startsWith("/api/packets/from-library")) {
       createdWith.push(JSON.parse(init?.body ?? "{}").libraryItemIds);
@@ -272,4 +305,110 @@ test("CREATE submits the whole accumulated set, across searches", async () => {
   assert.deepEqual(pushed, ["/edit/new-packet"], "create did not land the professional in the new FlowGuide");
   assert.equal(closed, 0, "create closed the picker instead of navigating");
   await act(async () => { root.unmount(); });
+});
+
+// ---------------------------------------------------------------------------
+// REACHABILITY IN THE PICKER.
+//
+// The 50-row cap lived in the shared list, so the picker had it too: opening
+// Create from Library on a 65-item Library showed 50 and stopped, with nothing
+// to indicate the other fifteen existed. The picker passes no paging props of
+// its own — it renders the same LibraryList — so this proves the inheritance
+// rather than assuming it.
+//
+// Every fixture item shares one updated_at, so paging here is carried entirely
+// by the id tiebreak. A cursor comparing the timestamp alone would stall on the
+// first page or repeat it forever, and the guard below would catch either.
+// ---------------------------------------------------------------------------
+const showMore = () => $$("button").find((b) => /Show more/.test(b.textContent ?? ""));
+
+async function exhaust() {
+  for (let guard = 0; guard < 40; guard++) {
+    const btn = showMore();
+    if (!btn) return guard;                 // no button left: everything is loaded
+    await act(async () => { btn.click(); });
+    await flush();
+  }
+  throw new Error("the picker never stopped asking for more pages");
+}
+
+test("PICKER: all 65 items are reachable WITHOUT SEARCHING", async () => {
+  useBig = true;
+  try {
+    const root = await mount();
+    assert.ok(rows().length > 0, "the picker showed nothing at all");
+    assert.ok(rows().length < 65, "the fixture did not page — this proves nothing");
+    assert.ok(!!showMore(), "the picker gave no way to reach the rest");
+
+    const pages = await exhaust();
+    assert.ok(pages >= 1, "no additional page was ever loaded");
+    assert.equal(rows().length, 65, `browsing reached ${rows().length} of 65`);
+
+    // ...each exactly once, and the last item — the one the old cap hid.
+    const titles = rows().map((r) => (r.textContent ?? "").match(/Community \d\d/)?.[0] ?? "");
+    assert.equal(new Set(titles).size, 65, "an item was listed twice across pages");
+    assert.ok(titles.includes("Community 01"), "the oldest item is still unreachable");
+    assert.equal(showMore(), undefined, "it still offers more after everything is loaded");
+    await act(async () => { root.unmount(); });
+  } finally { useBig = false; }
+});
+
+test("PICKER: selections accumulate ACROSS pages and survive to Create", async () => {
+  useBig = true;
+  try {
+    const root = await mount();
+    await selectRowContaining("Community 65");     // on the first page
+    await exhaust();
+    assert.equal(rows().length, 65);
+    await selectRowContaining("Community 01");     // only reachable after paging
+    assert.match(createButton().textContent ?? "", /Create FlowGuide with 2/,
+      "a selection made before paging was lost when more loaded");
+
+    // The earlier selection is still ticked after everything loaded.
+    const ticked = rows().filter((_, i) => checkboxes()[i].checked)
+      .map((r) => (r.textContent ?? "").match(/Community \d\d/)?.[0] ?? "");
+    assert.deepEqual(ticked.sort(), ["Community 01", "Community 65"], JSON.stringify(ticked));
+
+    await act(async () => { createButton().click(); });
+    await flush();
+    assert.deepEqual([...(createdWith[0] ?? [])].sort(), ["item-01", "item-65"],
+      "create submitted something other than what was selected across pages");
+    await act(async () => { root.unmount(); });
+  } finally { useBig = false; }
+});
+
+test("PICKER: searching resets paging, and clearing it pages again from the top", async () => {
+  useBig = true;
+  try {
+    const root = await mount();
+    await exhaust();
+    assert.equal(rows().length, 65);
+
+    await search("Community 4");                  // 40-49 plus 04
+    assert.ok(rows().length < 65 && rows().length > 0, `search returned ${rows().length}`);
+    assert.equal(showMore(), undefined, "a narrow search still claims there is another page");
+    assert.ok(isOpen(), "searching closed the picker");
+
+    await search("");                             // back to everything, page one
+    assert.ok(rows().length < 65, "clearing the search did not reset paging to the first page");
+    assert.ok(!!showMore(), "and it left no way to reach the rest again");
+    await exhaust();
+    assert.equal(rows().length, 65, "the full list was not reachable a second time");
+    await act(async () => { root.unmount(); });
+  } finally { useBig = false; }
+});
+
+test("PICKER: the dismissal fix still holds while paging", async () => {
+  useBig = true;
+  try {
+    const root = await mount();
+    await exhaust();
+    await selectRowContaining("Community 01");
+    // The gesture that used to end the session — now across a paged list.
+    await pressInsideReleaseOutside(rows()[0]);
+    assert.equal(closed, 0, "paging reintroduced the accidental dismissal");
+    assert.ok(isOpen());
+    assert.match(createButton().textContent ?? "", /with 1/, "the selection was lost");
+    await act(async () => { root.unmount(); });
+  } finally { useBig = false; }
 });

@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase";
 import { normalizeItemContent } from "@/lib/item-content";
-import { getLibraryItem, updateLibraryItem, deleteLibraryItem, countDescendants } from "@/lib/library-service";
+import { getLibraryItem, updateLibraryItem, deleteLibraryItem, countDescendants, setLibraryOrganization, libraryVocabulary } from "@/lib/library-service";
+import { normalizeCategory, normalizeLabels } from "@/lib/library-organization";
 
 type Context = { params: Promise<{ id: string }> };
 
@@ -27,6 +28,31 @@ export async function PATCH(request: Request, context: Context) {
 
   const { id } = await context.params;
   const body = await request.json().catch(() => ({}));
+  const supabaseEarly = createServerClient();
+
+  // ORGANIZING IS NOT EDITING, and it arrives in its own envelope so the two can
+  // never be confused for one another.
+  //
+  // A content save bumps `revision`, which is the save-back comparator: a copied
+  // item records the revision it came from, and a mismatch means "the base moved
+  // on". If filing an item into a category bumped it, organizing a 65-item
+  // Library would report 65 diverged FlowGuides. So this path writes the three
+  // organizational columns and nothing else — no revision, no updated_at, and
+  // no expectedRevision to supply, because no content is at stake.
+  const org = (body as { organization?: Record<string, unknown> }).organization;
+  if (org && typeof org === "object") {
+    const known = await libraryVocabulary(supabaseEarly, session.userId);
+    const patch: { category?: string; labels?: string[]; isFavorite?: boolean } = {};
+    if ("category" in org) patch.category = normalizeCategory(org.category, known.categories);
+    if ("labels" in org) patch.labels = normalizeLabels(org.labels, known.labels);
+    if ("isFavorite" in org) patch.isFavorite = org.isFavorite === true;
+
+    const res = await setLibraryOrganization(supabaseEarly, session.userId, id, patch);
+    if (res.error === "not_found") return NextResponse.json({ error: "not_found" }, { status: 404 });
+    if (res.error) return NextResponse.json({ error: res.error }, { status: 400 });
+    return NextResponse.json({ item: res.item });
+  }
+
   const expected = (body as { expectedRevision?: number }).expectedRevision;
 
   // The revision the editor loaded is REQUIRED, not optional. Without it two
@@ -38,7 +64,7 @@ export async function PATCH(request: Request, context: Context) {
       { error: "bad_request", message: "expectedRevision is required." }, { status: 400 });
   }
 
-  const supabase = createServerClient();
+  const supabase = supabaseEarly;
   const { item, conflict, error } = await updateLibraryItem(
     supabase, session.userId, id,
     normalizeItemContent(body as Record<string, unknown>), expected);

@@ -47,6 +47,14 @@ export default function LibraryWorkspace() {
   // nothing": an action that needs saved material must not vanish because a
   // search came back empty.
   const [hasAny, setHasAny] = useState<boolean | null>(null);
+  // ORGANIZATION FILTERS. Views of one Library, not separate collections: they
+  // compose with the search box and with each other, and the chips are drawn
+  // from the professional's own vocabulary rather than anything FlowGuide names.
+  const [category, setCategory] = useState("");
+  const [labels, setLabels] = useState<string[]>([]);
+  const [favorite, setFavorite] = useState(false);
+  const [vocab, setVocab] = useState<{ categories: string[]; labels: string[] }>({ categories: [], labels: [] });
+
   const [selecting, setSelecting] = useState(false);
   const [chosen, setChosen] = useState<string[]>([]);
   const router = useRouter();
@@ -309,8 +317,28 @@ export default function LibraryWorkspace() {
             />
           </div>
         ) : (
+          <>
+          {(vocab.categories.length > 0 || vocab.labels.length > 0 || favorite) && (
+            <div className="mb-3 flex flex-wrap items-center gap-1.5">
+              <FilterChip active={!category && labels.length === 0 && !favorite}
+                onClick={() => { setCategory(""); setLabels([]); setFavorite(false); }}>All</FilterChip>
+              <FilterChip active={favorite} onClick={() => setFavorite((f) => !f)}>★ Favorites</FilterChip>
+              {vocab.categories.map((c) => (
+                <FilterChip key={c} active={category === c}
+                  onClick={() => setCategory((cur) => cur === c ? "" : c)}>{c}</FilterChip>
+              ))}
+              {vocab.labels.map((l) => (
+                <FilterChip key={l} active={labels.includes(l)} subtle
+                  onClick={() => setLabels((cur) => cur.includes(l) ? cur.filter((x) => x !== l) : [...cur, l])}>{l}</FilterChip>
+              ))}
+            </div>
+          )}
           <LibraryList
             refreshKey={refreshKey}
+            category={category}
+            labels={labels}
+            favorite={favorite}
+            onVocabulary={setVocab}
             onLoaded={({ count, filtered }) => { if (!filtered) setHasAny(count > 0); }}
             selectable={selecting}
             selected={chosen}
@@ -341,8 +369,35 @@ export default function LibraryWorkspace() {
               </div>
             }
           />
+          </>
         )}
       </div>
     </div>
+  );
+}
+
+/** One filter chip. Deliberately the same control for categories and labels —
+ *  they filter the same list and behave the same way; only the emphasis
+ *  differs, because a category is a place and a label is a facet. */
+function FilterChip({
+  active, subtle = false, onClick, children,
+}: {
+  active: boolean; subtle?: boolean; onClick: () => void; children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={`rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${
+        active
+          ? "border-accent bg-accent text-white"
+          : subtle
+            ? "border-border bg-white text-muted hover:border-accent"
+            : "border-border bg-white text-foreground hover:border-accent"
+      }`}
+    >
+      {children}
+    </button>
   );
 }
