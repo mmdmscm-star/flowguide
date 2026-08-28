@@ -142,3 +142,60 @@ test("a move that changes nothing does not trigger a save", () => {
   assert.match(fn, /if \(updatedDetails === item\.details\) return;/,
     "a self-drop would still PATCH the order it already had");
 });
+
+// ---------------------------------------------------------------------------
+// THE LIBRARY EDITOR — the same component serves the Library and block-mode
+// FlowGuides, so this is one interaction, not a second one.
+// ---------------------------------------------------------------------------
+const BLOCK_EDITOR = "src/components/editor/block-item-editor.tsx";
+
+test("the Library editor reuses the shared reorder semantics, not its own", () => {
+  const src = codeOf(BLOCK_EDITOR);
+  assert.match(src, /import \{ moveDetail, detailsPayload \} from "@\/lib\/detail-order"/,
+    "the Library editor does not use the shared helper");
+  assert.match(src, /moveDetail\(arr, String\(active\.id\), String\(over\.id\)\)/,
+    "the drag does not go through moveDetail");
+  assert.ok(!/function moveDetail|const moveDetail|arrayMove/.test(src),
+    "a second reorder implementation appeared in the Library editor");
+});
+
+test("Library detail rows have a STABLE identity, not an array index", () => {
+  const src = codeOf(BLOCK_EDITOR);
+  assert.match(src, /type DraftDetail = Detail & \{ id: string \}/);
+  assert.match(src, /useSortable\(\{\s*id: detail\.id,/,
+    "rows are not registered as sortables by a stable id");
+  const list = src.slice(src.indexOf("{details.map("), src.indexOf("</SortableContext>"));
+  assert.match(list, /key=\{d\.id\}/, "the detail list is still keyed by something other than the row id");
+  assert.doesNotMatch(list, /key=\{i\}/,
+    "keyed by array index: a moved row would carry the wrong input's state with it");
+});
+
+test("the Library drag handle is keyboard-reachable, like the FlowGuide one", () => {
+  const src = codeOf(BLOCK_EDITOR);
+  assert.match(src, /KeyboardSensor/, "keyboard users cannot reorder Library details");
+  assert.match(src, /sortableKeyboardCoordinates/);
+  assert.match(src, /PointerSensor, \{ activationConstraint: \{ distance: 5 \} \}/,
+    "the pointer activation differs from the FlowGuide editor, so the two feel different");
+});
+
+test("the draft id is NEVER saved — the payload stays {label, value}", () => {
+  const src = codeOf(BLOCK_EDITOR);
+  assert.match(src, /const cleanDetails = detailsPayload\(/,
+    "the save does not strip the client-side row id");
+  // The same helper the FlowGuide editor uses, so neither can drift into
+  // sending an ordinal that could disagree with the array.
+  const withIds = [
+    { id: "x1", label: "Type", value: "MC" },
+    { id: "x2", label: "Community Fee", value: "$4,000" },
+  ];
+  const payload = detailsPayload(withIds);
+  for (const row of payload) assert.deepEqual(Object.keys(row).sort(), ["label", "value"]);
+  assert.deepEqual(payload.map((r) => r.label), ["Type", "Community Fee"], "order was not preserved");
+});
+
+test("dragging is refused while a save is in flight", () => {
+  const src = codeOf(BLOCK_EDITOR);
+  const row = src.slice(src.indexOf("function SortableDetailRow("), src.indexOf("export function BlockItemEditor("));
+  assert.match(row, /useSortable\(\{[\s\S]*?disabled: busy,/,
+    "a row can be dragged mid-save, which would race the payload being sent");
+});

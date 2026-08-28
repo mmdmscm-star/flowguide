@@ -1,6 +1,23 @@
 "use client";
 
 import { useState } from "react";
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  KeyboardSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+  useSortable,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import { moveDetail, detailsPayload } from "@/lib/detail-order";
 import type { Item } from "@/lib/types";
 import type { ItemContentPayload } from "@/lib/item-content";
 import type { MutationResult } from "@/lib/serial-mutation";
@@ -15,10 +32,104 @@ import type { MutationResult } from "@/lib/serial-mutation";
 // ============================================================
 
 type Detail = { label: string; value: string };
+// A row needs an identity that survives being moved. The list was keyed by
+// array index, which is fine for a static list and wrong the moment rows can
+// change places: the key would follow the position rather than the row, so a
+// drag would carry the wrong input's focus and value with it. The id is local
+// to this draft and never saved — detailsPayload sends {label, value} only.
+type DraftDetail = Detail & { id: string };
+const draftDetail = (d: Detail): DraftDetail => ({ ...d, id: crypto.randomUUID() });
 type Link = { url: string; label: string };
 type Photo = { url: string };
 type Contact = { name: string; role: string; phone: string; email: string; website: string };
 const emptyContact = (): Contact => ({ name: "", role: "", phone: "", email: "", website: "" });
+
+
+// ============================================================
+// One Detail row, reorderable.
+//
+// The same interaction as the FlowGuide item editor — same handle, same
+// sensors, same shared moveDetail semantics — because this editor serves BOTH
+// the Library and block-composition FlowGuides, and a professional should not
+// have to learn two ways to move a row depending on which screen they are on.
+//
+// Order is durable without any schema change: library_items.details is a jsonb
+// ARRAY, and jsonb preserves array order. The copy into a FlowGuide walks it
+// with jsonb_array_elements and numbers item_details.sort_order as it goes, so
+// an order arranged once in the Library is the order a new FlowGuide starts
+// from — and the copy is independent from that moment on.
+// ============================================================
+function SortableDetailRow({
+  detail,
+  busy,
+  field,
+  onChange,
+  onRemove,
+}: {
+  detail: DraftDetail;
+  busy: boolean;
+  field: string;
+  onChange: (patch: Partial<Detail>) => void;
+  onRemove: () => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: detail.id,
+    disabled: busy,
+  });
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  // Names the row for anyone who cannot see it move; falls back to the value
+  // when the label is still blank.
+  const named = detail.label.trim() || detail.value.trim();
+
+  return (
+    <div ref={setNodeRef} style={style} className="flex items-center gap-2">
+      <button
+        type="button"
+        {...attributes}
+        {...listeners}
+        disabled={busy}
+        aria-label={named ? `Reorder detail: ${named}` : "Reorder detail"}
+        className="text-gray-300 hover:text-gray-600 cursor-grab active:cursor-grabbing flex-shrink-0 touch-none p-1 -ml-1 disabled:cursor-not-allowed"
+      >
+        <svg className="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+          <circle cx="7" cy="4" r="1.5" />
+          <circle cx="13" cy="4" r="1.5" />
+          <circle cx="7" cy="10" r="1.5" />
+          <circle cx="13" cy="10" r="1.5" />
+          <circle cx="7" cy="16" r="1.5" />
+          <circle cx="13" cy="16" r="1.5" />
+        </svg>
+      </button>
+      <input
+        value={detail.label}
+        disabled={busy}
+        onChange={(e) => onChange({ label: e.target.value })}
+        placeholder="Label"
+        className={field}
+      />
+      <input
+        value={detail.value}
+        disabled={busy}
+        onChange={(e) => onChange({ value: e.target.value })}
+        placeholder="Value"
+        className={field}
+      />
+      <button
+        className="text-red-400 hover:text-red-600 px-1"
+        disabled={busy}
+        onClick={onRemove}
+        aria-label={named ? `Remove detail: ${named}` : "Remove detail"}
+      >
+        ×
+      </button>
+    </div>
+  );
+}
 
 export function BlockItemEditor({
   item,
@@ -36,13 +147,22 @@ export function BlockItemEditor({
   const [description, setDescription] = useState(item.description || "");
   const [notes, setNotes] = useState(item.notes || "");
   const [highlight, setHighlight] = useState(item.highlight || "");
-  const [details, setDetails] = useState<Detail[]>(item.details ? item.details.map((d) => ({ label: d.label, value: d.value })) : []);
+  const [details, setDetails] = useState<DraftDetail[]>(
+    item.details ? item.details.map((d) => draftDetail({ label: d.label, value: d.value })) : []);
   const [links, setLinks] = useState<Link[]>(item.links ? item.links.map((l) => ({ url: l.url, label: l.label || "" })) : []);
   const [photos, setPhotos] = useState<Photo[]>(item.photos ? item.photos.map((u) => ({ url: u })) : []);
   const [contacts, setContacts] = useState<Contact[]>(
     item.contacts ? item.contacts.map((c) => ({ name: c.name || "", role: c.role || "", phone: c.phone || "", email: c.email || "", website: c.website || "" })) : []
   );
   const [error, setError] = useState("");
+
+  // Same sensors as the FlowGuide editor: a pointer that ignores a 5px twitch,
+  // and a keyboard sensor, because a reorder only a mouse can perform is not
+  // available to everyone who has to use it.
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
 
   const field = "w-full px-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:ring-2 focus:ring-accent placeholder:text-gray-300";
   const smallBtn = "text-xs font-medium text-accent hover:text-accent-hover";
@@ -61,7 +181,10 @@ export function BlockItemEditor({
   }
 
   async function doSave() {
-    const cleanDetails = details.filter((d) => String(d?.label ?? "").trim() || String(d?.value ?? "").trim());
+    // detailsPayload drops the draft id and keeps the sequence: position is
+    // what carries order, here exactly as it does in the FlowGuide editor.
+    const cleanDetails = detailsPayload(
+      details.filter((d) => String(d?.label ?? "").trim() || String(d?.value ?? "").trim()));
     const cleanLinks = links.filter((l) => String(l?.url ?? "").trim());
     // Defensive: no stored shape may make this throw again.
     const cleanPhotos = photos.filter((p) => String(p?.url ?? "").trim());
@@ -147,17 +270,32 @@ export function BlockItemEditor({
           <div>
             <div className="flex items-center justify-between mb-1">
               <span className="text-xs font-medium text-muted">Details</span>
-              <button className={smallBtn} disabled={busy} onClick={() => setDetails((d) => [...d, { label: "", value: "" }])}>+ Add detail</button>
+              <button className={smallBtn} disabled={busy} onClick={() => setDetails((d) => [...d, draftDetail({ label: "", value: "" })])}>+ Add detail</button>
             </div>
-            <div className="space-y-2">
-              {details.map((d, i) => (
-                <div key={i} className="flex gap-2">
-                  <input value={d.label} disabled={busy} onChange={(e) => setDetails((arr) => arr.map((x, j) => j === i ? { ...x, label: e.target.value } : x))} placeholder="Label" className={field} />
-                  <input value={d.value} disabled={busy} onChange={(e) => setDetails((arr) => arr.map((x, j) => j === i ? { ...x, value: e.target.value } : x))} placeholder="Value" className={field} />
-                  <button className="text-red-400 hover:text-red-600 px-1" disabled={busy} onClick={() => setDetails((arr) => arr.filter((_, j) => j !== i))} aria-label="Remove detail">×</button>
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={(e: DragEndEvent) => {
+                const { active, over } = e;
+                if (!over || active.id === over.id) return;
+                setDetails((arr) => moveDetail(arr, String(active.id), String(over.id)));
+              }}
+            >
+              <SortableContext items={details.map((d) => d.id)} strategy={verticalListSortingStrategy}>
+                <div className="space-y-2">
+                  {details.map((d) => (
+                    <SortableDetailRow
+                      key={d.id}
+                      detail={d}
+                      busy={busy}
+                      field={field}
+                      onChange={(patch) => setDetails((arr) => arr.map((x) => x.id === d.id ? { ...x, ...patch } : x))}
+                      onRemove={() => setDetails((arr) => arr.filter((x) => x.id !== d.id))}
+                    />
+                  ))}
                 </div>
-              ))}
-            </div>
+              </SortableContext>
+            </DndContext>
           </div>
 
           {/* Links */}
