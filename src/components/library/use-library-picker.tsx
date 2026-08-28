@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { LibraryList } from "@/components/library/library-list";
 import { createFromLibrary } from "@/lib/create-from-library";
@@ -16,6 +16,33 @@ export function UseLibraryPicker({ onClose }: { onClose: () => void }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
+  // DISMISSAL MUST BE DELIBERATE.
+  //
+  // The backdrop used to close on any click it received, and a click is
+  // dispatched on the nearest common ancestor of where the press began and
+  // where it ended. Press inside the panel, release anywhere outside it, and
+  // the backdrop is that ancestor — so the panel's stopPropagation never runs
+  // and the whole assembly session ends.
+  //
+  // That is not a rare gesture here. Dragging to select text in the search box
+  // and overshooting the panel does it. So does pressing a row that the
+  // debounced search then replaces underneath the cursor: the row is gone by
+  // mouseup, and the release lands on the backdrop. Several minutes of choosing
+  // disappeared, intermittently, with nothing to show for it.
+  //
+  // So a backdrop click only counts when the press STARTED on the backdrop too.
+  const pressedBackdrop = useRef(false);
+
+  function onBackdropPointerDown(e: React.PointerEvent<HTMLDivElement>) {
+    pressedBackdrop.current = e.target === e.currentTarget;
+  }
+  function onBackdropClick(e: React.MouseEvent<HTMLDivElement>) {
+    if (busy) return;                          // a create is in flight
+    if (e.target !== e.currentTarget) return;  // the press ended inside
+    if (!pressedBackdrop.current) return;      // ...or it began inside
+    onClose();
+  }
+
   async function create() {
     setBusy(true);
     setError("");
@@ -27,9 +54,17 @@ export function UseLibraryPicker({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/30 p-4" onClick={onClose}>
-      <div className="w-full max-w-lg max-h-[85vh] overflow-y-auto rounded-xl border border-border bg-white p-4"
-           onClick={(e) => e.stopPropagation()}>
+    <div
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/30 p-4"
+      onPointerDown={onBackdropPointerDown}
+      onClick={onBackdropClick}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Use my Library"
+        className="w-full max-w-lg max-h-[85vh] overflow-y-auto rounded-xl border border-border bg-white p-4"
+      >
         <p className="text-base font-semibold text-foreground">Use my Library</p>
         <p className="mt-1 mb-3 text-sm text-muted">
           Choose what to start this FlowGuide with. Each one is copied in — you can
