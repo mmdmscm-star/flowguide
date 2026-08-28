@@ -226,6 +226,22 @@ export function LibraryList({
               <div className="min-w-0 flex-1 text-left">
                 <p className="text-sm font-medium text-foreground truncate">{s.title || "Untitled"}</p>
                 <p className="text-sm text-muted truncate">{subtitleFor(s)}</p>
+                {/* WHAT THIS ITEM NOW CARRIES. Without it, setting a category on
+                    six rows changed nothing anyone could see and the only
+                    evidence an action had worked was a sentence that scrolled
+                    away. The row is where the change actually happened. */}
+                {(s.category || (s.labels ?? []).length > 0) && (
+                  <p className="mt-1 flex flex-wrap items-center gap-1 text-[11px] leading-none">
+                    {s.category && (
+                      <span className="rounded-full bg-accent/10 px-1.5 py-0.5 font-medium text-accent">
+                        {s.category}
+                      </span>
+                    )}
+                    {(s.labels ?? []).map((l) => (
+                      <span key={l} className="rounded-full bg-gray-100 px-1.5 py-0.5 text-muted">{l}</span>
+                    ))}
+                  </p>
+                )}
               </div>
             </>
           );

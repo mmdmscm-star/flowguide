@@ -226,52 +226,115 @@ test("the vocabulary query actually reads is_favorite", () => {
 // ---------------------------------------------------------------------------
 test("the Library offers an explicit Organize entry point, beside Create", () => {
   const ws = bodyOf("src/components/library/library-workspace.tsx");
-  const header = ws.slice(ws.indexOf("Import with AI"), ws.indexOf("{selecting &&"));
+  const header = ws.slice(ws.indexOf("Import with AI"), ws.indexOf("{notice &&"));
   assert.match(header, />\s*Create a FlowGuide\s*</, "the create entry point is gone");
   assert.match(header, />\s*Organize\s*</,
-    "organizing is still only reachable through a button named after the other destination");
-  assert.match(header, /setOrganizing\(true\); setSelecting\(true\)/,
-    "Organize does not open the organizing intent");
-  assert.match(header, /setOrganizing\(false\); setSelecting\(true\)/,
-    "Create no longer opens with the create intent");
-  // ...and both are still gated on there being something to organize.
+    "organizing is only reachable through a button named after the other destination");
+  assert.match(header, /setOrganizing\(true\); setSelecting\(true\)/, "Organize does not open the organizing intent");
+  assert.match(header, /setOrganizing\(false\); setSelecting\(true\)/, "Create no longer opens with the create intent");
   assert.match(ws, /hasAny === true && \(/, "the entry points are offered over an empty Library");
 });
 
-test("ONE mode, two intents — not a second organizing system", () => {
+// ---------------------------------------------------------------------------
+// ARRIVING THROUGH ORGANIZE MUST BE AN ORGANIZE EXPERIENCE.
+//
+// Selection state is shared underneath, and that is an implementation detail.
+// Showing a dimmed "Create FlowGuide" and a disabled "Organize" beside it —
+// after clicking Organize — is the machinery leaking into the room: it says
+// nothing about what to do next and quite a lot about how the code is arranged.
+// ---------------------------------------------------------------------------
+const organizePanel = () => {
   const ws = bodyOf("src/components/library/library-workspace.tsx");
-  // Both doors set the SAME selection state; only `organizing` differs.
-  assert.equal((ws.match(/setSelecting\(true\)/g) ?? []).length, 2,
-    "there is more than one way to enter selection, or none");
-  assert.ok(!/organizeSelecting|selectingToOrganize|organizeMode/.test(ws),
-    "a parallel selection state appeared");
+  return ws.slice(ws.indexOf("{selecting && organizing && ("), ws.indexOf("{selecting && !organizing && ("));
+};
+const createPanel = () => {
+  const ws = bodyOf("src/components/library/library-workspace.tsx");
+  return ws.slice(ws.indexOf("{selecting && !organizing && ("), ws.indexOf("{importing && ("));
+};
+
+test("ORGANIZE MODE shows no Create action, and no second Organize button", () => {
+  const panel = organizePanel();
+  assert.ok(!/Create FlowGuide/.test(panel),
+    "a dimmed Create FlowGuide is still offered inside the organizing experience");
+  assert.ok(!/setOrganizing\(\(o\) => !o\)/.test(panel),
+    "the disabled Organize toggle is still there, beneath the button that opened it");
+  assert.match(panel, /Organize your Library/, "the mode does not name itself");
+  assert.match(panel, /Select the things you want to organize/, "the mode does not say what to do first");
 });
 
-test("the organizing panel appears with the MODE, not with the first selection", () => {
-  const ws = bodyOf("src/components/library/library-workspace.tsx");
-  assert.ok(!/\{organizing && chosen\.length > 0 && \(/.test(ws),
-    "clicking Organize shows only checkboxes until something is ticked — the controls it is named for stay hidden");
-  assert.match(ws, /\{organizing && \(/, "the panel is not tied to the mode");
-  assert.match(ws, /Tick the items below, then set a category, add a label, or star them\./,
-    "nothing tells the professional what to do first");
-  assert.match(ws, /Select the items you want to organize/,
-    "the bar does not say what this mode is for");
+test("ZERO SELECTED says so, and offers nothing that cannot work", () => {
+  const panel = organizePanel();
+  assert.match(panel, /\{chosen\.length\} item\{chosen\.length === 1 \? "" : "s"\} selected/,
+    "the count is not stated");
+  assert.match(panel, /\{chosen\.length === 0 \? \(/,
+    "the zero state is not distinguished from the working state");
+  assert.match(panel, /Tick anything below to begin/, "nothing tells the professional selection comes first");
+  // The inputs used to be editable while every action was disabled: type a
+  // category, press Set, watch nothing happen.
+  const zero = panel.slice(panel.indexOf("{chosen.length === 0 ? ("), panel.indexOf(") : ("));
+  assert.ok(!/<input/.test(zero), "an input the professional can type into leads to no action");
+  assert.ok(!/SmallAction/.test(zero), "an action button is offered with nothing to act on");
 });
 
-test("every bulk control is disabled until something is selected", () => {
-  const ws = bodyOf("src/components/library/library-workspace.tsx");
-  const panel = ws.slice(ws.indexOf("{organizing && ("), ws.indexOf("</div>\n          )}"));
-  const actions = panel.match(/<SmallAction disabled=\{[^}]*\}/g) ?? [];
-  assert.equal(actions.length, 6, `expected six bulk actions, found ${actions.length}`);
-  for (const a of actions) {
-    assert.match(a, /!chosen\.length/, `a bulk action can fire with nothing selected: ${a}`);
+test("SELECTING activates the controls — they exist only in the working state", () => {
+  const panel = organizePanel();
+  const working = panel.slice(panel.indexOf(") : ("));
+  for (const control of ["library-categories", "library-labels", "Set", "Clear", "Add", "Remove", "Favorite"]) {
+    assert.ok(working.includes(control), `the working state is missing ${control}`);
   }
 });
 
-test("the row star survives the change — it never required the mode", () => {
+test("CATEGORY AND LABELS are explained in human, horizontal terms", () => {
+  const panel = organizePanel();
+  assert.match(panel, /What kind of thing is this\?/, "Category is not explained");
+  assert.match(panel, /Other ways you would want to find it later/, "Labels are not explained");
+  // Wrapping is incidental; the words are what matter.
+  const flat = panel.replace(/\s+/g, " ");
+  assert.match(flat, /for example Place, Service, Organization, Document or Person\./,
+    "the Category examples are missing or not generic");
+  assert.match(flat, /a place, a specialty, a status such as Preferred/,
+    "the Label examples are missing or not generic");
+  // The examples must belong to no profession. A vertical vocabulary here would
+  // tell every other profession this software is not for them.
+  for (const vertical of ["Memory Care", "Assisted Living", "senior", "Senior", "care level", "community type"]) {
+    assert.ok(!panel.includes(vertical), `the explanatory copy hard-codes a vertical: ${vertical}`);
+  }
+});
+
+test("THE RESULT IS VISIBLE — a row shows what it now carries", () => {
   const list = bodyOf("src/components/library/library-list.tsx");
-  assert.match(list, /onToggleFavorite/, "the row star is gone");
+  assert.match(list, /\(s\.category \|\| \(s\.labels \?\? \[\]\)\.length > 0\) && \(/,
+    "a row never shows its own category or labels, so organizing changes nothing anyone can see");
   const ws = bodyOf("src/components/library/library-workspace.tsx");
-  assert.match(ws, /onToggleFavorite=\{selecting \? undefined : toggleFavorite\}/,
-    "the star's availability outside selection changed");
+  assert.match(ws, /setNotice\(`Organized \$\{data\.updated\} item/, "there is no acknowledgement");
+  assert.match(ws, /if \(data\.vocabulary\) setVocab\(data\.vocabulary\)/,
+    "the filter choices do not update after organizing");
+  assert.match(ws, /setRefreshKey\(\(k\) => k \+ 1\)/, "the list is not refreshed after organizing");
+});
+
+test("THE CREATE PATH keeps its own intent, and its own words", () => {
+  const panel = createPanel();
+  assert.match(panel, /Start a FlowGuide/, "the create experience does not name itself");
+  assert.ok(!/Organize your Library|library-categories|library-labels/.test(panel),
+    "organizing controls leaked into the create experience");
+  assert.match(panel, /createFromLibrary\(chosen\)/, "creating from the selection is gone");
+  assert.match(panel, /disabled=\{busy \|\| chosen\.length === 0\}/,
+    "Create can fire with nothing selected");
+});
+
+test("CANCEL leaves both experiences without touching content", () => {
+  for (const panel of [organizePanel(), createPanel()]) {
+    assert.match(panel, /setSelecting\(false\)/, "there is no way out");
+    assert.match(panel, /setChosen\(\[\]\)/, "leaving keeps a stale selection");
+    // Cancel must not write anything.
+    const cancel = panel.slice(panel.lastIndexOf("Cancel") - 700, panel.lastIndexOf("Cancel"));
+    assert.ok(!/fetch\(/.test(cancel), "cancelling performs a write");
+  }
+});
+
+test("a row is selectable by its card, not only by the checkbox", () => {
+  const list = bodyOf("src/components/library/library-list.tsx");
+  assert.match(list, /<label className=\{`\$\{shell\} cursor-pointer`\}>/,
+    "the row card is not a label, so tapping it does not select");
+  assert.match(list, /isSelected \? "border-accent bg-accent\/5"/, "a selected row is not visibly selected");
 });

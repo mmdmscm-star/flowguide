@@ -285,20 +285,114 @@ export default function LibraryWorkspace() {
             "organizing mode" beside the existing "creating mode" would make the
             professional pick the right door before knowing which room they
             wanted, and get it wrong half the time. */}
-        {selecting && (
+        {/* Said where the action was taken, not at the bottom of the page. */}
+        {notice && <p className="mb-3 text-sm text-green-700">{notice}</p>}
+
+        {/* TWO ENTRY POINTS, TWO EXPERIENCES.
+            Selection state is shared underneath — one mode, internally — but a
+            professional should never have to understand that. Arriving through
+            Organize and being shown a dimmed "Create FlowGuide" and a disabled
+            "Organize" beside it is the machinery leaking into the room: it says
+            nothing about what to do next and quite a lot about how the code is
+            arranged. Each intent now shows only its own action. */}
+        {selecting && organizing && (
           <div className="mb-4 rounded-xl border border-accent/40 bg-accent/5 p-3">
-            <p className="text-sm font-medium text-foreground">
-              {chosen.length
-                ? `${chosen.length} selected`
-                : organizing
-                  ? "Select the items you want to organize"
-                  : "Choose the items you want to work with"}
-            </p>
+            <p className="text-sm font-medium text-foreground">Organize your Library</p>
             <p className="mt-1 text-sm text-muted">
-              Start a FlowGuide with them, or file them for later. A copy in a
-              FlowGuide never changes what is saved here.
+              Select the things you want to organize. This is only for finding them
+              again — none of it is copied into a FlowGuide or seen by a client.
+            </p>
+
+            <div className="mt-3 flex items-center gap-2">
+              <span className={`text-sm font-medium ${chosen.length ? "text-foreground" : "text-muted"}`}>
+                {chosen.length} item{chosen.length === 1 ? "" : "s"} selected
+              </span>
+              <button
+                onClick={() => { setSelecting(false); setOrganizing(false); setChosen([]); }}
+                disabled={busy}
+                className="ml-auto text-sm font-medium text-muted hover:text-foreground"
+              >
+                Cancel
+              </button>
+            </div>
+
+            {/* NOTHING USABLE-LOOKING UNTIL THERE IS SOMETHING TO ACT ON.
+                The inputs were editable at zero selection while the buttons were
+                disabled, so the professional typed a category, pressed Set, and
+                watched nothing happen. A control that accepts input it cannot
+                use is worse than one that is absent. */}
+            {chosen.length === 0 ? (
+              <p className="mt-3 border-t border-accent/30 pt-3 text-xs text-muted">
+                Tick anything below to begin — or tap a row.
+              </p>
+            ) : (
+              <div className="mt-3 space-y-3 border-t border-accent/30 pt-3">
+                <div>
+                  <p className="text-xs font-medium text-foreground">Category</p>
+                  <p className="text-xs text-muted">
+                    What kind of thing is this? One per item — for example Place,
+                    Service, Organization, Document or Person.
+                  </p>
+                  <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                    <input
+                      list="library-categories"
+                      value={orgCategory}
+                      disabled={busy}
+                      onChange={(e) => setOrgCategory(e.target.value)}
+                      placeholder="Place"
+                      className="min-w-0 flex-1 px-2.5 py-1.5 rounded border border-border text-sm
+                                 focus:outline-none focus:ring-2 focus:ring-accent placeholder:text-gray-300"
+                    />
+                    <SmallAction disabled={busy || !orgCategory.trim()}
+                      onClick={() => organize({ setCategory: orgCategory })}>Set</SmallAction>
+                    <SmallAction disabled={busy}
+                      onClick={() => organize({ clearCategory: true })}>Clear</SmallAction>
+                  </div>
+                </div>
+
+                <div>
+                  <p className="text-xs font-medium text-foreground">Labels</p>
+                  <p className="text-xs text-muted">
+                    Other ways you would want to find it later. As many as you like —
+                    a place, a specialty, a status such as Preferred.
+                  </p>
+                  <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                    <input
+                      list="library-labels"
+                      value={orgLabel}
+                      disabled={busy}
+                      onChange={(e) => setOrgLabel(e.target.value)}
+                      placeholder="Preferred"
+                      className="min-w-0 flex-1 px-2.5 py-1.5 rounded border border-border text-sm
+                                 focus:outline-none focus:ring-2 focus:ring-accent placeholder:text-gray-300"
+                    />
+                    <SmallAction disabled={busy || !orgLabel.trim()}
+                      onClick={() => organize({ addLabels: [orgLabel] })}>Add</SmallAction>
+                    <SmallAction disabled={busy || !orgLabel.trim()}
+                      onClick={() => organize({ removeLabels: [orgLabel] })}>Remove</SmallAction>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <SmallAction disabled={busy} onClick={() => organize({ favorite: true })}>★ Favorite</SmallAction>
+                  <SmallAction disabled={busy} onClick={() => organize({ favorite: false })}>☆ Unfavorite</SmallAction>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {selecting && !organizing && (
+          <div className="mb-4 rounded-xl border border-accent/40 bg-accent/5 p-3">
+            <p className="text-sm font-medium text-foreground">Start a FlowGuide</p>
+            <p className="mt-1 text-sm text-muted">
+              Choose what to start it with. Each one is copied in — changing it there
+              never changes what is saved here.
             </p>
             <div className="mt-3 flex flex-wrap items-center gap-2">
+              <span className={`text-sm font-medium ${chosen.length ? "text-foreground" : "text-muted"}`}>
+                {chosen.length} item{chosen.length === 1 ? "" : "s"} selected
+              </span>
               <button
                 onClick={async () => {
                   setBusy(true); setNotice("");
@@ -307,77 +401,18 @@ export default function LibraryWorkspace() {
                   router.push(`/edit/${packetId}`);
                 }}
                 disabled={busy || chosen.length === 0}
-                className="px-3 py-2 rounded-lg bg-accent hover:bg-accent-hover text-white text-sm font-medium disabled:opacity-60"
+                className="ml-2 px-3 py-2 rounded-lg bg-accent hover:bg-accent-hover text-white text-sm font-medium disabled:opacity-60"
               >
-                {busy ? "Creating…" : chosen.length
-                  ? `Create FlowGuide with ${chosen.length}`
-                  : "Create FlowGuide"}
+                {busy ? "Creating…" : "Create FlowGuide"}
               </button>
               <button
-                onClick={() => setOrganizing((o) => !o)}
-                disabled={busy || chosen.length === 0}
-                aria-expanded={organizing}
-                className="px-3 py-2 rounded-lg border border-border bg-white text-sm font-medium
-                           text-foreground hover:border-accent hover:text-accent disabled:opacity-60"
-              >
-                Organize
-              </button>
-              <button
-                onClick={() => { setSelecting(false); setChosen([]); setOrganizing(false); }}
+                onClick={() => { setSelecting(false); setChosen([]); }}
                 disabled={busy}
                 className="ml-auto text-sm font-medium text-muted hover:text-foreground"
               >
                 Cancel
               </button>
             </div>
-
-            {/* The actions appear with the MODE rather than with the first
-                selection. Showing them only after something is ticked meant
-                clicking Organize appeared to do nothing but add checkboxes —
-                the controls it was named for were still hidden. They are
-                visible and disabled instead, which says what this mode is for
-                before anything is chosen. */}
-            {organizing && (
-              <div className="mt-3 space-y-2 border-t border-accent/30 pt-3">
-                {chosen.length === 0 && (
-                  <p className="text-xs text-muted">
-                    Tick the items below, then set a category, add a label, or star them.
-                  </p>
-                )}
-                <div className="flex flex-wrap items-center gap-2">
-                  <input
-                    list="library-categories"
-                    value={orgCategory}
-                    onChange={(e) => setOrgCategory(e.target.value)}
-                    placeholder="Category"
-                    className="min-w-0 flex-1 px-2.5 py-1.5 rounded border border-border text-sm
-                               focus:outline-none focus:ring-2 focus:ring-accent placeholder:text-gray-300"
-                  />
-                  <SmallAction disabled={busy || !chosen.length || !orgCategory.trim()}
-                    onClick={() => organize({ setCategory: orgCategory })}>Set</SmallAction>
-                  <SmallAction disabled={busy || !chosen.length}
-                    onClick={() => organize({ clearCategory: true })}>Clear</SmallAction>
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <input
-                    list="library-labels"
-                    value={orgLabel}
-                    onChange={(e) => setOrgLabel(e.target.value)}
-                    placeholder="Label"
-                    className="min-w-0 flex-1 px-2.5 py-1.5 rounded border border-border text-sm
-                               focus:outline-none focus:ring-2 focus:ring-accent placeholder:text-gray-300"
-                  />
-                  <SmallAction disabled={busy || !chosen.length || !orgLabel.trim()}
-                    onClick={() => organize({ addLabels: [orgLabel] })}>Add</SmallAction>
-                  <SmallAction disabled={busy || !chosen.length || !orgLabel.trim()}
-                    onClick={() => organize({ removeLabels: [orgLabel] })}>Remove</SmallAction>
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <SmallAction disabled={busy || !chosen.length} onClick={() => organize({ favorite: true })}>★ Favorite</SmallAction>
-                  <SmallAction disabled={busy || !chosen.length} onClick={() => organize({ favorite: false })}>☆ Unfavorite</SmallAction>
-                </div>
-              </div>
-            )}
           </div>
         )}
 
@@ -388,7 +423,6 @@ export default function LibraryWorkspace() {
           />
         )}
 
-        {notice && <p className="mb-4 text-sm text-green-700">{notice}</p>}
 
         {conflict && (
           <div className="mb-4 rounded-lg border border-amber-300 bg-amber-50/70 p-3">
