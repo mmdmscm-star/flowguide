@@ -29,6 +29,10 @@ export async function POST(_request: Request, context: Context) {
       user_id: session.userId,
       slug: generateSlug(),
       title: original.title ? `${original.title} (Copy)` : "",
+      // (Copy) BELONGS TO THE INTERNAL NAME ONLY. It exists so the professional
+      // can tell two drafts apart in My FlowGuides; putting it on the heading a
+      // client reads would publish that bookkeeping to them.
+      client_title: original.client_title || "",
       client_name: original.client_name || "",
       personal_note: original.personal_note || "",
       packet_type: original.packet_type || "general",

@@ -75,7 +75,7 @@ export default async function PacketPage({ params }: Props) {
       {ownedId && <OwnerBar packetId={ownedId} />}
       <main className="w-full max-w-lg mx-auto pb-12 overflow-x-hidden break-words">
         <PacketHeader
-          title={packet.title}
+          title={packet.clientTitle}
           clientName={packet.clientName}
           professional={packet.professional}
         />

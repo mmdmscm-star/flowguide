@@ -150,7 +150,9 @@ export function PrintPacket({ packet, liveUrl }: { packet: Packet; liveUrl: stri
     <div className="pg-doc">
       {logo && <img className="pg-logo" src={logo} alt={txt(pro.businessName) || "Logo"} />}
       {has(pro.businessName) && <p className="pg-business">{txt(pro.businessName)}</p>}
-      <h1 className="pg-title">{packet.title}</h1>
+      {/* The client title, when the professional chose one. Blank omits the
+          heading rather than printing an empty line — see packet-header.tsx. */}
+      {has(packet.clientTitle) && <h1 className="pg-title">{txt(packet.clientTitle)}</h1>}
       {has(packet.clientName) && <p className="pg-for">Prepared for {txt(packet.clientName)}</p>}
       {/* Paper is a supporting renderer: it exists to lead back to the live
           FlowGuide, so the address is printed where a reader will find it. */}

@@ -1,14 +1,27 @@
 import { ProfessionalContact } from "@/lib/types";
 
+// THE HEADING A CLIENT READS, WHEN THERE IS ONE.
+//
+// `title` here is the packet's CLIENT title, not the professional's internal
+// name for the FlowGuide. The two used to be one field, so "Options for Bonnie
+// Smith" — a useful thing to file a FlowGuide under — was also the first thing
+// Bonnie Smith read.
+//
+// Blank is a legitimate choice, not a missing value: plenty of FlowGuides read
+// better with the professional's own branding above the content and no heading
+// between them. So the <h1> is omitted rather than rendered empty, and the
+// header's spacing closes up instead of leaving a gap where something failed.
 export function PacketHeader({
   title,
   clientName,
   professional,
 }: {
-  title: string;
+  /** The recipient-facing title. Blank or absent omits the heading entirely. */
+  title?: string;
   clientName?: string;
   professional: ProfessionalContact;
 }) {
+  const heading = String(title ?? "").trim();
   return (
     <header className="px-5 pt-8 pb-6">
       {professional.logoUrl && (
@@ -19,15 +32,17 @@ export function PacketHeader({
         />
       )}
       {professional.businessName && (
-        <p className="text-xs font-medium uppercase tracking-widest text-muted mb-1">
+        <p className={`text-xs font-medium uppercase tracking-widest text-muted ${heading ? "mb-1" : ""}`}>
           {professional.businessName}
         </p>
       )}
-      <h1 className="text-2xl font-bold leading-tight text-foreground whitespace-pre-line">
-        {title}
-      </h1>
+      {heading && (
+        <h1 className="text-2xl font-bold leading-tight text-foreground whitespace-pre-line">
+          {heading}
+        </h1>
+      )}
       {clientName && (
-        <p className="mt-2 text-sm text-muted">
+        <p className={`${heading ? "mt-2" : "mt-1"} text-sm text-muted`}>
           Prepared for {clientName}
         </p>
       )}

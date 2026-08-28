@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { CreatorNav } from "@/components/nav/creator-nav";
 import DeletePacketAction from "./delete-packet-action";
 import {
@@ -201,10 +201,14 @@ async function errorFrom(res: Response): Promise<string> {
 }
 
 export function BlockPacketEditor({
-  packetId, title, status, clientName, createdAt, initialBlocks, justConverted,
+  packetId, title, clientTitle: initialClientTitle, status, clientName, createdAt, initialBlocks, justConverted,
 }: {
   packetId: string;
+  /** The professional's own name for this FlowGuide. Backstage: shown here so
+   *  they know which one they are in, and edited elsewhere. */
   title: string;
+  /** The optional heading a recipient sees. Blank omits it entirely. */
+  clientTitle: string;
   status: string;
   /** Identify the packet in the delete confirmation; nothing else reads these. */
   clientName?: string;
@@ -213,6 +217,39 @@ export function BlockPacketEditor({
   justConverted?: boolean;
 }) {
   const readOnly = status !== "draft";
+
+  // THE TITLE A CLIENT READS, in the mode that had no way to set one.
+  //
+  // Block composition showed the internal name as a read-only heading and
+  // offered no packet-level field at all, so the new distinction was reachable
+  // in legacy mode only. This adds the ONE field that was missing. Editing the
+  // internal name in block mode is a separate, pre-existing gap and is left
+  // exactly as it was.
+  //
+  // Not gated on readOnly: title and personal_note have always been editable
+  // after publishing — they change what an already-shared link renders next
+  // time it is opened — and this heading is the same kind of thing. The
+  // read-only rule here is about block structure.
+  const [clientTitle, setClientTitle] = useState(initialClientTitle);
+  const [titleSaved, setTitleSaved] = useState(false);
+  const clientTitleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function updateClientTitle(next: string) {
+    setClientTitle(next);
+    setTitleSaved(false);
+    if (clientTitleTimer.current) clearTimeout(clientTitleTimer.current);
+    clientTitleTimer.current = setTimeout(async () => {
+      // The same PATCH the legacy editor uses, so an empty string genuinely
+      // clears the heading rather than being dropped as falsy on the way.
+      const res = await fetch(`/api/packets/${packetId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clientTitle: next }),
+      });
+      if (res.ok) setTitleSaved(true);
+      else setErrorMsg("Could not save the client title.");
+    }, 500);
+  }
   const [blocks, setBlocks] = useState<EditorBlock[]>(() => toEditorBlocks(initialBlocks));
   const [saving, setSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
@@ -371,6 +408,23 @@ export function BlockPacketEditor({
         <header className="pt-6 pb-4">
           <p className="text-xs uppercase tracking-widest text-muted mb-1">Block composition</p>
           <h1 className="text-2xl font-bold text-foreground leading-tight whitespace-pre-line">{title || "Untitled Packet"}</h1>
+          <p className="text-xs text-muted">Only you see this name.</p>
+
+          <label htmlFor="client-title" className="mt-4 block text-xs font-medium uppercase tracking-wide text-muted mb-1">
+            Title your client sees <span className="normal-case font-normal">(optional)</span>
+          </label>
+          <input
+            id="client-title"
+            type="text"
+            value={clientTitle}
+            onChange={(e) => updateClientTitle(e.target.value)}
+            placeholder="Senior Living Communities"
+            className="w-full text-base font-semibold text-foreground bg-transparent border-none outline-none placeholder:text-gray-300"
+          />
+          <p className="text-xs text-muted">
+            Leave blank and your client sees no title at all.{titleSaved ? " Saved." : ""}
+          </p>
+
           <p className="mt-2 text-xs text-muted">
             {headingCount} heading{headingCount === 1 ? "" : "s"} · {itemCount} item{itemCount === 1 ? "" : "s"} · headings are visual only and do not own the items after them
           </p>

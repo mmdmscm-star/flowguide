@@ -77,7 +77,11 @@ export async function PATCH(request: Request, context: Context) {
 
   // Only allow updating specific fields
   const allowed: Record<string, string> = {
+    // The internal name. Required to publish, never shown to a recipient.
     title: "title",
+    // The optional heading a recipient sees; blank omits it. Deliberately NOT
+    // in ingest_bump_packet_self's tuple, so editing it cannot abort an import.
+    clientTitle: "client_title",
     clientName: "client_name",
     personalNote: "personal_note",
     mapUrl: "map_url",

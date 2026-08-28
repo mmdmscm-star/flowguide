@@ -115,7 +115,10 @@ type IdentityMode = "default" | "none" | "custom";
 interface PacketData {
   id: string;
   slug: string;
+  /** The professional's own name for this FlowGuide. Backstage only. */
   title: string;
+  /** The optional heading a client sees. Blank omits it. */
+  clientTitle: string;
   clientName: string;
   personalNote: string;
   mapUrl: string;
@@ -286,6 +289,7 @@ export function LegacyPacketEditor() {
       id: p.id,
       slug: p.slug,
       title: p.title || "",
+      clientTitle: p.client_title || "",
       clientName: p.client_name || "",
       personalNote: p.personal_note || "",
       mapUrl: p.map_url || "",
@@ -1111,22 +1115,43 @@ export function LegacyPacketEditor() {
         </div>
       )}
 
-      {/* Packet title & client name */}
+      {/* TWO NAMES, BECAUSE THEY DO TWO JOBS.
+          The first is how the professional finds this again; the second is what
+          a client reads, if they should read one at all. They were the same
+          field, which is why "Options for Bonnie Smith" was also the heading
+          Bonnie Smith saw. Two labelled inputs, no toggle and no settings. */}
       <div className="mb-6">
+        <label className="block text-xs font-medium uppercase tracking-wide text-muted mb-1">
+          FlowGuide name
+        </label>
         <textarea
           ref={titleRef}
           value={packet.title}
           onChange={(e) => updatePacketField("title", e.target.value)}
-          placeholder="Packet title"
+          placeholder="Options for the Smith family"
           rows={1}
           className="w-full text-2xl font-bold text-foreground bg-transparent border-none outline-none resize-none overflow-hidden placeholder:text-gray-300"
         />
+        <p className="text-xs text-muted">Only you see this. It is how you find this FlowGuide later.</p>
+
+        <label className="mt-4 block text-xs font-medium uppercase tracking-wide text-muted mb-1">
+          Title your client sees <span className="normal-case font-normal">(optional)</span>
+        </label>
+        <input
+          type="text"
+          value={packet.clientTitle}
+          onChange={(e) => updatePacketField("clientTitle", e.target.value)}
+          placeholder="Senior Living Communities"
+          className="w-full text-base font-semibold text-foreground bg-transparent border-none outline-none placeholder:text-gray-300"
+        />
+        <p className="text-xs text-muted">Leave blank and your client sees no title at all.</p>
+
         <input
           type="text"
           value={packet.clientName}
           onChange={(e) => updatePacketField("clientName", e.target.value)}
           placeholder="Prepared for (optional)"
-          className="w-full mt-1 text-sm text-muted bg-transparent border-none outline-none placeholder:text-gray-300"
+          className="w-full mt-4 text-sm text-muted bg-transparent border-none outline-none placeholder:text-gray-300"
         />
       </div>
 

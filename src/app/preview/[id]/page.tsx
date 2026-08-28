@@ -39,13 +39,13 @@ export default async function PreviewPage({ params }: Props) {
         packetId={id}
         slug={packet.slug}
         initialStatus={packet.status}
-        title={packet.title}
+        title={packet.clientTitle}
         clientName={packet.clientName}
         professionalName={packet.professional?.name}
       />
 
       <PacketHeader
-        title={packet.title}
+        title={packet.clientTitle}
         clientName={packet.clientName}
         professional={packet.professional}
       />

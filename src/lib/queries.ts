@@ -227,6 +227,7 @@ function buildPacket(
   return {
     slug: packet.slug,
     title: packet.title,
+    clientTitle: packet.client_title || undefined,
     clientName: packet.client_name || undefined,
     personalNote: packet.personal_note || undefined,
     mapUrl: packet.map_url || undefined,
@@ -282,6 +283,7 @@ async function buildBlockPacket(
   return {
     slug: packet.slug,
     title: packet.title,
+    clientTitle: packet.client_title || undefined,
     clientName: packet.client_name || undefined,
     personalNote: packet.personal_note || undefined,
     mapUrl: packet.map_url || undefined,
@@ -475,6 +477,7 @@ function buildPacketWithId(packet: any, profile: any, sections: Section[]): Pack
     id: packet.id,
     slug: packet.slug,
     title: packet.title,
+    clientTitle: packet.client_title || undefined,
     clientName: packet.client_name || undefined,
     personalNote: packet.personal_note || undefined,
     mapUrl: packet.map_url || undefined,

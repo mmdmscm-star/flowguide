@@ -7,7 +7,11 @@ import type { Packet } from "./types.ts";
 const LIVE = "https://flowguide.example.com/p/abc123";
 const PACKET = {
   slug: "abc123",
-  title: "Senior Living Options",
+  // The two are now different things, and the fixture says so: the internal
+  // name is what the professional files it under, and it must never reach the
+  // email. The client title is the heading a reader actually sees.
+  title: "INTERNAL Alvarez options — do not show",
+  clientTitle: "Senior Living Options",
   clientName: "the Alvarez family",
   personalNote: "Here are the three I'd start with.",
   compositionMode: "legacy",
@@ -43,6 +47,8 @@ test("every packet field the brief names survives, in packet order", () => {
   // The business name and footer label are UPPERCASED, matching the live
   // header. Done by transforming the string rather than with text-transform,
   // which several email clients ignore.
+  assert.ok(!html.includes("INTERNAL Alvarez options"),
+    "the professional's internal FlowGuide name reached the client's email");
   for (const needed of ["WHITFIELD SENIOR ADVISORS", "Senior Living Options", "the Alvarez family",
     "Here are the three I&#39;d start with.", "Recommended Communities", "In order of fit.",
     "Vine Ridge Senior Living", "1247 Sonoma Ave", "A warm boutique community.",
@@ -90,7 +96,10 @@ test("an address becomes a maps link", () => {
 });
 
 test("content is escaped, and only http(s) may become a link", () => {
-  const nasty = { ...PACKET, title: '<script>alert(1)</script>',
+  // The payload goes in the field that actually reaches the HTML. It used to be
+  // `title`; the heading is now `clientTitle`, and a guard aimed at a field the
+  // renderer no longer reads would pass while escaping nothing.
+  const nasty = { ...PACKET, clientTitle: '<script>alert(1)</script>',
     sections: [{ id: "s", title: "T", items: [{ id: "x", title: "X",
       links: [{ url: "javascript:alert(1)", label: "Bad" }] }] }] } as unknown as Packet;
   const out = renderPacketEmail(nasty, { liveUrl: LIVE });
@@ -109,6 +118,8 @@ test("an empty-ish packet still renders without holes", () => {
 
 test("the plain-text flavour carries the same facts", () => {
   const text = renderPacketEmailText(PACKET, { liveUrl: LIVE });
+  assert.ok(!text.includes("INTERNAL Alvarez options"),
+    "the internal name reached the plain-text email");
   for (const needed of ["Senior Living Options", "Vine Ridge Senior Living", "Monthly cost: $4,800 - $6,200",
     "Maria Santos", LIVE]) {
     assert.ok(text.includes(needed), `missing from plain text: ${needed}`);

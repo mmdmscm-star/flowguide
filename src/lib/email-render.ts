@@ -257,11 +257,15 @@ export function renderPacketEmail(packet: Packet, opts: EmailRenderOptions): str
   // the email the one place the professional's brand did not appear.
   const logo = safeUrl(pro.logoUrl);
 
+  // The CLIENT title, not the professional's internal name for the FlowGuide.
+  // Blank omits the heading rather than emitting an empty <h1>, which in an
+  // email client is a visible band of whitespace rather than nothing.
+  const heading = String(packet.clientTitle ?? "").trim();
   const header = `<tr><td style="padding:28px 24px 8px">
     ${logo ? `<img src="${esc(logo)}" alt="${esc(business || "Logo")}" height="40"
          style="display:block;height:40px;width:auto;max-width:180px;margin:0 0 14px" />` : ""}
     ${business ? p(esc(business).toUpperCase(), `font-size:12px;letter-spacing:1px;color:${MUTED};margin:0 0 6px`) : ""}
-    <h1 style="margin:0;font-family:${FONT};font-size:26px;line-height:1.2;color:${INK};font-weight:700">${esc(packet.title)}</h1>
+    ${heading ? `<h1 style="margin:0;font-family:${FONT};font-size:26px;line-height:1.2;color:${INK};font-weight:700">${esc(heading)}</h1>` : ""}
     ${client ? p(`Prepared for ${esc(client)}`, `color:${MUTED};margin:6px 0 0`) : ""}
     ${live ? p(`<a href="${esc(live)}" style="color:${LINK};text-decoration:underline">Open the interactive version</a>`, "font-size:15px;margin:10px 0 0") : ""}
   </td></tr>`;
@@ -375,7 +379,9 @@ export function renderPacketEmailText(packet: Packet, opts: EmailRenderOptions):
   const out: string[] = [];
   const pro = packet.professional ?? ({} as Packet["professional"]);
   if (String(pro.businessName ?? "").trim()) out.push(String(pro.businessName).toUpperCase());
-  out.push(packet.title);
+  // Same rule as the HTML: no client title means no heading line at all, rather
+  // than a blank one the reader has to interpret.
+  if (String(packet.clientTitle ?? "").trim()) out.push(String(packet.clientTitle).trim());
   if (String(packet.clientName ?? "").trim()) out.push(`Prepared for ${packet.clientName}`);
   if (opts.liveUrl) out.push("", opts.liveUrl);
   if (String(packet.personalNote ?? "").trim()) out.push("", String(packet.personalNote).trim());

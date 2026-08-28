@@ -31,6 +31,7 @@ export default async function EditPacketPage({ params, searchParams }: Props) {
       <BlockPacketEditor
         packetId={id}
         title={data.title}
+        clientTitle={data.clientTitle}
         status={data.status}
         clientName={data.clientName}
         createdAt={data.createdAt}

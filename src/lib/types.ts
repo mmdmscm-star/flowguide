@@ -66,7 +66,13 @@ export type PacketBlock =
 
 export interface Packet {
   slug: string;
+  /** The professional's INTERNAL name for this FlowGuide. Never rendered to a
+   *  recipient — that is `clientTitle`. Required before publishing, because a
+   *  FlowGuide has to be findable in My FlowGuides. */
   title: string;
+  /** The OPTIONAL heading a recipient sees. Blank means the title area is left
+   *  out entirely, which is a choice rather than a missing value. */
+  clientTitle?: string;
   clientName?: string;
   personalNote?: string;
   mapUrl?: string;
