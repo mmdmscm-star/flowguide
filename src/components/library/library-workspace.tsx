@@ -250,13 +250,32 @@ export default function LibraryWorkspace() {
                 the useful actions in that state. Unknown (null) keeps it
                 hidden, so a failed load never offers a dead end either. */}
             {hasAny === true && (
-              <button
-                onClick={() => { setNotice(""); setChosen([]); setSelecting(true); }}
-                className="px-3 py-2 rounded-lg border border-border bg-white text-sm font-medium
-                           text-foreground hover:border-accent hover:text-accent"
-              >
-                Create a FlowGuide
-              </button>
+              <>
+                <button
+                  onClick={() => { setNotice(""); setChosen([]); setOrganizing(false); setSelecting(true); }}
+                  className="px-3 py-2 rounded-lg border border-border bg-white text-sm font-medium
+                             text-foreground hover:border-accent hover:text-accent"
+                >
+                  Create a FlowGuide
+                </button>
+                {/* THE OTHER DOOR, SAID OUT LOUD.
+                    Selection has been neutral since Phase 2 — pick items, then
+                    decide — but the only way IN was a button that named one of
+                    the two destinations. So a professional looking for how to
+                    organize their Library found Favorites, which is on every
+                    row, and concluded that was the whole release. Everything
+                    else was behind "Create a FlowGuide", which is the last
+                    place anyone would look for it.
+                    The mode is the same one; only the intent it opens with
+                    differs, so nothing here is a second organizing system. */}
+                <button
+                  onClick={() => { setNotice(""); setChosen([]); setOrganizing(true); setSelecting(true); }}
+                  className="px-3 py-2 rounded-lg border border-border bg-white text-sm font-medium
+                             text-foreground hover:border-accent hover:text-accent"
+                >
+                  Organize
+                </button>
+              </>
             )}
           </div>
         )}
@@ -271,7 +290,9 @@ export default function LibraryWorkspace() {
             <p className="text-sm font-medium text-foreground">
               {chosen.length
                 ? `${chosen.length} selected`
-                : "Choose the items you want to work with"}
+                : organizing
+                  ? "Select the items you want to organize"
+                  : "Choose the items you want to work with"}
             </p>
             <p className="mt-1 text-sm text-muted">
               Start a FlowGuide with them, or file them for later. A copy in a
@@ -310,10 +331,19 @@ export default function LibraryWorkspace() {
               </button>
             </div>
 
-            {/* The actions appear only once Organize is asked for, so the
-                ordinary path — select, create — stays two controls wide. */}
-            {organizing && chosen.length > 0 && (
+            {/* The actions appear with the MODE rather than with the first
+                selection. Showing them only after something is ticked meant
+                clicking Organize appeared to do nothing but add checkboxes —
+                the controls it was named for were still hidden. They are
+                visible and disabled instead, which says what this mode is for
+                before anything is chosen. */}
+            {organizing && (
               <div className="mt-3 space-y-2 border-t border-accent/30 pt-3">
+                {chosen.length === 0 && (
+                  <p className="text-xs text-muted">
+                    Tick the items below, then set a category, add a label, or star them.
+                  </p>
+                )}
                 <div className="flex flex-wrap items-center gap-2">
                   <input
                     list="library-categories"
@@ -323,9 +353,9 @@ export default function LibraryWorkspace() {
                     className="min-w-0 flex-1 px-2.5 py-1.5 rounded border border-border text-sm
                                focus:outline-none focus:ring-2 focus:ring-accent placeholder:text-gray-300"
                   />
-                  <SmallAction disabled={busy || !orgCategory.trim()}
+                  <SmallAction disabled={busy || !chosen.length || !orgCategory.trim()}
                     onClick={() => organize({ setCategory: orgCategory })}>Set</SmallAction>
-                  <SmallAction disabled={busy}
+                  <SmallAction disabled={busy || !chosen.length}
                     onClick={() => organize({ clearCategory: true })}>Clear</SmallAction>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
@@ -337,14 +367,14 @@ export default function LibraryWorkspace() {
                     className="min-w-0 flex-1 px-2.5 py-1.5 rounded border border-border text-sm
                                focus:outline-none focus:ring-2 focus:ring-accent placeholder:text-gray-300"
                   />
-                  <SmallAction disabled={busy || !orgLabel.trim()}
+                  <SmallAction disabled={busy || !chosen.length || !orgLabel.trim()}
                     onClick={() => organize({ addLabels: [orgLabel] })}>Add</SmallAction>
-                  <SmallAction disabled={busy || !orgLabel.trim()}
+                  <SmallAction disabled={busy || !chosen.length || !orgLabel.trim()}
                     onClick={() => organize({ removeLabels: [orgLabel] })}>Remove</SmallAction>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
-                  <SmallAction disabled={busy} onClick={() => organize({ favorite: true })}>★ Favorite</SmallAction>
-                  <SmallAction disabled={busy} onClick={() => organize({ favorite: false })}>☆ Unfavorite</SmallAction>
+                  <SmallAction disabled={busy || !chosen.length} onClick={() => organize({ favorite: true })}>★ Favorite</SmallAction>
+                  <SmallAction disabled={busy || !chosen.length} onClick={() => organize({ favorite: false })}>☆ Unfavorite</SmallAction>
                 </div>
               </div>
             )}

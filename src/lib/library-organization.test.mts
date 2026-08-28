@@ -215,3 +215,63 @@ test("the vocabulary query actually reads is_favorite", () => {
   assert.match(service, /select\("category, labels, is_favorite"\)/,
     "hasFavorites is computed from a query that never selected the column");
 });
+
+// ---------------------------------------------------------------------------
+// ORGANIZATION NEEDS A DOOR WITH ITS OWN NAME ON IT.
+//
+// Selection has been neutral since Phase 2 — pick items, then decide what to do
+// with them — but the only way IN was a button labelled "Create a FlowGuide".
+// So a professional looking for how to organize their Library found Favorites,
+// which is on every row, and reasonably concluded that was the whole release.
+// ---------------------------------------------------------------------------
+test("the Library offers an explicit Organize entry point, beside Create", () => {
+  const ws = bodyOf("src/components/library/library-workspace.tsx");
+  const header = ws.slice(ws.indexOf("Import with AI"), ws.indexOf("{selecting &&"));
+  assert.match(header, />\s*Create a FlowGuide\s*</, "the create entry point is gone");
+  assert.match(header, />\s*Organize\s*</,
+    "organizing is still only reachable through a button named after the other destination");
+  assert.match(header, /setOrganizing\(true\); setSelecting\(true\)/,
+    "Organize does not open the organizing intent");
+  assert.match(header, /setOrganizing\(false\); setSelecting\(true\)/,
+    "Create no longer opens with the create intent");
+  // ...and both are still gated on there being something to organize.
+  assert.match(ws, /hasAny === true && \(/, "the entry points are offered over an empty Library");
+});
+
+test("ONE mode, two intents — not a second organizing system", () => {
+  const ws = bodyOf("src/components/library/library-workspace.tsx");
+  // Both doors set the SAME selection state; only `organizing` differs.
+  assert.equal((ws.match(/setSelecting\(true\)/g) ?? []).length, 2,
+    "there is more than one way to enter selection, or none");
+  assert.ok(!/organizeSelecting|selectingToOrganize|organizeMode/.test(ws),
+    "a parallel selection state appeared");
+});
+
+test("the organizing panel appears with the MODE, not with the first selection", () => {
+  const ws = bodyOf("src/components/library/library-workspace.tsx");
+  assert.ok(!/\{organizing && chosen\.length > 0 && \(/.test(ws),
+    "clicking Organize shows only checkboxes until something is ticked — the controls it is named for stay hidden");
+  assert.match(ws, /\{organizing && \(/, "the panel is not tied to the mode");
+  assert.match(ws, /Tick the items below, then set a category, add a label, or star them\./,
+    "nothing tells the professional what to do first");
+  assert.match(ws, /Select the items you want to organize/,
+    "the bar does not say what this mode is for");
+});
+
+test("every bulk control is disabled until something is selected", () => {
+  const ws = bodyOf("src/components/library/library-workspace.tsx");
+  const panel = ws.slice(ws.indexOf("{organizing && ("), ws.indexOf("</div>\n          )}"));
+  const actions = panel.match(/<SmallAction disabled=\{[^}]*\}/g) ?? [];
+  assert.equal(actions.length, 6, `expected six bulk actions, found ${actions.length}`);
+  for (const a of actions) {
+    assert.match(a, /!chosen\.length/, `a bulk action can fire with nothing selected: ${a}`);
+  }
+});
+
+test("the row star survives the change — it never required the mode", () => {
+  const list = bodyOf("src/components/library/library-list.tsx");
+  assert.match(list, /onToggleFavorite/, "the row star is gone");
+  const ws = bodyOf("src/components/library/library-workspace.tsx");
+  assert.match(ws, /onToggleFavorite=\{selecting \? undefined : toggleFavorite\}/,
+    "the star's availability outside selection changed");
+});
