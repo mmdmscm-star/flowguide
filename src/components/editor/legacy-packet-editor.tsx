@@ -30,6 +30,7 @@ import {
   arrayMove,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { moveDetail, detailsPayload } from "@/lib/detail-order";
 
 // ============================================================
 // Types for editor state
@@ -670,7 +671,28 @@ export function LegacyPacketEditor() {
       fetch("/api/items", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: itemId, details: updatedDetails.map((d) => ({ label: d.label, value: d.value })) }),
+        body: JSON.stringify({ id: itemId, details: detailsPayload(updatedDetails) }),
+      }).then((r) => { if (!r.ok) throw new Error(); })
+    );
+  }
+
+  // ORDER IS THE ARRAY. update_item_content assigns item_details.sort_order from
+  // the position of each entry in the details array it is sent, and every read
+  // path — the live FlowGuide, print, email, the Library — already selects
+  // `order("sort_order")`. So reordering is a move within this array followed by
+  // the save that editing a row already performs. Nothing new is persisted and
+  // no value is touched; only the sequence changes.
+  function reorderDetail(itemId: string, activeId: string, overId: string) {
+    const item = items.find((i) => i.id === itemId);
+    if (!item || activeId === overId) return;
+    const updatedDetails = moveDetail(item.details, activeId, overId);
+    if (updatedDetails === item.details) return;      // nothing moved: no save
+    setItems((prev) => prev.map((i) => (i.id === itemId ? { ...i, details: updatedDetails } : i)));
+    debouncedSave(() =>
+      fetch("/api/items", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: itemId, details: detailsPayload(updatedDetails) }),
       }).then((r) => { if (!r.ok) throw new Error(); })
     );
   }
@@ -684,7 +706,7 @@ export function LegacyPacketEditor() {
       fetch("/api/items", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: itemId, details: updatedDetails.map((d) => ({ label: d.label, value: d.value })) }),
+        body: JSON.stringify({ id: itemId, details: detailsPayload(updatedDetails) }),
       }).then((r) => { if (!r.ok) throw new Error(); })
     );
   }
@@ -1266,6 +1288,7 @@ export function LegacyPacketEditor() {
                       }}
                       onAddDetail={addDetail}
                       onUpdateDetail={updateDetail}
+                      onReorderDetail={reorderDetail}
                       onRemoveDetail={removeDetail}
                       onAddLink={addLink}
                       onUpdateLink={updateLink}
@@ -1712,6 +1735,132 @@ function SortableSection({
 // ============================================================
 // Item Editor Component
 // ============================================================
+// Detail rows — reorderable, same mental model as items and sections
+//
+// Import order is where a Detail list starts, not where it has to stay: the
+// professional decides what a family reads first. The alternative was retyping
+// rows to move one line, which is what prompted this.
+//
+// The order IS the array. update_item_content assigns item_details.sort_order
+// from array position, and every renderer already reads `order("sort_order")`,
+// so a move here reaches the live FlowGuide, print and email without any of
+// them changing.
+//
+// Its own DndContext, nested inside the item and section ones exactly as the
+// item list already nests inside the section list — a detail drag must not be
+// interpreted as dragging the card it lives in. Sensors are declared here for
+// the same reason, and include the KeyboardSensor the rest of the editor uses,
+// so the handle is reachable with a keyboard rather than a mouse only.
+// ============================================================
+function DetailRows({
+  item,
+  onUpdateDetail,
+  onReorderDetail,
+  onRemoveDetail,
+}: {
+  item: EditorItem;
+  onUpdateDetail: (itemId: string, detailId: string, field: "label" | "value", value: string) => void;
+  onReorderDetail: (itemId: string, activeId: string, overId: string) => void;
+  onRemoveDetail: (itemId: string, detailId: string) => void;
+}) {
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
+
+  return (
+    <DndContext
+      sensors={sensors}
+      collisionDetection={closestCenter}
+      onDragEnd={(e: DragEndEvent) => {
+        const { active, over } = e;
+        if (over && active.id !== over.id) onReorderDetail(item.id, String(active.id), String(over.id));
+      }}
+    >
+      <SortableContext items={item.details.map((d) => d.id)} strategy={verticalListSortingStrategy}>
+        {item.details.map((detail) => (
+          <SortableDetailRow
+            key={detail.id}
+            itemId={item.id}
+            detail={detail}
+            onUpdateDetail={onUpdateDetail}
+            onRemoveDetail={onRemoveDetail}
+          />
+        ))}
+      </SortableContext>
+    </DndContext>
+  );
+}
+
+function SortableDetailRow({
+  itemId,
+  detail,
+  onUpdateDetail,
+  onRemoveDetail,
+}: {
+  itemId: string;
+  detail: EditorDetail;
+  onUpdateDetail: (itemId: string, detailId: string, field: "label" | "value", value: string) => void;
+  onRemoveDetail: (itemId: string, detailId: string) => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: detail.id,
+  });
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  // The label names the row for anyone who cannot see it being dragged; an
+  // unlabelled row still says which one it is by falling back to its value.
+  const named = detail.label.trim() || detail.value.trim();
+
+  return (
+    <div ref={setNodeRef} style={style} className="flex items-center gap-2 mb-1.5">
+      <button
+        type="button"
+        {...attributes}
+        {...listeners}
+        aria-label={named ? `Reorder detail: ${named}` : "Reorder detail"}
+        className="text-gray-300 hover:text-gray-600 cursor-grab active:cursor-grabbing flex-shrink-0 touch-none p-1 -ml-1"
+      >
+        <svg className="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+          <circle cx="7" cy="4" r="1.5" />
+          <circle cx="13" cy="4" r="1.5" />
+          <circle cx="7" cy="10" r="1.5" />
+          <circle cx="13" cy="10" r="1.5" />
+          <circle cx="7" cy="16" r="1.5" />
+          <circle cx="13" cy="16" r="1.5" />
+        </svg>
+      </button>
+      <input
+        type="text"
+        value={detail.label}
+        onChange={(e) => onUpdateDetail(itemId, detail.id, "label", e.target.value)}
+        placeholder="Label"
+        className="flex-1 px-2.5 py-1.5 rounded border border-border text-sm focus:outline-none focus:ring-2 focus:ring-accent placeholder:text-gray-300"
+      />
+      <input
+        type="text"
+        value={detail.value}
+        onChange={(e) => onUpdateDetail(itemId, detail.id, "value", e.target.value)}
+        placeholder="Value"
+        className="flex-1 px-2.5 py-1.5 rounded border border-border text-sm focus:outline-none focus:ring-2 focus:ring-accent placeholder:text-gray-300"
+      />
+      <button
+        onClick={() => onRemoveDetail(itemId, detail.id)}
+        className="text-sm text-red-400 hover:text-red-600 px-1"
+        aria-label={named ? `Remove detail: ${named}` : "Remove detail"}
+      >
+        ×
+      </button>
+    </div>
+  );
+}
+
+
+// ============================================================
 function ItemEditor({
   item,
   sections,
@@ -1721,6 +1870,7 @@ function ItemEditor({
   onLibraryChanged,
   onAddDetail,
   onUpdateDetail,
+  onReorderDetail,
   onRemoveDetail,
   onAddLink,
   onUpdateLink,
@@ -1743,6 +1893,7 @@ function ItemEditor({
   onLibraryChanged: (message: string) => void;
   onAddDetail: (itemId: string) => void;
   onUpdateDetail: (itemId: string, detailId: string, field: "label" | "value", value: string) => void;
+  onReorderDetail: (itemId: string, activeId: string, overId: string) => void;
   onRemoveDetail: (itemId: string, detailId: string) => void;
   onAddLink: (itemId: string) => void;
   onUpdateLink: (itemId: string, linkId: string, field: "url" | "label", value: string) => void;
@@ -1871,30 +2022,12 @@ function ItemEditor({
                 + Add
               </button>
             </div>
-            {item.details.map((detail) => (
-              <div key={detail.id} className="flex gap-2 mb-1.5">
-                <input
-                  type="text"
-                  value={detail.label}
-                  onChange={(e) => onUpdateDetail(item.id, detail.id, "label", e.target.value)}
-                  placeholder="Label"
-                  className="flex-1 px-2.5 py-1.5 rounded border border-border text-sm focus:outline-none focus:ring-2 focus:ring-accent placeholder:text-gray-300"
-                />
-                <input
-                  type="text"
-                  value={detail.value}
-                  onChange={(e) => onUpdateDetail(item.id, detail.id, "value", e.target.value)}
-                  placeholder="Value"
-                  className="flex-1 px-2.5 py-1.5 rounded border border-border text-sm focus:outline-none focus:ring-2 focus:ring-accent placeholder:text-gray-300"
-                />
-                <button
-                  onClick={() => onRemoveDetail(item.id, detail.id)}
-                  className="text-sm text-red-400 hover:text-red-600 px-1"
-                >
-                  ×
-                </button>
-              </div>
-            ))}
+            <DetailRows
+              item={item}
+              onUpdateDetail={onUpdateDetail}
+              onReorderDetail={onReorderDetail}
+              onRemoveDetail={onRemoveDetail}
+            />
           </div>
 
           {/* Links */}
