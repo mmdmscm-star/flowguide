@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase";
+import { libraryCopyFailure, ADD_FAILED_MESSAGE } from "@/lib/library-copy-failure";
 
 type Context = { params: Promise<{ id: string }> };
 
@@ -88,14 +89,12 @@ export async function POST(request: Request, context: Context) {
     p_library_item_ids: libraryItemIds,
   });
   if (rpcErr) {
-    // All-or-nothing on the input side, as when creating a new FlowGuide.
-    if (/missing or not yours/i.test(rpcErr.message)) {
-      return NextResponse.json({
-        error: "entries_unavailable",
-        message: "Some of those Library items are no longer available. Refresh and try again.",
-      }, { status: 409 });
-    }
-    return NextResponse.json({ error: "insert_failed", message: rpcErr.message }, { status: 400 });
+    // All-or-nothing on the input side, as when creating a new FlowGuide — and
+    // the same rule about what a failure may say: recognised refusals keep their
+    // wording, anything else is logged and reported as ours.
+    const failure = libraryCopyFailure(rpcErr.message, "add-from-library",
+      { error: "insert_failed", message: ADD_FAILED_MESSAGE });
+    return NextResponse.json({ error: failure.error, message: failure.message }, { status: failure.status });
   }
   const created = (data ?? []) as string[];
 

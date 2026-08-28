@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase";
 import { generateSlug } from "@/lib/slug";
+import { libraryCopyFailure, CREATE_FAILED_MESSAGE } from "@/lib/library-copy-failure";
 
 export const maxDuration = 30;
 
@@ -60,15 +61,17 @@ export async function POST(request: Request) {
     // ALL OR NOTHING on the input side: a missing or foreign entry aborts the
     // whole creation rather than quietly producing a partial subset. Someone who
     // picked four things gets four or an error, never three without explanation.
-    if (/missing or not yours/i.test(error.message)) {
-      return NextResponse.json({
-        error: "entries_unavailable",
-        message: "Some of those Library items are no longer available. Refresh and try again.",
-      }, { status: 409 });
-    }
-    return NextResponse.json({ error: "create_failed", message: error.message }, { status: 400 });
+    //
+    // Anything we do NOT recognise is our fault, not the professional's, and is
+    // logged rather than shown: this route used to hand the database's own text
+    // to the modal, which once read "function public.update_item_content(...)
+    // does not exist".
+    const failure = libraryCopyFailure(error.message, "create-from-library",
+      { error: "create_failed", message: CREATE_FAILED_MESSAGE });
+    return NextResponse.json({ error: failure.error, message: failure.message }, { status: failure.status });
   }
 
-  return NextResponse.json(
-    { error: "create_failed", message: lastError || "Could not create it. Try again." }, { status: 400 });
+  const exhausted = libraryCopyFailure(lastError, "create-from-library: slug attempts exhausted",
+    { error: "create_failed", message: CREATE_FAILED_MESSAGE });
+  return NextResponse.json({ error: exhausted.error, message: exhausted.message }, { status: exhausted.status });
 }

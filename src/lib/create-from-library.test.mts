@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { readFileSync, existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { libraryCopyFailure } from "./library-copy-failure.ts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const read = (p: string) => readFileSync(join(ROOT, p), "utf8");
@@ -74,10 +75,19 @@ test("a slug collision is retried, as the ordinary blank create retries it", () 
 });
 
 test("a missing or foreign entry is reported as unavailable, not as a partial success", () => {
+  // The recognition moved into the shared failure classifier, so that a raw
+  // database message could stop reaching the modal on either path. Assert the
+  // OUTCOME rather than where the regex happens to live: both routes delegate,
+  // and the classifier still answers this refusal the same way.
   for (const [name, src] of [["create", ROUTE], ["add-to-packet", EXISTING]] as const) {
-    assert.match(src, /missing or not yours/, `${name} must recognise the all-or-nothing refusal`);
-    assert.match(src, /entries_unavailable/, `${name} must surface it as such`);
+    assert.match(src, /libraryCopyFailure\(/, `${name} must classify failures through the shared helper`);
   }
+  const verdict = libraryCopyFailure(
+    "library: 2 of 4 chosen entries are missing or not yours", "test",
+    { error: "create_failed", message: "generic" });
+  assert.equal(verdict.error, "entries_unavailable", "the all-or-nothing refusal is no longer recognised");
+  assert.equal(verdict.status, 409);
+  assert.match(verdict.message, /no longer available/i);
 });
 
 // ---------------------------------------------------------------------------
