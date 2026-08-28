@@ -16,7 +16,7 @@ import { createServerClient } from "./supabase.ts";
 import type { ItemContentPayload } from "./item-content.ts";
 import { REVISION_CONFLICT, type LibraryAncestry } from "./library.ts";
 
-import { cursorFilter, cursorFrom, vocabularyOf, type LibraryCursor } from "./library-organization";
+import { cursorFilter, cursorFrom, vocabularyOf, type LibraryCursor, type LibraryVocabulary } from "./library-organization";
 
 type Db = ReturnType<typeof createServerClient>;
 
@@ -147,11 +147,87 @@ export async function setLibraryOrganization(
   return { item: toLibraryItem(data as Record<string, unknown>) };
 }
 
+export interface BulkOrganizePatch {
+  setCategory?: string;
+  clearCategory?: boolean;
+  addLabels?: string[];
+  removeLabels?: string[];
+  favorite?: boolean;
+}
+
+/**
+ * Organize MANY items at once — the reason organization is usable at all.
+ *
+ * A Library that already holds sixty-five things cannot be organized one dialog
+ * at a time; that is not a feature with friction, it is a feature nobody will
+ * ever finish. So the same three columns are written across a selection.
+ *
+ * Owner-scoped on every statement, and it writes NOTHING ELSE. No revision, no
+ * updated_at — see setLibraryOrganization for why the first would report every
+ * descendant FlowGuide as diverged and the second would reshuffle the list.
+ *
+ * Labels need each row's current value to add to or remove from, so rows are
+ * read first. Rows whose result is identical are then written together, which
+ * keeps a 65-item categorise to a handful of statements rather than 65.
+ */
+export async function bulkOrganize(
+  db: Db, userId: string, ids: string[], patch: BulkOrganizePatch,
+): Promise<{ updated: number; error?: string }> {
+  const targets = [...new Set(ids.map(String))].filter(Boolean);
+  if (!targets.length) return { updated: 0, error: "nothing_selected" };
+
+  // Ownership is confirmed HERE, from the session's id, before anything is
+  // written — and the write repeats the predicate rather than trusting this.
+  const { data: owned, error: readErr } = await db.from("library_items")
+    .select("id, labels").eq("user_id", userId).in("id", targets);
+  if (readErr) return { updated: 0, error: readErr.message };
+  const rows = (owned ?? []) as Array<{ id: string; labels: string[] | null }>;
+  if (!rows.length) return { updated: 0, error: "not_found" };
+  const mine = rows.map((r) => r.id);
+
+  const flat: Record<string, unknown> = {};
+  if (patch.clearCategory) flat.category = "";
+  else if (patch.setCategory !== undefined) flat.category = patch.setCategory;
+  if (patch.favorite !== undefined) flat.is_favorite = patch.favorite;
+
+  if (Object.keys(flat).length) {
+    const { error } = await db.from("library_items").update(flat)
+      .eq("user_id", userId).in("id", mine);
+    if (error) return { updated: 0, error: error.message };
+  }
+
+  const add = (patch.addLabels ?? []).filter(Boolean);
+  const remove = (patch.removeLabels ?? []).filter(Boolean);
+  if (add.length || remove.length) {
+    const fold = (x: string) => x.toLowerCase();
+    const dropped = new Set(remove.map(fold));
+    // Group by the RESULT, so identical outcomes cost one statement between them.
+    const groups = new Map<string, { labels: string[]; ids: string[] }>();
+    for (const r of rows) {
+      const current = (r.labels ?? []).map(String);
+      const kept = current.filter((l) => !dropped.has(fold(l)));
+      const have = new Set(kept.map(fold));
+      const next = [...kept];
+      for (const l of add) if (!have.has(fold(l))) { next.push(l); have.add(fold(l)); }
+      const key = JSON.stringify(next);
+      const g = groups.get(key) ?? { labels: next, ids: [] };
+      g.ids.push(r.id);
+      groups.set(key, g);
+    }
+    for (const g of groups.values()) {
+      const { error } = await db.from("library_items").update({ labels: g.labels })
+        .eq("user_id", userId).in("id", g.ids);
+      if (error) return { updated: 0, error: error.message };
+    }
+  }
+
+  return { updated: mine.length };
+}
+
 /** The professional's own vocabulary, for filter chips and spelling reuse. */
-export async function libraryVocabulary(
-  db: Db, userId: string,
-): Promise<{ categories: string[]; labels: string[] }> {
-  const { data } = await db.from("library_items").select("category, labels").eq("user_id", userId);
+export async function libraryVocabulary(db: Db, userId: string): Promise<LibraryVocabulary> {
+  const { data } = await db.from("library_items")
+    .select("category, labels, is_favorite").eq("user_id", userId);
   return vocabularyOf((data ?? []) as Array<{ category?: unknown; labels?: unknown }>);
 }
 

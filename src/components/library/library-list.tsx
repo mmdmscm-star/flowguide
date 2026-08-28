@@ -1,6 +1,7 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { type LibrarySnapshot, subtitleFor, heroPhoto } from "@/lib/library-adapter";
+import type { LibraryVocabulary } from "@/lib/library-organization";
 
 // The searchable list of Library entries. Used in two places, deliberately:
 // the /library workspace and the in-editor picker. One list, two contexts —
@@ -19,6 +20,7 @@ export function LibraryList({
   labels = [],
   favorite = false,
   onVocabulary,
+  onToggleFavorite,
 }: {
   selectable?: boolean;
   selected?: string[];
@@ -40,7 +42,10 @@ export function LibraryList({
   favorite?: boolean;
   /** The vocabulary actually in use, reported from the first page so the
    *  filter chips can be drawn from the professional's own words. */
-  onVocabulary?: (v: { categories: string[]; labels: string[] }) => void;
+  onVocabulary?: (v: LibraryVocabulary) => void;
+  /** Star straight from the row. Omitted where a star would be noise — inside a
+   *  picker the professional is choosing, not filing. */
+  onToggleFavorite?: (id: string, next: boolean) => void;
 }) {
   const [q, setQ] = useState("");
   const [items, setItems] = useState<LibrarySnapshot[]>([]);
@@ -85,6 +90,12 @@ export function LibraryList({
     onVocabularyRef.current = onVocabulary;
   });
 
+  // The star answers immediately and reconciles from the next load. Filing is
+  // a rapid, low-stakes gesture — waiting on a round trip to see a star fill in
+  // makes tidying feel like submitting a form.
+  const [starred, setStarred] = useState<Record<string, boolean>>({});
+  const isStarred = (s: LibrarySnapshot) => starred[s.id] ?? s.isFavorite === true;
+
   const labelKey = labels.join("\u0000");
   const labelList = useMemo(() => (labelKey ? labelKey.split("\u0000") : []), [labelKey]);
 
@@ -108,6 +119,7 @@ export function LibraryList({
       if (mine !== seq.current) return;
       if (!res.ok) { setError(data.message || data.error || "Could not load your Library."); return; }
       setItems(data.items ?? []);
+      setStarred({});                       // the server's answer supersedes ours
       setHasMore(data.hasMore === true);
       setCursor(data.nextCursor ?? null);
       if (data.vocabulary) onVocabularyRef.current?.(data.vocabulary);
@@ -222,20 +234,40 @@ export function LibraryList({
             isSelected ? "border-accent bg-accent/5" : "border-border bg-white"
           }`;
 
+          // The star sits OUTSIDE the row's own control. A label wrapping a
+          // checkbox would otherwise swallow the click and select the row, and
+          // a button inside a button is not valid markup at all.
+          const star = onToggleFavorite ? (
+            <button
+              type="button"
+              onClick={() => { const next = !isStarred(s);
+                setStarred((m) => ({ ...m, [s.id]: next })); onToggleFavorite(s.id, next); }}
+              aria-pressed={isStarred(s)}
+              aria-label={isStarred(s) ? `Remove ${s.title || "this item"} from favorites` : `Add ${s.title || "this item"} to favorites`}
+              className={`flex-none px-1 text-lg leading-none transition-colors ${
+                isStarred(s) ? "text-amber-500 hover:text-amber-600" : "text-gray-300 hover:text-amber-500"
+              }`}
+            >
+              {isStarred(s) ? "★" : "☆"}
+            </button>
+          ) : null;
+
           return selectable ? (
-            <li key={s.id}>
+            <li key={s.id} className="flex items-center gap-1">
               <label className={`${shell} cursor-pointer`}>
                 <input type="checkbox" checked={isSelected}
                        onChange={() => onToggle?.(s.id)} className="flex-none" />
                 {body}
               </label>
+              {star}
             </li>
           ) : (
-            <li key={s.id}>
+            <li key={s.id} className="flex items-center gap-1">
               <button type="button" onClick={() => onOpen?.(s)} disabled={!onOpen}
                       className={`${shell} ${onOpen ? "cursor-pointer hover:border-accent" : ""}`}>
                 {body}
               </button>
+              {star}
             </li>
           );
         })}

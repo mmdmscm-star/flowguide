@@ -1,8 +1,10 @@
 "use client";
 import { useCallback, useState } from "react";
-import { BlockItemEditor } from "@/components/editor/block-item-editor";
+import { BlockItemEditor, type LibraryOrganization } from "@/components/editor/block-item-editor";
 import { LibraryList } from "@/components/library/library-list";
 import { LibraryDetail } from "@/components/library/library-detail";
+import { LibraryFilters, EMPTY_FILTERS, type LibraryFilterState } from "@/components/library/library-filters";
+import type { LibraryVocabulary } from "@/lib/library-organization";
 import { CreatorNav } from "@/components/nav/creator-nav";
 import { ImportWithAI } from "@/components/library/import-with-ai";
 import { createFromLibrary } from "@/lib/create-from-library";
@@ -50,16 +52,53 @@ export default function LibraryWorkspace() {
   // ORGANIZATION FILTERS. Views of one Library, not separate collections: they
   // compose with the search box and with each other, and the chips are drawn
   // from the professional's own vocabulary rather than anything FlowGuide names.
-  const [category, setCategory] = useState("");
-  const [labels, setLabels] = useState<string[]>([]);
-  const [favorite, setFavorite] = useState(false);
-  const [vocab, setVocab] = useState<{ categories: string[]; labels: string[] }>({ categories: [], labels: [] });
+  const [filters, setFilters] = useState<LibraryFilterState>(EMPTY_FILTERS);
+  const [vocab, setVocab] = useState<LibraryVocabulary>({ categories: [], labels: [], hasFavorites: false });
+  const [organizing, setOrganizing] = useState(false);
+  const [orgCategory, setOrgCategory] = useState("");
+  const [orgLabel, setOrgLabel] = useState("");
+
+  /** One organizing write for the whole selection. Refreshes the list so the
+   *  chips and stars reflect what just happened. */
+  async function organize(patch: Record<string, unknown>) {
+    if (!chosen.length) return;
+    setBusy(true); setNotice("");
+    try {
+      const res = await fetch("/api/library/bulk", {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: chosen, ...patch }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setNotice(data.message || "Could not organize those items."); return; }
+      if (data.vocabulary) setVocab(data.vocabulary);
+      setRefreshKey((k) => k + 1);
+      setNotice(`Organized ${data.updated} item${data.updated === 1 ? "" : "s"}.`);
+    } catch {
+      setNotice("Could not organize those items.");
+    } finally { setBusy(false); }
+  }
+
+  async function toggleFavorite(id: string, next: boolean) {
+    // Starring the FIRST item has to reveal the Favorites filter straight away.
+    // The vocabulary otherwise only arrives with a first page, so the affordance
+    // would appear on some later reload — long after the moment it was earned.
+    // Unstarring is not mirrored: whether that was the last one is a question
+    // about the whole Library, and the next load answers it honestly.
+    if (next) setVocab((v) => (v.hasFavorites ? v : { ...v, hasFavorites: true }));
+    await fetch(`/api/library/${id}`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ organization: { isFavorite: next } }),
+    }).catch(() => {});
+  }
 
   const [selecting, setSelecting] = useState(false);
   const [chosen, setChosen] = useState<string[]>([]);
   const router = useRouter();
 
-  const save = useCallback(async (payload: ItemContentPayload): Promise<MutationResult> => {
+  const save = useCallback(async (
+    payload: ItemContentPayload, _updated?: unknown, organization?: LibraryOrganization,
+  ): Promise<MutationResult> => {
+    void _updated;
     if (!editing) return "failed";
     setBusy(true);
     setNotice("");
@@ -79,6 +118,17 @@ export default function LibraryWorkspace() {
         return "rejected";
       }
       if (!res.ok) { setNotice(data.message || data.error || "Could not save."); return "failed"; }
+
+      // TWO WRITES, DELIBERATELY. The content save above bumps `revision`,
+      // which is the save-back comparator; organization must not, so it goes
+      // through its own path rather than riding along in the payload. It runs
+      // after the content save so a rejected revision leaves both untouched.
+      if (organization && editing) {
+        await fetch(`/api/library/${editing.id}`, {
+          method: "PATCH", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ organization }),
+        }).catch(() => {});
+      }
 
       setEditing(null);
       setRefreshKey((k) => k + 1);
@@ -211,13 +261,21 @@ export default function LibraryWorkspace() {
           </div>
         )}
 
+        {/* SELECTION IS NEUTRAL. Choosing items commits to nothing; what to do
+            with them is the next decision, not the first. A separate
+            "organizing mode" beside the existing "creating mode" would make the
+            professional pick the right door before knowing which room they
+            wanted, and get it wrong half the time. */}
         {selecting && (
           <div className="mb-4 rounded-xl border border-accent/40 bg-accent/5 p-3">
             <p className="text-sm font-medium text-foreground">
-              Choose what to start a FlowGuide with
+              {chosen.length
+                ? `${chosen.length} selected`
+                : "Choose the items you want to work with"}
             </p>
             <p className="mt-1 text-sm text-muted">
-              Each one is copied in. Changing it there never changes what is saved here.
+              Start a FlowGuide with them, or file them for later. A copy in a
+              FlowGuide never changes what is saved here.
             </p>
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <button
@@ -235,13 +293,61 @@ export default function LibraryWorkspace() {
                   : "Create FlowGuide"}
               </button>
               <button
-                onClick={() => { setSelecting(false); setChosen([]); }}
+                onClick={() => setOrganizing((o) => !o)}
+                disabled={busy || chosen.length === 0}
+                aria-expanded={organizing}
+                className="px-3 py-2 rounded-lg border border-border bg-white text-sm font-medium
+                           text-foreground hover:border-accent hover:text-accent disabled:opacity-60"
+              >
+                Organize
+              </button>
+              <button
+                onClick={() => { setSelecting(false); setChosen([]); setOrganizing(false); }}
                 disabled={busy}
                 className="ml-auto text-sm font-medium text-muted hover:text-foreground"
               >
                 Cancel
               </button>
             </div>
+
+            {/* The actions appear only once Organize is asked for, so the
+                ordinary path — select, create — stays two controls wide. */}
+            {organizing && chosen.length > 0 && (
+              <div className="mt-3 space-y-2 border-t border-accent/30 pt-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <input
+                    list="library-categories"
+                    value={orgCategory}
+                    onChange={(e) => setOrgCategory(e.target.value)}
+                    placeholder="Category"
+                    className="min-w-0 flex-1 px-2.5 py-1.5 rounded border border-border text-sm
+                               focus:outline-none focus:ring-2 focus:ring-accent placeholder:text-gray-300"
+                  />
+                  <SmallAction disabled={busy || !orgCategory.trim()}
+                    onClick={() => organize({ setCategory: orgCategory })}>Set</SmallAction>
+                  <SmallAction disabled={busy}
+                    onClick={() => organize({ clearCategory: true })}>Clear</SmallAction>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <input
+                    list="library-labels"
+                    value={orgLabel}
+                    onChange={(e) => setOrgLabel(e.target.value)}
+                    placeholder="Label"
+                    className="min-w-0 flex-1 px-2.5 py-1.5 rounded border border-border text-sm
+                               focus:outline-none focus:ring-2 focus:ring-accent placeholder:text-gray-300"
+                  />
+                  <SmallAction disabled={busy || !orgLabel.trim()}
+                    onClick={() => organize({ addLabels: [orgLabel] })}>Add</SmallAction>
+                  <SmallAction disabled={busy || !orgLabel.trim()}
+                    onClick={() => organize({ removeLabels: [orgLabel] })}>Remove</SmallAction>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <SmallAction disabled={busy} onClick={() => organize({ favorite: true })}>★ Favorite</SmallAction>
+                  <SmallAction disabled={busy} onClick={() => organize({ favorite: false })}>☆ Unfavorite</SmallAction>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -312,33 +418,33 @@ export default function LibraryWorkspace() {
             <BlockItemEditor
               item={snapshotToItem(editing)}
               busy={busy}
-              onSave={(payload) => save(payload)}
+              onSave={(payload, updated, organization) => save(payload, updated, organization)}
+              organization={{
+                category: editing.category ?? "",
+                labels: editing.labels ?? [],
+                isFavorite: editing.isFavorite ?? false,
+              }}
+              vocabulary={vocab}
               onClose={() => setEditing(null)}
             />
           </div>
         ) : (
           <>
-          {(vocab.categories.length > 0 || vocab.labels.length > 0 || favorite) && (
-            <div className="mb-3 flex flex-wrap items-center gap-1.5">
-              <FilterChip active={!category && labels.length === 0 && !favorite}
-                onClick={() => { setCategory(""); setLabels([]); setFavorite(false); }}>All</FilterChip>
-              <FilterChip active={favorite} onClick={() => setFavorite((f) => !f)}>★ Favorites</FilterChip>
-              {vocab.categories.map((c) => (
-                <FilterChip key={c} active={category === c}
-                  onClick={() => setCategory((cur) => cur === c ? "" : c)}>{c}</FilterChip>
-              ))}
-              {vocab.labels.map((l) => (
-                <FilterChip key={l} active={labels.includes(l)} subtle
-                  onClick={() => setLabels((cur) => cur.includes(l) ? cur.filter((x) => x !== l) : [...cur, l])}>{l}</FilterChip>
-              ))}
-            </div>
-          )}
+          <LibraryFilters vocabulary={vocab} value={filters} onChange={setFilters} className="mb-3" />
+          {/* Suggestions for the bulk inputs, from the professional's own words. */}
+          <datalist id="library-categories">
+            {vocab.categories.map((c) => <option key={c} value={c} />)}
+          </datalist>
+          <datalist id="library-labels">
+            {vocab.labels.map((l) => <option key={l} value={l} />)}
+          </datalist>
           <LibraryList
             refreshKey={refreshKey}
-            category={category}
-            labels={labels}
-            favorite={favorite}
+            category={filters.category}
+            labels={filters.labels}
+            favorite={filters.favorite}
             onVocabulary={setVocab}
+            onToggleFavorite={selecting ? undefined : toggleFavorite}
             onLoaded={({ count, filtered }) => { if (!filtered) setHasAny(count > 0); }}
             selectable={selecting}
             selected={chosen}
@@ -376,26 +482,17 @@ export default function LibraryWorkspace() {
   );
 }
 
-/** One filter chip. Deliberately the same control for categories and labels —
- *  they filter the same list and behave the same way; only the emphasis
- *  differs, because a category is a place and a label is a facet. */
-function FilterChip({
-  active, subtle = false, onClick, children,
-}: {
-  active: boolean; subtle?: boolean; onClick: () => void; children: React.ReactNode;
-}) {
+/** A compact control for one bulk action. */
+function SmallAction({
+  disabled, onClick, children,
+}: { disabled?: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      aria-pressed={active}
-      className={`rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${
-        active
-          ? "border-accent bg-accent text-white"
-          : subtle
-            ? "border-border bg-white text-muted hover:border-accent"
-            : "border-border bg-white text-foreground hover:border-accent"
-      }`}
+      disabled={disabled}
+      className="rounded-lg border border-border bg-white px-2.5 py-1.5 text-xs font-medium
+                 text-foreground hover:border-accent hover:text-accent disabled:opacity-50"
     >
       {children}
     </button>

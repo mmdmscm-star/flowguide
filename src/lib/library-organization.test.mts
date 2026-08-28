@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import {
   normalizeCategory, normalizeLabels, vocabularyOf, cursorFrom, cursorFilter,
 } from "./library-organization.ts";
+import { shouldShowFilters } from "../components/library/library-filters.tsx";
 
 // Comments stripped INCLUDING trailing ones. A rule must be asserted against
 // the code, never against the prose explaining it: the organization write
@@ -150,4 +151,67 @@ test("filters and search reset paging rather than reusing a stale cursor", () =>
     "the labels dependency is the array itself, which is a new identity each render");
   assert.match(list, /useMemo\(\(\) => \(labelKey \? labelKey\.split\([\s\S]{0,40}?\[labelKey\]\)/,
     "labelList is not derived from the stable key");
+});
+
+// ---------------------------------------------------------------------------
+// FAVORITES MUST NOT DEPEND ON CATEGORY OR LABEL VOCABULARY.
+//
+// The first version gated the whole filter surface on categories or labels
+// existing, with the filter's OWN state as the only other way in. So a Library
+// with one starred item and nothing filed showed no Favorites chip — and the
+// only way to reveal it was a filter you could not switch on, because the chip
+// was not rendered. A closed loop, and exactly the kind that looks like
+// "organization just doesn't work here".
+// ---------------------------------------------------------------------------
+const NONE = { categories: [], labels: [], hasFavorites: false };
+const OFF = { category: "", labels: [] as string[], favorite: false };
+
+test("an unorganized Library shows NO filter chrome", () => {
+  assert.equal(shouldShowFilters(NONE, OFF), false,
+    "an empty row of controls is offered to someone who has organized nothing");
+});
+
+test("ONE FAVORITE is enough, with zero categories and zero labels", () => {
+  assert.equal(shouldShowFilters({ ...NONE, hasFavorites: true }, OFF), true,
+    "starring an item does not reveal the Favorites filter");
+});
+
+test("a category or a label alone also reveals it", () => {
+  assert.equal(shouldShowFilters({ ...NONE, categories: ["Communities"] }, OFF), true);
+  assert.equal(shouldShowFilters({ ...NONE, labels: ["Santa Rosa"] }, OFF), true);
+});
+
+test("unstarring the last favorite cannot strand you inside the Favorites view", () => {
+  // hasFavorites is false again, but the filter is ON — so the chip stays and
+  // can be switched off.
+  assert.equal(shouldShowFilters(NONE, { ...OFF, favorite: true }), true,
+    "the only control that could leave the view disappeared with the last favorite");
+});
+
+test("...and once the view is left, the calm surface returns", () => {
+  assert.equal(shouldShowFilters(NONE, OFF), false);
+});
+
+test("the vocabulary reports whether ANYTHING is starred, in either shape", () => {
+  assert.equal(vocabularyOf([{ category: "", labels: [] }]).hasFavorites, false);
+  assert.equal(vocabularyOf([{ category: "", labels: [], is_favorite: true }]).hasFavorites, true,
+    "the database row shape is not recognised");
+  assert.equal(vocabularyOf([{ category: "", labels: [], isFavorite: true }]).hasFavorites, true,
+    "the mapped item shape is not recognised");
+  // ...and it is a fact about the material, never about the filter.
+  const v = vocabularyOf([{ category: "Communities", labels: ["Moving"], is_favorite: false }]);
+  assert.deepEqual(v, { categories: ["Communities"], labels: ["Moving"], hasFavorites: false });
+});
+
+test("starring the FIRST item reveals the filter without waiting for a reload", () => {
+  const ws = bodyOf("src/components/library/library-workspace.tsx");
+  const fn = ws.slice(ws.indexOf("async function toggleFavorite"));
+  assert.match(fn.slice(0, fn.indexOf("\n  }")), /setVocab\(\(v\) => \(v\.hasFavorites \? v : \{ \.\.\.v, hasFavorites: true \}\)\)/,
+    "the affordance waits for the next page load, long after it was earned");
+});
+
+test("the vocabulary query actually reads is_favorite", () => {
+  const service = bodyOf("src/lib/library-service.ts");
+  assert.match(service, /select\("category, labels, is_favorite"\)/,
+    "hasFavorites is computed from a query that never selected the column");
 });

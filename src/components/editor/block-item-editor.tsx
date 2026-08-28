@@ -131,16 +131,29 @@ function SortableDetailRow({
   );
 }
 
+export interface LibraryOrganization {
+  category: string;
+  labels: string[];
+  isFavorite: boolean;
+}
+
 export function BlockItemEditor({
   item,
   busy,
   onSave,
   onClose,
+  organization,
+  vocabulary,
 }: {
   item: Item;
   busy: boolean;
-  onSave: (payload: ItemContentPayload, updatedItem: Item) => Promise<MutationResult>;
+  onSave: (payload: ItemContentPayload, updatedItem: Item, organization?: LibraryOrganization) => Promise<MutationResult>;
   onClose: () => void;
+  /** Present only when editing a LIBRARY entry. A FlowGuide item has no
+   *  category or labels — organization belongs to the shelf, not to the copy
+   *  that was taken from it — so the section simply does not exist there. */
+  organization?: LibraryOrganization;
+  vocabulary?: { categories: string[]; labels: string[] };
 }) {
   const [title, setTitle] = useState(item.title || "");
   const [address, setAddress] = useState(item.address || "");
@@ -155,6 +168,22 @@ export function BlockItemEditor({
     item.contacts ? item.contacts.map((c) => ({ name: c.name || "", role: c.role || "", phone: c.phone || "", email: c.email || "", website: c.website || "" })) : []
   );
   const [error, setError] = useState("");
+  const [category, setCategory] = useState(organization?.category ?? "");
+  const [labels, setLabels] = useState<string[]>(organization?.labels ?? []);
+  const [isFavorite, setIsFavorite] = useState(organization?.isFavorite ?? false);
+  const [labelDraft, setLabelDraft] = useState("");
+
+  function addLabel() {
+    const wanted = labelDraft.replace(/\s+/g, " ").trim();
+    if (!wanted) return;
+    // Case-insensitive, so one idea stays one chip. The server normalises again
+    // against the whole Library; this is the same rule applied early enough for
+    // the professional to SEE it happen.
+    const known = (vocabulary?.labels ?? []).find((l) => l.toLowerCase() === wanted.toLowerCase());
+    const value = known ?? wanted;
+    setLabels((cur) => cur.some((l) => l.toLowerCase() === value.toLowerCase()) ? cur : [...cur, value]);
+    setLabelDraft("");
+  }
 
   // Same sensors as the FlowGuide editor: a pointer that ignores a 5px twitch,
   // and a keyboard sensor, because a reorder only a mouse can perform is not
@@ -211,7 +240,11 @@ export function BlockItemEditor({
         : undefined,
     };
 
-    const result = await onSave(payload, updatedItem);
+    // Organization travels beside the content payload, never inside it: the
+    // content write bumps `revision` and the organization write must not, so
+    // they stay two separate writes on the other side of this callback.
+    const result = await onSave(payload, updatedItem,
+      organization ? { category, labels, isFavorite } : undefined);
     if (result === "ok") onClose();
     else if (result === "failed") setError("Save failed — your changes were not applied.");
     else if (result === "rejected") setError("Another change is saving — try again in a moment.");
@@ -265,6 +298,85 @@ export function BlockItemEditor({
             <textarea value={notes} disabled={busy} onChange={(e) => setNotes(e.target.value)} rows={2}
               placeholder="For your reference only" className={field} />
           </label>
+
+          {/* LIBRARY ORGANIZATION — how the professional files this, kept
+              visibly apart from what a client reads. Rendered only for a
+              Library entry: none of it is copied into a FlowGuide, and none of
+              it ever reaches a recipient. */}
+          {organization && (
+            <div className="rounded-lg border border-dashed border-border bg-gray-50/60 p-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-medium uppercase tracking-wide text-muted">
+                  Library organization
+                </span>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => setIsFavorite((f) => !f)}
+                  aria-pressed={isFavorite}
+                  className={`text-lg leading-none ${isFavorite ? "text-amber-500" : "text-gray-300 hover:text-amber-500"}`}
+                  aria-label={isFavorite ? "Remove from favorites" : "Add to favorites"}
+                >
+                  {isFavorite ? "★" : "☆"}
+                </button>
+              </div>
+              <p className="mt-1 text-xs text-muted">
+                Only you see this. It is how you find this again — it is never copied
+                into a FlowGuide.
+              </p>
+
+              <label className="mt-3 block text-xs text-muted">Category</label>
+              <input
+                list="item-editor-categories"
+                value={category}
+                disabled={busy}
+                onChange={(e) => setCategory(e.target.value)}
+                placeholder="Communities"
+                className={field}
+              />
+              <datalist id="item-editor-categories">
+                {(vocabulary?.categories ?? []).map((c) => <option key={c} value={c} />)}
+              </datalist>
+
+              <label className="mt-3 block text-xs text-muted">Labels</label>
+              {labels.length > 0 && (
+                <div className="mb-1.5 flex flex-wrap gap-1.5">
+                  {labels.map((l) => (
+                    <span key={l} className="inline-flex items-center gap-1 rounded-full border border-border
+                                             bg-white px-2 py-0.5 text-xs text-foreground">
+                      {l}
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => setLabels((cur) => cur.filter((x) => x !== l))}
+                        aria-label={`Remove label ${l}`}
+                        className="text-red-400 hover:text-red-600"
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+              <div className="flex gap-2">
+                <input
+                  list="item-editor-labels"
+                  value={labelDraft}
+                  disabled={busy}
+                  onChange={(e) => setLabelDraft(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addLabel(); } }}
+                  placeholder="Santa Rosa"
+                  className={field}
+                />
+                <button type="button" className={smallBtn} disabled={busy || !labelDraft.trim()} onClick={addLabel}>
+                  + Add
+                </button>
+              </div>
+              <datalist id="item-editor-labels">
+                {(vocabulary?.labels ?? []).map((l) => <option key={l} value={l} />)}
+              </datalist>
+            </div>
+          )}
 
           {/* Details */}
           <div>

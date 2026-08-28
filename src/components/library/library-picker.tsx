@@ -1,6 +1,8 @@
 "use client";
 import { useState } from "react";
 import { LibraryList } from "@/components/library/library-list";
+import { LibraryFilters, EMPTY_FILTERS, type LibraryFilterState } from "@/components/library/library-filters";
+import type { LibraryVocabulary } from "@/lib/library-organization";
 
 // Insert from Library. Produces ORDINARY packet items — after this, the packet
 // owns its copies outright and nothing stays connected.
@@ -13,6 +15,11 @@ export function LibraryPicker({
   onClose: () => void;
 }) {
   const [selected, setSelected] = useState<string[]>([]);
+  // The SAME filters as the Library. Narrowing while assembling is where
+  // filtering earns the most, and it should be the thing already learned
+  // rather than a second system that resembles it.
+  const [filters, setFilters] = useState<LibraryFilterState>(EMPTY_FILTERS);
+  const [vocab, setVocab] = useState<LibraryVocabulary>({ categories: [], labels: [], hasFavorites: false });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -47,7 +54,12 @@ export function LibraryPicker({
 
         {error && <p className="mb-2 text-sm text-red-700">{error}</p>}
 
+        <LibraryFilters vocabulary={vocab} value={filters} onChange={setFilters} className="mb-3" />
         <LibraryList
+          category={filters.category}
+          labels={filters.labels}
+          favorite={filters.favorite}
+          onVocabulary={setVocab}
           selectable
           selected={selected}
           onToggle={(id) => setSelected((s) => s.includes(id) ? s.filter((x) => x !== id) : [...s, id])}

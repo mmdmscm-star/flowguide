@@ -59,11 +59,20 @@ export function normalizeLabels(raw: unknown, existing: string[] = []): string[]
   return out;
 }
 
+export interface LibraryVocabulary {
+  categories: string[];
+  labels: string[];
+  /** Whether ANYTHING is starred — not whether the Favorites filter is on.
+   *  The filter surface needs to know the difference: a Library with one
+   *  favorite and no categories or labels still has something to offer. */
+  hasFavorites: boolean;
+}
+
 /** The distinct vocabulary in use, for filter chips and for spelling reuse.
  *  Derived from the material rather than maintained beside it. */
 export function vocabularyOf(
-  rows: Array<{ category?: unknown; labels?: unknown }>,
-): { categories: string[]; labels: string[] } {
+  rows: Array<{ category?: unknown; labels?: unknown; is_favorite?: unknown; isFavorite?: unknown }>,
+): LibraryVocabulary {
   const cats = new Map<string, string>();
   const labs = new Map<string, string>();
   for (const r of rows) {
@@ -75,7 +84,11 @@ export function vocabularyOf(
     }
   }
   const byName = (a: string, b: string) => a.localeCompare(b, undefined, { sensitivity: "base" });
-  return { categories: [...cats.values()].sort(byName), labels: [...labs.values()].sort(byName) };
+  return {
+    categories: [...cats.values()].sort(byName),
+    labels: [...labs.values()].sort(byName),
+    hasFavorites: rows.some((r) => r.is_favorite === true || r.isFavorite === true),
+  };
 }
 
 // ---------------------------------------------------------------------------
