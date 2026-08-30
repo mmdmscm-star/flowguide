@@ -329,22 +329,75 @@ function Header({
           : "truncate text-sm font-medium text-foreground/80"}>{name}</span>
         <span className="flex-none text-xs text-muted">({count})</span>
       </button>
-      {onRename && (
-        // Quiet until wanted: legible on focus and on hover, never competing
-        // with the heading it belongs to.
-        <button
-          type="button"
-          onClick={() => { setDraft(name); setEditing(true); }}
-          disabled={busy}
-          aria-label={`Rename ${name}`}
-          className="flex-none text-[11px] font-medium text-muted/0 transition-colors
-                     hover:text-accent focus:text-accent group-hover/head:text-muted
-                     disabled:opacity-40"
-        >
-          Rename
-        </button>
-      )}
+      {onRename && <HeadingMenu name={name} busy={busy} onRename={() => { setDraft(name); setEditing(true); }} />}
       <span className="ml-auto flex-none">{controls}</span>
+    </div>
+  );
+}
+
+/** The one action a heading has, reachable without hovering.
+ *
+ *  HOVER IS NOT AN AFFORDANCE ON A PHONE. The first version faded Rename in on
+ *  hover and focus, which meant a touch device had no way to find it at all
+ *  short of discovering it by accident. So the control is always visible — a
+ *  quiet `…` that sits at the end of the heading and says nothing until asked.
+ *
+ *  Dismissal is deliberate for the same reason the Library picker's is: Escape
+ *  closes, and a click anywhere else closes, but only when the press STARTED
+ *  outside — otherwise a drag that ends off the menu would close it mid-gesture.
+ */
+function HeadingMenu({
+  name, busy, onRename,
+}: { name: string; busy?: boolean; onRename: () => void }) {
+  const [open, setOpen] = useState(false);
+  const box = useRef<HTMLDivElement | null>(null);
+  const pressedOutside = useRef(false);
+
+  useEffect(() => {
+    if (!open) return;
+    const down = (e: Event) => {
+      pressedOutside.current = !box.current?.contains(e.target as Node);
+    };
+    const up = (e: Event) => {
+      if (pressedOutside.current && !box.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const key = (e: Event) => { if ((e as KeyboardEvent).key === "Escape") setOpen(false); };
+    document.addEventListener("pointerdown", down, true);
+    document.addEventListener("click", up, true);
+    document.addEventListener("keydown", key);
+    return () => {
+      document.removeEventListener("pointerdown", down, true);
+      document.removeEventListener("click", up, true);
+      document.removeEventListener("keydown", key);
+    };
+  }, [open]);
+
+  return (
+    <div ref={box} className="relative flex-none">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        disabled={busy}
+        aria-label={`Actions for ${name}`}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        className="px-1.5 text-sm leading-none text-muted hover:text-accent disabled:opacity-40"
+      >
+        …
+      </button>
+      {open && (
+        <div role="menu" className="absolute left-0 top-full z-10 mt-1 w-36 overflow-hidden
+                                    rounded-lg border border-border bg-white shadow-lg">
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => { setOpen(false); onRename(); }}
+            className="w-full px-3 py-2 text-left text-sm text-foreground hover:bg-gray-50"
+          >
+            Rename
+          </button>
+        </div>
+      )}
     </div>
   );
 }

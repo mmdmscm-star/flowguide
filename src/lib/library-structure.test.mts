@@ -277,6 +277,23 @@ test("sections and groups are collapsible", () => {
   assert.match(view, /aria-expanded=\{!collapsed\}/);
 });
 
+test("0042 carries NO shadow-agreement precondition", () => {
+  // The structured runtime deploys BEFORE 0042 and stops maintaining
+  // `category` the moment it is live, so the shadow goes stale by design. A
+  // precondition demanding they still agree would reject the migration on the
+  // first thing filed after the deploy, and protects nothing once nothing
+  // writes the column.
+  const sql = readFileSync("supabase/migrations/0042_library_retire_category.sql", "utf8");
+  assert.ok(!/still describe two different homes/.test(sql),
+    "0042 still refuses to run unless the retired shadow agrees");
+  assert.ok(!/\$pre\$/.test(sql), "0042 still has a precondition block");
+  // What it DOES still verify.
+  for (const guarantee of ["content must never be lost", "changed during a column drop",
+                           "the section/group structure changed"]) {
+    assert.ok(sql.includes(guarantee), `0042 no longer asserts: ${guarantee}`);
+  }
+});
+
 test("0041 carries 0040's reconciliation VERBATIM, and is its own migration", () => {
   const a = readFileSync("supabase/migrations/0040_library_structure_cutover.sql", "utf8");
   const b = readFileSync("supabase/migrations/0041_library_structure_catchup.sql", "utf8");
@@ -339,6 +356,19 @@ test("rename is offered only where the structure is the professional's to change
                         "src/components/library/use-library-picker.tsx"]) {
     assert.ok(!/reorder|onRename/.test(bodyOf(picker)), `${picker} can rename the structure`);
   }
+});
+
+test("the rename affordance is VISIBLE, not revealed by hovering", () => {
+  const view = bodyOf("src/components/library/library-structure-view.tsx");
+  // A hover-only control does not exist on a touch device.
+  assert.ok(!/group-hover\/head|text-muted\/0/.test(view),
+    "the heading action is hidden until hover");
+  assert.match(view, /aria-label=\{`Actions for \$\{name\}`\}/, "there is no visible actions control");
+  assert.match(view, /aria-haspopup="menu"/);
+  assert.match(view, /role="menuitem"/);
+  // One action. A heading is not a settings screen.
+  assert.equal((view.match(/role="menuitem"/g) ?? []).length, 1,
+    "the heading menu carries more than the one action it needs");
 });
 
 test("rename happens IN PLACE, with no dialog and no management screen", () => {

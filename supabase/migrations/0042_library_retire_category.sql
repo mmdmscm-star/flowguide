@@ -63,23 +63,30 @@ create temp table zz_0042_structure on commit drop as
   select 'group'::text, id, name, sort_order::bigint from public.library_groups;
 
 -- ---------------------------------------------------------------------------
--- PRECONDITION. Contract only after the model it replaces is genuinely dead:
--- every item's shadow must still agree with its section, which is what 0041
--- guaranteed. If anything disagrees, something wrote a category after the
--- cutover and dropping the column would discard a real intent.
--- ---------------------------------------------------------------------------
-do $pre$
-declare v_split bigint;
-begin
-  select count(*) into v_split from public.library_items li
-    left join public.library_sections s on s.id = li.section_id
-   where lower(coalesce(s.name, '')) is distinct from lower(btrim(li.category));
-  if v_split <> 0 then
-    raise exception '0042: % item(s) still describe two different homes — reconcile before contracting', v_split;
-  end if;
-end;
-$pre$;
-
+-- WHY THERE IS NO SHADOW-AGREEMENT PRECONDITION.
+--
+-- An earlier draft refused to run unless every item's `category` still named
+-- its section — the state 0041 guaranteed. Under the correct deployment order
+-- that check is not merely unnecessary, it is WRONG.
+--
+-- The structured runtime deploys BEFORE this migration, because it must: it is
+-- forward-compatible with the column present, whereas the runtime that came
+-- before it would break without one. And the moment that runtime is live it
+-- stops maintaining `category` — placement writes section_id, group_id and
+-- sort_order and nothing else. So the shadow goes stale immediately and by
+-- design, and the very first thing a professional files after the deploy would
+-- make the old precondition reject this migration.
+--
+-- It also no longer protects anything. It existed to prove the shadow still
+-- held live intent worth migrating; once nothing writes it, it cannot. The
+-- structured model is authoritative, and Library ORGANIZATION is re-creatable
+-- in a way Library CONTENT is not — which is the distinction this whole
+-- contract rests on, and the reason a stale shadow is simply garbage rather
+-- than evidence.
+--
+-- What still is verified, below, is everything that matters: no item deleted,
+-- no content touched, and every section, group, placement and position exactly
+-- where it was.
 -- ---------------------------------------------------------------------------
 -- The three objects 0038 created for `category`, and nothing else.
 -- ---------------------------------------------------------------------------

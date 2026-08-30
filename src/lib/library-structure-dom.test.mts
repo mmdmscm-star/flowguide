@@ -304,8 +304,21 @@ test("a Library with NO sections reports itself empty, so the flat list stays", 
 // ---------------------------------------------------------------------------
 // RENAME, IN PLACE
 // ---------------------------------------------------------------------------
-const renameButton = (host: Element, name: string) =>
-  [...host.querySelectorAll("button")].find((b) => b.getAttribute("aria-label") === `Rename ${name}`);
+const menuButton = (host: Element, name: string) =>
+  [...host.querySelectorAll("button")].find((b) => b.getAttribute("aria-label") === `Actions for ${name}`);
+const menuItem = (host: Element, label: string) =>
+  [...host.querySelectorAll('[role="menuitem"]')].find((b) => (b.textContent ?? "").trim() === label);
+
+/** Open the heading's menu and choose Rename — the whole path a professional
+ *  takes, with no hover anywhere in it. */
+const openRename = async (host: Element, name: string) => {
+  const m = menuButton(host, name);
+  assert.ok(m, `no visible actions control on "${name}"`);
+  await click(m!);
+  const item = menuItem(host, "Rename");
+  assert.ok(item, `the menu on "${name}" offers no Rename`);
+  await click(item!);
+};
 
 // React tracks a controlled input's value on the node, so assigning `.value`
 // directly is invisible to it and onChange never fires. The native setter is
@@ -324,12 +337,71 @@ const press = async (field: Element, key: string) => {
   await act(async () => { await new Promise((r) => setTimeout(r, 5)); });
 };
 
+test("RENAME IS REACHABLE WITHOUT HOVER — the control is simply there", async () => {
+  // The first version faded Rename in on hover and focus, which on a touch
+  // device is no affordance at all. The `…` is rendered unconditionally.
+  hasStructure = true;
+  const { host } = await mount({ reorder: true });
+  for (const heading of ["Communities", "Santa Rosa"]) {
+    const m = menuButton(host, heading);
+    assert.ok(m, `"${heading}" has no visible actions control`);
+    assert.equal(m!.getAttribute("aria-haspopup"), "menu");
+    assert.equal(m!.getAttribute("aria-expanded"), "false");
+    // Nothing hover-gated: no opacity-0 / group-hover trickery on the control.
+    assert.ok(!/text-muted\/0|group-hover/.test(m!.className),
+      `"${heading}" hides its actions control until hover`);
+  }
+});
+
+test("the menu offers exactly one action, and it is Rename", async () => {
+  hasStructure = true;
+  const { host } = await mount({ reorder: true });
+  await click(menuButton(host, "Communities")!);
+  const items = [...host.querySelectorAll('[role="menuitem"]')];
+  assert.equal(items.length, 1, "the heading menu grew extra actions");
+  assert.equal((items[0].textContent ?? "").trim(), "Rename");
+});
+
+test("ESCAPE closes the heading menu without renaming anything", async () => {
+  hasStructure = true; renameCalls.length = 0;
+  const { host } = await mount({ reorder: true });
+  await click(menuButton(host, "Communities")!);
+  assert.ok(menuItem(host, "Rename"), "the menu did not open");
+  await act(async () => {
+    dom.window.document.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  });
+  assert.equal(menuItem(host, "Rename"), undefined, "Escape left the menu open");
+  assert.equal(menuButton(host, "Communities")!.getAttribute("aria-expanded"), "false");
+  assert.equal(renameCalls.length, 0);
+});
+
+test("a click elsewhere closes it — but only when the press STARTED elsewhere", async () => {
+  hasStructure = true;
+  const { host } = await mount({ reorder: true });
+  await click(menuButton(host, "Communities")!);
+  assert.ok(menuItem(host, "Rename"), "the menu did not open");
+
+  // A drag that BEGAN inside the menu and ended outside must not dismiss it —
+  // the same gesture that used to close the Library picker mid-selection.
+  const item = menuItem(host, "Rename")!;
+  await act(async () => {
+    item.dispatchEvent(new dom.window.Event("pointerdown", { bubbles: true }));
+    dom.window.document.body.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+  });
+  assert.ok(menuItem(host, "Rename"), "a drag out of the menu closed it");
+
+  // A press that genuinely started outside does close it.
+  await act(async () => {
+    dom.window.document.body.dispatchEvent(new dom.window.Event("pointerdown", { bubbles: true }));
+    dom.window.document.body.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+  });
+  assert.equal(menuItem(host, "Rename"), undefined, "clicking away left the menu open");
+});
+
 test("a heading becomes a FIELD in place — no dialog, no settings screen", async () => {
   hasStructure = true; renameCalls.length = 0; renameFails = false;
   const { host } = await mount({ reorder: true });
-  const btn = renameButton(host, "Communities")!;
-  assert.ok(btn, "the section heading offers no way to correct it");
-  await click(btn);
+  await openRename(host, "Communities");
   const field = host.querySelector('input[aria-label="Rename Communities"]') as HTMLInputElement;
   assert.ok(field, "the heading did not become a field");
   assert.equal(field.value, "Communities", "the field does not start from the current name");
@@ -341,7 +413,7 @@ test("Enter sends the rename — the name only, for the right thing", async () =
   // would make "renaming reordered something" fire on somebody else's move.
   hasStructure = true; renameCalls.length = 0; orderCalls.length = 0; renameFails = false;
   const { host } = await mount({ reorder: true });
-  await click(renameButton(host, "Santa Rosa")!);
+  await openRename(host, "Santa Rosa");
   const field = host.querySelector('input[aria-label="Rename Santa Rosa"]') as HTMLInputElement;
   await typeInto(field, "  Santa   Rosa County  ");
   await press(field, "Enter");
@@ -355,7 +427,7 @@ test("Enter sends the rename — the name only, for the right thing", async () =
 test("Escape abandons it, and nothing is sent", async () => {
   hasStructure = true; renameCalls.length = 0; renameFails = false;
   const { host } = await mount({ reorder: true });
-  await click(renameButton(host, "Communities")!);
+  await openRename(host, "Communities");
   const field = host.querySelector('input[aria-label="Rename Communities"]') as HTMLInputElement;
   await typeInto(field, "Something Else");
   await press(field, "Escape");
@@ -366,7 +438,7 @@ test("Escape abandons it, and nothing is sent", async () => {
 test("an UNCHANGED name is not sent at all", async () => {
   hasStructure = true; renameCalls.length = 0; renameFails = false;
   const { host } = await mount({ reorder: true });
-  await click(renameButton(host, "Communities")!);
+  await openRename(host, "Communities");
   const field = host.querySelector('input[aria-label="Rename Communities"]') as HTMLInputElement;
   await press(field, "Enter");
   assert.equal(renameCalls.length, 0, "a no-op rename was sent to the server");
@@ -375,7 +447,7 @@ test("an UNCHANGED name is not sent at all", async () => {
 test("a REFUSED rename says so and keeps the field open to fix", async () => {
   hasStructure = true; renameCalls.length = 0; renameFails = true;
   const { host } = await mount({ reorder: true });
-  await click(renameButton(host, "Communities")!);
+  await openRename(host, "Communities");
   const field = host.querySelector('input[aria-label="Rename Communities"]') as HTMLInputElement;
   await typeInto(field, "Services");
   await press(field, "Enter");
@@ -388,13 +460,13 @@ test("a REFUSED rename says so and keeps the field open to fix", async () => {
 test("a PICKER offers no rename at all", async () => {
   hasStructure = true;
   const { host } = await mount({ selectable: true, selected: [], onToggle: () => {} });
-  assert.equal(renameButton(host, "Communities"), undefined, "a picker can rename the structure");
-  assert.equal(renameButton(host, "Santa Rosa"), undefined, "a picker can rename a group");
+  assert.equal(menuButton(host, "Communities"), undefined, "a picker can rename the structure");
+  assert.equal(menuButton(host, "Santa Rosa"), undefined, "a picker can rename a group");
 });
 
 test("a FILTERED view offers no rename either", async () => {
   hasStructure = true;
   const { host } = await mount({ reorder: false });
-  assert.equal(renameButton(host, "Communities"), undefined,
+  assert.equal(menuButton(host, "Communities"), undefined,
     "rename survives into a filtered view, where the structure is only partly shown");
 });
