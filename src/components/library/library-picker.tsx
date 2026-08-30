@@ -2,6 +2,9 @@
 import { useState } from "react";
 import { LibraryList } from "@/components/library/library-list";
 import { LibraryFilters, EMPTY_FILTERS, type LibraryFilterState } from "@/components/library/library-filters";
+import { LibraryStructureView } from "@/components/library/library-structure-view";
+import { LibrarySearch } from "@/components/library/library-search";
+import { showStructure, type GroupRow, type SectionRow } from "@/lib/library-structure";
 import type { LibraryVocabulary } from "@/lib/library-organization";
 
 // Insert from Library. Produces ORDINARY packet items — after this, the packet
@@ -20,6 +23,13 @@ export function LibraryPicker({
   // rather than a second system that resembles it.
   const [filters, setFilters] = useState<LibraryFilterState>(EMPTY_FILTERS);
   const [vocab, setVocab] = useState<LibraryVocabulary>({ categories: [], labels: [], hasFavorites: false });
+  // ORGANIZATION HELPS HERE TOO. Assembling a FlowGuide is where finding things
+  // matters most, so the picker browses the same Section -> Group structure the
+  // Library does. It offers no way to CHANGE any of it: choosing is not filing,
+  // and a reorder control in a picker would edit the shelf while you shop.
+  const [structure, setStructure] = useState<{ sections: SectionRow[]; groups: GroupRow[] }>(
+    { sections: [], groups: [] });
+  const [q, setQ] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -54,8 +64,20 @@ export function LibraryPicker({
 
         {error && <p className="mb-2 text-sm text-red-700">{error}</p>}
 
+        <LibrarySearch value={q} onChange={setQ} className="mb-3" />
         <LibraryFilters vocabulary={vocab} value={filters} onChange={setFilters} className="mb-3" />
+        {showStructure(structure.sections.length > 0, { q, labels: filters.labels, favorite: filters.favorite }) ? (
+          <LibraryStructureView
+            selectable
+            selected={selected}
+            onToggle={(id) => setSelected((s) => s.includes(id) ? s.filter((x) => x !== id) : [...s, id])}
+            onVocabulary={setVocab}
+            onEmpty={(empty) => { if (empty) setStructure({ sections: [], groups: [] }); }}
+          />
+        ) : (
         <LibraryList
+          query={q}
+          onStructure={setStructure}
           category={filters.category}
           labels={filters.labels}
           favorite={filters.favorite}
@@ -65,6 +87,7 @@ export function LibraryPicker({
           onToggle={(id) => setSelected((s) => s.includes(id) ? s.filter((x) => x !== id) : [...s, id])}
           emptyHint="Your Library is empty. Save something from a FlowGuide first, then you can reuse it here."
         />
+        )}
 
         <div className="mt-4 flex items-center gap-2">
           <button onClick={insert} disabled={busy || selected.length === 0}

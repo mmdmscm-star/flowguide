@@ -4,6 +4,9 @@ import { BlockItemEditor, type LibraryOrganization } from "@/components/editor/b
 import { LibraryList } from "@/components/library/library-list";
 import { LibraryDetail } from "@/components/library/library-detail";
 import { LibraryFilters, EMPTY_FILTERS, type LibraryFilterState } from "@/components/library/library-filters";
+import { LibraryStructureView } from "@/components/library/library-structure-view";
+import { LibrarySearch } from "@/components/library/library-search";
+import { showStructure, canReorder, type GroupRow, type SectionRow } from "@/lib/library-structure";
 import type { LibraryVocabulary } from "@/lib/library-organization";
 import { CreatorNav } from "@/components/nav/creator-nav";
 import { ImportWithAI } from "@/components/library/import-with-ai";
@@ -49,14 +52,26 @@ export default function LibraryWorkspace() {
   // nothing": an action that needs saved material must not vanish because a
   // search came back empty.
   const [hasAny, setHasAny] = useState<boolean | null>(null);
+  // The search term lives HERE, not in the list: typing is what switches the
+  // Library from its structure to a flat result set, so the box has to outlive
+  // that switch.
+  const [q, setQ] = useState("");
   // ORGANIZATION FILTERS. Views of one Library, not separate collections: they
   // compose with the search box and with each other, and the chips are drawn
   // from the professional's own vocabulary rather than anything FlowGuide names.
   const [filters, setFilters] = useState<LibraryFilterState>(EMPTY_FILTERS);
   const [vocab, setVocab] = useState<LibraryVocabulary>({ categories: [], labels: [], hasFavorites: false });
   const [organizing, setOrganizing] = useState(false);
-  const [orgCategory, setOrgCategory] = useState("");
   const [orgLabel, setOrgLabel] = useState("");
+  // WHERE THINGS GO. A destination chosen from what exists, or named inline —
+  // there is no screen for making an empty section first, because a section
+  // that holds nothing is not something anyone set out to create.
+  const [structure, setStructure] = useState<{ sections: SectionRow[]; groups: GroupRow[] }>(
+    { sections: [], groups: [] });
+  const [destSection, setDestSection] = useState("");     // section id, "", or "__new"
+  const [newSection, setNewSection] = useState("");
+  const [destGroup, setDestGroup] = useState("");         // group id, "", or "__new"
+  const [newGroup, setNewGroup] = useState("");
 
   /** One organizing write for the whole selection. Refreshes the list so the
    *  chips and stars reflect what just happened. */
@@ -71,11 +86,19 @@ export default function LibraryWorkspace() {
       const data = await res.json();
       if (!res.ok) { setNotice(data.message || "Could not organize those items."); return; }
       if (data.vocabulary) setVocab(data.vocabulary);
+      if (data.structure) setStructure(data.structure);
       setRefreshKey((k) => k + 1);
       setNotice(`Organized ${data.updated} item${data.updated === 1 ? "" : "s"}.`);
     } catch {
       setNotice("Could not organize those items.");
     } finally { setBusy(false); }
+  }
+
+  /** Put the selection somewhere. One call: the destination, the position and
+   *  the compatibility shadow all move together. */
+  async function place(target: Record<string, unknown>) {
+    await organize({ place: target });
+    setDestSection(""); setNewSection(""); setDestGroup(""); setNewGroup("");
   }
 
   async function toggleFavorite(id: string, next: boolean) {
@@ -90,6 +113,23 @@ export default function LibraryWorkspace() {
       body: JSON.stringify({ organization: { isFavorite: next } }),
     }).catch(() => {});
   }
+
+  /** "Communities › Santa Rosa" for one entry, or undefined when it is not in
+   *  a section. Used only where the hierarchy is NOT on screen. */
+  const locationOf = useCallback((item: LibrarySnapshot): string | undefined => {
+    const sec = structure.sections.find((x) => x.id === item.sectionId);
+    if (!sec) return undefined;
+    const grp = structure.groups.find((x) => x.id === item.groupId);
+    return grp ? `${sec.name} › ${grp.name}` : sec.name;
+  }, [structure]);
+
+  // STRUCTURE SHOWS WHEN IT EXISTS AND NOTHING IS FILTERING. A Library with no
+  // sections stays the calm flat list it has always been; a search, a label or
+  // Favorites suspends the hierarchy, because those results come from all over
+  // and drawing untouched containers as empty would say they were.
+  const structured = showStructure(structure.sections.length > 0, {
+    q, labels: filters.labels, favorite: filters.favorite,
+  });
 
   const [selecting, setSelecting] = useState(false);
   const [chosen, setChosen] = useState<string[]>([]);
@@ -182,6 +222,18 @@ export default function LibraryWorkspace() {
       setBusy(false);
     }
   }, []);
+
+  /** Read an entry, and fetch how many FlowGuides hold a copy — context for
+   *  deleting, fetched here rather than shipped with every row. */
+  function openEntry(s: LibrarySnapshot) {
+    setNotice("");
+    setViewing(s);
+    setUsedIn(null);
+    fetch(`/api/library/${s.id}`)
+      .then((r) => r.json())
+      .then((d) => setUsedIn(typeof d.usedIn === "number" ? d.usedIn : null))
+      .catch(() => setUsedIn(null));
+  }
 
   async function remove(s: LibrarySnapshot) {
     // Named consequence, not a generic "are you sure": what makes this safe is
@@ -328,33 +380,94 @@ export default function LibraryWorkspace() {
             ) : (
               <div className="mt-3 space-y-3 border-t border-accent/30 pt-3">
                 <div>
-                  <p className="text-xs font-medium text-foreground">Category</p>
+                  <p className="text-xs font-medium text-foreground">Where should these live?</p>
                   <p className="text-xs text-muted">
-                    What kind of thing is this? One per item — for example Place,
-                    Service, Organization, Document or Person.
+                    One place per item — for example Places, Services, People or Documents.
+                    You can add a group inside it, like a town or a specialty.
                   </p>
-                  <div className="mt-1.5 flex flex-wrap items-center gap-2">
-                    <input
-                      list="library-categories"
-                      value={orgCategory}
+                  <div className="mt-1.5 space-y-2">
+                    <select
+                      value={destSection}
                       disabled={busy}
-                      onChange={(e) => setOrgCategory(e.target.value)}
-                      placeholder="Place"
-                      className="min-w-0 flex-1 px-2.5 py-1.5 rounded border border-border text-sm
-                                 focus:outline-none focus:ring-2 focus:ring-accent placeholder:text-gray-300"
-                    />
-                    <SmallAction disabled={busy || !orgCategory.trim()}
-                      onClick={() => organize({ setCategory: orgCategory })}>Set</SmallAction>
-                    <SmallAction disabled={busy}
-                      onClick={() => organize({ clearCategory: true })}>Clear</SmallAction>
+                      onChange={(e) => { setDestSection(e.target.value); setDestGroup(""); setNewGroup(""); }}
+                      className="w-full rounded border border-border px-2.5 py-1.5 text-sm
+                                 focus:outline-none focus:ring-2 focus:ring-accent"
+                    >
+                      <option value="">Choose a place…</option>
+                      {structure.sections.map((sec) => (
+                        <option key={sec.id} value={sec.id}>{sec.name}</option>
+                      ))}
+                      <option value="__new">+ New…</option>
+                    </select>
+
+                    {destSection === "__new" && (
+                      <input
+                        value={newSection}
+                        disabled={busy}
+                        onChange={(e) => setNewSection(e.target.value)}
+                        placeholder="Name it — Places, Services, People…"
+                        className="w-full rounded border border-border px-2.5 py-1.5 text-sm
+                                   focus:outline-none focus:ring-2 focus:ring-accent placeholder:text-gray-300"
+                      />
+                    )}
+
+                    {/* A GROUP ONLY ONCE THERE IS SOMETHING TO PUT IT IN, and
+                        only ever the chosen section's own groups. Two groups
+                        called Santa Rosa under different sections are different
+                        groups, so offering the wrong section's would be an
+                        invitation to file something somewhere it cannot go. */}
+                    {destSection && destSection !== "__new" && (
+                      <select
+                        value={destGroup}
+                        disabled={busy}
+                        onChange={(e) => setDestGroup(e.target.value)}
+                        className="w-full rounded border border-border px-2.5 py-1.5 text-sm
+                                   focus:outline-none focus:ring-2 focus:ring-accent"
+                      >
+                        <option value="">No group — straight in</option>
+                        {structure.groups.filter((g) => g.sectionId === destSection).map((g) => (
+                          <option key={g.id} value={g.id}>{g.name}</option>
+                        ))}
+                        <option value="__new">+ New group…</option>
+                      </select>
+                    )}
+                    {destSection === "__new" && newSection.trim() && (
+                      <p className="text-[11px] text-muted">You can add groups inside it once it exists.</p>
+                    )}
+                    {destGroup === "__new" && (
+                      <input
+                        value={newGroup}
+                        disabled={busy}
+                        onChange={(e) => setNewGroup(e.target.value)}
+                        placeholder="Group name — a town, a specialty…"
+                        className="w-full rounded border border-border px-2.5 py-1.5 text-sm
+                                   focus:outline-none focus:ring-2 focus:ring-accent placeholder:text-gray-300"
+                      />
+                    )}
+
+                    <div className="flex flex-wrap items-center gap-2">
+                      <SmallAction
+                        disabled={busy || !destSection || (destSection === "__new" && !newSection.trim())
+                          || (destGroup === "__new" && !newGroup.trim())}
+                        onClick={() => place(
+                          destSection === "__new"
+                            ? { newSectionName: newSection }
+                            : { sectionId: destSection,
+                                ...(destGroup === "__new" ? { newGroupName: newGroup }
+                                   : destGroup ? { groupId: destGroup } : {}) })}
+                      >Put them here</SmallAction>
+                      <SmallAction disabled={busy} onClick={() => place({ unorganize: true })}>
+                        Take out of its section
+                      </SmallAction>
+                    </div>
                   </div>
                 </div>
 
                 <div>
                   <p className="text-xs font-medium text-foreground">Labels</p>
                   <p className="text-xs text-muted">
-                    Other ways you would want to find it later. As many as you like —
-                    a place, a specialty, a status such as Preferred.
+                    Other ways you would want to find it later, wherever it lives.
+                    As many as you like — a specialty, a status such as Preferred.
                   </p>
                   <div className="mt-1.5 flex flex-wrap items-center gap-2">
                     <input
@@ -484,52 +597,66 @@ export default function LibraryWorkspace() {
               busy={busy}
               onSave={(payload, updated, organization) => save(payload, updated, organization)}
               organization={{
-                category: editing.category ?? "",
                 labels: editing.labels ?? [],
                 isFavorite: editing.isFavorite ?? false,
               }}
+              locationLabel={locationOf(editing)}
               vocabulary={vocab}
               onClose={() => setEditing(null)}
             />
           </div>
         ) : (
           <>
+          <LibrarySearch value={q} onChange={setQ} className="mb-3" />
           <LibraryFilters vocabulary={vocab} value={filters} onChange={setFilters} className="mb-3" />
-          {/* Suggestions for the bulk inputs, from the professional's own words. */}
-          <datalist id="library-categories">
-            {vocab.categories.map((c) => <option key={c} value={c} />)}
-          </datalist>
+          {/* Suggestions for the label input, from the professional's own
+              words. There is no category datalist any more: where something
+              lives is chosen from real sections, not typed. */}
           <datalist id="library-labels">
             {vocab.labels.map((l) => <option key={l} value={l} />)}
           </datalist>
+
+          {structured ? (
+            <LibraryStructureView
+              refreshKey={refreshKey}
+              selectable={selecting}
+              selected={chosen}
+              onToggle={(id) => setChosen((c) => c.includes(id) ? c.filter((x) => x !== id) : [...c, id])}
+              onOpen={selecting ? undefined : openEntry}
+              onToggleFavorite={selecting ? undefined : toggleFavorite}
+              onMove={(id) => {
+                // The same mechanism, reached from a row: hand this one item to
+                // the Organize panel rather than growing a second way to pick a
+                // destination.
+                setNotice(""); setChosen([id]); setOrganizing(true); setSelecting(true);
+                window.scrollTo({ top: 0, behavior: "smooth" });
+              }}
+              reorder={canReorder({ labels: filters.labels, favorite: filters.favorite })}
+              onVocabulary={setVocab}
+              onEmpty={(empty) => { if (empty) setStructure({ sections: [], groups: [] }); }}
+            />
+          ) : (
           <LibraryList
             refreshKey={refreshKey}
             category={filters.category}
             labels={filters.labels}
             favorite={filters.favorite}
             onVocabulary={setVocab}
+            onStructure={setStructure}
             onToggleFavorite={selecting ? undefined : toggleFavorite}
+            query={q}
             onLoaded={({ count, filtered }) => { if (!filtered) setHasAny(count > 0); }}
+            // The location belongs on the row exactly here — in a flat,
+            // filtered result, where no heading above it says where the item
+            // lives. Under the hierarchy it would be noise.
+            locationOf={locationOf}
             selectable={selecting}
             selected={chosen}
             onToggle={(id) => setChosen((c) => c.includes(id) ? c.filter((x) => x !== id) : [...c, id])}
-            onOpen={selecting ? undefined : (s) => {
-              setNotice("");
-              setViewing(s);
-              // How many FlowGuides hold a copy — context for deleting. Fetched
-              // here rather than shipped with every row in the list.
-              setUsedIn(null);
-              fetch(`/api/library/${s.id}`)
-                .then((r) => r.json())
-                .then((d) => setUsedIn(typeof d.usedIn === "number" ? d.usedIn : null))
-                .catch(() => setUsedIn(null));
-            }}
+            onOpen={selecting ? undefined : openEntry}
             emptyHint={
-              // SAY IT ONCE. The previous version explained the same idea three
-              // times — the page description, a paragraph on what a Library
-              // holds, and a list of ways to fill it. A professional opening an
-              // empty Library needs to know what goes in it and how to start,
-              // not a short manual.
+              // SAY IT ONCE. A professional opening an empty Library needs to
+              // know what goes in it and how to start, not a short manual.
               <div className="rounded-xl border border-border bg-white p-4">
                 <p className="text-base font-semibold text-foreground">Nothing saved yet</p>
                 <p className="mt-1 text-sm text-muted">
@@ -539,6 +666,7 @@ export default function LibraryWorkspace() {
               </div>
             }
           />
+          )}
           </>
         )}
       </div>

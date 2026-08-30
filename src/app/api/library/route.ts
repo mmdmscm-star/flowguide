@@ -3,7 +3,7 @@ import { getSession } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase";
 import { normalizeItemContent } from "@/lib/item-content";
 import { isDuplicateCandidate } from "@/lib/library";
-import { searchLibrary, createLibraryItem, readItemAsPayload, libraryVocabulary } from "@/lib/library-service";
+import { searchLibrary, createLibraryItem, readItemAsPayload, libraryVocabulary, readStructure } from "@/lib/library-service";
 
 // GET  /api/library?q=&category=&labels=a,b&favorite=1&cursorUpdatedAt=&cursorId=
 //      One PAGE of the Library, newest first. Search and the organization
@@ -31,12 +31,29 @@ export async function GET(request: Request) {
   const cursorId = sp.get("cursorId");
   const cursor = cursorUpdatedAt && cursorId ? { updatedAt: cursorUpdatedAt, id: cursorId } : null;
 
-  const { items, hasMore, nextCursor, error } = await searchLibrary(supabase, session.userId, {
+  // ONE CONTAINER, when the structured view is expanding a long section in
+  // place. `unorganized=1` is the remainder, which keeps newest-first ordering
+  // because it is not hand-ordered; a section or group is ordered by hand and
+  // pages on (sort_order, id), so it carries its own cursor.
+  const sectionId = sp.get("sectionId");
+  const groupId = sp.get("groupId");
+  const wantsContainer = !!sectionId || sp.get("unorganized") === "1";
+  const container = wantsContainer
+    ? { sectionId: sectionId || null, groupId: groupId || null }
+    : null;
+  const cursorSortOrder = sp.get("cursorSortOrder");
+  const containerCursor = cursorSortOrder !== null && cursorId
+    ? { sortOrder: Number(cursorSortOrder), id: cursorId }
+    : null;
+
+  const { items, hasMore, nextCursor, nextContainerCursor, error } = await searchLibrary(supabase, session.userId, {
     q: sp.get("q") ?? "",
     category: sp.get("category") ?? "",
     labels: (sp.get("labels") ?? "").split(",").map((l) => l.trim()).filter(Boolean),
     favorite: sp.get("favorite") === "1",
     cursor,
+    container,
+    containerCursor,
     limit: Number(sp.get("limit")) || undefined,
   });
   if (error) return NextResponse.json({ error }, { status: 500 });
@@ -44,8 +61,15 @@ export async function GET(request: Request) {
   // The vocabulary rides along with the FIRST page only. It describes the whole
   // Library rather than this page, so re-sending it with every scroll would be
   // the same answer repeated.
-  const vocabulary = cursor ? undefined : await libraryVocabulary(supabase, session.userId);
-  return NextResponse.json({ items, hasMore, nextCursor, vocabulary });
+  // Vocabulary and structure ride along with the FIRST page only. Both
+  // describe the whole Library rather than this page, so re-sending them with
+  // every scroll would be the same answer repeated. Structure comes too so the
+  // Organize panel can offer real sections without a second round trip.
+  const first = !cursor && !containerCursor;
+  const [vocabulary, structure] = first
+    ? await Promise.all([libraryVocabulary(supabase, session.userId), readStructure(supabase, session.userId)])
+    : [undefined, undefined];
+  return NextResponse.json({ items, hasMore, nextCursor, nextContainerCursor, vocabulary, structure });
 }
 
 export async function POST(request: Request) {

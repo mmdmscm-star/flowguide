@@ -123,3 +123,31 @@ export function cursorFilter(cursor: LibraryCursor): string {
   const id = cursor.id.replace(/"/g, "");
   return `updated_at.lt."${ts}",and(updated_at.eq."${ts}",id.lt."${id}")`;
 }
+
+// ---------------------------------------------------------------------------
+// PAGING INSIDE A CONTAINER
+//
+// The unorganized remainder keeps `updated_at desc, id desc` and the cursor
+// above — newest-first, exactly as it has always been. A SECTION or GROUP is
+// ordered by hand instead, so it pages on `sort_order asc, id asc`.
+//
+// sort_order alone is not a total order either: two items can share a rank
+// after a tie-breaking move, and a cursor comparing only sort_order would then
+// skip or repeat one. id is the primary key, so the pair is unique — the same
+// argument as updated_at, reached from the other direction.
+// ---------------------------------------------------------------------------
+
+export interface ContainerCursor {
+  sortOrder: number;
+  id: string;
+}
+
+export function containerCursorFrom(row: { sortOrder?: unknown; sort_order?: unknown; id: unknown }): ContainerCursor {
+  return { sortOrder: Number(row.sortOrder ?? row.sort_order ?? 0), id: String(row.id) };
+}
+
+/** `(sort_order, id) > (cursor.sortOrder, cursor.id)`, as PostgREST spells it. */
+export function containerCursorFilter(cursor: ContainerCursor): string {
+  const id = String(cursor.id).replace(/"/g, "");
+  return `sort_order.gt.${Number(cursor.sortOrder)},and(sort_order.eq.${Number(cursor.sortOrder)},id.gt."${id}")`;
+}

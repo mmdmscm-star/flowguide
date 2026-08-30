@@ -132,7 +132,6 @@ function SortableDetailRow({
 }
 
 export interface LibraryOrganization {
-  category: string;
   labels: string[];
   isFavorite: boolean;
 }
@@ -144,6 +143,7 @@ export function BlockItemEditor({
   onClose,
   organization,
   vocabulary,
+  locationLabel,
 }: {
   item: Item;
   busy: boolean;
@@ -154,6 +154,10 @@ export function BlockItemEditor({
    *  that was taken from it — so the section simply does not exist there. */
   organization?: LibraryOrganization;
   vocabulary?: { categories: string[]; labels: string[] };
+  /** Where this entry currently lives, e.g. "Communities › Santa Rosa".
+   *  Shown, not edited: moving something is a placement, made against a
+   *  selection in Organize, not a text field that could disagree with it. */
+  locationLabel?: string;
 }) {
   const [title, setTitle] = useState(item.title || "");
   const [address, setAddress] = useState(item.address || "");
@@ -168,7 +172,6 @@ export function BlockItemEditor({
     item.contacts ? item.contacts.map((c) => ({ name: c.name || "", role: c.role || "", phone: c.phone || "", email: c.email || "", website: c.website || "" })) : []
   );
   const [error, setError] = useState("");
-  const [category, setCategory] = useState(organization?.category ?? "");
   const [labels, setLabels] = useState<string[]>(organization?.labels ?? []);
   const [isFavorite, setIsFavorite] = useState(organization?.isFavorite ?? false);
   const [labelDraft, setLabelDraft] = useState("");
@@ -244,7 +247,7 @@ export function BlockItemEditor({
     // content write bumps `revision` and the organization write must not, so
     // they stay two separate writes on the other side of this callback.
     const result = await onSave(payload, updatedItem,
-      organization ? { category, labels, isFavorite } : undefined);
+      organization ? { labels, isFavorite } : undefined);
     if (result === "ok") onClose();
     else if (result === "failed") setError("Save failed — your changes were not applied.");
     else if (result === "rejected") setError("Another change is saving — try again in a moment.");
@@ -325,18 +328,17 @@ export function BlockItemEditor({
                 into a FlowGuide.
               </p>
 
-              <label className="mt-3 block text-xs text-muted">Category</label>
-              <input
-                list="item-editor-categories"
-                value={category}
-                disabled={busy}
-                onChange={(e) => setCategory(e.target.value)}
-                placeholder="Communities"
-                className={field}
-              />
-              <datalist id="item-editor-categories">
-                {(vocabulary?.categories ?? []).map((c) => <option key={c} value={c} />)}
-              </datalist>
+              {/* WHERE IT LIVES, SHOWN RATHER THAN TYPED. A free-text field
+                  here could name a section that does not exist, or disagree
+                  with the one the item is actually in. Moving something is a
+                  placement — chosen from what exists, or created inline while
+                  filing — so it belongs to Organize, not to a text box in an
+                  editor that is otherwise about content. */}
+              <p className="mt-3 text-xs text-muted">
+                {locationLabel
+                  ? <>In <span className="font-medium text-foreground">{locationLabel}</span>. Use Organize to move it.</>
+                  : <>Not in a section. Use Organize to put it in one.</>}
+              </p>
 
               <label className="mt-3 block text-xs text-muted">Labels</label>
               {labels.length > 0 && (

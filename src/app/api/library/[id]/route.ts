@@ -3,7 +3,7 @@ import { getSession } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase";
 import { normalizeItemContent } from "@/lib/item-content";
 import { getLibraryItem, updateLibraryItem, deleteLibraryItem, countDescendants, setLibraryOrganization, libraryVocabulary } from "@/lib/library-service";
-import { normalizeCategory, normalizeLabels } from "@/lib/library-organization";
+import { normalizeLabels } from "@/lib/library-organization";
 
 type Context = { params: Promise<{ id: string }> };
 
@@ -43,7 +43,12 @@ export async function PATCH(request: Request, context: Context) {
   if (org && typeof org === "object") {
     const known = await libraryVocabulary(supabaseEarly, session.userId);
     const patch: { category?: string; labels?: string[]; isFavorite?: boolean } = {};
-    if ("category" in org) patch.category = normalizeCategory(org.category, known.categories);
+    // CATEGORY IS NO LONGER WRITTEN HERE, deliberately. It is the rollback
+    // shadow now: it carries the item's SECTION NAME and is maintained by
+    // placeItems as part of the same statement that moves the item. A second
+    // path that could set it to free text would be exactly the drift the
+    // shadow exists to prevent — the two would describe different homes.
+    // Where something lives is a placement, not a text field.
     if ("labels" in org) patch.labels = normalizeLabels(org.labels, known.labels);
     if ("isFavorite" in org) patch.isFavorite = org.isFavorite === true;
 

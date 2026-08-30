@@ -190,16 +190,25 @@ test("the creator nav is never rendered on a recipient's page", () => {
 // Viewing is not editing
 // ---------------------------------------------------------------------------
 test("selecting and opening are different elements, so a click is never ambiguous", () => {
-  const LIST = read("src/components/library/library-list.tsx");
+  // The row moved into its own component so the flat list and the structured
+  // view cannot drift apart. The RULE is unchanged and still asserted here.
+  // COMMENTS STRIPPED. A rule must be asserted against the code, never against
+  // the prose explaining it: the row's own comment says why the star sits
+  // outside the label — and mentions the checkbox — so a scan that left it in
+  // would match its own rationale and fail for the wrong reason.
+  const LIST = read("src/components/library/library-row.tsx")
+    .replace(/\{\/\*[\s\S]*?\*\/\}/g, "")
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/(^|[^:])\/\/.*$/gm, "$1");
   // One behaviour per mode, chosen by which element renders — not by a branch
   // inside a shared handler, which is where "did that select or open it?" lives.
-  assert.match(LIST, /return selectable \? \(/);
-  const rows = LIST.slice(LIST.indexOf("return selectable ? ("));
+  assert.match(LIST, /\{selectable \? \(/);
+  const rows = LIST.slice(LIST.indexOf("{selectable ? ("));
   const label = rows.slice(0, rows.indexOf(") : ("));
   const button = rows.slice(rows.indexOf(") : ("));
   assert.match(label, /<input type="checkbox"/, "selection mode is a labelled checkbox");
   assert.doesNotMatch(label, /onOpen/, "and cannot open the detail view");
-  assert.match(button, /onClick=\{\(\) => onOpen\?\.\(s\)\}/, "normal mode opens on click");
+  assert.match(button, /onClick=\{\(\) => onOpen\?\.\(item\)\}/, "normal mode opens on click");
   assert.doesNotMatch(button, /checkbox/, "and has no checkbox");
 });
 
@@ -222,8 +231,9 @@ test("the read-only detail renders content, not disabled form controls", () => {
 });
 
 test("opening an entry cannot start an edit by itself", () => {
-  const openHandler = WORKSPACE.slice(WORKSPACE.indexOf("onOpen={selecting ? undefined"),
-                                      WORKSPACE.indexOf("emptyHint="));
+  // Both lists now share one handler, so the rule is asserted against it once.
+  const openHandler = WORKSPACE.slice(WORKSPACE.indexOf("function openEntry"),
+                                      WORKSPACE.indexOf("async function remove"));
   assert.match(openHandler, /setViewing\(s\)/);
   assert.doesNotMatch(openHandler, /setEditing\(/,
     "clicking a row must not put the professional in an editor");

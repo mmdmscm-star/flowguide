@@ -279,21 +279,28 @@ test("ZERO SELECTED says so, and offers nothing that cannot work", () => {
 test("SELECTING activates the controls — they exist only in the working state", () => {
   const panel = organizePanel();
   const working = panel.slice(panel.indexOf(") : ("));
-  for (const control of ["library-categories", "library-labels", "Set", "Clear", "Add", "Remove", "Favorite"]) {
+  // Placement replaced the free-text Category box: where something lives is now
+  // chosen from real sections, or named inline, never typed into a field that
+  // could disagree with the section the item is actually in.
+  for (const control of ["library-labels", "Put them here", "Take out of its section",
+                         "Add", "Remove", "Favorite"]) {
     assert.ok(working.includes(control), `the working state is missing ${control}`);
   }
 });
 
 test("CATEGORY AND LABELS are explained in human, horizontal terms", () => {
   const panel = organizePanel();
-  assert.match(panel, /What kind of thing is this\?/, "Category is not explained");
+  assert.match(panel, /Where should these live\?/, "placement is not explained");
   assert.match(panel, /Other ways you would want to find it later/, "Labels are not explained");
   // Wrapping is incidental; the words are what matter.
   const flat = panel.replace(/\s+/g, " ");
-  assert.match(flat, /for example Place, Service, Organization, Document or Person\./,
-    "the Category examples are missing or not generic");
-  assert.match(flat, /a place, a specialty, a status such as Preferred/,
+  assert.match(flat, /for example Places, Services, People or Documents\./,
+    "the Section examples are missing or not generic");
+  assert.match(flat, /a specialty, a status such as Preferred/,
     "the Label examples are missing or not generic");
+  // A group is explained as a second level, in words that belong to no trade.
+  assert.match(flat, /You can add a group inside it, like a town or a specialty\./,
+    "groups are not explained, or the example is not generic");
   // The examples must belong to no profession. A vertical vocabulary here would
   // tell every other profession this software is not for them.
   for (const vertical of ["Memory Care", "Assisted Living", "senior", "Senior", "care level", "community type"]) {
@@ -302,9 +309,9 @@ test("CATEGORY AND LABELS are explained in human, horizontal terms", () => {
 });
 
 test("THE RESULT IS VISIBLE — a row shows what it now carries", () => {
-  const list = bodyOf("src/components/library/library-list.tsx");
-  assert.match(list, /\(s\.category \|\| \(s\.labels \?\? \[\]\)\.length > 0\) && \(/,
-    "a row never shows its own category or labels, so organizing changes nothing anyone can see");
+  const row = bodyOf("src/components/library/library-row.tsx");
+  assert.match(row, /\(location \|\| \(item\.labels \?\? \[\]\)\.length > 0\) && \(/,
+    "a row never shows its labels or where it lives, so organizing changes nothing anyone can see");
   const ws = bodyOf("src/components/library/library-workspace.tsx");
   assert.match(ws, /setNotice\(`Organized \$\{data\.updated\} item/, "there is no acknowledgement");
   assert.match(ws, /if \(data\.vocabulary\) setVocab\(data\.vocabulary\)/,
@@ -333,8 +340,8 @@ test("CANCEL leaves both experiences without touching content", () => {
 });
 
 test("a row is selectable by its card, not only by the checkbox", () => {
-  const list = bodyOf("src/components/library/library-list.tsx");
-  assert.match(list, /<label className=\{`\$\{shell\} cursor-pointer`\}>/,
+  const row = bodyOf("src/components/library/library-row.tsx");
+  assert.match(row, /<label className=\{`\$\{shell\} cursor-pointer`\}>/,
     "the row card is not a label, so tapping it does not select");
-  assert.match(list, /isSelected \? "border-accent bg-accent\/5"/, "a selected row is not visibly selected");
+  assert.match(row, /selected \? "border-accent bg-accent\/5"/, "a selected row is not visibly selected");
 });

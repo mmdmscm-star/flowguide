@@ -1,7 +1,9 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { type LibrarySnapshot, subtitleFor, heroPhoto } from "@/lib/library-adapter";
+import { type LibrarySnapshot } from "@/lib/library-adapter";
+import { LibraryRow } from "@/components/library/library-row";
 import type { LibraryVocabulary } from "@/lib/library-organization";
+import type { GroupRow, SectionRow } from "@/lib/library-structure";
 
 // The searchable list of Library entries. Used in two places, deliberately:
 // the /library workspace and the in-editor picker. One list, two contexts —
@@ -14,19 +16,28 @@ export function LibraryList({
   onToggle,
   onOpen,
   refreshKey = 0,
+  query,
   emptyHint,
   onLoaded,
   category = "",
   labels = [],
   favorite = false,
   onVocabulary,
+  onStructure,
   onToggleFavorite,
+  locationOf,
 }: {
   selectable?: boolean;
   selected?: string[];
   onToggle?: (id: string) => void;
   onOpen?: (item: LibrarySnapshot) => void;
   refreshKey?: number;
+  /** SEARCH LIVES ABOVE THE LIST when a surface can also show the structured
+   *  view — the box has to survive the switch between them, and a box that
+   *  disappears the moment structure exists is worse than no structure. Given a
+   *  `query`, this list is controlled and renders no input of its own; left
+   *  undefined it keeps its own box, which is what the standalone uses want. */
+  query?: string;
   /** What to show when the Library holds nothing AND nothing is being searched.
    *  A node rather than a string: an empty Library is a professional's first
    *  encounter with the feature, and one grey sentence is not an explanation. */
@@ -43,11 +54,19 @@ export function LibraryList({
   /** The vocabulary actually in use, reported from the first page so the
    *  filter chips can be drawn from the professional's own words. */
   onVocabulary?: (v: LibraryVocabulary) => void;
+  /** The sections and groups in use, reported from the first page so the
+   *  Organize panel can offer real destinations without another round trip. */
+  onStructure?: (s: { sections: SectionRow[]; groups: GroupRow[] }) => void;
   /** Star straight from the row. Omitted where a star would be noise — inside a
    *  picker the professional is choosing, not filing. */
   onToggleFavorite?: (id: string, next: boolean) => void;
+  /** Quiet "Communities › Santa Rosa" under a row. Passed ONLY where the
+   *  hierarchy is not on screen — a search result, a label or Favorites view —
+   *  because under a heading that already says it, repeating it is noise. */
+  locationOf?: (s: LibrarySnapshot) => string | undefined;
 }) {
-  const [q, setQ] = useState("");
+  const [innerQ, setInnerQ] = useState("");
+  const q = query ?? innerQ;
   const [items, setItems] = useState<LibrarySnapshot[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -85,9 +104,11 @@ export function LibraryList({
   // participates in scheduling.
   const onLoadedRef = useRef(onLoaded);
   const onVocabularyRef = useRef(onVocabulary);
+  const onStructureRef = useRef(onStructure);
   useEffect(() => {
     onLoadedRef.current = onLoaded;
     onVocabularyRef.current = onVocabulary;
+    onStructureRef.current = onStructure;
   });
 
   // The star answers immediately and reconciles from the next load. Filing is
@@ -123,6 +144,7 @@ export function LibraryList({
       setHasMore(data.hasMore === true);
       setCursor(data.nextCursor ?? null);
       if (data.vocabulary) onVocabularyRef.current?.(data.vocabulary);
+      if (data.structure) onStructureRef.current?.(data.structure);
       onLoadedRef.current?.({ count: (data.items ?? []).length, filtered: query.trim().length > 0 });
     } catch {
       if (mine === seq.current) setError("Could not load your Library. Check your connection.");
@@ -173,12 +195,14 @@ export function LibraryList({
 
   return (
     <div>
-      <input
-        value={q}
-        onChange={(e) => setQ(e.target.value)}
-        placeholder="Search your Library…"
-        className="w-full px-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:ring-2 focus:ring-accent placeholder:text-gray-400"
-      />
+      {query === undefined && (
+        <input
+          value={innerQ}
+          onChange={(e) => setInnerQ(e.target.value)}
+          placeholder="Search your Library…"
+          className="w-full px-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:ring-2 focus:ring-accent placeholder:text-gray-400"
+        />
+      )}
 
       {error && <p className="mt-3 text-sm text-red-700">{error}</p>}
 
@@ -199,94 +223,31 @@ export function LibraryList({
       )}
 
       <ul className="mt-3 space-y-2">
-        {items.map((s) => {
-          const photo = heroPhoto(s);
-          const isSelected = selected.includes(s.id);
-
-          // ONE BEHAVIOUR PER MODE, and they are different elements rather than
-          // one element with a branch inside its handler. In selection mode a
-          // row is a label wrapping a checkbox and clicking it selects; in
-          // normal mode a row is a button and clicking it opens the entry to
-          // read. Neither can fire in the other's mode, so a click never has to
-          // be interpreted.
-          const body = (
-            <>
-              {/* The item's own photo when it has one; otherwise a quiet
-                  neutral tile rather than anything derived from the title. */}
-              {photo
-                /* eslint-disable-next-line @next/next/no-img-element */
-                ? <img src={photo} alt="" className="h-10 w-10 flex-none rounded object-cover bg-gray-100" />
-                : <div className="h-10 w-10 flex-none rounded bg-gray-100 flex items-center justify-center">
-                    <svg viewBox="0 0 24 24" className="h-4 w-4 text-gray-300" fill="none" stroke="currentColor" strokeWidth="1.5">
-                      <rect x="3" y="4" width="18" height="16" rx="2" />
-                      <circle cx="8.5" cy="9.5" r="1.5" />
-                      <path d="M21 16l-5-5-4 4-2-2-4 4" />
-                    </svg>
-                  </div>}
-              <div className="min-w-0 flex-1 text-left">
-                <p className="text-sm font-medium text-foreground truncate">{s.title || "Untitled"}</p>
-                <p className="text-sm text-muted truncate">{subtitleFor(s)}</p>
-                {/* WHAT THIS ITEM NOW CARRIES. Without it, setting a category on
-                    six rows changed nothing anyone could see and the only
-                    evidence an action had worked was a sentence that scrolled
-                    away. The row is where the change actually happened. */}
-                {(s.category || (s.labels ?? []).length > 0) && (
-                  <p className="mt-1 flex flex-wrap items-center gap-1 text-[11px] leading-none">
-                    {s.category && (
-                      <span className="rounded-full bg-accent/10 px-1.5 py-0.5 font-medium text-accent">
-                        {s.category}
-                      </span>
-                    )}
-                    {(s.labels ?? []).map((l) => (
-                      <span key={l} className="rounded-full bg-gray-100 px-1.5 py-0.5 text-muted">{l}</span>
-                    ))}
-                  </p>
-                )}
-              </div>
-            </>
-          );
-
-          const shell = `flex w-full items-center gap-3 rounded-lg border p-3 ${
-            isSelected ? "border-accent bg-accent/5" : "border-border bg-white"
-          }`;
-
-          // The star sits OUTSIDE the row's own control. A label wrapping a
-          // checkbox would otherwise swallow the click and select the row, and
-          // a button inside a button is not valid markup at all.
-          const star = onToggleFavorite ? (
-            <button
-              type="button"
-              onClick={() => { const next = !isStarred(s);
-                setStarred((m) => ({ ...m, [s.id]: next })); onToggleFavorite(s.id, next); }}
-              aria-pressed={isStarred(s)}
-              aria-label={isStarred(s) ? `Remove ${s.title || "this item"} from favorites` : `Add ${s.title || "this item"} to favorites`}
-              className={`flex-none px-1 text-lg leading-none transition-colors ${
-                isStarred(s) ? "text-amber-500 hover:text-amber-600" : "text-gray-300 hover:text-amber-500"
-              }`}
-            >
-              {isStarred(s) ? "★" : "☆"}
-            </button>
-          ) : null;
-
-          return selectable ? (
-            <li key={s.id} className="flex items-center gap-1">
-              <label className={`${shell} cursor-pointer`}>
-                <input type="checkbox" checked={isSelected}
-                       onChange={() => onToggle?.(s.id)} className="flex-none" />
-                {body}
-              </label>
-              {star}
-            </li>
-          ) : (
-            <li key={s.id} className="flex items-center gap-1">
-              <button type="button" onClick={() => onOpen?.(s)} disabled={!onOpen}
-                      className={`${shell} ${onOpen ? "cursor-pointer hover:border-accent" : ""}`}>
-                {body}
+        {items.map((s) => (
+          <LibraryRow
+            key={s.id}
+            item={s}
+            selectable={selectable}
+            selected={selected.includes(s.id)}
+            onToggle={onToggle}
+            onOpen={selectable ? undefined : onOpen}
+            location={locationOf?.(s)}
+            star={onToggleFavorite ? (
+              <button
+                type="button"
+                onClick={() => { const next = !isStarred(s);
+                  setStarred((m) => ({ ...m, [s.id]: next })); onToggleFavorite(s.id, next); }}
+                aria-pressed={isStarred(s)}
+                aria-label={isStarred(s) ? `Remove ${s.title || "this item"} from favorites` : `Add ${s.title || "this item"} to favorites`}
+                className={`flex-none px-1 text-lg leading-none transition-colors ${
+                  isStarred(s) ? "text-amber-500 hover:text-amber-600" : "text-gray-300 hover:text-amber-500"
+                }`}
+              >
+                {isStarred(s) ? "★" : "☆"}
               </button>
-              {star}
-            </li>
-          );
-        })}
+            ) : null}
+          />
+        ))}
       </ul>
 
       {/* The end of the list, and the next page. */}

@@ -23,6 +23,10 @@ export interface LibrarySnapshot extends ItemContentPayload {
   category?: string;
   labels?: string[];
   isFavorite?: boolean;
+  /** The item's one structural home. null/null is the unorganized remainder. */
+  sectionId?: string | null;
+  groupId?: string | null;
+  sortOrder?: number;
 }
 
 /** Library snapshot -> the editor's Item shape. */

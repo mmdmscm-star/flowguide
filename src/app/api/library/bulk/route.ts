@@ -1,12 +1,23 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase";
-import { bulkOrganize, libraryVocabulary } from "@/lib/library-service";
-import { normalizeCategory, normalizeLabels } from "@/lib/library-organization";
+import { bulkOrganize, libraryVocabulary, placeItems, readStructure } from "@/lib/library-service";
+import { normalizeLabels } from "@/lib/library-organization";
 
 // PATCH /api/library/bulk — organize a selection of Library entries at once.
 //
-// { ids, setCategory?, clearCategory?, addLabels?, removeLabels?, favorite? }
+// { ids, place?, addLabels?, removeLabels?, favorite? }
+//
+// `place` puts the selection somewhere — an existing section, a new one named
+// inline, optionally a group inside it, or back to the unorganized remainder:
+//
+//   { sectionId } | { newSectionName } | { ..., groupId } | { ..., newGroupName }
+//   | { unorganize: true }
+//
+// There is no longer a raw category field. `category` is the rollback shadow
+// and carries the section's name; letting a second path write free text into it
+// would let it describe a different home than section_id does, which is the one
+// thing the shadow must never do.
 //
 // ORGANIZATION ONLY. This route can set a category, a label and a star, and
 // there is nothing else it can reach: no title, no description, no content of
@@ -36,15 +47,43 @@ export async function PATCH(request: Request) {
   const known = await libraryVocabulary(supabase, session.userId);
   const b = body as Record<string, unknown>;
 
-  const { updated, error } = await bulkOrganize(supabase, session.userId, ids, {
-    setCategory: "setCategory" in b ? normalizeCategory(b.setCategory, known.categories) : undefined,
-    clearCategory: b.clearCategory === true,
-    addLabels: "addLabels" in b ? normalizeLabels(b.addLabels, known.labels) : undefined,
-    // Removal matches case-insensitively inside bulkOrganize, so a label typed
-    // in the wrong case still comes off rather than silently staying put.
-    removeLabels: "removeLabels" in b ? normalizeLabels(b.removeLabels, known.labels) : undefined,
-    favorite: typeof b.favorite === "boolean" ? b.favorite : undefined,
-  });
+  // PLACEMENT FIRST, and on its own. It writes section, group, position and the
+  // shadow together; labels and the star are separate dimensions that cut
+  // across wherever a thing happens to live.
+  let updated = 0;
+  let error: string | undefined;
+  const place = b.place as Record<string, unknown> | undefined;
+  if (place && typeof place === "object") {
+    const res = await placeItems(supabase, session.userId, ids, {
+      sectionId: typeof place.sectionId === "string" ? place.sectionId : undefined,
+      newSectionName: typeof place.newSectionName === "string" ? place.newSectionName : undefined,
+      groupId: typeof place.groupId === "string" ? place.groupId : undefined,
+      newGroupName: typeof place.newGroupName === "string" ? place.newGroupName : undefined,
+      unorganize: place.unorganize === true,
+    });
+    updated = res.updated; error = res.error;
+    if (error === "section_not_found" || error === "group_not_found") {
+      // Almost always a section another tab emptied and pruned while this one
+      // still had it on screen. Say which thing is gone rather than failing
+      // with something the professional cannot act on.
+      return NextResponse.json({
+        error, message: error === "section_not_found"
+          ? "That section no longer exists. Choose another or make a new one."
+          : "That group no longer exists. Choose another or make a new one.",
+      }, { status: 409 });
+    }
+  }
+
+  if (!error && ("addLabels" in b || "removeLabels" in b || typeof b.favorite === "boolean")) {
+    const res = await bulkOrganize(supabase, session.userId, ids, {
+      addLabels: "addLabels" in b ? normalizeLabels(b.addLabels, known.labels) : undefined,
+      // Removal matches case-insensitively inside bulkOrganize, so a label typed
+      // in the wrong case still comes off rather than silently staying put.
+      removeLabels: "removeLabels" in b ? normalizeLabels(b.removeLabels, known.labels) : undefined,
+      favorite: typeof b.favorite === "boolean" ? b.favorite : undefined,
+    });
+    updated = Math.max(updated, res.updated); error = error ?? res.error;
+  }
 
   if (error === "not_found") return NextResponse.json({ error: "not_found" }, { status: 404 });
   if (error === "nothing_selected") {
@@ -57,5 +96,9 @@ export async function PATCH(request: Request) {
       { error: "organize_failed", message: "Could not organize those items. Nothing was changed." },
       { status: 400 });
   }
-  return NextResponse.json({ updated, vocabulary: await libraryVocabulary(supabase, session.userId) });
+  const [vocabulary, structure] = await Promise.all([
+    libraryVocabulary(supabase, session.userId),
+    readStructure(supabase, session.userId),
+  ]);
+  return NextResponse.json({ updated, vocabulary, structure });
 }

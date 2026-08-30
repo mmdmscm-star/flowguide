@@ -1,0 +1,96 @@
+"use client";
+import { type LibrarySnapshot, subtitleFor, heroPhoto } from "@/lib/library-adapter";
+
+// ONE ROW, wherever a Library entry appears — the flat list, the structured
+// view, and both pickers.
+//
+// Extracted so the two lists cannot drift. A row that looked slightly different
+// depending on which surface you reached it through would teach the
+// professional that they are two different things, and they are not.
+
+/** Quiet location context: "Communities › Santa Rosa".
+ *
+ *  DELIBERATELY ABSENT WHEN THE HIERARCHY IS ON SCREEN. Under a heading that
+ *  already says Communities › Santa Rosa, repeating it on every row proves the
+ *  metadata exists and tells the reader nothing. In a search result or a
+ *  Favorites view, where the structure is suspended, it is the one thing the
+ *  row cannot otherwise say — so it appears exactly there. */
+export function LocationLine({ location }: { location: string }) {
+  return <span className="truncate text-[11px] text-muted/80">{location}</span>;
+}
+
+export function LibraryRow({
+  item, selectable, selected, onToggle, onOpen, star, location, controls,
+}: {
+  item: LibrarySnapshot;
+  selectable: boolean;
+  selected: boolean;
+  onToggle?: (id: string) => void;
+  onOpen?: (s: LibrarySnapshot) => void;
+  star?: React.ReactNode;
+  /** Shown only where the surrounding hierarchy does NOT already say it. */
+  location?: string;
+  /** Move up / Move down / Move…, when the stored sequence is what is on
+   *  screen. Pickers never pass these: choosing is not filing. */
+  controls?: React.ReactNode;
+}) {
+  const photo = heroPhoto(item);
+
+  const body = (
+    <>
+      {photo
+        /* eslint-disable-next-line @next/next/no-img-element */
+        ? <img src={photo} alt="" className="h-10 w-10 flex-none rounded object-cover bg-gray-100" />
+        : <div className="h-10 w-10 flex-none rounded bg-gray-100 flex items-center justify-center">
+            <svg viewBox="0 0 24 24" className="h-4 w-4 text-gray-300" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <rect x="3" y="4" width="18" height="16" rx="2" />
+              <circle cx="8.5" cy="9.5" r="1.5" />
+              <path d="M21 16l-5-5-4 4-2-2-4 4" />
+            </svg>
+          </div>}
+      <div className="min-w-0 flex-1 text-left">
+        <p className="text-sm font-medium text-foreground truncate">{item.title || "Untitled"}</p>
+        <p className="text-sm text-muted truncate">{subtitleFor(item)}</p>
+        {(location || (item.labels ?? []).length > 0) && (
+          <p className="mt-1 flex flex-wrap items-center gap-1 text-[11px] leading-none">
+            {location && <LocationLine location={location} />}
+            {/* Labels stay on the row in BOTH views. They cut across the
+                structure, so position never implies them. */}
+            {(item.labels ?? []).map((l) => (
+              <span key={l} className="rounded-full bg-gray-100 px-1.5 py-0.5 text-muted">{l}</span>
+            ))}
+          </p>
+        )}
+      </div>
+    </>
+  );
+
+  const shell = `flex w-full items-center gap-3 rounded-lg border p-3 ${
+    selected ? "border-accent bg-accent/5" : "border-border bg-white"
+  }`;
+
+  // ONE BEHAVIOUR PER MODE, as two different elements rather than one element
+  // with a branch inside its handler: selecting wraps a checkbox in a label,
+  // reading is a button. Neither can fire in the other's mode.
+  return (
+    <li className="flex items-center gap-1">
+      {selectable ? (
+        <label className={`${shell} cursor-pointer`}>
+          <input type="checkbox" checked={selected}
+                 onChange={() => onToggle?.(item.id)} className="flex-none" />
+          {body}
+        </label>
+      ) : (
+        <button type="button" onClick={() => onOpen?.(item)} disabled={!onOpen}
+                className={`${shell} ${onOpen ? "cursor-pointer hover:border-accent" : ""}`}>
+          {body}
+        </button>
+      )}
+      {/* Outside the row's own control on purpose: a label wrapping a checkbox
+          would swallow the click and select the row, and a button inside a
+          button is not valid markup. */}
+      {star}
+      {controls}
+    </li>
+  );
+}
