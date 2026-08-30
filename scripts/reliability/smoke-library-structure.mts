@@ -147,13 +147,13 @@ try {
   void r5;
 
   const dup = await placeItems(svc, UID, ids.slice(2, 3), { newSectionName: "Other Place" });
-  const other = (await readStructure(svc, UID)).sections.find((s) => s.name === "Other Place")!;
-  const clash = await renameStructure(svc, UID, "section", other.id, "renamed properly");
+  const otherSection = (await readStructure(svc, UID)).sections.find((s) => s.name === "Other Place")!;
+  const clash = await renameStructure(svc, UID, "section", otherSection.id, "renamed properly");
   ck("[6] a case-insensitive duplicate name is refused cleanly",
     clash.error === "duplicate_name", clash.error ?? "accepted");
   ck("[6] ...and the refused rename changed nothing",
-    (await readStructure(svc, UID)).sections.find((s) => s.id === other.id)?.name === "Other Place");
-  const blank = await renameStructure(svc, UID, "section", other.id, "   ");
+    (await readStructure(svc, UID)).sections.find((s) => s.id === otherSection.id)?.name === "Other Place");
+  const blank = await renameStructure(svc, UID, "section", otherSection.id, "   ");
   ck("[6] a blank name is refused", blank.error === "blank_name", blank.error ?? "accepted");
   void dup;
 
