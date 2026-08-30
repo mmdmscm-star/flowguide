@@ -35,6 +35,11 @@ const GROUPED = [
 ];
 const UNORG = [{ id: "u-1", title: "Unfiled One", address: "9 Loose Rd", labels: [] }];
 
+/** LOOSE in its CURRENT stored order — the fake server's rows are mutated by a
+ *  move, so every read has to sort rather than trust the array's own order. */
+const looseOrdered = () => [...LOOSE].sort((a, b) => a.sortOrder - b.sortOrder || a.id.localeCompare(b.id));
+const resetLoose = () => LOOSE.forEach((r, i) => { r.sortOrder = i; });
+
 let hasStructure = true;
 const orderCalls: Array<Record<string, unknown>> = [];
 const listCalls: string[] = [];
@@ -60,8 +65,9 @@ function fakeFetch(url: string, init?: { method?: string; body?: string }) {
       },
       containers: [
         { sectionId: SECTION, groupId: GROUP, items: GROUPED, total: 2, cursor: null, hasMore: false },
-        { sectionId: SECTION, groupId: null, items: LOOSE.slice(0, 6), total: 40,
-          cursor: { sortOrder: 5, id: LOOSE[5].id }, hasMore: true },
+        (() => { const o = looseOrdered(); const first = o.slice(0, 6); const last = first[first.length - 1];
+          return { sectionId: SECTION, groupId: null, items: first, total: o.length,
+                   cursor: { sortOrder: last.sortOrder, id: last.id }, hasMore: o.length > 6 }; })(),
       ],
       unorganized: { sectionId: null, groupId: null, items: UNORG, total: 1, cursor: null, hasMore: false },
       vocabulary: { categories: [], labels: [], hasFavorites: false },
@@ -71,15 +77,30 @@ function fakeFetch(url: string, init?: { method?: string; body?: string }) {
   if (u.pathname === "/api/library") {
     listCalls.push(u.search);
     const after = Number(u.searchParams.get("cursorSortOrder"));
-    const next = LOOSE.filter((r) => r.sortOrder > after).slice(0, 6);
+    const ordered = looseOrdered();
+    const next = ordered.filter((r) => r.sortOrder > after).slice(0, 6);
     const last = next[next.length - 1];
-    const more = last ? last.sortOrder < LOOSE[LOOSE.length - 1].sortOrder : false;
+    const more = last ? last.sortOrder < ordered[ordered.length - 1].sortOrder : false;
     return json({ items: next, hasMore: more,
       nextContainerCursor: more && last ? { sortOrder: last.sortOrder, id: last.id } : null });
   }
 
   if (u.pathname === "/api/library/order") {
-    orderCalls.push(JSON.parse(init?.body ?? "{}"));
+    const body = JSON.parse(init?.body ?? "{}") as { kind: string; id: string; direction: "up" | "down" };
+    orderCalls.push(body);
+    // A REAL SWAP, the way the server does it: against the WHOLE container,
+    // resolved from the id alone. Without this the test could not tell a
+    // preserved depth from a preserved-but-wrong list.
+    if (body.kind === "item") {
+      const ordered = looseOrdered();
+      const i = ordered.findIndex((r) => r.id === body.id);
+      const j = body.direction === "up" ? i - 1 : i + 1;
+      if (i !== -1 && j >= 0 && j < ordered.length) {
+        const a = ordered[i].sortOrder;
+        ordered[i].sortOrder = ordered[j].sortOrder;
+        ordered[j].sortOrder = a;
+      }
+    }
     return json({ moved: true });
   }
 
@@ -630,4 +651,94 @@ test("SHOW MORE state survives a close and reopen", async () => {
   await expandAll(host);
   assert.ok(textOf(host).includes("Loose 12"),
     "closing a container discarded the pages already fetched");
+});
+
+// ---------------------------------------------------------------------------
+// AN EXPANDED CONTAINER SURVIVES A REORDER
+//
+// Show more revealed 12 of 16, a move was made on one of the revealed rows, and
+// the section snapped back to its first six — so arranging a long section by
+// hand meant pressing Show more again after every single move. The reload that
+// follows a successful move was rebuilding the container from its first page
+// and discarding everything Show more had fetched.
+// ---------------------------------------------------------------------------
+const looseRows = (host: Element) =>
+  [...host.querySelectorAll("li")]
+    .map((r) => (r.textContent ?? "").match(/Loose \d\d/)?.[0])
+    .filter(Boolean) as string[];
+
+const moveRow = async (host: Element, title: string, dir: "Move up" | "Move down") => {
+  const row = [...host.querySelectorAll("li")].find((r) => (r.textContent ?? "").includes(title));
+  assert.ok(row, `no row for ${title}`);
+  const b = [...row!.querySelectorAll("button")].find((x) => x.getAttribute("aria-label") === dir);
+  assert.ok(b, `${title} has no ${dir}`);
+  assert.ok(!b!.hasAttribute("disabled"), `${dir} is disabled on ${title}`);
+  await click(b!);
+};
+
+test("MOVING A DEEP ROW keeps the depth Show more revealed", async () => {
+  resetLoose();
+  hasStructure = true; orderCalls.length = 0;
+  const { host } = await mount({ reorder: true });
+  await expandAll(host);
+  assert.equal(looseRows(host).length, 6, "the container did not start at its first page");
+
+  await click(byText(host, /Show more/)!);
+  assert.equal(looseRows(host).length, 12, "Show more did not reveal a second page");
+  assert.ok(looseRows(host).includes("Loose 09"), "Loose 09 should be visible after one Show more");
+
+  // A row that was NOT in the initial six.
+  await moveRow(host, "Loose 09", "Move down");
+
+  // 4. the move actually happened, server-side, against the whole container
+  assert.deepEqual(orderCalls.at(-1), { kind: "item", id: "loose-09", direction: "down" });
+  const after = looseRows(host);
+  assert.equal(after.indexOf("Loose 10") + 1, after.indexOf("Loose 09"),
+    `Loose 09 did not move below Loose 10 — got ${JSON.stringify(after.slice(6, 12))}`);
+
+  // 5. the depth survived — no snap back to six
+  assert.equal(after.length, 12,
+    `the section reset to its first page after a move — showing ${after.length} rows`);
+  assert.ok(byText(host, /Show more/), "the remaining rows are no longer reachable");
+
+  // 6. a second deep move works immediately, with no Show more in between.
+  //    Asserted as a SWAP with whatever is actually above it — after the first
+  //    move that neighbour is Loose 09, not Loose 10.
+  const neighbourAbove = after[after.indexOf("Loose 11") - 1];
+  await moveRow(host, "Loose 11", "Move up");
+  assert.deepEqual(orderCalls.at(-1), { kind: "item", id: "loose-11", direction: "up" });
+  const after2 = looseRows(host);
+  assert.equal(after2.length, 12, "the second move reset the depth");
+  assert.equal(after2.indexOf("Loose 11") + 1, after2.indexOf(neighbourAbove),
+    `Loose 11 did not exchange places with ${neighbourAbove} — got ${JSON.stringify(after2.slice(6, 12))}`);
+});
+
+test("the depth is restored by PAGING THE SERVER, not by reusing stale pages", async () => {
+  resetLoose();
+  hasStructure = true; listCalls.length = 0;
+  const { host } = await mount({ reorder: true });
+  await expandAll(host);
+  await click(byText(host, /Show more/)!);
+  const before = listCalls.length;
+
+  await moveRow(host, "Loose 09", "Move down");
+  assert.ok(listCalls.length > before,
+    "the reload reused the pages it already had — they were fetched against the order that just changed");
+  assert.ok(listCalls.slice(before).every((s) => s.includes("sectionId=")),
+    "a restore page was fetched without its container");
+});
+
+test("restoring depth copes with a container that SHRANK", async () => {
+  // The restore must stop when the server runs out, not when the old count is
+  // reached — otherwise moving an item out of a container would spin.
+  resetLoose();
+  hasStructure = true;
+  const { host } = await mount({ reorder: true });
+  await expandAll(host);
+  let guard = 0;
+  while (byText(host, /Show more/) && guard++ < 20) await click(byText(host, /Show more/)!);
+  assert.equal(looseRows(host).length, 40, "the container was not fully expanded");
+  await moveRow(host, "Loose 20", "Move down");
+  assert.equal(looseRows(host).length, 40, "a fully expanded container lost rows after a move");
+  assert.equal(byText(host, /Show more/), undefined, "Show more came back on a fully expanded container");
 });

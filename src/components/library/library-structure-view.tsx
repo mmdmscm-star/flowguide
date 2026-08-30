@@ -86,17 +86,76 @@ export function LibraryStructureView({
   // Nothing sets state SYNCHRONOUSLY here: the first statement is the fetch, so
   // the effect below cannot start a cascading render. The stale error is
   // cleared where the new answer lands rather than optimistically up front.
-  const load = useCallback(async () => {
+  /** One page of one container, straight from the server. Shared by Show more
+   *  and by the depth restore below, so both page the same way. */
+  const fetchPage = useCallback(async (
+    sectionId: string | null, groupId: string | null,
+    cursor: { sortOrder?: number; updatedAt?: string; id: string } | null,
+  ) => {
+    const sp = new URLSearchParams();
+    if (sectionId) sp.set("sectionId", sectionId); else sp.set("unorganized", "1");
+    if (groupId) sp.set("groupId", groupId);
+    if (cursor) {
+      sp.set("cursorId", cursor.id);
+      if (cursor.sortOrder !== undefined) sp.set("cursorSortOrder", String(cursor.sortOrder));
+      if (cursor.updatedAt !== undefined) sp.set("cursorUpdatedAt", cursor.updatedAt);
+    }
+    const res = await fetch(`/api/library?${sp}`);
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.message || "Could not load more.");
+    return { items: (d.items ?? []) as LibrarySnapshot[],
+             cursor: (d.nextContainerCursor ?? d.nextCursor ?? null) as Container["cursor"],
+             hasMore: d.hasMore === true };
+  }, []);
+
+  /**
+   * Reload the whole structure.
+   *
+   * `restore` says how many rows each container was showing, so a reload after
+   * a reorder can page back to the SAME DEPTH instead of snapping to the first
+   * page. Without it, moving an item that Show more had revealed collapsed the
+   * section back to six rows and made manual ordering a click-per-move chore.
+   *
+   * The already-fetched pages are NOT kept and re-sorted locally. They were
+   * paged with cursors against the order that just changed, so keeping them
+   * could repeat or drop a row. The server stays authoritative; this simply
+   * asks it for the same amount again.
+   *
+   * Everything is assembled BEFORE any state is set, so the view renders once
+   * at full depth — no flash of a short list, and nothing for the page to
+   * scroll away from underneath the professional.
+   */
+  const load = useCallback(async (restore?: Record<string, number>) => {
     try {
       const res = await fetch("/api/library/browse");
       const d = await res.json();
       if (!res.ok) { setError(d.message || "Could not load your Library."); return; }
+
+      let refilled: Record<string, Container> = {};
+      if (restore) {
+        const containers: Container[] = [...(d.containers ?? []), d.unorganized].filter(Boolean);
+        for (const c of containers) {
+          const k = keyOf(c.sectionId, c.groupId);
+          const want = restore[k] ?? 0;
+          if (want <= c.items.length) continue;
+          let cursor = c.cursor, hasMore = c.hasMore, got: LibrarySnapshot[] = [];
+          // The container may have SHRUNK — an item moved elsewhere — so stop
+          // when the server runs out rather than when the old count is reached.
+          while (hasMore && cursor && c.items.length + got.length < want) {
+            const page = await fetchPage(c.sectionId, c.groupId, cursor);
+            got = [...got, ...page.items];
+            cursor = page.cursor; hasMore = page.hasMore;
+          }
+          if (got.length) refilled = { ...refilled, [k]: { ...c, items: got, cursor, hasMore } };
+        }
+      }
+
       setError("");
-      setData(d); setExtra({});
+      setData(d); setExtra(refilled);
       if (d.vocabulary) vocabRef.current?.(d.vocabulary);
       emptyRef.current?.((d.structure?.sections ?? []).length === 0);
     } catch { setError("Could not load your Library. Check your connection."); }
-  }, []);
+  }, [fetchPage]);
 
   // Deferred out of the effect body, the same way the flat list does it: the
   // fetch is started after the render commits rather than during it.
@@ -116,22 +175,16 @@ export function LibraryStructureView({
     if (!st.cursor || busy) return;
     setBusy(true);
     try {
-      const sp = new URLSearchParams();
-      if (c.sectionId) sp.set("sectionId", c.sectionId); else sp.set("unorganized", "1");
-      if (c.groupId) sp.set("groupId", c.groupId);
-      sp.set("cursorId", st.cursor.id);
-      if (st.cursor.sortOrder !== undefined) sp.set("cursorSortOrder", String(st.cursor.sortOrder));
-      if (st.cursor.updatedAt !== undefined) sp.set("cursorUpdatedAt", st.cursor.updatedAt);
-      const res = await fetch(`/api/library?${sp}`);
-      const d = await res.json();
-      if (!res.ok) { setError(d.message || "Could not load more."); return; }
+      const page = await fetchPage(c.sectionId, c.groupId, st.cursor);
       const k = keyOf(c.sectionId, c.groupId);
       setExtra((m) => ({ ...m, [k]: {
         ...c,
-        items: [...(m[k]?.items ?? []), ...(d.items ?? [])],
-        cursor: d.nextContainerCursor ?? d.nextCursor ?? null,
-        hasMore: d.hasMore === true,
+        items: [...(m[k]?.items ?? []), ...page.items],
+        cursor: page.cursor,
+        hasMore: page.hasMore,
       } }));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not load more.");
     } finally { setBusy(false); }
   }
 
@@ -166,7 +219,15 @@ export function LibraryStructureView({
         body: JSON.stringify({ kind, id, direction }),
       });
       if (!res.ok) { const d = await res.json().catch(() => ({})); setError(d.message || "Could not move that."); return; }
-      await load();
+      // HOW MUCH WAS ON SCREEN, so the reload can put it back. Captured after
+      // the server confirms, because a failed move should change nothing.
+      // `data` is non-null wherever a move control can be pressed, but the
+      // guard costs nothing and keeps the reload honest if that ever changes.
+      const depth: Record<string, number> = {};
+      for (const c of data ? [...data.containers, data.unorganized] : []) {
+        depth[keyOf(c.sectionId, c.groupId)] = rowsFor(c).length;
+      }
+      await load(depth);
     } catch { setError("Could not move that."); }
     finally { setBusy(false); }
   }
