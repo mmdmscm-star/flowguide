@@ -18,7 +18,7 @@ import { REVISION_CONFLICT, type LibraryAncestry } from "./library.ts";
 
 import { cursorFilter, cursorFrom, vocabularyOf, containerCursorFilter, containerCursorFrom,
   type LibraryCursor, type ContainerCursor, type LibraryVocabulary } from "./library-organization";
-import { appendOrders, cleanName, findByName, shadowCategory, swapForMove,
+import { appendOrders, cleanName, findByName, shadowCategory, swapForMove, unreconciledIds,
   type GroupRow, type Placement, type SectionRow } from "./library-structure";
 
 type Db = ReturnType<typeof createServerClient>;
@@ -170,10 +170,13 @@ export async function searchLibrary(
  */
 export async function setLibraryOrganization(
   db: Db, userId: string, id: string,
-  patch: { category?: string; labels?: string[]; isFavorite?: boolean },
+  patch: { labels?: string[]; isFavorite?: boolean },
 ): Promise<{ item?: LibraryItem; error?: string }> {
+  // NO CATEGORY. It is the rollback shadow, written by placeItems from the
+  // section's name. This function had the capability and no caller, which is
+  // one refactor away from being a second writer that could make category and
+  // section_id describe different homes.
   const update: Record<string, unknown> = {};
-  if (patch.category !== undefined) update.category = patch.category;
   if (patch.labels !== undefined) update.labels = patch.labels;
   if (patch.isFavorite !== undefined) update.is_favorite = patch.isFavorite;
   if (!Object.keys(update).length) return { error: "nothing_to_change" };
@@ -479,14 +482,27 @@ export async function placeItems(
   // Ownership confirmed here, from the session, before anything is written —
   // and every write repeats the predicate rather than trusting this.
   const { data: owned, error: readErr } = await db.from("library_items")
-    .select("id").eq("user_id", userId).in("id", targets);
+    .select("id, category, section_id").eq("user_id", userId).in("id", targets);
   if (readErr) return { updated: 0, error: readErr.message };
-  const mine = ((owned ?? []) as Array<{ id: string }>).map((r) => r.id);
+  const ownedRows = (owned ?? []) as Array<{ id: string; category: string; section_id: string | null }>;
+  const mine = ownedRows.map((r) => r.id);
   if (!mine.length) return { updated: 0, error: "not_found" };
   // Preserve the caller's order; the read above does not promise one.
   const ordered = targets.filter((t) => mine.includes(t));
 
   let structure = await readStructure(db, userId);
+
+  // THE CUTOVER GUARD. If an item's shadow names a different section than the
+  // one it is in, the previous runtime changed it during the compatibility
+  // window and 0041 has not reconciled it yet. Writing here would overwrite
+  // that intent AND the evidence of it. Decline once, rather than lose it.
+  //
+  // After 0041 nothing can disagree, so this never fires again; it leaves with
+  // the shadow in the contract migration.
+  const stale = unreconciledIds(
+    ownedRows.map((r) => ({ id: r.id, category: r.category, sectionId: r.section_id })),
+    new Map(structure.sections.map((x) => [x.id, x.name])));
+  if (stale.length) return { updated: 0, error: "unreconciled" };
 
   // ---- resolve the destination -------------------------------------------
   let sectionId: string | null = null;

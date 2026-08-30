@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
   swapForMove, appendOrders, shadowCategory, buildTree, sameContainer,
-  emptyGroupIds, emptySectionIds, findByName, showStructure, canReorder,
+  emptyGroupIds, emptySectionIds, findByName, showStructure, canReorder, unreconciledIds,
 } from "./library-structure.ts";
 
 // Source-shape guards read the CODE, never the prose explaining it. Several
@@ -270,4 +270,94 @@ test("a long container expands IN PLACE rather than becoming its own screen", ()
 test("sections and groups are collapsible", () => {
   const view = bodyOf("src/components/library/library-structure-view.tsx");
   assert.match(view, /aria-expanded=\{!collapsed\}/);
+});
+
+// ---------------------------------------------------------------------------
+// THE CUTOVER RACE
+//
+// Between 0040 and the structured runtime being reachable, the OLD runtime can
+// still write `category`. If a placement then ran before 0041, it would
+// overwrite that intent with its section's name — and destroy the evidence,
+// because afterwards the two agree and 0041 finds nothing to reconcile.
+// ---------------------------------------------------------------------------
+const NAMES = new Map([["s1", "Places"], ["s2", "Services"]]);
+
+test("a synchronized item is NOT flagged, so the guard is invisible in normal use", () => {
+  assert.deepEqual(unreconciledIds([
+    { id: "a", category: "Places", sectionId: "s1" },
+    { id: "b", category: "", sectionId: null },
+    { id: "c", category: "  places  ", sectionId: "s1" },   // folded, still agreeing
+  ], NAMES), []);
+});
+
+test("an item the OLD runtime moved is flagged before it can be overwritten", () => {
+  assert.deepEqual(unreconciledIds([
+    { id: "a", category: "Services", sectionId: "s1" },     // old runtime said Services
+  ], NAMES), ["a"]);
+});
+
+test("an item the old runtime FILED for the first time is flagged", () => {
+  assert.deepEqual(unreconciledIds([
+    { id: "a", category: "Documents", sectionId: null },
+  ], NAMES), ["a"]);
+});
+
+test("an item the old runtime CLEARED is flagged", () => {
+  assert.deepEqual(unreconciledIds([
+    { id: "a", category: "", sectionId: "s1" },
+  ], NAMES), ["a"]);
+});
+
+test("a section that no longer exists counts as a disagreement, not a crash", () => {
+  assert.deepEqual(unreconciledIds([{ id: "a", category: "Places", sectionId: "gone" }], NAMES), ["a"]);
+});
+
+test("PLACEMENT consults the guard before it writes anything", () => {
+  const svc = bodyOf("src/lib/library-service.ts");
+  const place = svc.slice(svc.indexOf("export async function placeItems"),
+                          svc.indexOf("export async function pruneEmptyStructure"));
+  // THE RESULT MUST GATE THE WRITE. Asserting only that unreconciledIds is
+  // mentioned somewhere passes even if its answer is thrown away — a rename
+  // that left `stale` permanently empty would keep the early return and the
+  // mention, and silently disable the guard.
+  assert.match(place,
+    /const stale = unreconciledIds\([\s\S]{0,400}?\);\s*\n\s*if \(stale\.length\) return \{ updated: 0, error: "unreconciled" \};/,
+    "the guard's answer does not gate the placement");
+  const guardAt = place.indexOf("const stale = unreconciledIds");
+  const firstWrite = place.indexOf(".update({");
+  assert.ok(guardAt !== -1 && (guardAt < firstWrite || firstWrite === -1),
+    "the guard runs AFTER a write, which is too late to protect anything");
+});
+
+test("the route tells the professional what to do about it", () => {
+  const route = bodyOf("src/app/api/library/bulk/route.ts");
+  assert.match(route, /error === "unreconciled"/);
+  assert.match(route, /Reload the Library and try again/,
+    "the refusal gives no remedy");
+});
+
+test("placement remains the ONLY writer of category, with no latent second", () => {
+  const svc = bodyOf("src/lib/library-service.ts");
+  const one = svc.slice(svc.indexOf("export async function setLibraryOrganization"),
+                        svc.indexOf("export interface BulkOrganizePatch"));
+  assert.ok(!/category/.test(one),
+    "setLibraryOrganization can still write a category, which is one refactor from a second writer");
+});
+
+// ---------------------------------------------------------------------------
+// 0041 IS AN INDEPENDENT MIGRATION, NOT A RE-RUN
+// ---------------------------------------------------------------------------
+test("0041 carries 0040's reconciliation VERBATIM, and is its own migration", () => {
+  const a = readFileSync("supabase/migrations/0040_library_structure_cutover.sql", "utf8");
+  const b = readFileSync("supabase/migrations/0041_library_structure_catchup.sql", "utf8");
+  const BEGIN = "-- ===================== CATCH-UP BLOCK BEGINS";
+  const END = "-- ===================== CATCH-UP BLOCK ENDS";
+  const block = a.slice(a.indexOf(BEGIN), a.indexOf(END))
+    .replace("-- Everything between these markers is what a later 0041 would contain.\n", "")
+    .slice(a.slice(a.indexOf(BEGIN), a.indexOf(END)).indexOf("\n"));
+  assert.ok(b.includes(block.trim().slice(0, 400)),
+    "0041 has drifted from the reconciliation that was tested in 0040");
+  // Its own snapshot table, so running it never depends on 0040's transaction.
+  assert.match(b, /zz_0041_before/);
+  assert.ok(!b.includes("zz_0040_before"), "0041 refers to 0040's temp table");
 });

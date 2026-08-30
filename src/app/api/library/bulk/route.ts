@@ -62,6 +62,15 @@ export async function PATCH(request: Request) {
       unorganize: place.unorganize === true,
     });
     updated = res.updated; error = res.error;
+    if (error === "unreconciled") {
+      // Only reachable in the minute between the structured runtime going live
+      // and the 0041 catch-up running. Naming the remedy beats a generic
+      // failure the professional cannot act on.
+      return NextResponse.json({
+        error: "unreconciled",
+        message: "Some of these were changed elsewhere a moment ago. Reload the Library and try again.",
+      }, { status: 409 });
+    }
     if (error === "section_not_found" || error === "group_not_found") {
       // Almost always a section another tab emptied and pruned while this one
       // still had it on screen. Say which thing is gone rather than failing

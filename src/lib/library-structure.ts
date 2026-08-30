@@ -175,3 +175,36 @@ export function showStructure(
  *  "move down" would mean something the professional cannot see. */
 export const canReorder = (filtering: Parameters<typeof showStructure>[1]): boolean =>
   !String(filtering.q ?? "").trim() && !(filtering.labels ?? []).length && !filtering.favorite;
+
+// ---------------------------------------------------------------------------
+// THE CUTOVER RACE, AND THE SMALLEST THING THAT CLOSES IT.
+//
+// Between 0040 running and the structured runtime being reachable, the previous
+// runtime is still serving and can still write `category` — it has never heard
+// of section_id. So an item can end up with section_id pointing at the section
+// 0040 gave it and a category naming a DIFFERENT one. That is the professional's
+// most recent intent, expressed through the only field the old runtime had.
+//
+// 0041 reconciles it. But the new runtime is live for a minute or so BEFORE
+// 0041 runs, and a placement in that minute would overwrite `category` with its
+// section's name — destroying the intent, and destroying the evidence, since
+// afterwards the two agree and 0041 finds nothing to reconcile.
+//
+// The fix is not a synchronisation layer. It is to notice that the pair
+// disagree and decline, once, until 0041 has run. After that nothing can
+// disagree — the new runtime writes both together — so this never fires again
+// and leaves with the shadow in the contract migration.
+//
+// Compared case-insensitively and whitespace-folded, because that is how a
+// section name and a category are matched everywhere else.
+// ---------------------------------------------------------------------------
+export function unreconciledIds(
+  rows: Array<{ id: string; category?: unknown; sectionId: string | null }>,
+  sectionNameById: Map<string, string>,
+): string[] {
+  const fold = (s: string) => shadowCategory(s).toLowerCase();
+  return rows.filter((r) => {
+    const home = r.sectionId ? (sectionNameById.get(r.sectionId) ?? "") : "";
+    return fold(home) !== fold(String(r.category ?? ""));
+  }).map((r) => r.id);
+}
