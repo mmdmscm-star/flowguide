@@ -318,14 +318,38 @@ test("THE CREATE PATH keeps its own intent, and its own words", () => {
     "Create can fire with nothing selected");
 });
 
-test("CANCEL leaves both experiences without touching content", () => {
-  for (const panel of [organizePanel(), createPanel()]) {
+test("LEAVING either experience drops the selection and writes nothing", () => {
+  for (const [label, panel] of [["Done", organizePanel()], ["Cancel", createPanel()]] as const) {
     assert.match(panel, /setSelecting\(false\)/, "there is no way out");
     assert.match(panel, /setChosen\(\[\]\)/, "leaving keeps a stale selection");
-    // Cancel must not write anything.
-    const cancel = panel.slice(panel.lastIndexOf("Cancel") - 700, panel.lastIndexOf("Cancel"));
-    assert.ok(!/fetch\(/.test(cancel), "cancelling performs a write");
+    const exit = panel.slice(panel.lastIndexOf(label) - 700, panel.lastIndexOf(label));
+    assert.ok(!/fetch\(/.test(exit), `${label} performs a write`);
   }
+});
+
+test("ORGANIZE says DONE, because its writes have already happened", () => {
+  // Placing, labelling and starring all save immediately. "Cancel" would offer
+  // to undo something this button cannot undo, and would make a professional
+  // hesitate before leaving work they had already finished.
+  const panel = organizePanel();
+  assert.match(panel, />\s*Done\s*</, "the organize panel does not offer Done");
+  assert.ok(!/>\s*Cancel\s*</.test(panel), "the organize panel still says Cancel");
+});
+
+test("CREATE keeps Cancel, because it genuinely stages a choice", () => {
+  // Nothing is written until Create FlowGuide, so there IS something to abandon.
+  const panel = createPanel();
+  assert.match(panel, />\s*Cancel\s*</, "the create panel lost its Cancel");
+  assert.ok(!/>\s*Done\s*</.test(panel), "the create panel says Done, but nothing is saved yet");
+  assert.match(panel, /createFromLibrary\(chosen\)/, "the create panel does not defer its write");
+});
+
+test("a successful organize LEAVES THE PANEL OPEN to keep working", () => {
+  const ws = bodyOf("src/components/library/library-workspace.tsx");
+  const fn = ws.slice(ws.indexOf("async function organize"), ws.indexOf("async function toggleFavorite"));
+  assert.ok(!/setSelecting\(false\)|setOrganizing\(false\)|setChosen\(\[\]\)/.test(fn),
+    "a successful action closes the panel or drops the selection, so filing several things in a row is impossible");
+  assert.match(fn, /setRefreshKey/, "the list is not refreshed, so the result is invisible");
 });
 
 test("a row is selectable by its card, not only by the checkbox", () => {

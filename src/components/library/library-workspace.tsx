@@ -359,12 +359,24 @@ export default function LibraryWorkspace() {
               <span className={`text-sm font-medium ${chosen.length ? "text-foreground" : "text-muted"}`}>
                 {chosen.length} item{chosen.length === 1 ? "" : "s"} selected
               </span>
+              {/* DONE, NOT CANCEL. Every action in this panel writes
+                  immediately — placing, labelling and starring are already
+                  saved by the time this button is reachable — so "Cancel" would
+                  offer to undo something that cannot be undone from here, and
+                  would make a professional hesitate before leaving a job they
+                  had already finished.
+                  This closes the panel and drops the temporary selection. It
+                  touches nothing that was saved, and there is no staged state
+                  for it to discard: the alternative — holding edits until a
+                  Save — is machinery this panel deliberately does not have. */}
               <button
-                onClick={() => { setSelecting(false); setOrganizing(false); setChosen([]); }}
+                onClick={() => { setSelecting(false); setOrganizing(false); setChosen([]); setNotice(""); }}
                 disabled={busy}
-                className="ml-auto text-sm font-medium text-muted hover:text-foreground"
+                className="ml-auto rounded-lg border border-border bg-white px-3 py-1.5 text-sm
+                           font-medium text-foreground hover:border-accent hover:text-accent
+                           disabled:opacity-50"
               >
-                Cancel
+                Done
               </button>
             </div>
 
@@ -502,6 +514,10 @@ export default function LibraryWorkspace() {
               Choose what to start it with. Each one is copied in — changing it there
               never changes what is saved here.
             </p>
+            {/* CANCEL IS CORRECT HERE, and stays. Nothing is written until
+                Create FlowGuide: the selection is a staged choice, so there is
+                something real to abandon. The Organize panel says Done for the
+                opposite reason — its writes have already happened. */}
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <span className={`text-sm font-medium ${chosen.length ? "text-foreground" : "text-muted"}`}>
                 {chosen.length} item{chosen.length === 1 ? "" : "s"} selected
