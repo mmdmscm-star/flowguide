@@ -22,7 +22,7 @@ export function LibraryPicker({
   // filtering earns the most, and it should be the thing already learned
   // rather than a second system that resembles it.
   const [filters, setFilters] = useState<LibraryFilterState>(EMPTY_FILTERS);
-  const [vocab, setVocab] = useState<LibraryVocabulary>({ categories: [], labels: [], hasFavorites: false });
+  const [vocab, setVocab] = useState<LibraryVocabulary>({ labels: [], hasFavorites: false });
   // ORGANIZATION HELPS HERE TOO. Assembling a FlowGuide is where finding things
   // matters most, so the picker browses the same Section -> Group structure the
   // Library does. It offers no way to CHANGE any of it: choosing is not filing,
@@ -78,7 +78,6 @@ export function LibraryPicker({
         <LibraryList
           query={q}
           onStructure={setStructure}
-          category={filters.category}
           labels={filters.labels}
           favorite={filters.favorite}
           onVocabulary={setVocab}

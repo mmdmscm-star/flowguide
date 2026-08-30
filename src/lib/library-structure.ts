@@ -2,7 +2,7 @@
 //
 // Everything here is a function of values, so the rules can be asserted without
 // a database: what a move actually writes, where a placement lands, which
-// containers have become empty, and what the compatibility shadow should say.
+// containers have become empty.
 //
 // ONE STRUCTURAL HOME. An item points at a section, optionally at a group
 // inside that section, and nowhere else. There is no multi-placement, no alias
@@ -90,22 +90,6 @@ export function appendOrders(currentMax: number | null, count: number): number[]
 }
 
 // ---------------------------------------------------------------------------
-// THE COMPATIBILITY SHADOW
-//
-// `category` stays written for as long as rolling back to the pre-structure
-// runtime is something we might do. It carries the SECTION NAME, or '' when the
-// item is unorganized.
-//
-// It deliberately cannot express a group or a manual position. Encoding either
-// would mean inventing a parseable format inside a user-visible text column,
-// and then owning that format forever. A rollback shows sections and loses the
-// nesting from VIEW — the data itself stays in group_id and sort_order.
-// ---------------------------------------------------------------------------
-export function shadowCategory(sectionName: string | null | undefined): string {
-  return (sectionName ?? "").replace(/\s+/g, " ").trim();
-}
-
-// ---------------------------------------------------------------------------
 // PRUNING
 //
 // Structure exists because material is in it. When the last item leaves, the
@@ -136,7 +120,8 @@ export function emptySectionIds(
 
 /** Case-insensitive reuse, so naming a section "communities" when
  *  "Communities" exists joins the one that is there instead of making a second.
- *  The same rule labels and categories already follow. */
+ *  The same rule labels already follow, and the same rule the unique indexes on
+ *  library_sections and library_groups enforce underneath. */
 export function findByName<T extends { name: string }>(rows: T[], wanted: string): T | undefined {
   const w = wanted.replace(/\s+/g, " ").trim().toLowerCase();
   if (!w) return undefined;
@@ -161,7 +146,7 @@ export function cleanName(raw: unknown): string {
 // ---------------------------------------------------------------------------
 export function showStructure(
   hasSections: boolean,
-  filtering: { q?: string; labels?: string[]; favorite?: boolean; category?: string },
+  filtering: { q?: string; labels?: string[]; favorite?: boolean },
 ): boolean {
   if (!hasSections) return false;
   if (String(filtering.q ?? "").trim()) return false;
@@ -175,36 +160,3 @@ export function showStructure(
  *  "move down" would mean something the professional cannot see. */
 export const canReorder = (filtering: Parameters<typeof showStructure>[1]): boolean =>
   !String(filtering.q ?? "").trim() && !(filtering.labels ?? []).length && !filtering.favorite;
-
-// ---------------------------------------------------------------------------
-// THE CUTOVER RACE, AND THE SMALLEST THING THAT CLOSES IT.
-//
-// Between 0040 running and the structured runtime being reachable, the previous
-// runtime is still serving and can still write `category` — it has never heard
-// of section_id. So an item can end up with section_id pointing at the section
-// 0040 gave it and a category naming a DIFFERENT one. That is the professional's
-// most recent intent, expressed through the only field the old runtime had.
-//
-// 0041 reconciles it. But the new runtime is live for a minute or so BEFORE
-// 0041 runs, and a placement in that minute would overwrite `category` with its
-// section's name — destroying the intent, and destroying the evidence, since
-// afterwards the two agree and 0041 finds nothing to reconcile.
-//
-// The fix is not a synchronisation layer. It is to notice that the pair
-// disagree and decline, once, until 0041 has run. After that nothing can
-// disagree — the new runtime writes both together — so this never fires again
-// and leaves with the shadow in the contract migration.
-//
-// Compared case-insensitively and whitespace-folded, because that is how a
-// section name and a category are matched everywhere else.
-// ---------------------------------------------------------------------------
-export function unreconciledIds(
-  rows: Array<{ id: string; category?: unknown; sectionId: string | null }>,
-  sectionNameById: Map<string, string>,
-): string[] {
-  const fold = (s: string) => shadowCategory(s).toLowerCase();
-  return rows.filter((r) => {
-    const home = r.sectionId ? (sectionNameById.get(r.sectionId) ?? "") : "";
-    return fold(home) !== fold(String(r.category ?? ""));
-  }).map((r) => r.id);
-}

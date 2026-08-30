@@ -90,14 +90,14 @@ try {
   // updated_at second, so the factory now supplies all of them.
   const later = (ms: number) => new Date(Date.parse(TIED) + ms).toISOString();
   const row = (title: string, extra: Record<string, unknown>) => ({
-    user_id: DUID, title, category: "", labels: [] as string[], is_favorite: false,
+    user_id: DUID, title, labels: [] as string[], is_favorite: false,
     updated_at: TIED, ...extra,
   });
   const rows = [
-    row("Tied Alpha",   { updated_at: TIED, category: "Communities", labels: ["Santa Rosa", "Memory Care"], is_favorite: true }),
-    row("Tied Bravo",   { updated_at: TIED, category: "Communities", labels: ["Santa Rosa"] }),
-    row("Tied Charlie", { updated_at: TIED, category: "Services", labels: ["Moving"] }),
-    row("Later Delta",  { updated_at: later(2000), category: "Services", labels: ["Moving", "Real Estate"], is_favorite: true }),
+    row("Tied Alpha",   { updated_at: TIED, labels: ["Santa Rosa", "Memory Care"], is_favorite: true }),
+    row("Tied Bravo",   { updated_at: TIED, labels: ["Santa Rosa"] }),
+    row("Tied Charlie", { updated_at: TIED, labels: ["Moving"] }),
+    row("Later Delta",  { updated_at: later(2000), labels: ["Moving", "Real Estate"], is_favorite: true }),
     row("Later Echo",   { updated_at: later(1000) }),
   ];
   const { error: ie } = await svc.from("library_items").insert(rows);
@@ -122,8 +122,8 @@ try {
     const byId = new Map(((data ?? []) as { id: string; title: string }[]).map((r) => [r.id, r.title]));
     return w.seen.map((id) => byId.get(id) ?? "?");
   };
-  const communities = await titlesOf("category=Communities");
-  check("[3] category filters", communities.length === 2 && communities.every((t) => t.startsWith("Tied")),
+  const communities = await titlesOf("labels=Santa%20Rosa");
+  check("[3] a label filters", communities.length === 2 && communities.every((t) => t.startsWith("Tied")),
     JSON.stringify(communities));
 
   const santaRosa = await titlesOf("labels=Santa%20Rosa");
@@ -135,19 +135,19 @@ try {
   const favs = await titlesOf("favorite=1");
   check("[3] favorites filter", favs.length === 2 && favs.every((t) => /Alpha|Delta/.test(t)), JSON.stringify(favs));
 
-  const combined = await titlesOf("category=Communities&labels=Santa%20Rosa&favorite=1");
-  check("[3] category + label + favorite compose", combined.length === 1 && combined[0] === "Tied Alpha",
+  const combined = await titlesOf("labels=Santa%20Rosa&favorite=1");
+  check("[3] label + favorite compose", combined.length === 1 && combined[0] === "Tied Alpha",
     JSON.stringify(combined));
 
   const searched = await titlesOf("q=Charlie");
   check("[3] search still works, and pages", searched.length === 1 && searched[0] === "Tied Charlie",
     JSON.stringify(searched));
 
-  const searchPlusFilter = await titlesOf("q=Tied&category=Services");
+  const searchPlusFilter = await titlesOf("q=Tied&labels=Moving");
   check("[3] search composes with a filter", searchPlusFilter.length === 1 && searchPlusFilter[0] === "Tied Charlie",
     JSON.stringify(searchPlusFilter));
 
-  const none = await titlesOf("category=Nothing%20Named%20This");
+  const none = await titlesOf("labels=Nothing%20Named%20This");
   check("[3] a filter matching nothing returns an empty page, not an error", none.length === 0, JSON.stringify(none));
 
   // ---- 4. ORGANIZING MUST NOT LOOK LIKE EDITING --------------------------
@@ -157,18 +157,18 @@ try {
   const patch = await fetch(`${BASE}/api/library/${target.id}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json", Cookie: `flowguide_session=${dToken}` },
-    body: JSON.stringify({ organization: { category: "  services  ", labels: ["  Moving ", "moving", "", "Real Estate"], isFavorite: true } }),
+    body: JSON.stringify({ organization: { labels: ["  Moving ", "moving", "", "Real Estate"], isFavorite: true } }),
   });
   const patched = await patch.json();
   check("[4] an organization patch needs no expectedRevision", patch.ok, `${patch.status} ${JSON.stringify(patched).slice(0, 160)}`);
-  const after = ((await svc.from("library_items").select("revision,updated_at,category,labels,is_favorite")
+  const after = ((await svc.from("library_items").select("revision,updated_at,labels,is_favorite")
     .eq("id", target.id).single()).data) as Record<string, unknown>;
   check("[4] revision did NOT move — no false save-back conflict", after.revision === target.revision,
     `${target.revision} -> ${after.revision}`);
   check("[4] updated_at did NOT move — the list does not reshuffle", after.updated_at === target.updated_at,
     `${target.updated_at} -> ${after.updated_at}`);
-  check("[4] the category was trimmed AND adopted the existing spelling",
-    after.category === "Services", JSON.stringify(after.category));
+  check("[4] the labels were trimmed, de-duplicated and folded to one idea",
+    JSON.stringify(after.labels) === JSON.stringify(["Moving", "Real Estate"]), JSON.stringify(after.labels));
   check("[4] labels were trimmed, de-duplicated, blanks dropped, spelling reused",
     JSON.stringify(after.labels) === JSON.stringify(["Moving", "Real Estate"]), JSON.stringify(after.labels));
   check("[4] the star was set", after.is_favorite === true, JSON.stringify(after.is_favorite));
@@ -187,8 +187,9 @@ try {
     const { data: its } = await svc.from("items").select("*")
       .in("section_id", ((secs ?? []) as { id: string }[]).map((x) => x.id));
     const copied = ((its ?? []) as Record<string, unknown>[])[0] ?? {};
-    check("[5] the copy carries NO category, labels or favorite",
-      !("category" in copied) && !("labels" in copied) && !("is_favorite" in copied),
+    check("[5] the copy carries NO labels, favorite, or place in the structure",
+      !("labels" in copied) && !("is_favorite" in copied)
+      && !("section_id" in copied) && !("group_id" in copied) && !("sort_order" in copied),
       JSON.stringify(Object.keys(copied)));
     const { data: det } = await svc.from("item_details").select("label,value").eq("item_id", String(copied.id));
     check("[5] and nothing leaked into the item's details",

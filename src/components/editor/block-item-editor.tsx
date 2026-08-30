@@ -149,11 +149,11 @@ export function BlockItemEditor({
   busy: boolean;
   onSave: (payload: ItemContentPayload, updatedItem: Item, organization?: LibraryOrganization) => Promise<MutationResult>;
   onClose: () => void;
-  /** Present only when editing a LIBRARY entry. A FlowGuide item has no
-   *  category or labels — organization belongs to the shelf, not to the copy
-   *  that was taken from it — so the section simply does not exist there. */
+  /** Present only when editing a LIBRARY entry. A FlowGuide item has no labels
+   *  and no place in a Section — organization belongs to the shelf, not to the
+   *  copy taken from it — so the block simply does not exist there. */
   organization?: LibraryOrganization;
-  vocabulary?: { categories: string[]; labels: string[] };
+  vocabulary?: { labels: string[] };
   /** Where this entry currently lives, e.g. "Communities › Santa Rosa".
    *  Shown, not edited: moving something is a placement, made against a
    *  selection in Organize, not a text field that could disagree with it. */

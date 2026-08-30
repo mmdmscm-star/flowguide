@@ -18,7 +18,7 @@ import { REVISION_CONFLICT, type LibraryAncestry } from "./library.ts";
 
 import { cursorFilter, cursorFrom, vocabularyOf, containerCursorFilter, containerCursorFrom,
   type LibraryCursor, type ContainerCursor, type LibraryVocabulary } from "./library-organization";
-import { appendOrders, cleanName, findByName, shadowCategory, swapForMove, unreconciledIds,
+import { appendOrders, cleanName, findByName, swapForMove,
   type GroupRow, type Placement, type SectionRow } from "./library-structure";
 
 type Db = ReturnType<typeof createServerClient>;
@@ -30,7 +30,6 @@ export interface LibraryItem extends ItemContentPayload {
   /** Library ORGANIZATION. Never copied into a FlowGuide, never shown to a
    *  recipient — how a professional files their own shelf is not information
    *  about the thing on it. */
-  category: string;
   labels: string[];
   isFavorite: boolean;
   /** The item's ONE structural home. null/null is the unorganized remainder,
@@ -42,7 +41,7 @@ export interface LibraryItem extends ItemContentPayload {
   sortOrder: number;
 }
 
-const COLUMNS = "id, title, address, description, notes, details, links, photos, contacts, revision, updated_at, category, labels, is_favorite, section_id, group_id, sort_order";
+const COLUMNS = "id, title, address, description, notes, details, links, photos, contacts, revision, updated_at, labels, is_favorite, section_id, group_id, sort_order";
 
 /** Rows carry snake_case; the payload shape is shared with the packet writers. */
 function toLibraryItem(row: Record<string, unknown>): LibraryItem {
@@ -50,7 +49,6 @@ function toLibraryItem(row: Record<string, unknown>): LibraryItem {
     id: String(row.id),
     revision: Number(row.revision),
     updatedAt: String(row.updated_at),
-    category: String(row.category ?? ""),
     labels: Array.isArray(row.labels) ? (row.labels as unknown[]).map(String) : [],
     isFavorite: row.is_favorite === true,
     sectionId: (row.section_id as string | null) ?? null,
@@ -70,7 +68,6 @@ function toLibraryItem(row: Record<string, unknown>): LibraryItem {
 /** Search, or list most-recently-updated when the query is empty. */
 export interface LibraryQuery {
   q?: string;
-  category?: string;
   /** AND semantics: an item must carry every label asked for. */
   labels?: string[];
   favorite?: boolean;
@@ -112,9 +109,6 @@ export async function searchLibrary(
   // quotes, stray operators — instead of erroring on it.
   const text = String(query.q ?? "").trim();
   if (text) q = q.textSearch("search_tsv", text, { type: "websearch" });
-
-  const category = String(query.category ?? "").trim();
-  if (category) q = q.eq("category", category);
 
   const labels = (query.labels ?? []).map((l) => String(l).trim()).filter(Boolean);
   if (labels.length) q = q.contains("labels", labels);
@@ -172,10 +166,8 @@ export async function setLibraryOrganization(
   db: Db, userId: string, id: string,
   patch: { labels?: string[]; isFavorite?: boolean },
 ): Promise<{ item?: LibraryItem; error?: string }> {
-  // NO CATEGORY. It is the rollback shadow, written by placeItems from the
-  // section's name. This function had the capability and no caller, which is
-  // one refactor away from being a second writer that could make category and
-  // section_id describe different homes.
+  // LABELS AND THE STAR ONLY. Where an item lives is a placement, made against
+  // a selection, not a field that could be edited here into disagreeing with it.
   const update: Record<string, unknown> = {};
   if (patch.labels !== undefined) update.labels = patch.labels;
   if (patch.isFavorite !== undefined) update.is_favorite = patch.isFavorite;
@@ -226,9 +218,8 @@ export async function bulkOrganize(
   if (!rows.length) return { updated: 0, error: "not_found" };
   const mine = rows.map((r) => r.id);
 
-  // The star only. Category is not reachable from here any more: it is the
-  // rollback shadow, written by placeItems from the section's name, and a
-  // second writer could make it disagree with section_id.
+  // The star only. Where something lives is a placement, which is its own
+  // operation because it writes a section, a group and a position together.
   const flat: Record<string, unknown> = {};
   if (patch.favorite !== undefined) flat.is_favorite = patch.favorite;
 
@@ -269,8 +260,8 @@ export async function bulkOrganize(
 /** The professional's own vocabulary, for filter chips and spelling reuse. */
 export async function libraryVocabulary(db: Db, userId: string): Promise<LibraryVocabulary> {
   const { data } = await db.from("library_items")
-    .select("category, labels, is_favorite").eq("user_id", userId);
-  return vocabularyOf((data ?? []) as Array<{ category?: unknown; labels?: unknown }>);
+    .select("labels, is_favorite").eq("user_id", userId);
+  return vocabularyOf((data ?? []) as Array<{ labels?: unknown }>);
 }
 
 export async function getLibraryItem(
@@ -465,10 +456,7 @@ export interface PlacementRequest {
  * Put a selection somewhere, creating the section or group if it is new.
  *
  * Appends in the order given, so a bulk file keeps the sequence the
- * professional selected in rather than an arbitrary one. Writes the
- * compatibility shadow (`category` = the section's name, or '') in the same
- * statement, so a rollback to the pre-structure runtime still shows where
- * things live.
+ * professional selected in rather than an arbitrary one.
  *
  * Prunes afterwards: whatever container the selection just left may now be
  * empty, and empty structure is not something anyone asked to keep.
@@ -482,52 +470,37 @@ export async function placeItems(
   // Ownership confirmed here, from the session, before anything is written —
   // and every write repeats the predicate rather than trusting this.
   const { data: owned, error: readErr } = await db.from("library_items")
-    .select("id, category, section_id").eq("user_id", userId).in("id", targets);
+    .select("id").eq("user_id", userId).in("id", targets);
   if (readErr) return { updated: 0, error: readErr.message };
-  const ownedRows = (owned ?? []) as Array<{ id: string; category: string; section_id: string | null }>;
-  const mine = ownedRows.map((r) => r.id);
+  const mine = ((owned ?? []) as Array<{ id: string }>).map((r) => r.id);
   if (!mine.length) return { updated: 0, error: "not_found" };
   // Preserve the caller's order; the read above does not promise one.
   const ordered = targets.filter((t) => mine.includes(t));
 
   let structure = await readStructure(db, userId);
 
-  // THE CUTOVER GUARD. If an item's shadow names a different section than the
-  // one it is in, the previous runtime changed it during the compatibility
-  // window and 0041 has not reconciled it yet. Writing here would overwrite
-  // that intent AND the evidence of it. Decline once, rather than lose it.
-  //
-  // After 0041 nothing can disagree, so this never fires again; it leaves with
-  // the shadow in the contract migration.
-  const stale = unreconciledIds(
-    ownedRows.map((r) => ({ id: r.id, category: r.category, sectionId: r.section_id })),
-    new Map(structure.sections.map((x) => [x.id, x.name])));
-  if (stale.length) return { updated: 0, error: "unreconciled" };
-
   // ---- resolve the destination -------------------------------------------
   let sectionId: string | null = null;
   let groupId: string | null = null;
-  let sectionName = "";
 
   if (!req.unorganize) {
     const wantedSection = cleanName(req.newSectionName);
     if (req.sectionId) {
       const found = structure.sections.find((x) => x.id === req.sectionId);
       if (!found) return { updated: 0, error: "section_not_found" };
-      sectionId = found.id; sectionName = found.name;
+      sectionId = found.id;
     } else if (wantedSection) {
       // Case-insensitive reuse: naming a section that already exists joins it
       // rather than creating a second one beside it.
       const existing = findByName(structure.sections, wantedSection);
-      if (existing) { sectionId = existing.id; sectionName = existing.name; }
+      if (existing) sectionId = existing.id;
       else {
         const nextOrder = structure.sections.reduce((m, x) => Math.max(m, x.sortOrder), -1) + 1;
         const { data, error } = await db.from("library_sections")
           .insert({ user_id: userId, name: wantedSection, sort_order: nextOrder })
-          .select("id, name, sort_order").single();
+          .select("id").single();
         if (error) return { updated: 0, error: error.message };
-        const row = data as Record<string, unknown>;
-        sectionId = String(row.id); sectionName = String(row.name);
+        sectionId = String((data as Record<string, unknown>).id);
         structure = await readStructure(db, userId);
       }
     }
@@ -568,15 +541,11 @@ export async function placeItems(
   }
   const orders = appendOrders(base, ordered.length);
 
-  // The shadow. `category` cannot express a group or a position and is not
-  // asked to — it names the section, or nothing.
-  const category = shadowCategory(sectionName);
-
   // One statement per item, because each takes its own position. No revision,
   // no updated_at, on purpose.
   for (let i = 0; i < ordered.length; i++) {
     const { error } = await db.from("library_items")
-      .update({ section_id: sectionId, group_id: groupId, sort_order: sectionId ? orders[i] : 0, category })
+      .update({ section_id: sectionId, group_id: groupId, sort_order: sectionId ? orders[i] : 0 })
       .eq("id", ordered[i]).eq("user_id", userId);
     if (error) return { updated: 0, error: error.message };
   }
@@ -747,4 +716,43 @@ export async function browseLibrary(
       total: countOf(null, null), cursor: un.nextCursor ?? null, hasMore: un.hasMore,
     },
   };
+}
+
+/**
+ * Rename a section or a group. THE NAME, AND NOTHING ELSE.
+ *
+ * Which is the whole reason this can exist now. While `category` shadowed the
+ * section's name onto every item, a rename meant a second write across every
+ * descendant — non-atomic, and able to leave the two disagreeing — so it was
+ * withheld rather than done badly. With the shadow retired, a heading is stored
+ * in exactly one place and correcting it is a single-column update.
+ *
+ * Nothing moves: no item changes section or group, no sort_order is touched, no
+ * label or star is altered, and no content is written. A typo in a heading is a
+ * typo in a heading.
+ *
+ * Uniqueness is the DATABASE's answer, not a check-then-write here. 0039 put a
+ * unique index on (user_id, lower(name)) for sections and (section_id,
+ * lower(name)) for groups, so a colliding rename is refused by the index
+ * whatever else is happening concurrently — and a name that differs only in
+ * case is the same name. Two groups called "Santa Rosa" under different
+ * sections remain fine, because that index is scoped per section.
+ */
+export async function renameStructure(
+  db: Db, userId: string, kind: "section" | "group", id: string, rawName: string,
+): Promise<{ error?: string }> {
+  const name = cleanName(rawName);
+  if (!name) return { error: "blank_name" };
+
+  const table = kind === "section" ? "library_sections" : "library_groups";
+  const { data, error } = await db.from(table)
+    .update({ name })                       // one column; nothing else exists to touch
+    .eq("id", id).eq("user_id", userId)
+    .select("id").maybeSingle();
+
+  // 23505 is the unique index doing its job. Reported as a name clash rather
+  // than a database error, because that is what it means to the professional.
+  if (error) return { error: error.code === "23505" ? "duplicate_name" : error.message };
+  if (!data) return { error: "not_found" };
+  return {};
 }

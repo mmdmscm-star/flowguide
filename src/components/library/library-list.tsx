@@ -19,7 +19,6 @@ export function LibraryList({
   query,
   emptyHint,
   onLoaded,
-  category = "",
   labels = [],
   favorite = false,
   onVocabulary,
@@ -48,7 +47,6 @@ export function LibraryList({
   onLoaded?: (info: { count: number; filtered: boolean }) => void;
   /** Organization filters. They compose with the search box and with each
    *  other; labels are AND, so an item must carry every one asked for. */
-  category?: string;
   labels?: string[];
   favorite?: boolean;
   /** The vocabulary actually in use, reported from the first page so the
@@ -123,12 +121,11 @@ export function LibraryList({
   const params = useCallback((query: string, after: { updatedAt: string; id: string } | null) => {
     const sp = new URLSearchParams();
     if (query.trim()) sp.set("q", query.trim());
-    if (category) sp.set("category", category);
     if (labelList.length) sp.set("labels", labelList.join(","));
     if (favorite) sp.set("favorite", "1");
     if (after) { sp.set("cursorUpdatedAt", after.updatedAt); sp.set("cursorId", after.id); }
     return sp.toString();
-  }, [category, labelList, favorite]);
+  }, [labelList, favorite]);
 
   const load = useCallback(async (query: string) => {
     const mine = ++seq.current;

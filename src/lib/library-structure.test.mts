@@ -2,8 +2,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
-  swapForMove, appendOrders, shadowCategory, buildTree, sameContainer,
-  emptyGroupIds, emptySectionIds, findByName, showStructure, canReorder, unreconciledIds,
+  swapForMove, appendOrders, buildTree, sameContainer,
+  emptyGroupIds, emptySectionIds, findByName, showStructure, canReorder,
 } from "./library-structure.ts";
 
 // Source-shape guards read the CODE, never the prose explaining it. Several
@@ -124,31 +124,36 @@ test("pruning is APPLICATION policy, not a trigger", () => {
 });
 
 // ---------------------------------------------------------------------------
-// THE COMPATIBILITY SHADOW
+// THE LEGACY CATEGORY IS GONE, NOT MERELY UNUSED
+//
+// Dead compatibility machinery kept "just in case" is machinery that has to be
+// reasoned about forever. These assert it is actually absent.
 // ---------------------------------------------------------------------------
-test("the shadow carries the SECTION NAME, or nothing", () => {
-  assert.equal(shadowCategory("Communities"), "Communities");
-  assert.equal(shadowCategory("  Large   Community  "), "Large Community");
-  assert.equal(shadowCategory(null), "");
-  assert.equal(shadowCategory(undefined), "");
+test("no runtime code reads or writes the legacy category", () => {
+  for (const f of ["src/lib/library-service.ts", "src/lib/library-structure.ts",
+                   "src/lib/library-organization.ts", "src/lib/library-adapter.ts",
+                   "src/app/api/library/route.ts", "src/app/api/library/bulk/route.ts",
+                   "src/app/api/library/[id]/route.ts",
+                   "src/components/library/library-filters.tsx",
+                   "src/components/library/library-list.tsx",
+                   "src/components/library/library-workspace.tsx"]) {
+    assert.ok(!/\bcategory\b/i.test(bodyOf(f)), `${f} still references the legacy category`);
+  }
 });
 
-test("PLACEMENT is the only writer of category", () => {
+test("the cutover machinery is gone with it", () => {
+  const svc = bodyOf("src/lib/library-service.ts");
+  assert.ok(!/unreconciled|shadowCategory/.test(svc), "the cutover guard or shadow survives");
+  assert.ok(!/unreconciled/.test(bodyOf("src/app/api/library/bulk/route.ts")),
+    "the route still handles a state that can no longer occur");
+});
+
+test("placement writes a section, a group and a position — and nothing else", () => {
   const svc = bodyOf("src/lib/library-service.ts");
   const place = svc.slice(svc.indexOf("export async function placeItems"),
                           svc.indexOf("export async function pruneEmptyStructure"));
-  assert.match(place, /shadowCategory\(sectionName\)/, "placement does not maintain the shadow");
-  assert.match(place, /category \}\)/, "placement does not write the shadow with the move");
-
-  // Any second writer could make category and section_id describe different
-  // homes, which is the one thing the shadow must never do.
-  const bulk = svc.slice(svc.indexOf("export async function bulkOrganize"),
-                         svc.indexOf("export async function libraryVocabulary"));
-  assert.ok(!/category/.test(bulk), "bulkOrganize can still write a raw category");
-  const one = bodyOf("src/app/api/library/[id]/route.ts");
-  assert.ok(!/patch\.category/.test(one), "the single-item route can still write a raw category");
-  const editor = bodyOf("src/components/editor/block-item-editor.tsx");
-  assert.ok(!/setCategory/.test(editor), "the editor still offers a free-text category");
+  assert.match(place, /\.update\(\{ section_id: sectionId, group_id: groupId, sort_order: [^}]*\}\)/,
+    "placement writes a column it should not");
 });
 
 test("NEITHER placement NOR a move touches revision or updated_at", () => {
@@ -272,81 +277,6 @@ test("sections and groups are collapsible", () => {
   assert.match(view, /aria-expanded=\{!collapsed\}/);
 });
 
-// ---------------------------------------------------------------------------
-// THE CUTOVER RACE
-//
-// Between 0040 and the structured runtime being reachable, the OLD runtime can
-// still write `category`. If a placement then ran before 0041, it would
-// overwrite that intent with its section's name — and destroy the evidence,
-// because afterwards the two agree and 0041 finds nothing to reconcile.
-// ---------------------------------------------------------------------------
-const NAMES = new Map([["s1", "Places"], ["s2", "Services"]]);
-
-test("a synchronized item is NOT flagged, so the guard is invisible in normal use", () => {
-  assert.deepEqual(unreconciledIds([
-    { id: "a", category: "Places", sectionId: "s1" },
-    { id: "b", category: "", sectionId: null },
-    { id: "c", category: "  places  ", sectionId: "s1" },   // folded, still agreeing
-  ], NAMES), []);
-});
-
-test("an item the OLD runtime moved is flagged before it can be overwritten", () => {
-  assert.deepEqual(unreconciledIds([
-    { id: "a", category: "Services", sectionId: "s1" },     // old runtime said Services
-  ], NAMES), ["a"]);
-});
-
-test("an item the old runtime FILED for the first time is flagged", () => {
-  assert.deepEqual(unreconciledIds([
-    { id: "a", category: "Documents", sectionId: null },
-  ], NAMES), ["a"]);
-});
-
-test("an item the old runtime CLEARED is flagged", () => {
-  assert.deepEqual(unreconciledIds([
-    { id: "a", category: "", sectionId: "s1" },
-  ], NAMES), ["a"]);
-});
-
-test("a section that no longer exists counts as a disagreement, not a crash", () => {
-  assert.deepEqual(unreconciledIds([{ id: "a", category: "Places", sectionId: "gone" }], NAMES), ["a"]);
-});
-
-test("PLACEMENT consults the guard before it writes anything", () => {
-  const svc = bodyOf("src/lib/library-service.ts");
-  const place = svc.slice(svc.indexOf("export async function placeItems"),
-                          svc.indexOf("export async function pruneEmptyStructure"));
-  // THE RESULT MUST GATE THE WRITE. Asserting only that unreconciledIds is
-  // mentioned somewhere passes even if its answer is thrown away — a rename
-  // that left `stale` permanently empty would keep the early return and the
-  // mention, and silently disable the guard.
-  assert.match(place,
-    /const stale = unreconciledIds\([\s\S]{0,400}?\);\s*\n\s*if \(stale\.length\) return \{ updated: 0, error: "unreconciled" \};/,
-    "the guard's answer does not gate the placement");
-  const guardAt = place.indexOf("const stale = unreconciledIds");
-  const firstWrite = place.indexOf(".update({");
-  assert.ok(guardAt !== -1 && (guardAt < firstWrite || firstWrite === -1),
-    "the guard runs AFTER a write, which is too late to protect anything");
-});
-
-test("the route tells the professional what to do about it", () => {
-  const route = bodyOf("src/app/api/library/bulk/route.ts");
-  assert.match(route, /error === "unreconciled"/);
-  assert.match(route, /Reload the Library and try again/,
-    "the refusal gives no remedy");
-});
-
-test("placement remains the ONLY writer of category, with no latent second", () => {
-  const svc = bodyOf("src/lib/library-service.ts");
-  const one = svc.slice(svc.indexOf("export async function setLibraryOrganization"),
-                        svc.indexOf("export interface BulkOrganizePatch"));
-  assert.ok(!/category/.test(one),
-    "setLibraryOrganization can still write a category, which is one refactor from a second writer");
-});
-
-// ---------------------------------------------------------------------------
-// 0041 IS AN INDEPENDENT MIGRATION, NOT A RE-RUN
-// ---------------------------------------------------------------------------
 test("0041 carries 0040's reconciliation VERBATIM, and is its own migration", () => {
   const a = readFileSync("supabase/migrations/0040_library_structure_cutover.sql", "utf8");
   const b = readFileSync("supabase/migrations/0041_library_structure_catchup.sql", "utf8");
@@ -360,4 +290,67 @@ test("0041 carries 0040's reconciliation VERBATIM, and is its own migration", ()
   // Its own snapshot table, so running it never depends on 0040's transaction.
   assert.match(b, /zz_0041_before/);
   assert.ok(!b.includes("zz_0040_before"), "0041 refers to 0040's temp table");
+});
+
+// ---------------------------------------------------------------------------
+// RENAME
+//
+// Possible only now. While `category` shadowed the section's name onto every
+// item, renaming meant a second write across every descendant — non-atomic, and
+// able to leave the two disagreeing — so it was withheld rather than done
+// badly. With the shadow retired the name lives in exactly one place.
+// ---------------------------------------------------------------------------
+test("rename writes the NAME and nothing else", () => {
+  const svc = bodyOf("src/lib/library-service.ts");
+  const fn = svc.slice(svc.indexOf("export async function renameStructure"));
+  assert.match(fn, /\.update\(\{ name \}\)/, "rename writes more than the name");
+  for (const forbidden of ["sort_order", "section_id", "group_id", "revision", "updated_at",
+                           "labels", "is_favorite", "library_items"]) {
+    assert.ok(!fn.includes(forbidden), `rename can reach ${forbidden}`);
+  }
+  assert.match(fn, /\.eq\("id", id\)\.eq\("user_id", userId\)/, "rename is not owner-scoped");
+});
+
+test("a duplicate name is refused by the DATABASE, not by a check-then-write", () => {
+  const svc = bodyOf("src/lib/library-service.ts");
+  const fn = svc.slice(svc.indexOf("export async function renameStructure"));
+  // A read-then-write would race: two tabs could both see "free" and both
+  // write. The unique index refuses whatever else is happening.
+  assert.match(fn, /error\.code === "23505" \? "duplicate_name"/,
+    "a unique violation is not translated into a name clash");
+  assert.ok(!/select\("id, name"\)|findByName/.test(fn),
+    "rename checks for a duplicate before writing, which races");
+
+  const sql = readFileSync("supabase/migrations/0039_library_structure_expand.sql", "utf8");
+  assert.match(sql, /library_sections_user_name_key\s*\n\s*on public\.library_sections \(user_id, lower\(name\)\)/,
+    "sections have no case-insensitive unique index for rename to rely on");
+  assert.match(sql, /library_groups_section_name_key\s*\n\s*on public\.library_groups \(section_id, lower\(name\)\)/,
+    "groups are not unique per SECTION, so identical names across sections would break");
+});
+
+test("rename is offered only where the structure is the professional's to change", () => {
+  const view = bodyOf("src/components/library/library-structure-view.tsx");
+  assert.match(view, /onRename=\{reorder \? \(n\) => rename\("section", sec\.id, n\) : undefined\}/,
+    "section rename is not gated the same way reordering is");
+  assert.match(view, /onRename=\{reorder \? \(n\) => rename\("group", g\.id, n\) : undefined\}/,
+    "group rename is not gated the same way reordering is");
+  // reorder is false in both pickers and whenever a filter is narrowing.
+  for (const picker of ["src/components/library/library-picker.tsx",
+                        "src/components/library/use-library-picker.tsx"]) {
+    assert.ok(!/reorder|onRename/.test(bodyOf(picker)), `${picker} can rename the structure`);
+  }
+});
+
+test("rename happens IN PLACE, with no dialog and no management screen", () => {
+  const view = bodyOf("src/components/library/library-structure-view.tsx");
+  assert.match(view, /if \(editing\) \{/, "the heading does not become a field");
+  assert.match(view, /e\.key === "Escape"/, "there is no way to abandon a rename");
+  assert.match(view, /onBlur=\{commit\}/, "clicking away discards what was typed");
+  assert.ok(!/role="dialog"|fixed inset-0/.test(view), "rename opens a dialog");
+});
+
+test("an unchanged or emptied name closes quietly instead of erroring", () => {
+  const view = bodyOf("src/components/library/library-structure-view.tsx");
+  assert.match(view, /if \(!wanted \|\| wanted === name\) \{ setEditing\(false\); setDraft\(name\); return; \}/,
+    "a no-op rename is sent to the server, or reports a failure the professional did not cause");
 });

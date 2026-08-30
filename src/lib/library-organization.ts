@@ -21,19 +21,6 @@ function tidy(raw: unknown): string {
 const fold = (s: string) => s.toLowerCase();
 
 /**
- * One category, trimmed, adopting an existing spelling when there is one.
- *
- * `existing` is the professional's own vocabulary — the distinct categories
- * already in their Library. Nothing is invented for them.
- */
-export function normalizeCategory(raw: unknown, existing: string[] = []): string {
-  const wanted = tidy(raw);
-  if (!wanted) return "";
-  const match = existing.map(tidy).find((e) => e && fold(e) === fold(wanted));
-  return match ?? wanted;
-}
-
-/**
  * Labels: trimmed, blanks dropped, de-duplicated within the item, and matched
  * to existing spelling where the professional already has one.
  *
@@ -60,7 +47,6 @@ export function normalizeLabels(raw: unknown, existing: string[] = []): string[]
 }
 
 export interface LibraryVocabulary {
-  categories: string[];
   labels: string[];
   /** Whether ANYTHING is starred — not whether the Favorites filter is on.
    *  The filter surface needs to know the difference: a Library with one
@@ -68,16 +54,17 @@ export interface LibraryVocabulary {
   hasFavorites: boolean;
 }
 
-/** The distinct vocabulary in use, for filter chips and for spelling reuse.
- *  Derived from the material rather than maintained beside it. */
+/** The distinct LABELS in use, for filter chips and for spelling reuse. Derived
+ *  from the material rather than maintained beside it.
+ *
+ *  Categories are gone: where something lives is a Section now, browsed as a
+ *  heading rather than offered as a chip. Labels are what remains genuinely
+ *  cross-cutting, and the only vocabulary a filter needs. */
 export function vocabularyOf(
-  rows: Array<{ category?: unknown; labels?: unknown; is_favorite?: unknown; isFavorite?: unknown }>,
+  rows: Array<{ labels?: unknown; is_favorite?: unknown; isFavorite?: unknown }>,
 ): LibraryVocabulary {
-  const cats = new Map<string, string>();
   const labs = new Map<string, string>();
   for (const r of rows) {
-    const c = tidy(r.category);
-    if (c && !cats.has(fold(c))) cats.set(fold(c), c);
     for (const l of (Array.isArray(r.labels) ? r.labels : [])) {
       const t = tidy(l);
       if (t && !labs.has(fold(t))) labs.set(fold(t), t);
@@ -85,7 +72,6 @@ export function vocabularyOf(
   }
   const byName = (a: string, b: string) => a.localeCompare(b, undefined, { sensitivity: "base" });
   return {
-    categories: [...cats.values()].sort(byName),
     labels: [...labs.values()].sort(byName),
     hasFavorites: rows.some((r) => r.is_favorite === true || r.isFavorite === true),
   };

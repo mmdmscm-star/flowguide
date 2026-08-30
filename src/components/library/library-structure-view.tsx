@@ -125,6 +125,26 @@ export function LibraryStructureView({
     } finally { setBusy(false); }
   }
 
+  /** Correct a heading in place. One column; nothing under it moves. */
+  async function rename(kind: "section" | "group", id: string, name: string) {
+    setBusy(true);
+    try {
+      const res = await fetch("/api/library/structure", {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kind, id, name }),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        setError(d.message || "Could not rename that.");
+        return false;
+      }
+      setError("");
+      await load();
+      return true;
+    } catch { setError("Could not rename that."); return false; }
+    finally { setBusy(false); }
+  }
+
   async function move(kind: "item" | "section" | "group", id: string, direction: "up" | "down") {
     setBusy(true);
     try {
@@ -201,6 +221,8 @@ export function LibraryStructureView({
             <Header
               level="section" name={sec.name} count={total} collapsed={!!shut}
               onCollapse={() => setCollapsed((m) => ({ ...m, [sec.id]: !m[sec.id] }))}
+              onRename={reorder ? (n) => rename("section", sec.id, n) : undefined}
+              busy={busy}
               controls={reorder ? (
                 <Controls busy={busy} isFirst={si === 0} isLast={si === sections.length - 1}
                   onUp={() => move("section", sec.id, "up")} onDown={() => move("section", sec.id, "down")} />
@@ -218,6 +240,8 @@ export function LibraryStructureView({
                       <Header
                         level="group" name={g.name} count={c?.total ?? 0} collapsed={!!gshut}
                         onCollapse={() => setCollapsed((m) => ({ ...m, [g.id]: !m[g.id] }))}
+                        onRename={reorder ? (n) => rename("group", g.id, n) : undefined}
+                        busy={busy}
                         controls={reorder ? (
                           <Controls busy={busy} isFirst={gi === 0} isLast={gi === mine.length - 1}
                             onUp={() => move("group", g.id, "up")} onDown={() => move("group", g.id, "down")} />
@@ -249,13 +273,54 @@ export function LibraryStructureView({
 }
 
 function Header({
-  level, name, count, collapsed, onCollapse, controls,
+  level, name, count, collapsed, onCollapse, controls, onRename, busy,
 }: {
   level: "section" | "group"; name: string; count: number;
   collapsed: boolean; onCollapse: () => void; controls?: React.ReactNode;
+  /** Omitted wherever the structure is not the professional's to change —
+   *  inside a picker, and while a filter is narrowing the list. */
+  onRename?: (name: string) => Promise<boolean>;
+  busy?: boolean;
 }) {
+  // RENAME HAPPENS WHERE THE NAME IS. The heading becomes a field, in place —
+  // no dialog, no settings panel, and certainly no screen for managing
+  // headings. Enter keeps it, Escape abandons it, and blurring keeps it too,
+  // because clicking away from a thing you just typed should not discard it.
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(name);
+
+  async function commit() {
+    const wanted = draft.replace(/\s+/g, " ").trim();
+    // Nothing to do: unchanged, or emptied. Closing beats an error about a
+    // change the professional did not make.
+    if (!wanted || wanted === name) { setEditing(false); setDraft(name); return; }
+    const ok = await onRename?.(wanted);
+    if (ok) setEditing(false);
+  }
+
+  if (editing) {
+    return (
+      <div className="flex items-center gap-1.5">
+        <input
+          autoFocus
+          value={draft}
+          disabled={busy}
+          aria-label={`Rename ${name}`}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") { e.preventDefault(); commit(); }
+            if (e.key === "Escape") { e.preventDefault(); setDraft(name); setEditing(false); }
+          }}
+          onBlur={commit}
+          className="min-w-0 flex-1 rounded border border-accent px-2 py-1 text-sm
+                     focus:outline-none focus:ring-2 focus:ring-accent"
+        />
+      </div>
+    );
+  }
+
   return (
-    <div className="flex items-center gap-1.5">
+    <div className="group/head flex items-center gap-1.5">
       <button type="button" onClick={onCollapse} aria-expanded={!collapsed}
         className="flex min-w-0 items-center gap-1.5 text-left">
         <span className={`text-muted transition-transform ${collapsed ? "" : "rotate-90"}`} aria-hidden="true">›</span>
@@ -264,6 +329,21 @@ function Header({
           : "truncate text-sm font-medium text-foreground/80"}>{name}</span>
         <span className="flex-none text-xs text-muted">({count})</span>
       </button>
+      {onRename && (
+        // Quiet until wanted: legible on focus and on hover, never competing
+        // with the heading it belongs to.
+        <button
+          type="button"
+          onClick={() => { setDraft(name); setEditing(true); }}
+          disabled={busy}
+          aria-label={`Rename ${name}`}
+          className="flex-none text-[11px] font-medium text-muted/0 transition-colors
+                     hover:text-accent focus:text-accent group-hover/head:text-muted
+                     disabled:opacity-40"
+        >
+          Rename
+        </button>
+      )}
       <span className="ml-auto flex-none">{controls}</span>
     </div>
   );

@@ -60,7 +60,7 @@ export default function LibraryWorkspace() {
   // compose with the search box and with each other, and the chips are drawn
   // from the professional's own vocabulary rather than anything FlowGuide names.
   const [filters, setFilters] = useState<LibraryFilterState>(EMPTY_FILTERS);
-  const [vocab, setVocab] = useState<LibraryVocabulary>({ categories: [], labels: [], hasFavorites: false });
+  const [vocab, setVocab] = useState<LibraryVocabulary>({ labels: [], hasFavorites: false });
   const [organizing, setOrganizing] = useState(false);
   const [orgLabel, setOrgLabel] = useState("");
   // WHERE THINGS GO. A destination chosen from what exists, or named inline —
@@ -94,8 +94,8 @@ export default function LibraryWorkspace() {
     } finally { setBusy(false); }
   }
 
-  /** Put the selection somewhere. One call: the destination, the position and
-   *  the compatibility shadow all move together. */
+  /** Put the selection somewhere. One call: the destination and the position
+   *  move together. */
   async function place(target: Record<string, unknown>) {
     await organize({ place: target });
     setDestSection(""); setNewSection(""); setDestGroup(""); setNewGroup("");
@@ -370,8 +370,8 @@ export default function LibraryWorkspace() {
 
             {/* NOTHING USABLE-LOOKING UNTIL THERE IS SOMETHING TO ACT ON.
                 The inputs were editable at zero selection while the buttons were
-                disabled, so the professional typed a category, pressed Set, and
-                watched nothing happen. A control that accepts input it cannot
+                disabled, so the professional typed a name, pressed the button,
+                and watched nothing happen. A control that accepts input it cannot
                 use is worse than one that is absent. */}
             {chosen.length === 0 ? (
               <p className="mt-3 border-t border-accent/30 pt-3 text-xs text-muted">
@@ -610,8 +610,8 @@ export default function LibraryWorkspace() {
           <LibrarySearch value={q} onChange={setQ} className="mb-3" />
           <LibraryFilters vocabulary={vocab} value={filters} onChange={setFilters} className="mb-3" />
           {/* Suggestions for the label input, from the professional's own
-              words. There is no category datalist any more: where something
-              lives is chosen from real sections, not typed. */}
+              words. Where something lives is chosen from real sections, not
+              typed, so there is nothing to suggest for it. */}
           <datalist id="library-labels">
             {vocab.labels.map((l) => <option key={l} value={l} />)}
           </datalist>
@@ -638,8 +638,7 @@ export default function LibraryWorkspace() {
           ) : (
           <LibraryList
             refreshKey={refreshKey}
-            category={filters.category}
-            labels={filters.labels}
+              labels={filters.labels}
             favorite={filters.favorite}
             onVocabulary={setVocab}
             onStructure={setStructure}

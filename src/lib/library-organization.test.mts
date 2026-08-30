@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
-  normalizeCategory, normalizeLabels, vocabularyOf, cursorFrom, cursorFilter,
+  normalizeLabels, vocabularyOf, cursorFrom, cursorFilter,
 } from "./library-organization.ts";
 import { shouldShowFilters } from "../components/library/library-filters.tsx";
 
@@ -19,19 +19,10 @@ const bodyOf = (p: string) => readFileSync(p, "utf8")
 // VOCABULARY: converge by reusing what the professional already said, without
 // anything to administer.
 // ---------------------------------------------------------------------------
-test("a category adopts the spelling already in use", () => {
-  assert.equal(normalizeCategory("santa rosa", ["Santa Rosa"]), "Santa Rosa");
-  assert.equal(normalizeCategory("  COMMUNITIES  ", ["Communities"]), "Communities");
-});
-
-test("a genuinely new category is kept as typed", () => {
-  assert.equal(normalizeCategory("Organizations", ["Communities", "Services"]), "Organizations");
-});
-
 test("whitespace is tidied, inside as well as outside", () => {
-  assert.equal(normalizeCategory("  Memory   Care  "), "Memory Care");
-  assert.equal(normalizeCategory("   "), "", "whitespace alone is not a category");
-  assert.equal(normalizeCategory(undefined), "");
+  assert.deepEqual(normalizeLabels(["  Memory   Care  "]), ["Memory Care"]);
+  assert.deepEqual(normalizeLabels(["   "]), [], "whitespace alone is not a label");
+  assert.deepEqual(normalizeLabels(undefined), []);
 });
 
 test("LABELS are trimmed, blanks dropped, and de-duplicated within an item", () => {
@@ -56,12 +47,11 @@ test("a non-array is not a crash", () => {
 
 test("the vocabulary is DERIVED from the material, folded and sorted", () => {
   const v = vocabularyOf([
-    { category: "Communities", labels: ["Santa Rosa", "Memory Care"] },
-    { category: "communities", labels: ["santa rosa", "Moving"] },
-    { category: "", labels: [] },
-    { category: "Services", labels: null },
+    { labels: ["Santa Rosa", "Memory Care"] },
+    { labels: ["santa rosa", "Moving"] },
+    { labels: [] },
+    { labels: null },
   ]);
-  assert.deepEqual(v.categories, ["Communities", "Services"], "a case variant became a second category");
   assert.deepEqual(v.labels, ["Memory Care", "Moving", "Santa Rosa"]);
 });
 
@@ -130,7 +120,7 @@ test("a Library snapshot does not carry organization into a FlowGuide item", () 
   const adapter = bodyOf("src/lib/library-adapter.ts");
   const fn = adapter.slice(adapter.indexOf("export function snapshotToItem"));
   const body = fn.slice(0, fn.indexOf("\n}"));
-  for (const leak of ["category", "labels", "isFavorite"]) {
+  for (const leak of ["labels", "isFavorite", "sectionId", "groupId", "sortOrder"]) {
     assert.ok(!body.includes(leak), `snapshotToItem carries ${leak} into packet content`);
   }
 });
@@ -140,7 +130,7 @@ test("filters and search reset paging rather than reusing a stale cursor", () =>
   // The first-page loader always passes null, so a cursor from the previous
   // result set can never be applied to a new one.
   assert.match(list, /params\(query, null\)/, "the first page is fetched with a carried-over cursor");
-  assert.match(list, /useCallback\([\s\S]{0,900}?category, labelList, favorite\]/,
+  assert.match(list, /useCallback\([\s\S]{0,900}?labelList, favorite\]/,
     "the request params do not depend on the filters, so changing one would not refetch");
   // ...and they depend on the VALUE of the labels, not the array's identity.
   // `labels = []` is a fresh array every render, so depending on it rebuilt
@@ -163,8 +153,8 @@ test("filters and search reset paging rather than reusing a stale cursor", () =>
 // was not rendered. A closed loop, and exactly the kind that looks like
 // "organization just doesn't work here".
 // ---------------------------------------------------------------------------
-const NONE = { categories: [], labels: [], hasFavorites: false };
-const OFF = { category: "", labels: [] as string[], favorite: false };
+const NONE = { labels: [], hasFavorites: false };
+const OFF = { labels: [] as string[], favorite: false };
 
 test("an unorganized Library shows NO filter chrome", () => {
   assert.equal(shouldShowFilters(NONE, OFF), false,
@@ -176,8 +166,7 @@ test("ONE FAVORITE is enough, with zero categories and zero labels", () => {
     "starring an item does not reveal the Favorites filter");
 });
 
-test("a category or a label alone also reveals it", () => {
-  assert.equal(shouldShowFilters({ ...NONE, categories: ["Communities"] }, OFF), true);
+test("a label alone also reveals it", () => {
   assert.equal(shouldShowFilters({ ...NONE, labels: ["Santa Rosa"] }, OFF), true);
 });
 
@@ -193,14 +182,14 @@ test("...and once the view is left, the calm surface returns", () => {
 });
 
 test("the vocabulary reports whether ANYTHING is starred, in either shape", () => {
-  assert.equal(vocabularyOf([{ category: "", labels: [] }]).hasFavorites, false);
-  assert.equal(vocabularyOf([{ category: "", labels: [], is_favorite: true }]).hasFavorites, true,
+  assert.equal(vocabularyOf([{ labels: [] }]).hasFavorites, false);
+  assert.equal(vocabularyOf([{ labels: [], is_favorite: true }]).hasFavorites, true,
     "the database row shape is not recognised");
-  assert.equal(vocabularyOf([{ category: "", labels: [], isFavorite: true }]).hasFavorites, true,
+  assert.equal(vocabularyOf([{ labels: [], isFavorite: true }]).hasFavorites, true,
     "the mapped item shape is not recognised");
   // ...and it is a fact about the material, never about the filter.
-  const v = vocabularyOf([{ category: "Communities", labels: ["Moving"], is_favorite: false }]);
-  assert.deepEqual(v, { categories: ["Communities"], labels: ["Moving"], hasFavorites: false });
+  const v = vocabularyOf([{ labels: ["Moving"], is_favorite: false }]);
+  assert.deepEqual(v, { labels: ["Moving"], hasFavorites: false });
 });
 
 test("starring the FIRST item reveals the filter without waiting for a reload", () => {
@@ -212,7 +201,7 @@ test("starring the FIRST item reveals the filter without waiting for a reload", 
 
 test("the vocabulary query actually reads is_favorite", () => {
   const service = bodyOf("src/lib/library-service.ts");
-  assert.match(service, /select\("category, labels, is_favorite"\)/,
+  assert.match(service, /select\("labels, is_favorite"\)/,
     "hasFavorites is computed from a query that never selected the column");
 });
 
@@ -270,7 +259,7 @@ test("ZERO SELECTED says so, and offers nothing that cannot work", () => {
     "the zero state is not distinguished from the working state");
   assert.match(panel, /Tick anything below to begin/, "nothing tells the professional selection comes first");
   // The inputs used to be editable while every action was disabled: type a
-  // category, press Set, watch nothing happen.
+  // name, press the button, watch nothing happen.
   const zero = panel.slice(panel.indexOf("{chosen.length === 0 ? ("), panel.indexOf(") : ("));
   assert.ok(!/<input/.test(zero), "an input the professional can type into leads to no action");
   assert.ok(!/SmallAction/.test(zero), "an action button is offered with nothing to act on");
@@ -279,9 +268,9 @@ test("ZERO SELECTED says so, and offers nothing that cannot work", () => {
 test("SELECTING activates the controls — they exist only in the working state", () => {
   const panel = organizePanel();
   const working = panel.slice(panel.indexOf(") : ("));
-  // Placement replaced the free-text Category box: where something lives is now
-  // chosen from real sections, or named inline, never typed into a field that
-  // could disagree with the section the item is actually in.
+  // Placement replaced the free-text box: where something lives is chosen from
+  // real sections, or named inline, never typed into a field that means nothing
+  // until something matches it.
   for (const control of ["library-labels", "Put them here", "Take out of its section",
                          "Add", "Remove", "Favorite"]) {
     assert.ok(working.includes(control), `the working state is missing ${control}`);

@@ -23,6 +23,7 @@ const svc = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPA
 
 const {
   placeItems, moveItem, moveSection, moveGroup, readStructure, browseLibrary, searchLibrary,
+  renameStructure,
 } = await import("../../src/lib/library-service.ts");
 
 let pass = 0, fail = 0;
@@ -51,7 +52,7 @@ try {
   const ids: string[] = [];
   for (const t of titles) {
     const { data } = await svc.from("library_items")
-      .insert({ user_id: UID, title: t, category: "", labels: [], is_favorite: false })
+      .insert({ user_id: UID, title: t, labels: [], is_favorite: false })
       .select("id, revision, updated_at").single();
     ids.push((data as { id: string }).id);
   }
@@ -75,16 +76,13 @@ try {
     r3.updated === 1 && secs.filter((s) => s.name.toLowerCase() === "places").length === 1,
     JSON.stringify(secs.map((s) => s.name)));
 
-  // ---- the compatibility shadow ------------------------------------------
-  const shadow = ((await svc.from("library_items").select("title, category, section_id, group_id, sort_order")
+  // ---- placement ----------------------------------------------------------
+  const filed = ((await svc.from("library_items").select("title, section_id, group_id, sort_order")
     .eq("user_id", UID).order("title")).data ?? []) as
-    Array<{ title: string; category: string; section_id: string | null; group_id: string | null; sort_order: number }>;
-  ck("[2] every placed item carries the SECTION NAME as its shadow category",
-    shadow.filter((r) => r.section_id).every((r) => r.category === "Places"),
-    JSON.stringify(shadow.map((r) => `${r.title}:${r.category}`)));
+    Array<{ title: string; section_id: string | null; group_id: string | null; sort_order: number }>;
   ck("[2] positions are dense from 0 within each container",
-    JSON.stringify(shadow.filter((r) => r.section_id && !r.group_id).map((r) => r.sort_order).sort()) === "[0,1,2,3]",
-    JSON.stringify(shadow.map((r) => `${r.title}@${r.sort_order}`)));
+    JSON.stringify(filed.filter((r) => r.section_id && !r.group_id).map((r) => r.sort_order).sort()) === "[0,1,2,3]",
+    JSON.stringify(filed.map((r) => `${r.title}@${r.sort_order}`)));
 
   // ---- ordering -----------------------------------------------------------
   const loose = await searchLibrary(svc, UID, { container: { sectionId: places.id, groupId: null }, limit: 50 });
@@ -127,16 +125,44 @@ try {
   ck("[5] emptying the structure prunes it entirely",
     back.updated === all.length && empty.sections.length === 0 && empty.groups.length === 0,
     JSON.stringify({ s: empty.sections.length, g: empty.groups.length }));
-  const cleared = ((await svc.from("library_items").select("category").eq("user_id", UID)).data ?? []) as
-    Array<{ category: string }>;
-  ck("[5] the shadow is cleared with them", cleared.every((r) => r.category === ""));
+  const emptied = ((await svc.from("library_items").select("section_id, group_id, sort_order")
+    .eq("user_id", UID)).data ?? []) as Array<{ section_id: string | null; group_id: string | null; sort_order: number }>;
+  ck("[5] every item is genuinely unfiled afterwards",
+    emptied.every((r) => r.section_id === null && r.group_id === null && Number(r.sort_order) === 0));
+
+  // ---- rename, which retiring the shadow made possible --------------------
+  const r5 = await placeItems(svc, UID, ids.slice(0, 2), { newSectionName: "Renameable" });
+  const before = (await readStructure(svc, UID)).sections.find((s) => s.name === "Renameable")!;
+  const placedBefore = ((await svc.from("library_items")
+    .select("id, section_id, group_id, sort_order").eq("user_id", UID).order("id")).data ?? []);
+  const rn = await renameStructure(svc, UID, "section", before.id, "  Renamed   Properly  ");
+  const afterSec = (await readStructure(svc, UID)).sections.find((s) => s.id === before.id)!;
+  ck("[6] a section renames in place, tidied", !rn.error && afterSec.name === "Renamed Properly",
+    `${rn.error ?? ""} ${afterSec?.name}`);
+  const placedAfter = ((await svc.from("library_items")
+    .select("id, section_id, group_id, sort_order").eq("user_id", UID).order("id")).data ?? []);
+  ck("[6] ...and nothing underneath it moved",
+    JSON.stringify(placedAfter) === JSON.stringify(placedBefore),
+    "a rename moved or reordered items");
+  void r5;
+
+  const dup = await placeItems(svc, UID, ids.slice(2, 3), { newSectionName: "Other Place" });
+  const other = (await readStructure(svc, UID)).sections.find((s) => s.name === "Other Place")!;
+  const clash = await renameStructure(svc, UID, "section", other.id, "renamed properly");
+  ck("[6] a case-insensitive duplicate name is refused cleanly",
+    clash.error === "duplicate_name", clash.error ?? "accepted");
+  ck("[6] ...and the refused rename changed nothing",
+    (await readStructure(svc, UID)).sections.find((s) => s.id === other.id)?.name === "Other Place");
+  const blank = await renameStructure(svc, UID, "section", other.id, "   ");
+  ck("[6] a blank name is refused", blank.error === "blank_name", blank.error ?? "accepted");
+  void dup;
 
   // ---- the invariant everything else rests on -----------------------------
   const stampsAfter = ((await svc.from("library_items")
     .select("id, revision, updated_at").eq("user_id", UID).order("id")).data ?? []) as
     Array<{ id: string; revision: number; updated_at: string }>;
   const key = (r: { id: string; revision: number; updated_at: string }) => `${r.id}|${r.revision}|${r.updated_at}`;
-  ck("[6] NOT ONE placement or move touched revision or updated_at",
+  ck("[7] NOT ONE placement, move or rename touched revision or updated_at",
     stampsBefore.map(key).join("\n") === stampsAfter.map(key).join("\n"),
     "an organizational write bumped a content stamp");
 
@@ -145,14 +171,19 @@ try {
     .insert({ email: `zz-structure-other-${Date.now()}@example.invalid` }).select("id").single();
   const OTHER = (other as { id: string }).id;
   const theirs = await placeItems(svc, OTHER, ids.slice(0, 1), { newSectionName: "Theirs" });
-  ck("[7] another owner cannot place THIS user's items", theirs.error === "not_found", theirs.error ?? "placed");
+  ck("[8] another owner cannot place THIS user's items", theirs.error === "not_found", theirs.error ?? "placed");
+  const sections = (await readStructure(svc, UID)).sections;
+  if (sections.length) {
+    const foreign = await renameStructure(svc, OTHER, "section", sections[0].id, "Hijacked");
+    ck("[8] another owner cannot rename THIS user's section", foreign.error === "not_found", foreign.error ?? "renamed");
+  }
   await svc.from("library_sections").delete().eq("user_id", OTHER);
   await svc.from("users").delete().eq("id", OTHER);
 } finally {
   await cleanup();
   const { count } = await svc.from("library_items")
     .select("id", { count: "exact", head: true }).eq("user_id", UID);
-  ck("[8] no residue: the disposable user and everything under it is gone", (count ?? 0) === 0);
+  ck("[9] no residue: the disposable user and everything under it is gone", (count ?? 0) === 0);
 }
 
 console.log(`\n${pass} passed, ${fail} failed\n`);

@@ -5,7 +5,7 @@ import { normalizeItemContent } from "@/lib/item-content";
 import { isDuplicateCandidate } from "@/lib/library";
 import { searchLibrary, createLibraryItem, readItemAsPayload, libraryVocabulary, readStructure } from "@/lib/library-service";
 
-// GET  /api/library?q=&category=&labels=a,b&favorite=1&cursorUpdatedAt=&cursorId=
+// GET  /api/library?q=&labels=a,b&favorite=1&cursorUpdatedAt=&cursorId=
 //      One PAGE of the Library, newest first. Search and the organization
 //      filters compose; paging is keyset, so nothing is skipped or repeated
 //      when an item is edited mid-scroll.
@@ -48,7 +48,6 @@ export async function GET(request: Request) {
 
   const { items, hasMore, nextCursor, nextContainerCursor, error } = await searchLibrary(supabase, session.userId, {
     q: sp.get("q") ?? "",
-    category: sp.get("category") ?? "",
     labels: (sp.get("labels") ?? "").split(",").map((l) => l.trim()).filter(Boolean),
     favorite: sp.get("favorite") === "1",
     cursor,

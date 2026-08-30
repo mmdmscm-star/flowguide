@@ -38,6 +38,8 @@ const UNORG = [{ id: "u-1", title: "Unfiled One", address: "9 Loose Rd", labels:
 let hasStructure = true;
 const orderCalls: Array<Record<string, unknown>> = [];
 const listCalls: string[] = [];
+const renameCalls: Array<Record<string, unknown>> = [];
+let renameFails = false;
 
 function fakeFetch(url: string, init?: { method?: string; body?: string }) {
   const u = new URL(url, "https://flowguide.test");
@@ -79,6 +81,16 @@ function fakeFetch(url: string, init?: { method?: string; body?: string }) {
   if (u.pathname === "/api/library/order") {
     orderCalls.push(JSON.parse(init?.body ?? "{}"));
     return json({ moved: true });
+  }
+
+  if (u.pathname === "/api/library/structure") {
+    renameCalls.push(JSON.parse(init?.body ?? "{}"));
+    if (renameFails) {
+      return Promise.resolve({ ok: false, status: 409,
+        json: async () => ({ error: "duplicate_name", message: "You already have a section with that name." }),
+      } as unknown as Response);
+    }
+    return json({ structure: {} });
   }
   throw new Error(`unexpected fetch ${url}`);
 }
@@ -287,4 +299,102 @@ test("a Library with NO sections reports itself empty, so the flat list stays", 
     "an unorganized Library does not fall back to the calm flat list");
   assert.ok(!textOf(host).includes("Uncategorized"),
     "an unorganized Library was wrapped in a hierarchy it did not ask for");
+});
+
+// ---------------------------------------------------------------------------
+// RENAME, IN PLACE
+// ---------------------------------------------------------------------------
+const renameButton = (host: Element, name: string) =>
+  [...host.querySelectorAll("button")].find((b) => b.getAttribute("aria-label") === `Rename ${name}`);
+
+// React tracks a controlled input's value on the node, so assigning `.value`
+// directly is invisible to it and onChange never fires. The native setter is
+// what a real keystroke goes through.
+const typeInto = async (field: HTMLInputElement, text: string) => {
+  const setter = Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, "value")!.set!;
+  await act(async () => {
+    setter.call(field, text);
+    field.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
+  });
+};
+const press = async (field: Element, key: string) => {
+  await act(async () => {
+    field.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key, bubbles: true }));
+  });
+  await act(async () => { await new Promise((r) => setTimeout(r, 5)); });
+};
+
+test("a heading becomes a FIELD in place — no dialog, no settings screen", async () => {
+  hasStructure = true; renameCalls.length = 0; renameFails = false;
+  const { host } = await mount({ reorder: true });
+  const btn = renameButton(host, "Communities")!;
+  assert.ok(btn, "the section heading offers no way to correct it");
+  await click(btn);
+  const field = host.querySelector('input[aria-label="Rename Communities"]') as HTMLInputElement;
+  assert.ok(field, "the heading did not become a field");
+  assert.equal(field.value, "Communities", "the field does not start from the current name");
+  assert.equal(host.querySelectorAll('[role="dialog"]').length, 0, "rename opened a dialog");
+});
+
+test("Enter sends the rename — the name only, for the right thing", async () => {
+  // orderCalls is reset too: it is shared, and an earlier test fills it, which
+  // would make "renaming reordered something" fire on somebody else's move.
+  hasStructure = true; renameCalls.length = 0; orderCalls.length = 0; renameFails = false;
+  const { host } = await mount({ reorder: true });
+  await click(renameButton(host, "Santa Rosa")!);
+  const field = host.querySelector('input[aria-label="Rename Santa Rosa"]') as HTMLInputElement;
+  await typeInto(field, "  Santa   Rosa County  ");
+  await press(field, "Enter");
+
+  assert.equal(renameCalls.length, 1, "Enter did not commit the rename");
+  assert.deepEqual(renameCalls[0], { kind: "group", id: GROUP, name: "Santa Rosa County" },
+    "the request names the wrong thing, or does not tidy whitespace");
+  assert.equal(orderCalls.length, 0, "renaming reordered something");
+});
+
+test("Escape abandons it, and nothing is sent", async () => {
+  hasStructure = true; renameCalls.length = 0; renameFails = false;
+  const { host } = await mount({ reorder: true });
+  await click(renameButton(host, "Communities")!);
+  const field = host.querySelector('input[aria-label="Rename Communities"]') as HTMLInputElement;
+  await typeInto(field, "Something Else");
+  await press(field, "Escape");
+  assert.equal(renameCalls.length, 0, "Escape still sent the rename");
+  assert.ok(textOf(host).includes("Communities"), "the original heading did not come back");
+});
+
+test("an UNCHANGED name is not sent at all", async () => {
+  hasStructure = true; renameCalls.length = 0; renameFails = false;
+  const { host } = await mount({ reorder: true });
+  await click(renameButton(host, "Communities")!);
+  const field = host.querySelector('input[aria-label="Rename Communities"]') as HTMLInputElement;
+  await press(field, "Enter");
+  assert.equal(renameCalls.length, 0, "a no-op rename was sent to the server");
+});
+
+test("a REFUSED rename says so and keeps the field open to fix", async () => {
+  hasStructure = true; renameCalls.length = 0; renameFails = true;
+  const { host } = await mount({ reorder: true });
+  await click(renameButton(host, "Communities")!);
+  const field = host.querySelector('input[aria-label="Rename Communities"]') as HTMLInputElement;
+  await typeInto(field, "Services");
+  await press(field, "Enter");
+  assert.equal(renameCalls.length, 1);
+  assert.ok(textOf(host).includes("You already have a section with that name"),
+    "the refusal is silent");
+  renameFails = false;
+});
+
+test("a PICKER offers no rename at all", async () => {
+  hasStructure = true;
+  const { host } = await mount({ selectable: true, selected: [], onToggle: () => {} });
+  assert.equal(renameButton(host, "Communities"), undefined, "a picker can rename the structure");
+  assert.equal(renameButton(host, "Santa Rosa"), undefined, "a picker can rename a group");
+});
+
+test("a FILTERED view offers no rename either", async () => {
+  hasStructure = true;
+  const { host } = await mount({ reorder: false });
+  assert.equal(renameButton(host, "Communities"), undefined,
+    "rename survives into a filtered view, where the structure is only partly shown");
 });

@@ -35,20 +35,17 @@ export async function PATCH(request: Request, context: Context) {
   //
   // A content save bumps `revision`, which is the save-back comparator: a copied
   // item records the revision it came from, and a mismatch means "the base moved
-  // on". If filing an item into a category bumped it, organizing a 65-item
-  // Library would report 65 diverged FlowGuides. So this path writes the three
-  // organizational columns and nothing else — no revision, no updated_at, and
-  // no expectedRevision to supply, because no content is at stake.
+  // on". If starring an item bumped it, organizing a 65-item Library would
+  // report 65 diverged FlowGuides. So this path writes the organizational
+  // columns and nothing else — no revision, no updated_at, and no
+  // expectedRevision to supply, because no content is at stake.
   const org = (body as { organization?: Record<string, unknown> }).organization;
   if (org && typeof org === "object") {
     const known = await libraryVocabulary(supabaseEarly, session.userId);
-    const patch: { category?: string; labels?: string[]; isFavorite?: boolean } = {};
-    // CATEGORY IS NO LONGER WRITTEN HERE, deliberately. It is the rollback
-    // shadow now: it carries the item's SECTION NAME and is maintained by
-    // placeItems as part of the same statement that moves the item. A second
-    // path that could set it to free text would be exactly the drift the
-    // shadow exists to prevent — the two would describe different homes.
-    // Where something lives is a placement, not a text field.
+    // LABELS AND THE STAR. Where an item lives is a Section, changed by a
+    // placement against a selection — not a field an editor could set to a name
+    // that means nothing.
+    const patch: { labels?: string[]; isFavorite?: boolean } = {};
     if ("labels" in org) patch.labels = normalizeLabels(org.labels, known.labels);
     if ("isFavorite" in org) patch.isFavorite = org.isFavorite === true;
 

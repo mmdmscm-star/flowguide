@@ -20,7 +20,6 @@ export interface LibrarySnapshot extends ItemContentPayload {
   /** Library ORGANIZATION — how the professional files this, not what it is.
    *  snapshotToItem deliberately does not carry these across: an item copied
    *  into a FlowGuide is content, and how it was filed is not part of it. */
-  category?: string;
   labels?: string[];
   isFavorite?: boolean;
   /** The item's one structural home. null/null is the unorganized remainder. */

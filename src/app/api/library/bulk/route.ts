@@ -14,14 +14,13 @@ import { normalizeLabels } from "@/lib/library-organization";
 //   { sectionId } | { newSectionName } | { ..., groupId } | { ..., newGroupName }
 //   | { unorganize: true }
 //
-// There is no longer a raw category field. `category` is the rollback shadow
-// and carries the section's name; letting a second path write free text into it
-// would let it describe a different home than section_id does, which is the one
-// thing the shadow must never do.
+// Where something lives is a `place`, never a name typed into a field — the
+// destination is chosen from sections that exist, or created inline while
+// filing.
 //
-// ORGANIZATION ONLY. This route can set a category, a label and a star, and
-// there is nothing else it can reach: no title, no description, no content of
-// any kind. A bulk endpoint that could write content would be one mistake away
+// ORGANIZATION ONLY. This route can place items, set a label and set a star,
+// and there is nothing else it can reach: no title, no description, no content
+// of any kind. A bulk endpoint that could write content would be one mistake away
 // from overwriting sixty-five records at once, so it simply cannot.
 //
 // Ownership comes from the SESSION, never from the body, and is applied inside
@@ -48,7 +47,7 @@ export async function PATCH(request: Request) {
   const b = body as Record<string, unknown>;
 
   // PLACEMENT FIRST, and on its own. It writes section, group, position and the
-  // shadow together; labels and the star are separate dimensions that cut
+  // position together; labels and the star are separate dimensions that cut
   // across wherever a thing happens to live.
   let updated = 0;
   let error: string | undefined;
@@ -62,15 +61,6 @@ export async function PATCH(request: Request) {
       unorganize: place.unorganize === true,
     });
     updated = res.updated; error = res.error;
-    if (error === "unreconciled") {
-      // Only reachable in the minute between the structured runtime going live
-      // and the 0041 catch-up running. Naming the remedy beats a generic
-      // failure the professional cannot act on.
-      return NextResponse.json({
-        error: "unreconciled",
-        message: "Some of these were changed elsewhere a moment ago. Reload the Library and try again.",
-      }, { status: 409 });
-    }
     if (error === "section_not_found" || error === "group_not_found") {
       // Almost always a section another tab emptied and pruned while this one
       // still had it on screen. Say which thing is gone rather than failing
