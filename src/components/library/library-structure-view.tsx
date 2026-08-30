@@ -63,7 +63,17 @@ export function LibraryStructureView({
 }) {
   const [data, setData] = useState<Browse | null>(null);
   const [extra, setExtra] = useState<Record<string, Container>>({});
-  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  // OPEN, NOT COLLAPSED — the map records what has been opened, and anything
+  // absent from it is shut. That inversion is the whole change: with several
+  // sections, a Library that opens fully expanded is a wall of rows, and the
+  // headings are the thing worth reading first.
+  //
+  // Deliberately NOT persisted. A remembered per-section state across sessions
+  // is a preference, and a preference needs somewhere to live and something to
+  // manage it. Opening the Library the same quiet way every time is simpler and
+  // costs one click when it is wrong.
+  const [open, setOpen] = useState<Record<string, boolean>>({});
+  const toggle = (id: string) => setOpen((m) => ({ ...m, [id]: !m[id] }));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -208,19 +218,38 @@ export function LibraryStructureView({
     );
   };
 
+  // Every heading that can be opened. Groups included, so Expand all means what
+  // it says rather than "expand the sections and leave you clicking again".
+  const headingIds = [...sections.map((x) => x.id), ...groups.map((x) => x.id)];
+  const anyOpen = headingIds.some((id) => open[id]);
+
   return (
     <div className="space-y-5">
+      {/* ONE CONTROL, and only when there is more than one thing to act on.
+          A single section already has its own chevron, so a global toggle
+          beside it would be two ways to do the same thing. */}
+      {headingIds.length > 1 && (
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={() => setOpen(anyOpen ? {} : Object.fromEntries(headingIds.map((id) => [id, true])))}
+            className="text-xs font-medium text-muted hover:text-accent"
+          >
+            {anyOpen ? "Collapse all" : "Expand all"}
+          </button>
+        </div>
+      )}
       {sections.map((sec, si) => {
         const mine = groups.filter((g) => g.sectionId === sec.id);
         const loose = container(sec.id, null);
         const total = mine.reduce((n, g) => n + (container(sec.id, g.id)?.total ?? 0), 0)
           + (loose?.total ?? 0);
-        const shut = collapsed[sec.id];
+        const shut = !open[sec.id];
         return (
           <section key={sec.id}>
             <Header
               level="section" name={sec.name} count={total} collapsed={!!shut}
-              onCollapse={() => setCollapsed((m) => ({ ...m, [sec.id]: !m[sec.id] }))}
+              onCollapse={() => toggle(sec.id)}
               onRename={reorder ? (n) => rename("section", sec.id, n) : undefined}
               busy={busy}
               controls={reorder ? (
@@ -234,12 +263,12 @@ export function LibraryStructureView({
                     section. */}
                 {mine.map((g, gi) => {
                   const c = container(sec.id, g.id);
-                  const gshut = collapsed[g.id];
+                  const gshut = !open[g.id];
                   return (
                     <div key={g.id} className="pl-3 border-l border-border">
                       <Header
                         level="group" name={g.name} count={c?.total ?? 0} collapsed={!!gshut}
-                        onCollapse={() => setCollapsed((m) => ({ ...m, [g.id]: !m[g.id] }))}
+                        onCollapse={() => toggle(g.id)}
                         onRename={reorder ? (n) => rename("group", g.id, n) : undefined}
                         busy={busy}
                         controls={reorder ? (

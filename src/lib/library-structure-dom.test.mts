@@ -131,6 +131,20 @@ const buttons = (host: Element, label: string) =>
   [...host.querySelectorAll("button")].filter((b) => b.getAttribute("aria-label") === label);
 const byText = (host: Element, re: RegExp) =>
   [...host.querySelectorAll("button")].find((b) => re.test(b.textContent ?? ""));
+/** The heading chevrons ONLY. The `…` menu button also carries aria-expanded —
+ *  for its popover — so a bare attribute selector picks up both and reports a
+ *  closed menu as a closed section. aria-haspopup is what separates them. */
+const headingToggles = (host: Element) =>
+  [...host.querySelectorAll("button")]
+    .filter((b) => b.hasAttribute("aria-expanded") && !b.hasAttribute("aria-haspopup"));
+
+/** Sections and groups now open CLOSED, so any test about their contents has to
+ *  open them first — which is itself the clearest statement of the new default. */
+const expandAll = async (host: Element) => {
+  const b = byText(host, /Expand all/);
+  assert.ok(b, "there is no global expand control");
+  await click(b!);
+};
 const click = async (el: Element) => {
   await act(async () => {
     el.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true, cancelable: true }));
@@ -143,6 +157,7 @@ const click = async (el: Element) => {
 test("the hierarchy renders: section, its group, then what sits loose in it", async () => {
   hasStructure = true;
   const { host } = await mount({ reorder: true });
+  await expandAll(host);
   const t = textOf(host);
   assert.ok(t.includes("Communities"), "the section heading is missing");
   assert.ok(t.includes("Santa Rosa"), "the group heading is missing");
@@ -159,27 +174,33 @@ test("the hierarchy renders: section, its group, then what sits loose in it", as
 test("a row shows NO section badge, because the heading above it already says so", async () => {
   hasStructure = true;
   const { host } = await mount({ reorder: true });
+  await expandAll(host);
   const rows = [...host.querySelectorAll("li")];
   const looseRow = rows.find((r) => (r.textContent ?? "").includes("Loose 01"))!;
   assert.ok(!(looseRow.textContent ?? "").includes("Communities"),
     "the row repeats its section, which the hierarchy already communicates");
 });
 
-test("collapsing a section hides its items and keeps its heading", async () => {
+test("a chevron still opens and closes its own heading", async () => {
   hasStructure = true;
   const { host } = await mount({ reorder: true });
-  assert.ok(textOf(host).includes("Loose 01"));
-  const toggle = [...host.querySelectorAll("button")]
-    .find((b) => b.getAttribute("aria-expanded") === "true" && (b.textContent ?? "").includes("Communities"))!;
+  const toggle = headingToggles(host).find((b) => (b.textContent ?? "").includes("Communities"))!;
+  assert.equal(toggle.getAttribute("aria-expanded"), "false", "the section did not start closed");
+
   await click(toggle);
-  assert.ok(!textOf(host).includes("Loose 01"), "collapsing did not hide the items");
-  assert.ok(textOf(host).includes("Communities"), "collapsing hid the heading too");
+  assert.equal(toggle.getAttribute("aria-expanded"), "true");
+  assert.ok(textOf(host).includes("Loose 01"), "opening did not reveal the items");
+
+  await click(toggle);
+  assert.ok(!textOf(host).includes("Loose 01"), "closing did not hide the items");
+  assert.ok(textOf(host).includes("Communities"), "closing hid the heading too");
   assert.equal(toggle.getAttribute("aria-expanded"), "false");
 });
 
 test("SHOW MORE reaches the end: all 40 items are actually reachable", async () => {
   hasStructure = true;
   const { host } = await mount({ reorder: true });
+  await expandAll(host);
   assert.ok(!textOf(host).includes("Loose 40"), "the container did not start paged");
 
   let guard = 0;
@@ -199,6 +220,7 @@ test("MOVE DOWN on the last visible row sends an intent, not the loaded page", a
   hasStructure = true;
   orderCalls.length = 0;
   const { host } = await mount({ reorder: true });
+  await expandAll(host);
 
   // The last row the first page shows. Under a page-local reorder this is where
   // the tail of the container would get silently rewritten.
@@ -221,6 +243,7 @@ test("MOVE DOWN on the last visible row sends an intent, not the loaded page", a
 test("the FIRST row of a container cannot move up, and the LAST cannot move down", async () => {
   hasStructure = true;
   const { host } = await mount({ reorder: true });
+  await expandAll(host);
   const grouped = [...host.querySelectorAll("li")]
     .filter((r) => /Grouped (One|Two)/.test(r.textContent ?? ""));
   const up = grouped[0].querySelector('button[aria-label="Move up"]')!;
@@ -232,6 +255,7 @@ test("the FIRST row of a container cannot move up, and the LAST cannot move down
 test("REORDER CONTROLS DISAPPEAR when a filter is narrowing the list", async () => {
   hasStructure = true;
   const { host } = await mount({ reorder: false });
+  await expandAll(host);
   assert.equal(buttons(host, "Move up").length, 0, "Move up survives a filtered view");
   assert.equal(buttons(host, "Move down").length, 0, "Move down survives a filtered view");
   assert.ok(textOf(host).includes("Loose 01"), "the items themselves vanished too");
@@ -265,6 +289,7 @@ test("SELECTION SURVIVES expanding a container and paging through it", async () 
     await act(async () => { await new Promise((r) => setTimeout(r, 5)); });
   };
   await render();
+  await expandAll(host);
 
   const box = [...host.querySelectorAll("li")]
     .find((r) => (r.textContent ?? "").includes("Grouped One"))!
@@ -342,6 +367,7 @@ test("RENAME IS REACHABLE WITHOUT HOVER — the control is simply there", async 
   // device is no affordance at all. The `…` is rendered unconditionally.
   hasStructure = true;
   const { host } = await mount({ reorder: true });
+  await expandAll(host);
   for (const heading of ["Communities", "Santa Rosa"]) {
     const m = menuButton(host, heading);
     assert.ok(m, `"${heading}" has no visible actions control`);
@@ -413,6 +439,7 @@ test("Enter sends the rename — the name only, for the right thing", async () =
   // would make "renaming reordered something" fire on somebody else's move.
   hasStructure = true; renameCalls.length = 0; orderCalls.length = 0; renameFails = false;
   const { host } = await mount({ reorder: true });
+  await expandAll(host);            // a GROUP heading is only visible once its section is open
   await openRename(host, "Santa Rosa");
   const field = host.querySelector('input[aria-label="Rename Santa Rosa"]') as HTMLInputElement;
   await typeInto(field, "  Santa   Rosa County  ");
@@ -469,4 +496,138 @@ test("a FILTERED view offers no rename either", async () => {
   const { host } = await mount({ reorder: false });
   assert.equal(menuButton(host, "Communities"), undefined,
     "rename survives into a filtered view, where the structure is only partly shown");
+});
+
+// ---------------------------------------------------------------------------
+// COLLAPSED BY DEFAULT
+//
+// With several sections, a Library that opens fully expanded is a wall of rows.
+// The headings are the thing worth reading first, so nothing opens until asked.
+// ---------------------------------------------------------------------------
+test("sections AND groups start closed, in the Library", async () => {
+  hasStructure = true;
+  const { host } = await mount({ reorder: true });
+  const heads = headingToggles(host);
+  assert.ok(heads.length > 0, "there are no collapsible headings at all");
+  assert.ok(heads.every((b) => b.getAttribute("aria-expanded") === "false"),
+    "something started open");
+  assert.ok(!textOf(host).includes("Loose 01"), "a section's items are showing before it was opened");
+  assert.ok(!textOf(host).includes("Grouped One"), "a group's items are showing before it was opened");
+  // The headings themselves, and the unfiled remainder, are still right there.
+  assert.ok(textOf(host).includes("Communities"), "the section heading is hidden too");
+  assert.ok(textOf(host).includes("Everything else"), "the unfiled remainder was collapsed away");
+  assert.ok(textOf(host).includes("Unfiled One"),
+    "the unorganized remainder is not a collapsible container and must stay visible");
+
+  // A GROUP heading is not rendered until its section opens, so asserting the
+  // default above cannot see it. Open only the section — by hand, not Expand
+  // all — and the group must still be shut.
+  const sectionToggle = headingToggles(host).find((b) => (b.textContent ?? "").includes("Communities"))!;
+  await click(sectionToggle);
+  const groupToggle = headingToggles(host).find((b) => (b.textContent ?? "").includes("Santa Rosa"));
+  assert.ok(groupToggle, "the group heading did not appear when its section opened");
+  assert.equal(groupToggle!.getAttribute("aria-expanded"), "false",
+    "a group inside an opened section starts expanded");
+  assert.ok(!textOf(host).includes("Grouped One"),
+    "the group's items are showing even though the group is closed");
+  assert.ok(textOf(host).includes("Loose 01"),
+    "opening the section did not reveal the items sitting loose in it");
+});
+
+test("...and in a PICKER too", async () => {
+  hasStructure = true;
+  const { host } = await mount({ selectable: true, selected: [], onToggle: () => {} });
+  const heads = headingToggles(host);
+  assert.ok(heads.length > 0 && heads.every((b) => b.getAttribute("aria-expanded") === "false"),
+    "a picker opens expanded");
+  assert.ok(!textOf(host).includes("Loose 01"));
+});
+
+test("EXPAND ALL opens sections and their groups together", async () => {
+  hasStructure = true;
+  const { host } = await mount({ reorder: true });
+  await expandAll(host);
+  const heads = headingToggles(host);
+  assert.equal(heads.length, 2, "expected a section and a group heading");
+  assert.ok(heads.every((b) => b.getAttribute("aria-expanded") === "true"), "something stayed closed");
+  assert.ok(textOf(host).includes("Loose 01"), "section items did not appear");
+  assert.ok(textOf(host).includes("Grouped One"),
+    "group items did not appear — Expand all left you clicking again");
+});
+
+test("COLLAPSE ALL closes everything again, and the control says which it will do", async () => {
+  hasStructure = true;
+  const { host } = await mount({ reorder: true });
+  assert.ok(byText(host, /Expand all/), "the control does not offer to expand when all is closed");
+  await expandAll(host);
+  const collapse = byText(host, /Collapse all/);
+  assert.ok(collapse, "the control still says Expand all after expanding");
+  await click(collapse!);
+  assert.ok(!textOf(host).includes("Loose 01"), "Collapse all left items showing");
+  assert.ok(byText(host, /Expand all/), "the control did not flip back");
+});
+
+test("one heading opened by hand is enough to offer Collapse all", async () => {
+  hasStructure = true;
+  const { host } = await mount({ reorder: true });
+  const toggle = headingToggles(host).find((b) => (b.textContent ?? "").includes("Communities"))!;
+  await click(toggle);
+  assert.ok(byText(host, /Collapse all/),
+    "after opening one section the global control still offers to expand");
+});
+
+test("SELECTION SURVIVES a container being closed — it is not cleared with the rows", async () => {
+  hasStructure = true;
+  let selected: string[] = [];
+  const host = dom.window.document.getElementById("root")!;
+  host.innerHTML = "";
+  const root = createRoot(host);
+  const render = async () => {
+    await act(async () => {
+      root.render(React.createElement(View, {
+        selectable: true, selected,
+        onToggle: (id: string) => {
+          selected = selected.includes(id) ? selected.filter((x) => x !== id) : [...selected, id];
+        },
+      }));
+    });
+    await act(async () => { await new Promise((r) => setTimeout(r, 5)); });
+  };
+  await render();
+  await expandAll(host);
+
+  const box = [...host.querySelectorAll("li")]
+    .find((r) => (r.textContent ?? "").includes("Grouped One"))!
+    .querySelector('input[type="checkbox"]') as HTMLInputElement;
+  await act(async () => { box.click(); });
+  assert.deepEqual(selected, ["g-1"], "the checkbox did not register");
+
+  // Close everything. The chosen row is now not rendered at all.
+  await click(byText(host, /Collapse all/)!);
+  assert.ok(!textOf(host).includes("Grouped One"), "the row is still rendered, so this proves nothing");
+  await render();
+  assert.deepEqual(selected, ["g-1"],
+    "closing a container cleared a selection inside it");
+
+  // Re-open: still ticked.
+  await expandAll(host);
+  await render();
+  const still = [...host.querySelectorAll("li")]
+    .find((r) => (r.textContent ?? "").includes("Grouped One"))!
+    .querySelector('input[type="checkbox"]') as HTMLInputElement;
+  assert.equal(still.checked, true, "the selection is not reflected after reopening");
+  assert.deepEqual(selected, ["g-1"]);
+});
+
+test("SHOW MORE state survives a close and reopen", async () => {
+  hasStructure = true;
+  const { host } = await mount({ reorder: true });
+  await expandAll(host);
+  await click(byText(host, /Show more/)!);
+  assert.ok(textOf(host).includes("Loose 12"), "the next page did not load");
+
+  await click(byText(host, /Collapse all/)!);
+  await expandAll(host);
+  assert.ok(textOf(host).includes("Loose 12"),
+    "closing a container discarded the pages already fetched");
 });
