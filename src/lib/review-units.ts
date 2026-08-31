@@ -80,6 +80,25 @@ export const REVIEW_REQUIRED: Record<string, ExceptionKind> = {
       "Your source marks this private, but it was written where your client would " +
       "see it and FlowGuide found no private copy of it. What should happen to it?",
   },
+  // A PROPOSAL THAT COULD NOT BE PLACED IN THE SOURCE AT ALL.
+  //
+  // The same principle as `unbound-private-note`, applied to the other
+  // direction. Failing to establish provenance must not silently authorise
+  // recipient-facing content either: if FlowGuide cannot say which row of the
+  // file this venue is, it cannot vouch for the facts written about it, and
+  // publishing them anyway is the escape hatch the whole contract exists to
+  // close. Measured on two real imports, an unbound proposal carried a
+  // NEIGHBOURING record's email, phone and website often enough that this is a
+  // live risk rather than a theoretical one.
+  //
+  // ONE CARD PER ITEM, carrying everything withheld, because the professional is
+  // making a single decision about one venue — not a decision per detail.
+  "unbound-recipient-content": {
+    code: "unbound_recipient_content",
+    guidance:
+      "FlowGuide could not match this to a row in your file, so it did not publish " +
+      "the details written about it. Everything proposed is kept here. What should happen to it?",
+  },
   // A DETAIL THAT RAN PAST ITS OWN COLUMN.
   //
   // This is NOT `privacy-rejected` wearing a different label. That kind asks

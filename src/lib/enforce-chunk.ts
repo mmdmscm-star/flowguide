@@ -32,6 +32,9 @@ export interface EnforcementTelemetry {
   /** Content taken out of a recipient-facing destination because its source
    *  field is not addressed to the recipient. */
   audienceRemoved: number;
+  /** Recipient-facing content held back because its proposal could not be
+   *  bound to a source record. */
+  unboundRecipientWithheld: number;
   /** Why enforcement did or did not run for this chunk. Recorded even when it
    *  declined, so "we were asked and said no" is a fact in the evidence rather
    *  than an absence someone has to interpret. */
@@ -80,7 +83,7 @@ export interface UnresolvedUnit {
   record: number;
   title: string | null;
   kind: "privacy-rejected" | "source-unresolved" | "cross-cell-detail" | "unbound-private-note"
-    | "audience-undecided" | "private-shown";
+    | "audience-undecided" | "private-shown" | "unbound-recipient-content";
   text: string;
   reason: string;
   /** Absolute source offset where the fact was written, when known. Provenance
@@ -104,6 +107,7 @@ const empty = (): EnforcementTelemetry => ({
   wholeSourceChecked: 0, wholeSourcePresent: 0, wholeSourceMissing: 0,
   attributionUnresolved: 0, privacyRejected: 0, itemsGoverned: 0,
   crossCellRejected: 0, unboundSurfaced: 0, audienceRemoved: 0,
+  unboundRecipientWithheld: 0,
 });
 
 /** Rebuild a result object with the same shape, items replaced. */
@@ -381,21 +385,88 @@ export function enforceChunkResult(opts: {
   for (const it of scanned) {
     if (governed.has(it)) continue;
     const note = String(it.notes ?? "");
-    if (!note.trim()) continue;
-    t.unboundSurfaced++;
-    t.privacyRejected++;
-    unresolved.push({
-      record: -1,
-      title: String(it.title ?? "") || null,
-      // ITS OWN KIND, because the reason differs from the ordinary privacy
-      // rejection and the professional is owed the true one. The source may
-      // well mark this private; what is absent is proof that it is THIS row's.
-      kind: "unbound-private-note",
-      text: note,
-      reason: "FlowGuide could not establish which source record this came from, "
-        + "so nothing proves the source meant it to be private",
-    });
-    replaced.set(it, { ...it, notes: "" });
+    const next: Record<string, unknown> = { ...it };
+    if (note.trim()) {
+      t.unboundSurfaced++;
+      t.privacyRejected++;
+      unresolved.push({
+        record: -1,
+        title: String(it.title ?? "") || null,
+        // ITS OWN KIND, because the reason differs from the ordinary privacy
+        // rejection and the professional is owed the true one. The source may
+        // well mark this private; what is absent is proof that it is THIS row's.
+        kind: "unbound-private-note",
+        text: note,
+        reason: "FlowGuide could not establish which source record this came from, "
+          + "so nothing proves the source meant it to be private",
+      });
+      next.notes = "";
+    }
+
+    // AND THE RECIPIENT-FACING SIDE, for the same reason.
+    //
+    // Withholding only the private note closed half the hole: the model's prose
+    // ABOUT an unidentified record still went to the client, unverified. On the
+    // two real imports an unbound proposal repeatedly carried a neighbouring
+    // record's email, phone and website, so this is the shape the contamination
+    // actually takes rather than a hypothetical.
+    //
+    // ONLY WHERE BINDING WAS POSSIBLE IN THE FIRST PLACE. There is a difference
+    // between provenance that FAILED and provenance that was never on offer,
+    // and it is the whole difference here. A pasted shortlist tiles into no
+    // records at all: every item is "unbound" because there is nothing to bind
+    // TO, and on the corpus that is most ordinary sources rather than a few.
+    // Applying this rule there would empty the packet for all of them, and it
+    // would be answering a question nobody could ask. That case already has its
+    // own answer — the whole-source fallback, which checks that facts survived
+    // SOMEWHERE and deliberately never blocks and never places.
+    //
+    // So the rule speaks only when the source did produce records and THIS
+    // proposal could not be matched to one. That is a real failure, and the
+    // event-planner and contractor imports are both of that kind.
+    //
+    // Title and photos are left: the title is the item's identity and losing it
+    // would leave an anonymous card the professional cannot even recognise, and
+    // a photo URL is not prose. Everything else is held.
+    const held: string[] = [];
+    if (!env || !env.length) { replaced.set(it, next); continue; }
+    const desc = String(it.description ?? "").trim();
+    if (desc) { held.push(desc); next.description = ""; }
+    const high = String(it.highlight ?? "").trim();
+    if (high) { held.push(high); next.highlight = ""; }
+    const addr = String(it.address ?? "").trim();
+    if (addr) { held.push(`Address: ${addr}`); next.address = ""; }
+    for (const d of (Array.isArray(it.details) ? it.details : []) as { label?: string; value?: string }[]) {
+      const line = `${String(d?.label ?? "").trim()}: ${String(d?.value ?? "").trim()}`.trim();
+      if (line.replace(/^:|:$/, "").trim()) held.push(line);
+    }
+    if (Array.isArray(it.details) && it.details.length) next.details = [];
+    for (const l of (Array.isArray(it.links) ? it.links : []) as { label?: string }[]) {
+      const t2 = String(l?.label ?? "").trim();
+      if (t2) held.push(`Link: ${t2}`);
+    }
+    if (Array.isArray(it.links)) next.links = it.links.map((l) => ({ ...(l as object), label: "" }));
+    for (const c of (Array.isArray(it.contacts) ? it.contacts : []) as Record<string, unknown>[]) {
+      const who = [String(c?.name ?? "").trim(), String(c?.role ?? "").trim()].filter(Boolean).join(", ");
+      if (who) held.push(`Contact: ${who}`);
+    }
+    if (Array.isArray(it.contacts))
+      next.contacts = it.contacts.map((c) => ({ ...(c as object), name: null, role: null }));
+
+    if (held.length) {
+      t.unboundRecipientWithheld++;
+      unresolved.push({
+        record: -1,
+        title: String(it.title ?? "") || null,
+        kind: "unbound-recipient-content",
+        // ONE decision, everything in it, so nothing is removed and lost in the
+        // same motion and the professional sees the whole item at once.
+        text: held.join("\n"),
+        reason: "FlowGuide could not establish which source record this proposal came from, "
+          + "so nothing proves these facts belong to it",
+      });
+    }
+    replaced.set(it, next);
   }
 
   // THE INVARIANT, CHECKED WHERE IT MATTERS: ON THE WAY OUT.

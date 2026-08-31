@@ -30,6 +30,7 @@ import { privateSourceOf, noteSupportedBy, splitFields, headingGrantsPrivacy,
 import { enforceChunkResult } from "./enforce-chunk.ts";
 import { parseClaims } from "./claim-parser.ts";
 import { createRequire } from "node:module";
+import { readFileSync } from "node:fs";
 
 const CHUNKS = createRequire(import.meta.url)("./__fixtures__/event-planner-chunks.json") as {
   ordinal: number; source_start: number; segment_text: string; result: unknown;
@@ -181,17 +182,28 @@ test("each spill is surfaced whole, once, as its own question", () => {
 test("legitimate quoted and multiline cells are left alone", () => {
   // Values holding commas inside ONE quoted field. If the guard were splitting
   // on punctuation rather than reading quote state, every one of these would go.
+  // CHECKED ON ITEMS THAT BIND. Four of run 1's venues cannot be bound, and
+  // their recipient-facing content is now withheld for review rather than
+  // published — so the property "a legitimate quoted cell survives" is a claim
+  // about the QUOTE PARSING, and has to be read on items that got that far.
+  // Run 2 binds all twelve, so the same values are checked there in full.
   const keep: [string, string][] = [
-    ["Larkspur Landing Conference Center",
-     "Parking, Wi-Fi, standard projector, 4 breakout rooms, confidentiality screens available on request"],
-    ["Glasshouse Studio", "Demonstration kitchen, movable walls, private roof deck, basic furniture"],
-    ["Clementine Club", "Full restaurant buyout, bar, two dining rooms, printed menus"],
     ["Atlas Hall", "Stage, 16-foot screen, house sound, freight elevator, waterfront lobby"],
-    ["Clementine Room at Parkline Hotel", "Built-in display, foyer, hotel Wi-Fi, guestrooms upstairs"],
+    ["Atlas Courtyard", "Market lights, heaters, portable bar, adjacent loading access"],
   ];
   for (const [title, value] of keep) {
     const found = detailsOf(byTitle(title)).some((d) => String(d.value ?? "").trim() === value);
     assert.ok(found, `${title} lost a legitimate multi-value field: ${JSON.stringify(value)}`);
+  }
+  for (const [title, value] of [
+    ["Larkspur Landing Conference Center",
+     "Parking, Wi-Fi, standard projector, 4 breakout rooms, confidentiality screens available on request"],
+    ["Glasshouse Studio", "Demonstration kitchen, movable walls, private roof deck, basic furniture"],
+    ["Clementine Club", "Full restaurant buyout, bar, two dining rooms, printed menus"],
+    ["Clementine Room at Parkline Hotel", "Built-in display, foyer, hotel Wi-Fi, guestrooms upstairs"],
+  ] as [string, string][]) {
+    const found = detailsOf(r2(title)).some((d) => String(d.value ?? "").trim() === value);
+    assert.ok(found, `${title} lost a legitimate multi-value field in run 2: ${JSON.stringify(value)}`);
   }
 
   // A MULTILINE quoted field yields both of its lines as ordinary facts.
@@ -726,4 +738,247 @@ test("private content with NO private copy is surfaced, never silently dropped",
   // CONTRAST: with the private copy present, the same removal asks nothing.
   assert.deepEqual(R2.units.filter((u) => String(u.title ?? "").startsWith("Clementine Room")), [],
     "the held-duplicate case started asking questions");
+});
+
+// ---------------------------------------------------------------------------
+// G. AN UNBOUND PROPOSAL CANNOT PUBLISH EITHER
+//
+// Failing to establish provenance already refused to authorise a private note.
+// It refused nothing on the way out, so the model's prose ABOUT an unidentified
+// record still reached the client unverified — and on both real imports an
+// unbound proposal repeatedly carried a NEIGHBOURING record's email, phone and
+// website, which is the shape the contamination actually takes.
+// ---------------------------------------------------------------------------
+
+import { INTERNAL_ONLY_CSV } from "./__fixtures__/internal-only-import.ts";
+const CONTRACTOR = JSON.parse(
+  readFileSync(new URL("./__fixtures__/internal-only-chunks.json", import.meta.url), "utf8"),
+) as { delimiterHint: string; chunks: { ordinal: number; sourceStart: number; segmentText: string; result: unknown }[] };
+
+function runContractor() {
+  process.env.FLOWGUIDE_ENFORCE_CONTRACT = "1";
+  const items: Item[] = [], units: { code: string; title?: string | null; text?: string }[] = [];
+  for (const c of CONTRACTOR.chunks) {
+    const out = enforceChunkResult({
+      segmentText: c.segmentText, chunkOrdinal: c.ordinal, sourceStart: c.sourceStart,
+      sourceText: INTERNAL_ONLY_CSV, result: c.result, runId: "contractor",
+      destination: "packet", delimiterHint: CONTRACTOR.delimiterHint,
+    });
+    items.push(...itemsOf(out.result));
+    units.push(...out.reviewUnits);
+  }
+  return { items, units };
+}
+
+test("an unbound proposal publishes no prose, and nothing it proposed is lost", () => {
+  // Run 1's four unbindable venues. Each carried a description, an address, six
+  // or seven details, a link label and contact names.
+  for (const title of ["Larkspur Landing Conference Center", "Glasshouse Studio",
+                       "Clementine Club", "Clementine Room at Parkline Hotel"]) {
+    const it = byTitle(title);
+    assert.equal(String(it.description ?? "").trim(), "", `${title} published a description unverified`);
+    assert.equal(String(it.highlight ?? "").trim(), "", `${title} published a highlight unverified`);
+    assert.equal(String(it.address ?? "").trim(), "", `${title} published an address unverified`);
+    assert.deepEqual(detailsOf(it), [], `${title} published details unverified`);
+    for (const l of (Array.isArray(it.links) ? it.links : []) as { label?: string }[])
+      assert.equal(String(l?.label ?? ""), "", `${title} published a link label unverified`);
+    for (const c of (Array.isArray(it.contacts) ? it.contacts : []) as Record<string, unknown>[])
+      assert.equal(c.name ?? null, null, `${title} published a contact name unverified`);
+
+    // RECOVERABLE, not deleted — one card holding the whole item.
+    const held = unitsFor("unbound_recipient_content", title);
+    assert.equal(held.length, 1, `${title}: expected exactly one card, got ${held.length}`);
+    assert.ok(String(held[0].text).length > 100, `${title}: the card is empty`);
+  }
+
+  // The identity values are DELIBERATELY still there: a phone number is not
+  // prose, and dropping it would lose the fact while proving nothing.
+  const cc = byTitle("Clementine Club");
+  assert.ok((cc.contacts as { email?: string }[]).some((c) => String(c?.email ?? "").includes("@")),
+    "an email was discarded along with the prose");
+});
+
+test("the withheld text is recoverable verbatim", () => {
+  const held = unitsFor("unbound_recipient_content", "Larkspur Landing Conference Center")[0];
+  assert.ok(held, "nothing was held");
+  const text = String(held.text);
+  for (const phrase of ["Parking, Wi-Fi, standard projector, 4 breakout rooms",
+                        "confidentiality screens available on request"])
+    assert.ok(text.includes(phrase), `the held card lost: ${phrase}`);
+  // Its address and contact are in there too, so the item can be rebuilt.
+  assert.ok(/Address:/.test(text), "the address was dropped rather than held");
+  assert.ok(/Contact:/.test(text), "the contact name was dropped rather than held");
+});
+
+test("a BOUND ordinary record is completely unaffected", () => {
+  // Run 2 binds all twelve, so nothing is withheld anywhere in it.
+  assert.equal(R2.units.filter((u) => u.code === "unbound_recipient_content").length, 0,
+    "a bound run had content withheld");
+  for (const it of R2.items) {
+    assert.ok(String(it.description ?? "").trim().length > 0, `${it.title} lost its description`);
+    assert.ok(detailsOf(it).length > 0, `${it.title} lost its details`);
+  }
+  // And in run 1, the eight venues that DO bind keep everything.
+  for (const title of ["Harbor House Loft", "Harbor House Garden", "The Foundry Hall",
+                       "The Foundry Annex", "Redwood Assembly", "Assembly House",
+                       "Atlas Hall", "Atlas Courtyard"]) {
+    const it = byTitle(title);
+    assert.ok(String(it.description ?? "").trim().length > 0, `${title} lost its description`);
+    assert.ok(detailsOf(it).length > 0, `${title} lost its details`);
+    assert.equal(unitsFor("unbound_recipient_content", title).length, 0,
+      `${title} bound, yet its content was withheld`);
+  }
+});
+
+test("NO FUZZY IDENTITY: an exact title match does not rescue an unbindable proposal", () => {
+  // The records DO have unique anchors here — each has its own website — so a
+  // binder that consulted titles would have something to bind WITH. The
+  // proposals carry no identity value at all: no link, no contact, no email,
+  // no phone. All they share with the source is the venue name, character for
+  // character, and prose quoted from the record's own cell.
+  //
+  // That is the whole test. If the title, the neighbouring row, the shared
+  // contact or the wording were ever consulted, these two would bind and
+  // publish. They must not.
+  const source = [
+    "Venue,Contact,Phone,Email,Website,Notes",
+    "Alpha Room,Sam Reyes,(415) 555-0101,sam@shared.example,https://alpharoom.example,Bright corner room",
+    "Beta Room,Sam Reyes,(415) 555-0101,sam@shared.example,https://betaroom.example,Quiet garden room",
+  ].join("\n");
+  const result = { sections: [{ items: [
+    { title: "Alpha Room", description: "Bright corner room",
+      details: [{ label: "Notes", value: "Bright corner room" }] },
+    { title: "Beta Room", description: "Quiet garden room",
+      details: [{ label: "Notes", value: "Quiet garden room" }] },
+  ] }] };
+  process.env.FLOWGUIDE_ENFORCE_CONTRACT = "1";
+  const out = enforceChunkResult({
+    segmentText: source, chunkOrdinal: 1, sourceStart: 0, sourceText: source,
+    result, runId: "no-guess", destination: "packet", delimiterHint: ",",
+  });
+  for (const it of itemsOf(out.result))
+    assert.equal(String(it.description ?? "").trim(), "",
+      `${it.title} was bound by its title or its prose — identity was inferred`);
+  assert.equal(out.reviewUnits.filter((u) => u.code === "unbound_recipient_content").length, 2,
+    "the unbindable proposals were not surfaced");
+
+  // CONTROL: give ONE proposal the record's own website and it binds and
+  // publishes normally. Without this, the assertions above would also pass if
+  // binding were simply broken for everything.
+  const withSite = { sections: [{ items: [
+    { ...result.sections[0].items[0], links: [{ url: "https://alpharoom.example/" }] },
+    result.sections[0].items[1],
+  ] }] };
+  const out2 = enforceChunkResult({
+    segmentText: source, chunkOrdinal: 1, sourceStart: 0, sourceText: source,
+    result: withSite, runId: "no-guess-2", destination: "packet", delimiterHint: ",",
+  });
+  const alpha = itemsOf(out2.result).find((x) => x.title === "Alpha Room")!;
+  const beta = itemsOf(out2.result).find((x) => x.title === "Beta Room")!;
+  assert.equal(String(alpha.description ?? "").trim(), "Bright corner room",
+    "a proposal carrying its record's own website failed to bind");
+  assert.equal(String(beta.description ?? "").trim(), "",
+    "the proposal with no anchor bound anyway");
+});
+
+test("the event-planner still asks exactly THREE questions when everything binds", () => {
+  // Run 2's own model output, with the two notes production had already
+  // stripped put back from the source. This is the packet the professional
+  // would actually see.
+  const env = recordEnvelopes(CSV, DELIM)!;
+  const col = (t: string, i: number) => {
+    const e = env.find((x) => x.name.startsWith(t))!;
+    return splitFields(CSV.slice(e.start, e.end), DELIM)[i].trim();
+  };
+  const restore: Record<string, string> = {
+    "Atlas Courtyard": col("Atlas Courtyard", 17),
+    "Clementine Club": col("Clementine Club", 15),
+  };
+  const fixed = RUN2.map((c) => ({
+    ...c,
+    result: c.result && (c.result as { sections?: unknown[] }).sections
+      ? { ...(c.result as object), sections: ((c.result as { sections: { items?: Item[] }[] }).sections)
+          .map((s) => ({ ...s, items: (s.items ?? []).map((it) => {
+            const k = Object.keys(restore).find((x) => String(it.title ?? "").startsWith(x));
+            return k ? { ...it, notes: restore[k] } : it;
+          }) })) }
+      : c.result,
+  }));
+  const out = runChunks(fixed);
+  const codes = out.units.map((u) => u.code).sort();
+  assert.deepEqual(codes, ["audience_undecided", "audience_undecided", "privacy_rejected"],
+    `expected three questions, got ${JSON.stringify(out.units.map((u) => `${u.code}:${u.title}`))}`);
+  assert.equal(out.units.filter((u) => u.code === "unbound_recipient_content").length, 0,
+    "the fail-closed rule fired on a run where everything binds");
+});
+
+test("contractor Redfern stays conservative, and stays recoverable", () => {
+  const out = runContractor();
+  const red = out.items.find((x) => String(x.title ?? "").startsWith("Redfern Renovation"))!;
+  // Its private note still fails closed exactly as before.
+  assert.equal(String(red.notes ?? "").trim(), "");
+  const note = out.units.find((u) => u.code === "unbound_private_note"
+    && String(u.title ?? "").startsWith("Redfern"));
+  assert.ok(note, "Redfern's internal note stopped failing closed");
+  assert.match(String(note!.text), /^INTERNAL ONLY — Luis said he can probably hold/);
+  // And now its recipient-facing side is held too, in its own single card.
+  assert.equal(String(red.description ?? "").trim(), "", "Redfern published prose it could not vouch for");
+  const held = out.units.filter((u) => u.code === "unbound_recipient_content"
+    && String(u.title ?? "").startsWith("Redfern"));
+  assert.equal(held.length, 1);
+  // Everything it proposed is in the one card: prose, address, priced details
+  // and the contact's name — enough to rebuild the item by hand.
+  const text = String(held[0].text);
+  for (const phrase of ["Construction-focused firm", "Address: 44 Casa Buena Dr",
+                        "$39,500", "1-year workmanship warranty", "Contact: Luis Ortega, Owner"])
+    assert.ok(text.includes(phrase), `the held card lost: ${phrase}`);
+  // Records that DO bind are untouched.
+  const alder = out.items.find((x) => String(x.title ?? "").startsWith("Alder & Stone"))!;
+  assert.ok(String(alder.description ?? "").trim().length > 0, "a bound contractor lost its description");
+});
+
+test("PROVENANCE THAT FAILED vs PROVENANCE THAT WAS NEVER ON OFFER", () => {
+  // The boundary this rule stands on. A pasted shortlist tiles into NO records,
+  // so every item is "unbound" for want of anything to bind to — and on the
+  // corpus that is most ordinary sources, not a few. Withholding there would
+  // empty the packet for all of them while answering a question nobody could
+  // ask. That case has its own answer already: the whole-source fallback, which
+  // never blocks and never places.
+  const prose = `SHORTLIST
+
+Riverbend Studio
+$1,800/day. 3,000 sq ft, blackout capable, in-house grip.
+riverbend.example.com | Booking: Nia Patel 646-555-0188
+`;
+  assert.equal(recordEnvelopes(prose), null, "this fixture gained record structure");
+  process.env.FLOWGUIDE_ENFORCE_CONTRACT = "1";
+  const out = enforceChunkResult({
+    segmentText: prose, chunkOrdinal: 0, sourceStart: 0, sourceText: prose,
+    result: { items: [{ title: "Riverbend Studio",
+      description: "3,000 sq ft, blackout capable, in-house grip.",
+      details: [{ label: "Day rate", value: "$1,800/day" }] }] },
+    destination: "packet",
+  });
+  const it = itemsOf(out.result)[0];
+  assert.equal(String(it.description ?? ""), "3,000 sq ft, blackout capable, in-house grip.",
+    "a source with no records had its prose withheld");
+  assert.equal(detailsOf(it).length, 1, "a source with no records had its details withheld");
+  assert.equal(out.reviewUnits.filter((u) => u.code === "unbound_recipient_content").length, 0);
+
+  // CONTRAST: the SAME shape of failure, on a source that does tile into
+  // records, is withheld. The difference is whether binding was ever possible.
+  const table = [
+    "Venue,Contact,Phone,Email,Website,Notes",
+    "Alpha Room,Sam Reyes,(415) 555-0101,sam@shared.example,https://alpharoom.example,Bright corner room",
+    "Beta Room,Sam Reyes,(415) 555-0101,sam@shared.example,https://betaroom.example,Quiet garden room",
+  ].join("\n");
+  assert.ok(recordEnvelopes(table, ",")!.length > 1, "the control fixture lost its record structure");
+  const out2 = enforceChunkResult({
+    segmentText: table, chunkOrdinal: 1, sourceStart: 0, sourceText: table,
+    result: { sections: [{ items: [{ title: "Alpha Room", description: "Bright corner room" }] }] },
+    destination: "packet", delimiterHint: ",",
+  });
+  assert.equal(String(itemsOf(out2.result)[0].description ?? "").trim(), "",
+    "an unbindable proposal published prose on a source that HAS records");
+  assert.equal(out2.reviewUnits.filter((u) => u.code === "unbound_recipient_content").length, 1);
 });
