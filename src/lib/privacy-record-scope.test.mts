@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { sourceGrantsPrivacy } from "./enforce.ts";
 import { recordEnvelopes } from "./attribution.ts";
+import { INTERNAL_ONLY_CSV as CSV } from "./__fixtures__/internal-only-import.ts";
 
 // THE REAL IMPORT THAT EXPOSED THIS.
 //
@@ -23,7 +24,6 @@ import { recordEnvelopes } from "./attribution.ts";
 // the harm this contract exists to prevent, and it would have been caused by
 // "fixing" the bug. Scope first, then pattern.
 
-const CSV = readFileSync(new URL("./__fixtures__/internal-only-import.csv", import.meta.url), "utf8");
 
 /** One record's own text, exactly as enforcement derives it: from the envelope
  *  seg-v4 already tiled the source into, never from a title search. */
