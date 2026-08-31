@@ -97,7 +97,33 @@ function looksLikeLabel(label: string): boolean {
   });
 }
 
-const LABEL_RE = /^\s*[-•*]?\s*([A-Za-z0-9][A-Za-z0-9 /&()'’.+-]{0,47}):\s*(.*)$/;
+/** The label's own shape, once any clock time inside it is neutralised. */
+const LABEL_SHAPE = /^[A-Za-z0-9][A-Za-z0-9 /&()'’.+-]{0,47}$/;
+
+// A CLOCK TIME IS NOT A FIELD SEPARATOR.
+//
+// `Evening extension after 6:00 PM: $1,100` has two colons and only the second
+// one separates anything. Taking the first produced the label `Evening
+// extension after 6` with the value `00 PM: $1,100` — and beside it, on the
+// same import, `Security after 9` = `00 PM: $450` and `October 17 available
+// until 9` = `30 PM`. Every one of those reached the packet as a detail the
+// client would read.
+//
+// So the separator is the first colon that is NOT flanked by digits, and the
+// label may contain a time. This is arithmetic on characters, not vocabulary:
+// no list of time words, no locale, no am/pm parsing.
+function labelSplit(text: string): { label: string; value: string } | null {
+  const lead = /^\s*[-•*]?\s*/.exec(text)?.[0].length ?? 0;
+  const body = text.slice(lead);
+  for (let i = 0; i < body.length; i++) {
+    if (body[i] !== ":") continue;
+    if (/\d/.test(body[i - 1] ?? "") && /\d/.test(body[i + 1] ?? "")) continue;
+    const label = body.slice(0, i);
+    if (!LABEL_SHAPE.test(label.replace(/(?<=\d):(?=\d)/g, "0"))) return null;
+    return { label: label.trim(), value: body.slice(i + 1).replace(/^\s+/, "") };
+  }
+  return null;
+}
 const URL_RE = /https?:\/\/[^\s"'<>)]+/gi;
 
 // BARE HOSTNAMES ARE URLs. The ice-cream source carried 15 websites and zero
@@ -190,8 +216,8 @@ const PHONE_RE = /\+?1?[-.\s(]*\d{3}[-.\s)]*\d{3}[-.\s]*\d{4}/g;
 const CONTINUES = /[,;:]$|\b(for|of|to|and|or|with|the|a|an|from|per|than|based on|including)$/i;
 
 /** Join wrapped continuation lines onto the value they belong to. */
-function joinWrapped(lines: { text: string; offset: number }[]): { text: string; line: number; offset: number }[] {
-  const out: { text: string; line: number; offset: number }[] = [];
+function joinWrapped(lines: { text: string; offset: number; cell?: number }[]): { text: string; line: number; offset: number; cell?: number }[] {
+  const out: { text: string; line: number; offset: number; cell?: number }[] = [];
   for (let i = 0; i < lines.length; i++) {
     const cur = lines[i].text.trim();
     if (!cur) continue;
@@ -200,12 +226,18 @@ function joinWrapped(lines: { text: string; offset: number }[]): { text: string;
       const next = (lines[n + 1]?.text ?? "").trim();
       if (!next) break;
       const carriesOn = CONTINUES.test(text);
-      const nextStartsSomethingNew = LABEL_RE.test(next) || /^[-•*]/.test(next) || /^https?:/i.test(next);
-      if (!carriesOn || nextStartsSomethingNew) break;
+      const nextStartsSomethingNew = labelSplit(next) !== null || /^[-•*]/.test(next) || /^https?:/i.test(next);
+      // A CELL IS A CEILING. A value that trails off mid-clause continues on the
+      // next LINE, never into the next COLUMN — and a cell ending in a comma or
+      // a preposition is exactly the shape that would otherwise be glued to its
+      // neighbour, re-creating the run-on by a different route.
+      const crossesCell = lines[n].cell !== undefined && lines[n + 1].cell !== undefined
+        && lines[n].cell !== lines[n + 1].cell;
+      if (!carriesOn || nextStartsSomethingNew || crossesCell) break;
       text = `${text} ${next}`;
       n++;
     }
-    out.push({ text, line: i, offset: lines[i].offset });
+    out.push({ text, line: i, offset: lines[i].offset, cell: lines[i].cell });
     i = n;
   }
   return out;
@@ -247,14 +279,66 @@ function splitTrailingProse(value: string): { value: string; trailing?: string }
 // cells are separated before anything else happens. Quote state is not tracked
 // across chunk boundaries — a chunk can begin mid-cell — so stray delimiters are
 // trimmed per block rather than parsed as a document.
-function cells(segment: string): { text: string; offset: number }[] {
+//
+// AND A COMMA-DELIMITED FILE NEEDS ITS QUOTES READ. Splitting on `[\n\t]`
+// alone is right for a tab paste and wrong for a CSV, where a record is ONE
+// physical line — until a quoted cell contains a newline. Then the second
+// physical line of that cell begins mid-record, and everything after it on that
+// line is the REST OF THE RECORD'S COLUMNS:
+//
+//   …,"Full-day rental: $7,400
+//   Evening extension after 6:00 PM: $1,100",October 17 available,"Wi-Fi, …
+//
+// Parsed as a bare line, that reads as the label `Evening extension after 6`
+// (the colon inside the clock time) with a value running on through three more
+// columns. Six of twelve venues produced such a claim, and enforcement then
+// wrote them into the packet — one of them REPLACING a cleaning fee the model
+// had proposed correctly.
+//
+// So when the source declares a delimiter, cells are cut on quote state, and a
+// newline INSIDE a quoted cell splits that cell's own lines without ever
+// escaping it. Legitimate multiline values survive as their own lines, which is
+// what makes `Full-day rental: $7,400` and the evening extension two facts
+// instead of one run-on.
+//
+// Without a delimiter nothing changes: a pasted source keeps exactly the
+// behaviour it had, and quote state is still not tracked across chunk
+// boundaries.
+function cells(segment: string, delimiter?: string | null): { text: string; offset: number; cell?: number }[] {
   const src = String(segment ?? "");
-  const out: { text: string; offset: number }[] = [];
-  let at = 0;
-  for (const raw of src.split(/[\n\t]/)) {
-    out.push({ text: raw.trim().replace(/^"+/, "").replace(/"+$/, "").replace(/""/g, '"').trim(), offset: at });
-    at += raw.length + 1;
+  const clean = (t: string) =>
+    t.trim().replace(/^"+/, "").replace(/"+$/, "").replace(/""/g, '"').trim();
+  const d = typeof delimiter === "string" && delimiter.length === 1 ? delimiter : null;
+  if (!d) {
+    const out: { text: string; offset: number }[] = [];
+    let at = 0;
+    for (const raw of src.split(/[\n\t]/)) {
+      out.push({ text: clean(raw), offset: at });
+      at += raw.length + 1;
+    }
+    return out;
   }
+  const out: { text: string; offset: number; cell: number }[] = [];
+  let cell = 0, quoted = false, start = 0;
+  const flush = (end: number) => {
+    const raw = src.slice(start, end);
+    let at = 0;
+    for (const piece of raw.split("\n")) {
+      out.push({ text: clean(piece), offset: start + at, cell });
+      at += piece.length + 1;
+    }
+    cell++;
+  };
+  for (let i = 0; i < src.length; i++) {
+    const ch = src[i];
+    if (quoted) {
+      if (ch === '"') { if (src[i + 1] === '"') { i++; continue; } quoted = false; }
+      continue;
+    }
+    if (ch === '"') { quoted = true; continue; }
+    if (ch === d || ch === "\n") { flush(i); start = i + 1; }
+  }
+  flush(src.length);
   return out;
 }
 
@@ -279,14 +363,19 @@ function valueIsIdentity(v: string): boolean {
   return looksLikeHostname(t) || IDENTITY_VALUE.test(t);
 }
 
-export function parseClaims(segment: string, chunkOrdinal = 0): ParseResult {
+export function parseClaims(
+  segment: string, chunkOrdinal = 0,
+  /** The delimiter the source declared, where it declared one. Given it, cells
+   *  are cut on quote state rather than on physical lines. */
+  opts: { delimiter?: string | null } = {},
+): ParseResult {
   const claims: Claim[] = [];
   const ambiguous: AmbiguousUnit[] = [];
   const fragments: Fragment[] = [];
   let seq = 0;
   const id = (line: number) => `${chunkOrdinal}:${line}:${seq++}`;
 
-  const blocks = joinWrapped(cells(segment));
+  const blocks = joinWrapped(cells(segment, opts.delimiter));
   // How often does each short line recur on its own? A repeated standalone line
   // in a directory is a field name.
   const standalone = new Map<string, number>();
@@ -309,9 +398,17 @@ export function parseClaims(segment: string, chunkOrdinal = 0): ParseResult {
     // "pat@x.example.com" followed by a phone number was read as a field name.
     if (!/:/.test(text) && looksLikeLabel(text) && !valueIsIdentity(text) && bi + 1 < blocks.length) {
       const nextText = blocks[bi + 1].text.trim();
+      // AND THE PAIR MUST LIVE IN ONE CELL. Once cells are cut properly, two
+      // ADJACENT COLUMNS look exactly like a two-line label/value pair — an
+      // availability column reading "October 17 available" recurs across the
+      // file, so it passes the recurrence test, and the amenities column beside
+      // it becomes its "value". That is a claim about nothing, assembled from
+      // two unrelated fields.
+      const sameCell = blocks[bi].cell === undefined || blocks[bi + 1].cell === undefined
+        || blocks[bi].cell === blocks[bi + 1].cell;
       const nextIsLabelLine = /:/.test(nextText) || (looksLikeLabel(nextText) && (standalone.get(nextText.toLowerCase()) ?? 0) > 1);
       const recurs = (standalone.get(text.toLowerCase()) ?? 0) > 1;
-      if (nextText && !nextIsLabelLine && (recurs || valueIsIdentity(nextText))) {
+      if (sameCell && nextText && !nextIsLabelLine && (recurs || valueIsIdentity(nextText))) {
         const label = text.trim();
         const kind = looksLikeHostname(nextText) ? "url" : "labelled";
         claims.push(kind === "url"
@@ -322,10 +419,10 @@ export function parseClaims(segment: string, chunkOrdinal = 0): ParseResult {
       }
     }
 
-    const m = isUrlLine ? null : LABEL_RE.exec(text);
-    if (m && looksLikeLabel(m[1])) {
-      const label = m[1].trim();
-      const rest = m[2].trim();
+    const m = isUrlLine ? null : labelSplit(text);
+    if (m && looksLikeLabel(m.label)) {
+      const label = m.label;
+      const rest = m.value.trim();
       if (!rest) { fragments.push({ line, offset, text, reason: "label with no value" }); continue; }
       const { value, trailing } = splitTrailingProse(rest);
       claims.push(looksLikeHostname(value)

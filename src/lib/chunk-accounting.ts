@@ -27,16 +27,20 @@ export interface ChunkAccounting {
 export function buildChunkAccounting(opts: {
   segmentText: string; chunkOrdinal: number; sourceStart: number;
   sourceText: string | null; result: unknown;
+  /** THE SAME DELIMITER ENFORCEMENT USED. The ledger is the record of what the
+   *  contract did, so it has to read the source the same way — otherwise it
+   *  reports claims enforcement never saw, which is worse than reporting none. */
+  delimiterHint?: string | null;
 }): ChunkAccounting {
-  const { segmentText, chunkOrdinal, sourceStart, sourceText, result } = opts;
+  const { segmentText, chunkOrdinal, sourceStart, sourceText, result, delimiterHint } = opts;
   const r = (result ?? {}) as { items?: unknown; sections?: { items?: unknown }[] };
   const items = [
     ...(Array.isArray(r.items) ? r.items : []),
     ...(Array.isArray(r.sections) ? r.sections.flatMap((s) => (Array.isArray(s?.items) ? s.items : [])) : []),
   ].filter((x): x is Record<string, unknown> => Boolean(x) && typeof x === "object");
 
-  const parsed = parseClaims(segmentText, chunkOrdinal);
-  const env = sourceText ? recordEnvelopes(sourceText) : null;
+  const parsed = parseClaims(segmentText, chunkOrdinal, { delimiter: delimiterHint ?? null });
+  const env = sourceText ? recordEnvelopes(sourceText, delimiterHint ?? undefined) : null;
   const a = attributeAll(parsed.claims, parsed.ambiguous, parsed.fragments, env, sourceStart);
 
   const bound = env && sourceText ? bindByProvenance(env, sourceText, items).bound : null;

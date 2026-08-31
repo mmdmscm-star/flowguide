@@ -179,12 +179,6 @@ export function enforceChunkResult(opts: {
   if (!items.length || !sourceText) return { result, telemetry: { ...empty(), scope }, unresolved: [], reviewUnits: [] };
 
   const env = recordEnvelopes(sourceText, delimiterHint ?? undefined);
-  const parsed = parseClaims(segmentText, chunkOrdinal);
-  const a = attributeAll(parsed.claims, parsed.ambiguous, parsed.fragments, env, sourceStart);
-  const t: EnforcementTelemetry = { ...empty(), scope };
-  const unresolved: UnresolvedUnit[] = [];
-  t.attributionUnresolved = a.unattributedClaims.length + a.unattributedAmbiguous.length;
-
   const envByIndex = new Map((env ?? []).map((e) => [e.index, e]));
   // The heading row is the first record the tiling produced. The delimiter is
   // the declared one where the file supplied it, and is otherwise inferred from
@@ -196,6 +190,14 @@ export function enforceChunkResult(opts: {
         .sort((a, b) => b.n - a.n)
         .filter((x) => x.n >= 3)[0]?.d ?? null
       : null);
+  // THE PARSER GETS THE DELIMITER TOO. Reading the source's structure in one
+  // place and not the other is how a quoted multiline cell came to be parsed as
+  // a bare line and ran on through three columns.
+  const parsed = parseClaims(segmentText, chunkOrdinal, { delimiter });
+  const a = attributeAll(parsed.claims, parsed.ambiguous, parsed.fragments, env, sourceStart);
+  const t: EnforcementTelemetry = { ...empty(), scope };
+  const unresolved: UnresolvedUnit[] = [];
+  t.attributionUnresolved = a.unattributedClaims.length + a.unattributedAmbiguous.length;
 
   // A VALUE THAT CROSSED A CELL BOUNDARY IS NOT A FIELD CLAIM.
   //

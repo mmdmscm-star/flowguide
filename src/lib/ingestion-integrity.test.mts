@@ -27,6 +27,7 @@ import { EVENT_PLANNER_CSV as CSV, EVENT_PLANNER_DELIMITER as DELIM } from "./__
 import { recordEnvelopes, bindByProvenance, sourceCells, spansCells } from "./attribution.ts";
 import { privateSourceOf, noteSupportedBy, splitFields, headingGrantsPrivacy } from "./enforce.ts";
 import { enforceChunkResult } from "./enforce-chunk.ts";
+import { parseClaims } from "./claim-parser.ts";
 import { createRequire } from "node:module";
 
 const CHUNKS = createRequire(import.meta.url)("./__fixtures__/event-planner-chunks.json") as {
@@ -217,6 +218,110 @@ test("spansCells speaks only from evidence", () => {
 });
 
 // ---------------------------------------------------------------------------
+// B2. THE PARSER READS CELLS, SO THE GUARD STAYS A BACKSTOP
+// ---------------------------------------------------------------------------
+
+const labelled = (src: string, delimiter?: string) =>
+  parseClaims(src, 0, delimiter ? { delimiter } : {}).claims
+    .filter((c) => c.kind === "labelled" || c.kind === "url")
+    .map((c) => `${c.label}=${c.value}`);
+
+test("a quoted multiline cell is parsed inside its own cell", () => {
+  // The record is ONE physical line until the quoted pricing cell breaks it.
+  // Everything after that cell's second line is the rest of the columns.
+  const row = 'Venue,Contact,Pricing,Availability,Amenities\n'
+    + 'Alpha Room,Sam Reyes,"Full-day rental: $7,400\nEvening extension: $1,100",October 17 available,"Wi-Fi, mics, display"';
+  const got = labelled(row, ",");
+  assert.ok(got.includes("Full-day rental=$7,400"), `lost the first line: ${JSON.stringify(got)}`);
+  assert.ok(got.includes("Evening extension=$1,100"), `lost the second line: ${JSON.stringify(got)}`);
+  // NOTHING ran on into the next columns.
+  for (const c of got)
+    assert.ok(!/October 17|Wi-Fi|mics/.test(c), `a claim escaped its cell: ${JSON.stringify(c)}`);
+
+  // CONTROL: without a declared delimiter the old behaviour is untouched, and
+  // it is the behaviour that produced the run-on. If this ever stops running
+  // on, the assertions above stop proving the delimiter is what fixed it.
+  const bare = labelled(row);
+  assert.ok(bare.some((c) => /October 17|Wi-Fi/.test(c)),
+    "the undelimited path changed too — the test no longer isolates the fix");
+});
+
+test("a clock time is not a label separator", () => {
+  const row = 'Venue,Pricing\nAlpha Room,"Evening extension after 6:00 PM: $1,100\nSecurity after 9:00 PM: $450"';
+  const got = labelled(row, ",");
+  assert.ok(got.includes("Evening extension after 6:00 PM=$1,100"), JSON.stringify(got));
+  assert.ok(got.includes("Security after 9:00 PM=$450"), JSON.stringify(got));
+  for (const c of got)
+    assert.ok(!/=00 PM|=30 PM/.test(c), `split inside a clock time: ${JSON.stringify(c)}`);
+  // An ordinary label:value is still split at its colon.
+  assert.deepEqual(labelled('A,B\nx,"Day rental: $5,900"', ","), ["Day rental=$5,900"]);
+});
+
+test("a cell that trails off mid-clause does not absorb the next column", () => {
+  // The continuation rule exists for a real shape: a value wrapping onto the
+  // next LINE. Once cells are cut, the block after a trailing "for" can be the
+  // next COLUMN instead, and joining them rebuilds the run-on by another route.
+  const src = 'Firm,Pricing,Timeline\n'
+    + 'Acme,"Care Costs: monthly fee based on level of care for","Assisted Living $3,700 per month"';
+  const got = labelled(src, ",");
+  assert.deepEqual(got, ["Care Costs=monthly fee based on level of care for"],
+    `a cell absorbed its neighbour: ${JSON.stringify(got)}`);
+
+  // CONTROL: within ONE cell the continuation still works, which is the
+  // behaviour this guard must not break.
+  const wrapped = 'Firm,Pricing\n'
+    + 'Acme,"Care Costs: monthly fee based on level of care for\nAssisted Living $3,700 per month"';
+  assert.deepEqual(labelled(wrapped, ","),
+    ["Care Costs=monthly fee based on level of care for Assisted Living $3,700 per month"],
+    "a genuine wrapped continuation stopped joining");
+});
+
+test("two adjacent columns are not read as a label and its value", () => {
+  // `October 17 available` recurs across the file, so it passes the recurrence
+  // test that the two-line label/value form relies on — and the amenities
+  // column sits right beside it.
+  const rows = 'Venue,Availability,Amenities\n'
+    + 'Alpha Room,October 17 available,"Stage, screen, lobby"\n'
+    + 'Beta Room,October 17 available,"Bar, patio, lighting"';
+  for (const c of labelled(rows, ","))
+    assert.ok(!/^October 17 available=/.test(c), `paired two columns: ${JSON.stringify(c)}`);
+});
+
+test("the guard is a backstop, not the parser: only real model spills remain", () => {
+  const flagged = OUT.units.filter((u) => u.code === "cross_cell_detail").map((u) => String(u.title));
+  // EXACTLY the four the model emitted...
+  for (const [title] of OBSERVED_SPILLS)
+    assert.ok(flagged.some((t) => t.startsWith(title)), `${title} is no longer flagged`);
+  // ...and NONE of the six that were the parser's own doing. Asserting these by
+  // name is what makes this a regression rather than a count that happens to
+  // match: before the parser read cells, every one of them raised a question.
+  for (const title of ["Harbor House Loft", "Harbor House Garden", "The Foundry Hall",
+                       "The Foundry Annex", "Atlas Hall", "Atlas Courtyard"])
+    assert.ok(!flagged.some((t) => t.startsWith(title)),
+      `${title} still raises a cross-cell question the parser should have prevented`);
+  assert.equal(flagged.length, 4, `expected 4 cross-cell questions, got ${JSON.stringify(flagged)}`);
+});
+
+test("the facts the parser now recovers are on the items, not only in excerpts", () => {
+  const want: [string, string, string][] = [
+    ["Assembly House", "Furniture reset fee", "$350"],
+    ["The Foundry Hall", "Cleaning", "$800"],
+    ["Harbor House Loft", "Security after 9:00 PM", "$450"],
+    ["Redwood Assembly", "Full-day rental", "$7,400"],
+    ["Assembly House", "Availability", "October 17 available until 9:30 PM"],
+  ];
+  for (const [title, label, value] of want) {
+    const d = detailsOf(byTitle(title)).find((x) => String(x.label ?? "") === label);
+    assert.ok(d, `${title} has no ${label} detail`);
+    assert.equal(String(d!.value).trim(), value, `${title} / ${label}`);
+  }
+  // And no detail anywhere is a clock-time fragment.
+  for (const it of OUT.items) for (const d of detailsOf(it))
+    assert.ok(!/^\d\d PM\b/.test(String(d.value ?? "").trim()),
+      `${it.title} shows a clock-time fragment: ${JSON.stringify(d)}`);
+});
+
+// ---------------------------------------------------------------------------
 // C. UNBOUND PROPOSALS FAIL CLOSED
 // ---------------------------------------------------------------------------
 
@@ -326,6 +431,31 @@ test("an ordinary private-notes heading authorises its own field", () => {
     "authority leaked from the private column into the client-facing description");
   assert.ok(String(fields[4] ?? "").includes("internal courtyard"),
     "the fixture's client-facing description changed — this assertion is vacuous");
+});
+
+test("every note the source marks private is authorised to stay private", () => {
+  // THE TEST KEY'S FOUR PRIVATE CASES, checked at the layer where the fixture is
+  // whole. Two of them cannot be shown end-to-end: the production run that
+  // PRODUCED this fixture had already stripped Redwood's and Clementine Room's
+  // notes into review cards, so the stored proposal no longer carries them.
+  // What decides the outcome is whether the source authorises the field, and
+  // that is exactly what is asserted here.
+  const env = recordEnvelopes(CSV, DELIM)!;
+  const headerRow = CSV.slice(env[0].start, env[0].end);
+  const cases: [string, string][] = [
+    ["Redwood Assembly", "Keep between the planning team"],
+    ["The Foundry Hall", "For planner only"],
+    ["Glasshouse Studio", "Do not share with the client yet"],
+    ["Clementine Room at Parkline Hotel", "Private note for our team"],
+  ];
+  for (const [title, phrase] of cases) {
+    const e = env.find((x) => x.name.startsWith(title))!;
+    const row = CSV.slice(e.start, e.end);
+    const note = splitFields(row, DELIM)[16].trim();
+    assert.ok(note.includes(phrase), `${title}'s private column changed — this assertion is vacuous`);
+    assert.equal(noteSupportedBy(note, privateSourceOf(row, { headerRow, delimiter: DELIM })), true,
+      `${title}'s private note is no longer authorised to stay private`);
+  }
 });
 
 test("an undecided-audience heading authorises nothing", () => {

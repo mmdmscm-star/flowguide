@@ -312,6 +312,7 @@ export async function POST(_request: Request, context: Context) {
       segmentText, chunkOrdinal: ordinal, sourceStart,
       sourceText: (run.source_text as string | null) ?? null,
       result: staged,
+      delimiterHint: (run.delimiter_hint as string | null) ?? null,
     });
     // Guarded on the CLAIM GENERATION, exactly as stage/fail/split are. If this
     // chunk was reclaimed by a newer attempt while the model was working, that
