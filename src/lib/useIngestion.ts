@@ -75,7 +75,13 @@ async function processChunk(runId: string, ordinal: number): Promise<ChunkOutcom
   }
 }
 
-export function useIngestion(packetId: string, opts?: { onComplete?: () => void; onNeedsReview?: () => void }) {
+export function useIngestion(packetId: string, opts?: {
+  onComplete?: () => void;
+  onNeedsReview?: () => void;
+  /** An item's CONTENT changed underneath the host — re-read the packet.
+   *  Fired only by the dispositions that actually write one. */
+  onItemsChanged?: () => void;
+}) {
   const [state, setState] = useState<IngestState>({ phase: "idle", runId: null, done: 0, total: 0, subdividing: false, error: "", reviewSummary: "", reviewExit: "", reviewFailures: [], resolving: "", recovery: null });
   const cancelled = useRef(false);
   const runIdRef = useRef<string | null>(null);
@@ -207,6 +213,26 @@ export function useIngestion(packetId: string, opts?: { onComplete?: () => void;
     setState((s) => ({ ...s, phase: "needs_review", error: "", resolving: "",
       reviewSummary: run.review?.summary || "", reviewExit: run.review?.exit || "",
       reviewFailures: run.review?.failures || [] }));
+
+    // THE PACKET CHANGED, SO SAY SO.
+    //
+    // Only `kept_private` writes item content. The card vanished the moment the
+    // run was re-read, but the editor below holds its own copy of the packet
+    // and had no reason to know a note had appeared in it — so the new private
+    // note stayed invisible until the browser was reloaded.
+    //
+    // The host re-reads the packet rather than being handed a note to splice
+    // in. The server already decided what `notes` now says — it appends to
+    // whatever was there — so inventing that string here would be a second
+    // authority that could disagree with the first.
+    //
+    // NOT for the other two dispositions: `resolved` and `ignored` change no
+    // item, and refetching the packet after them would be a wasted round trip
+    // that could also discard editor state for nothing.
+    //
+    // The finalized branch above returns early and calls onComplete, whose host
+    // already reloads — so the last unit does not fetch the packet twice.
+    if (status === "kept_private") opts?.onItemsChanged?.();
   }, [opts]);
 
   const cancel = useCallback(() => { cancelled.current = true; }, []);

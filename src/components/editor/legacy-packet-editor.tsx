@@ -1099,6 +1099,10 @@ export function LegacyPacketEditor() {
           // success banner suppressed. "AI organized your info" over a blocked
           // packet is how a safety state became a dead end.
           onNeedsReview={() => { loadPacket(); }}
+          // Keeping a note as private writes it into an item. Without this the
+          // card vanished and the Private Notes field below kept showing its
+          // old value until the browser was reloaded.
+          onItemsChanged={() => { loadPacket(); }}
         />
       )}
 

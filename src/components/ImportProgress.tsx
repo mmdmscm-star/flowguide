@@ -12,6 +12,7 @@ export default function ImportProgress({
   onDone,
   onDiscarded,
   onNeedsReview,
+  onItemsChanged,
 }: {
   packetId: string;
   runId: string;
@@ -21,8 +22,12 @@ export default function ImportProgress({
    *  editor should refresh — but this panel must STAY, because it holds the
    *  only way out. */
   onNeedsReview?: () => void;
+  /** "Keep as private note" wrote into an item. The editor below holds its own
+   *  copy of the packet, so it has to re-read — the card disappearing is not
+   *  the same as the note appearing. */
+  onItemsChanged?: () => void;
 }) {
-  const { state, resume, retry, discard, resolveUnit, applyAnyway } = useIngestion(packetId, { onComplete: onDone, onNeedsReview });
+  const { state, resume, retry, discard, resolveUnit, applyAnyway } = useIngestion(packetId, { onComplete: onDone, onNeedsReview, onItemsChanged });
   const started = useRef(false);
 
   useEffect(() => {
