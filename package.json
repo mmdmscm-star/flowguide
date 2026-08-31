@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "test": "node --import tsx --test src/lib/*.test.mts",
     "start": "next start",
     "lint": "eslint"
   },
@@ -28,6 +29,7 @@
     "jsdom": "^29.1.1",
     "supabase": "^2.115.0",
     "tailwindcss": "^4",
+    "tsx": "^4.23.13",
     "typescript": "^5"
   }
 }
