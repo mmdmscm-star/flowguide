@@ -902,7 +902,9 @@ export function LegacyPacketEditor() {
     fetch("/api/reorder", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ type: "items", orderedIds }),
+      // The packet is what the server scopes the write to — without it the
+      // route cannot tell whose rows these are.
+      body: JSON.stringify({ type: "items", packetId, orderedIds }),
     })
       .then((r) => {
         if (!r.ok) throw new Error();
@@ -933,7 +935,7 @@ export function LegacyPacketEditor() {
     fetch("/api/reorder", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ type: "sections", orderedIds }),
+      body: JSON.stringify({ type: "sections", packetId, orderedIds }),
     })
       .then((r) => {
         if (!r.ok) throw new Error();
