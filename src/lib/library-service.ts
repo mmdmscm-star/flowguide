@@ -18,7 +18,7 @@ import { REVISION_CONFLICT, type LibraryAncestry } from "./library.ts";
 
 import { cursorFilter, cursorFrom, vocabularyOf, containerCursorFilter, containerCursorFrom,
   type LibraryCursor, type ContainerCursor, type LibraryVocabulary } from "./library-organization";
-import { appendOrders, cleanName, findByName, swapForMove,
+import { appendOrders, cleanName, findByName,
   type GroupRow, type Placement, type SectionRow } from "./library-structure";
 
 type Db = ReturnType<typeof createServerClient>;
@@ -541,6 +541,23 @@ export async function placeItems(
   }
   const orders = appendOrders(base, ordered.length);
 
+  // ONE ITEM INTO AN ORGANIZED DESTINATION IS THE SAME MOVE A DRAG MAKES.
+  //
+  // "Move to…" on a single row means exactly what dropping it on that heading
+  // means: put it there, at the end. Sending it through `library_move` gets the
+  // per-owner lock, so the fallback control and the drag cannot interleave with
+  // each other. Everything else stays on this path deliberately — unorganizing
+  // has no destination container to append to, and a bulk placement is one
+  // decision about many rows rather than many neighbour-relative moves.
+  if (ordered.length === 1 && sectionId) {
+    const r = await moveStructural(db, userId, {
+      kind: "item", id: ordered[0], sectionId, groupId,
+    });
+    if (!r.moved) return { updated: 0, error: r.error };
+    await pruneEmptyStructure(db, userId);
+    return { updated: 1, structure: await readStructure(db, userId) };
+  }
+
   // One statement per item, because each takes its own position. No revision,
   // no updated_at, on purpose.
   for (let i = 0; i < ordered.length; i++) {
@@ -588,6 +605,58 @@ export async function pruneEmptyStructure(db: Db, userId: string): Promise<void>
   }
 }
 
+/** WHERE THIS AND EVERY OTHER STRUCTURAL MOVE GOES.
+ *
+ *  `library_move` (0044) does the whole thing in one transaction: it validates
+ *  the destination and the neighbour, renumbers the affected container densely,
+ *  and closes the gap in whichever container the thing left. It also takes a
+ *  per-owner advisory lock, which is the reason drag and the Move Up / Move
+ *  Down controls all come through here rather than each writing their own
+ *  statements. Two paths that skip each other's lock are not serialized.
+ *
+ *  The owner is a parameter of the function, never of the request: the route
+ *  passes the session's user and nothing else can reach it.
+ */
+export interface StructuralMove {
+  kind: "item" | "section" | "group";
+  id: string;
+  /** Destination, items only. */
+  sectionId?: string | null;
+  groupId?: string | null;
+  /** Place immediately before / after this sibling. Neither = the true end. */
+  before?: string | null;
+  after?: string | null;
+}
+
+export async function moveStructural(
+  db: Db, userId: string, req: StructuralMove,
+): Promise<{ moved: boolean; error?: string }> {
+  const { error } = await db.rpc("library_move", {
+    p_owner: userId,
+    p_kind: req.kind,
+    p_id: req.id,
+    p_section: req.sectionId ?? null,
+    p_group: req.groupId ?? null,
+    p_before: req.before ?? null,
+    p_after: req.after ?? null,
+  });
+  if (error) return { moved: false, error: error.message };
+  return { moved: true };
+}
+
+/** The stored neighbour a one-step move lands next to.
+ *
+ *  Read from the whole container, never from the rows a browser happens to be
+ *  showing — the point the paged Library has made twice already. */
+function neighbourFor(
+  ordered: Array<{ id: string }>, id: string, direction: "up" | "down",
+): { before?: string; after?: string } | null {
+  const i = ordered.findIndex((r) => r.id === id);
+  if (i === -1) return null;
+  if (direction === "up") return i === 0 ? null : { before: ordered[i - 1].id };
+  return i === ordered.length - 1 ? null : { after: ordered[i + 1].id };
+}
+
 /**
  * Move one item a single step within ITS OWN container.
  *
@@ -612,17 +681,16 @@ export async function moveItem(
   q = me.group_id ? q.eq("group_id", me.group_id) : q.is("group_id", null);
   const { data } = await q.order("sort_order", { ascending: true }).order("id", { ascending: true });
 
-  const ordered = ((data ?? []) as Array<{ id: string; sort_order: number }>)
-    .map((r) => ({ id: String(r.id), sortOrder: Number(r.sort_order) }));
-  const writes = swapForMove(ordered, id, direction);
-  if (!writes) return { moved: false };            // already at the edge
+  const ordered = ((data ?? []) as Array<{ id: string }>).map((r) => ({ id: String(r.id) }));
+  const at = neighbourFor(ordered, id, direction);
+  if (!at) return { moved: false };                 // already at the edge
 
-  for (const w of writes) {
-    const { error } = await db.from("library_items").update({ sort_order: w.sortOrder })
-      .eq("id", w.id).eq("user_id", userId);
-    if (error) return { moved: false, error: error.message };
-  }
-  return { moved: true };
+  // SAME PRIMITIVE AS THE DRAG. A one-step move is a neighbour-relative move
+  // whose neighbour happens to be adjacent, so it goes through the same
+  // transaction and takes the same per-owner lock.
+  return moveStructural(db, userId, {
+    kind: "item", id, sectionId: me.section_id, groupId: me.group_id, ...at,
+  });
 }
 
 /** Move a section among the professional's sections. */
@@ -630,15 +698,10 @@ export async function moveSection(
   db: Db, userId: string, id: string, direction: "up" | "down",
 ): Promise<{ moved: boolean; error?: string }> {
   const { sections } = await readStructure(db, userId);
-  if (!sections.some((s) => s.id === id)) return { moved: false, error: "not_found" };
-  const writes = swapForMove(sections, id, direction);
-  if (!writes) return { moved: false };
-  for (const w of writes) {
-    const { error } = await db.from("library_sections").update({ sort_order: w.sortOrder })
-      .eq("id", w.id).eq("user_id", userId);
-    if (error) return { moved: false, error: error.message };
-  }
-  return { moved: true };
+  if (!sections.some((x) => x.id === id)) return { moved: false, error: "not_found" };
+  const at = neighbourFor(sections, id, direction);
+  if (!at) return { moved: false };
+  return moveStructural(db, userId, { kind: "section", id, ...at });
 }
 
 /** Move a group within its own section. Groups never cross sections by moving —
@@ -650,14 +713,9 @@ export async function moveGroup(
   const me = groups.find((g) => g.id === id);
   if (!me) return { moved: false, error: "not_found" };
   const siblings = groups.filter((g) => g.sectionId === me.sectionId);
-  const writes = swapForMove(siblings, id, direction);
-  if (!writes) return { moved: false };
-  for (const w of writes) {
-    const { error } = await db.from("library_groups").update({ sort_order: w.sortOrder })
-      .eq("id", w.id).eq("user_id", userId);
-    if (error) return { moved: false, error: error.message };
-  }
-  return { moved: true };
+  const at = neighbourFor(siblings, id, direction);
+  if (!at) return { moved: false };
+  return moveStructural(db, userId, { kind: "group", id, ...at });
 }
 
 /**

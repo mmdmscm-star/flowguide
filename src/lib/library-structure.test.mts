@@ -53,11 +53,17 @@ test("the LAST VISIBLE ROW of a page is not the last row of its container", () =
 });
 
 test("the move endpoint takes an INTENT, not a list of ids", () => {
+  // Still the point, and now it carries two intents rather than one: a step up
+  // or down, and a position relative to a named neighbour. What it must never
+  // accept is an ORDER, because a paged client does not have one.
   const route = bodyOf("src/app/api/library/order/route.ts");
-  assert.match(route, /const \{ kind, id, direction \} = body/,
-    "the route accepts something other than one thing and one direction");
+  assert.match(route, /const \{ kind, id, direction, sectionId, groupId, before, after \} = body/,
+    "the route no longer takes one thing, one direction, and one neighbour");
   assert.ok(!/orderedIds|blockIds|ids\b/.test(route),
     "the route accepts an id LIST, which a paged client cannot supply correctly");
+  // And the owner is never the client's to name.
+  assert.ok(!/p_owner:\s*(body|req)/.test(route), "the owner comes from the request");
+  assert.match(route, /session\.userId/, "the owner is not taken from the session");
 });
 
 test("the server resolves the neighbour from the whole container", () => {
@@ -65,7 +71,30 @@ test("the server resolves the neighbour from the whole container", () => {
   const fn = svc.slice(svc.indexOf("export async function moveItem"));
   const body = fn.slice(0, fn.indexOf("export async function moveSection"));
   assert.ok(!/limit\(/.test(body), "the container read is capped, so a long section reorders wrongly");
-  assert.match(body, /swapForMove\(ordered/, "the move is not computed from the container");
+  // The step is now expressed as the neighbour it lands beside, and handed to
+  // the same transactional primitive a drag uses.
+  assert.match(body, /neighbourFor\(ordered/, "the move is not computed from the container");
+  assert.match(body, /moveStructural\(/, "a one-step move bypasses the shared primitive");
+});
+
+test("EVERY structural move goes through the one locked primitive", () => {
+  // The reason to share it is not tidiness. `library_move` takes a per-owner
+  // advisory lock, so two paths that each wrote their own statements would not
+  // be serialized against each other — a drag and a Move down could interleave
+  // and one would silently undo the other.
+  const svc = bodyOf("src/lib/library-service.ts");
+  assert.match(svc, /db\.rpc\("library_move"/, "nothing calls the transactional move");
+  assert.equal((svc.match(/db\.rpc\("library_move"/g) ?? []).length, 1,
+    "the RPC is called from more than one place; there should be a single door");
+  for (const fn of ["moveItem", "moveSection", "moveGroup"]) {
+    const at = svc.indexOf(`export async function ${fn}`);
+    const body = svc.slice(at, svc.indexOf("export ", at + 10));
+    assert.match(body, /moveStructural\(/, `${fn} writes its own order`);
+  }
+  // Single-item "Move to…" shares it too; bulk placement deliberately does not.
+  const place = svc.slice(svc.indexOf("export async function placeItems"));
+  assert.match(place, /ordered\.length === 1 && sectionId/,
+    "a single-item placement does not share the primitive");
 });
 
 // ---------------------------------------------------------------------------
@@ -255,13 +284,19 @@ for (const picker of [
 // ---------------------------------------------------------------------------
 // NO DRAG, AND NO FILE MANAGER
 // ---------------------------------------------------------------------------
-test("this phase adds NO drag-and-drop", () => {
+test("drag is added WITHOUT removing the way that already worked", () => {
+  // The previous phase asserted the absence of dnd-kit here. That was a phase
+  // boundary, not a principle, and this phase crosses it deliberately. What
+  // remains a principle is that drag is the fast path and not the only one:
+  // the step controls stay, and they are what a small screen and a keyboard
+  // still rely on.
   const view = bodyOf("src/components/library/library-structure-view.tsx");
-  for (const token of ["dnd-kit", "useSortable", "DndContext", "draggable", "onDragEnd"]) {
-    assert.ok(!view.includes(token), `the structured view pulls in ${token}`);
-  }
-  assert.match(view, /aria-label="Move up"/);
-  assert.match(view, /aria-label="Move down"/);
+  assert.match(view, /DndContext/, "the structured view has no drag context");
+  assert.match(view, /aria-label=\{`Move \$\{label\} up`\}/,
+    "Move up is gone, or no longer says what it moves");
+  assert.match(view, /aria-label=\{`Move \$\{label\} down`\}/,
+    "Move down is gone, or no longer says what it moves");
+  assert.match(view, /onMove \?/, "Move… is gone");
 });
 
 test("a long container expands IN PLACE rather than becoming its own screen", () => {

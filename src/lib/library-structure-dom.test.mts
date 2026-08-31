@@ -1,6 +1,7 @@
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { JSDOM } from "jsdom";
+import { readFileSync } from "node:fs";
 
 // THE STRUCTURED LIBRARY, ACTUALLY MOUNTED.
 //
@@ -41,6 +42,7 @@ const looseOrdered = () => [...LOOSE].sort((a, b) => a.sortOrder - b.sortOrder |
 const resetLoose = () => LOOSE.forEach((r, i) => { r.sortOrder = i; });
 
 let hasStructure = true;
+let refuseOrder = false;
 const orderCalls: Array<Record<string, unknown>> = [];
 const listCalls: string[] = [];
 const renameCalls: Array<Record<string, unknown>> = [];
@@ -88,6 +90,11 @@ function fakeFetch(url: string, init?: { method?: string; body?: string }) {
   if (u.pathname === "/api/library/order") {
     const body = JSON.parse(init?.body ?? "{}") as { kind: string; id: string; direction: "up" | "down" };
     orderCalls.push(body);
+    if (refuseOrder) {
+      return Promise.resolve({ ok: false, status: 400,
+        json: async () => ({ error: "move_failed", message: "Could not move that." }),
+      } as unknown as Response);
+    }
     // A REAL SWAP, the way the server does it: against the WHOLE container,
     // resolved from the id alone. Without this the test could not tell a
     // preserved depth from a preserved-but-wrong list.
@@ -149,7 +156,11 @@ async function mount(props: Record<string, unknown> = {}) {
 
 const textOf = (host: Element) => host.textContent ?? "";
 const buttons = (host: Element, label: string) =>
-  [...host.querySelectorAll("button")].filter((b) => b.getAttribute("aria-label") === label);
+  // The label now names the thing being moved ("Move Ridgeview down"), which is
+  // the point of it — so these match the ACTION, not one fixed string.
+  [...host.querySelectorAll("button")].filter((b) =>
+    new RegExp(`^${label.split(" ")[0]}\\b.*\\b${label.split(" ").slice(-1)[0]}$`)
+      .test(b.getAttribute("aria-label") ?? ""));
 const byText = (host: Element, re: RegExp) =>
   [...host.querySelectorAll("button")].find((b) => re.test(b.textContent ?? ""));
 /** The heading chevrons ONLY. The `…` menu button also carries aria-expanded —
@@ -248,7 +259,7 @@ test("MOVE DOWN on the last visible row sends an intent, not the loaded page", a
   const rows = [...host.querySelectorAll("li")];
   const lastVisible = rows.find((r) => (r.textContent ?? "").includes("Loose 06"))!;
   const down = [...lastVisible.querySelectorAll("button")]
-    .find((b) => b.getAttribute("aria-label") === "Move down")!;
+    .find((b) => /^Move .* down$/.test(b.getAttribute("aria-label") ?? ""))!;
   assert.ok(down, "the last visible row has no Move down");
   assert.ok(!down.hasAttribute("disabled"),
     "Move down is disabled on the last LOADED row, so the rest of the container is unreachable");
@@ -267,8 +278,10 @@ test("the FIRST row of a container cannot move up, and the LAST cannot move down
   await expandAll(host);
   const grouped = [...host.querySelectorAll("li")]
     .filter((r) => /Grouped (One|Two)/.test(r.textContent ?? ""));
-  const up = grouped[0].querySelector('button[aria-label="Move up"]')!;
-  const down = grouped[1].querySelector('button[aria-label="Move down"]')!;
+  const up = [...grouped[0].querySelectorAll("button")]
+    .find((b) => /^Move .* up$/.test(b.getAttribute("aria-label") ?? ""))!;
+  const down = [...grouped[1].querySelectorAll("button")]
+    .find((b) => /^Move .* down$/.test(b.getAttribute("aria-label") ?? ""))!;
   assert.ok(up.hasAttribute("disabled"), "the first row offers a move that cannot happen");
   assert.ok(down.hasAttribute("disabled"), "the last row of a complete container offers a move down");
 });
@@ -670,7 +683,11 @@ const looseRows = (host: Element) =>
 const moveRow = async (host: Element, title: string, dir: "Move up" | "Move down") => {
   const row = [...host.querySelectorAll("li")].find((r) => (r.textContent ?? "").includes(title));
   assert.ok(row, `no row for ${title}`);
-  const b = [...row!.querySelectorAll("button")].find((x) => x.getAttribute("aria-label") === dir);
+  // "Move up" / "Move down" now name their row — "Move Loose 09 down" — so the
+  // match is on the action, with the row's own name in the middle.
+  const verb = dir === "Move up" ? "up" : "down";
+  const b = [...row!.querySelectorAll("button")]
+    .find((x) => new RegExp(`^Move .* ${verb}$`).test(x.getAttribute("aria-label") ?? ""));
   assert.ok(b, `${title} has no ${dir}`);
   assert.ok(!b!.hasAttribute("disabled"), `${dir} is disabled on ${title}`);
   await click(b!);
@@ -741,4 +758,115 @@ test("restoring depth copes with a container that SHRANK", async () => {
   await moveRow(host, "Loose 20", "Move down");
   assert.equal(looseRows(host).length, 40, "a fully expanded container lost rows after a move");
   assert.equal(byText(host, /Show more/), undefined, "Show more came back on a fully expanded container");
+});
+
+// ---------------------------------------------------------------------------
+// DIRECT MANIPULATION — where the handles are, and where they are NOT
+//
+// Drag is the fast pointer path in the professional's own Library. Every other
+// surface that renders this same component is a place for FINDING things, and a
+// grip there would invite a rearrangement that surface cannot honour.
+// ---------------------------------------------------------------------------
+
+const handles = (host: Element) =>
+  [...host.querySelectorAll("button")]
+    .filter((b) => /^Drag to reorder /.test(b.getAttribute("aria-label") ?? ""));
+
+test("the Library gives every organized row and heading a visible grip", async () => {
+  const { host } = await mount({ reorder: true });
+  await expandAll(host);
+  const labels = handles(host).map((b) => b.getAttribute("aria-label"));
+  assert.ok(labels.some((l) => /^Drag to reorder section /.test(l ?? "")), "sections have no grip");
+  assert.ok(labels.some((l) => /^Drag to reorder group /.test(l ?? "")), "groups have no grip");
+  assert.ok(labels.some((l) => !/section|group/.test(l ?? "")), "rows have no grip");
+  // NAMED, not "drag handle" repeated down the page.
+  for (const l of labels) assert.ok((l ?? "").length > "Drag to reorder ".length, `unnamed grip: ${l}`);
+  // NOT HOVER-ONLY: nothing hides them behind a group-hover class.
+  for (const b of handles(host))
+    assert.ok(!/opacity-0|invisible|hidden/.test(b.className), `a grip is hidden until hover: ${b.className}`);
+});
+
+test("the grip is OUTSIDE the row's own button, so the markup stays valid", async () => {
+  const { host } = await mount({ reorder: true });
+  await expandAll(host);
+  for (const b of handles(host))
+    assert.equal(b.closest("button") , b, "a drag handle is nested inside another button");
+});
+
+test("UNORGANIZED gets no grip — it is newest-first, not a sequence", async () => {
+  const { host } = await mount({ reorder: true });
+  await expandAll(host);
+  const loose = [...host.querySelectorAll("section")]
+    .find((s) => /Everything else/.test(s.textContent ?? ""));
+  assert.ok(loose, "the unorganized remainder is not rendered");
+  assert.equal(handles(loose!).length, 0, "the unorganized remainder offers drag handles");
+});
+
+test("a PICKER offers no grips at all", async () => {
+  const { host } = await mount({ selectable: true, selected: [], onToggle: () => {} });
+  await expandAll(host);
+  assert.equal(handles(host).length, 0, "a picker lets people rearrange the Library");
+});
+
+test("SELECTION MODE hides the grips, without a second selection model", async () => {
+  // Organize and Create share one mode; `selectable` is it. The grips go for
+  // the same reason the step controls already did.
+  const { host } = await mount({ reorder: true, selectable: true, selected: [], onToggle: () => {} });
+  await expandAll(host);
+  assert.equal(handles(host).length, 0, "drag handles survive into selection mode");
+});
+
+test("a FILTERED view offers no grips", async () => {
+  // `reorder` is false under a search term, a label or Favorites, because the
+  // row above is not the row above in storage.
+  const { host } = await mount({ reorder: false });
+  await expandAll(host);
+  assert.equal(handles(host).length, 0, "a filtered view offers drag handles");
+});
+
+
+test("A REFUSED MOVE RECONCILES to what the server says, and says so", async () => {
+  // The important half is the second one. On failure the view does not try to
+  // un-compute anything it moved optimistically — it asks the server what is
+  // true and renders that. The optimistic move exists for the half-second the
+  // gesture is in flight, not as a source of truth.
+  const { host } = await mount({ reorder: true });
+  await expandAll(host);
+  const start = looseRows(host);
+  assert.ok(start.length > 1, "not enough rows to move one");
+
+  refuseOrder = true;
+  try {
+    await moveRow(host, start[0], "Move down");
+    assert.match(textOf(host), /Could not move that/, "a refused move said nothing");
+    // The rows are the server's, unchanged, because the server refused.
+    assert.deepEqual(looseRows(host), start,
+      "the view kept a move the server refused");
+  } finally { refuseOrder = false; }
+
+  // And the same gesture, accepted, does change it — otherwise the assertion
+  // above would pass on a view that simply never moves.
+  await moveRow(host, start[0], "Move down");
+  assert.notDeepEqual(looseRows(host), start, "an accepted move changed nothing");
+});
+
+test("DROP AND STEP RECONCILE THE SAME WAY", () => {
+  // A drop is not a different kind of write. Both capture the depth each
+  // container is showing and re-read at that depth, so a long section someone
+  // opened stays open — and both reload on FAILURE too, which is what makes
+  // the optimistic move safe to show.
+  const src = readFileSync(
+    new URL("../components/library/library-structure-view.tsx", import.meta.url), "utf8");
+  const drop = src.slice(src.indexOf("async function drop("), src.indexOf("function onDragStart"));
+  assert.match(drop, /depth\[keyOf\(c\.sectionId, c\.groupId\)\] = rowsFor\(c\)\.length/,
+    "a drop does not capture the depth each container was showing");
+  assert.match(drop, /await load\(depth\)/, "a drop does not re-read at that depth");
+  // THE RELOAD IS UNCONDITIONAL. Failure reconciles too — that is what makes an
+  // optimistic move safe to show, because the server always gets the last word.
+  // Asserted by counting: `res.ok` decides the NOTICE and nothing else, so a
+  // second mention of it could only be a guard around the reload.
+  assert.equal((drop.match(/res\.ok/g) ?? []).length, 1,
+    "something other than the notice is branching on whether the move succeeded");
+  assert.ok(!/setData\(|setExtra\(/.test(drop),
+    "a drop writes container state directly instead of re-reading it");
 });

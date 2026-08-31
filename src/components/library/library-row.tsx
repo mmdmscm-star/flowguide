@@ -21,6 +21,7 @@ export function LocationLine({ location }: { location: string }) {
 
 export function LibraryRow({
   item, selectable, selected, onToggle, onOpen, star, location, controls,
+  handle, innerRef, style, className,
 }: {
   item: LibrarySnapshot;
   selectable: boolean;
@@ -33,6 +34,13 @@ export function LibraryRow({
   /** Move up / Move down / Move…, when the stored sequence is what is on
    *  screen. Pickers never pass these: choosing is not filing. */
   controls?: React.ReactNode;
+  /** The drag grip, when this row can be dragged. Rendered OUTSIDE the row's own
+   *  button for the same reason `controls` is: a button inside a button is not
+   *  valid markup, and the row's button is what opens the item. */
+  handle?: React.ReactNode;
+  innerRef?: (node: HTMLElement | null) => void;
+  style?: React.CSSProperties;
+  className?: string;
 }) {
   const photo = heroPhoto(item);
 
@@ -73,7 +81,8 @@ export function LibraryRow({
   // with a branch inside its handler: selecting wraps a checkbox in a label,
   // reading is a button. Neither can fire in the other's mode.
   return (
-    <li className="flex items-center gap-1">
+    <li ref={innerRef} style={style} className={`flex items-center gap-1 ${className ?? ""}`}>
+      {handle}
       {selectable ? (
         <label className={`${shell} cursor-pointer`}>
           <input type="checkbox" checked={selected}

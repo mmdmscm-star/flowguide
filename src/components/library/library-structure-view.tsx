@@ -1,4 +1,13 @@
 "use client";
+import {
+  DndContext, DragOverlay, KeyboardSensor, PointerSensor, useSensor, useSensors,
+  type DragEndEvent, type DragOverEvent, type DragStartEvent,
+} from "@dnd-kit/core";
+import { SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import {
+  DragHandle, SortableHeading, SortableRow, libraryCollision,
+} from "@/components/library/library-dnd";
+import { containerKey, dragId, parseDragId, planDrop } from "@/lib/library-drag";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { LibrarySnapshot } from "@/lib/library-adapter";
 import type { LibraryVocabulary } from "@/lib/library-organization";
@@ -72,6 +81,15 @@ export function LibraryStructureView({
   // is a preference, and a preference needs somewhere to live and something to
   // manage it. Opening the Library the same quiet way every time is simpler and
   // costs one click when it is wrong.
+  /** A FAILED ACTION IS NOT A FAILED LIBRARY.
+   *
+   *  `error` blanks the whole view, which is right when the Library could not
+   *  be read and wrong for everything else: a refused move would hide every
+   *  section behind one sentence, and after a drag — where the reload that
+   *  follows clears `error` anyway — the professional would see the tree flicker
+   *  and never learn why nothing happened. So a move, a rename or a drop that
+   *  the server refuses says so ABOVE the tree, and the tree stays. */
+  const [notice, setNotice] = useState("");
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const toggle = (id: string) => setOpen((m) => ({ ...m, [id]: !m[id] }));
   const [busy, setBusy] = useState(false);
@@ -218,7 +236,10 @@ export function LibraryStructureView({
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ kind, id, direction }),
       });
-      if (!res.ok) { const d = await res.json().catch(() => ({})); setError(d.message || "Could not move that."); return; }
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        setNotice(d.message || "Could not move that.");
+      } else setNotice("");
       // HOW MUCH WAS ON SCREEN, so the reload can put it back. Captured after
       // the server confirms, because a failed move should change nothing.
       // `data` is non-null wherever a move control can be pressed, but the
@@ -228,8 +249,106 @@ export function LibraryStructureView({
         depth[keyOf(c.sectionId, c.groupId)] = rowsFor(c).length;
       }
       await load(depth);
-    } catch { setError("Could not move that."); }
+    } catch { setNotice("Could not move that."); }
     finally { setBusy(false); }
+  }
+
+  // =========================================================================
+  // DIRECT MANIPULATION
+  //
+  // Drag is the fast pointer path, not the only one: Move up / Move down /
+  // Move… stay exactly where they were, and on a small screen they remain the
+  // reliable way to do this. Both now go through the same server primitive, so
+  // neither can slip past the other's per-owner lock.
+  //
+  // NOTHING HERE DECIDES AN ORDER. The drop names one thing and one neighbour;
+  // the server reads the whole container to work out what that means. The rows
+  // on screen are a page of a container, and a page is not an order.
+  // =========================================================================
+  const dragEnabled = reorder && !selectable;
+  const sensors = useSensors(
+    // Desktop pointer and keyboard. No TouchSensor: Phase 1 does not ask a
+    // scrolling mobile Library to be a drag surface.
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+  const [dragging, setDragging] = useState<{ kind: string; id: string; label: string } | null>(null);
+  const [edge, setEdge] = useState<{ id: string; side: "before" | "after" } | null>(null);
+  /** The heading an item is hovering, so it can show it would receive the drop. */
+  const [overHeading, setOverHeading] = useState<string | null>(null);
+
+  /** Where each loaded item currently sits, and in what order. Built from the
+   *  containers the server sent, never from the DOM. */
+  const placeOf = new Map<string, { sectionId: string | null; groupId: string | null }>();
+  const rowOrder = new Map<string, string[]>();
+  if (data) {
+    for (const c of [...data.containers, data.unorganized]) {
+      const rows = rowsFor(c).map((r) => r.id);
+      rowOrder.set(containerKey(c.sectionId, c.groupId), rows);
+      for (const id of rows) placeOf.set(id, { sectionId: c.sectionId, groupId: c.groupId });
+    }
+  }
+  const nameOf = (kind: string, id: string): string => {
+    if (kind === "section") return data?.structure.sections.find((x) => x.id === id)?.name ?? "this section";
+    if (kind === "group") return data?.structure.groups.find((x) => x.id === id)?.name ?? "this group";
+    for (const c of data ? [...data.containers, data.unorganized] : [])
+      for (const r of rowsFor(c)) if (r.id === id) return r.title || "this item";
+    return "this item";
+  };
+
+  /** One drop, sent as an INTENT. Then the authoritative state is re-read at the
+   *  depth it was showing, exactly as the fallback controls already do — a
+   *  successful drag must not collapse a long section anyone had opened. */
+  async function drop(payload: Record<string, unknown>) {
+    setBusy(true);
+    try {
+      const res = await fetch("/api/library/order", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      setNotice(!res.ok
+        ? ((await res.json().catch(() => ({}))) as { message?: string }).message || "Could not move that."
+        : "");
+      // RELOAD EITHER WAY. On failure this is the reconciliation: the server is
+      // asked what is true rather than the optimistic move being un-computed.
+      const depth: Record<string, number> = {};
+      for (const c of data ? [...data.containers, data.unorganized] : [])
+        depth[keyOf(c.sectionId, c.groupId)] = rowsFor(c).length;
+      await load(depth);
+    } catch {
+      setNotice("Could not move that.");
+    } finally { setBusy(false); }
+  }
+
+  function onDragStart(e: DragStartEvent) {
+    const a = parseDragId(e.active.id);
+    if (a) setDragging({ ...a, label: nameOf(a.kind, a.id) });
+  }
+  function onDragOver(e: DragOverEvent) {
+    const a = parseDragId(e.active.id), o = e.over ? parseDragId(e.over.id) : null;
+    setOverHeading(a?.kind === "item" && o && o.kind !== "item" ? String(e.over!.id) : null);
+    if (!a || !o || o.kind !== a.kind || a.id === o.id) { setEdge(null); return; }
+    // Only a row gets a line; a heading gets a ring instead.
+    if (a.kind !== "item") { setEdge(null); return; }
+    const ap = placeOf.get(a.id), op = placeOf.get(o.id);
+    const same = ap && op && ap.sectionId === op.sectionId && ap.groupId === op.groupId;
+    const rows = op ? rowOrder.get(containerKey(op.sectionId, op.groupId)) ?? [] : [];
+    const side = same && rows.indexOf(a.id) < rows.indexOf(o.id) ? "after" : "before";
+    setEdge({ id: o.id, side });
+  }
+  function onDragEnd(e: DragEndEvent) {
+    const active = e.active.id, over = e.over?.id ?? null;
+    setDragging(null); setEdge(null); setOverHeading(null);
+    // WHAT THE DROP MEANS is decided in one pure place, so every edge of it can
+    // be read and tested without pretending to be a pointer.
+    const plan = planDrop(active, over, {
+      placeOf, rowOrder,
+      sections: data?.structure.sections ?? [],
+      groups: data?.structure.groups ?? [],
+    });
+    if (!plan) return;
+    if (plan.kind === "refused") { setNotice(plan.message); return; }
+    void drop(plan.payload);
   }
 
   if (error) return <p className="text-sm text-red-700">{error}</p>;
@@ -246,27 +365,51 @@ export function LibraryStructureView({
     const rows = rowsFor(c);
     const st = stateFor(c);
     if (!rows.length) return null;
+    // UNORGANIZED IS NOT A SEQUENCE. It is newest-first by design, so it gets no
+    // handles and is not a drop destination — dragging into it would be asking
+    // for an order it does not have.
+    const sortable = dragEnabled && c.sectionId !== null;
+    const body = (
+      <ul className={`${indent} space-y-2`}>
+        {rows.map((s, i) => {
+          const controls = reorder && !selectable ? (
+            // isLast IS NOT "the last row loaded". A paged container has
+            // more below the fold, and disabling Move down there would put
+            // the rest of the section out of reach from the one row that
+            // needs to walk into it — the page boundary leaking into
+            // behaviour, which is the whole thing the server-side move
+            // exists to avoid.
+            <Controls busy={busy} isFirst={i === 0}
+              isLast={i === rows.length - 1 && !st.hasMore}
+              label={s.title || "this item"}
+              onUp={() => move("item", s.id, "up")} onDown={() => move("item", s.id, "down")}
+              onMove={onMove ? () => onMove(s.id) : undefined} />
+          ) : null;
+          const common = {
+            item: s, selectable, selected: selected.includes(s.id),
+            onToggle, onOpen, star: star(s), controls,
+          };
+          if (!sortable) return <LibraryRow key={s.id} {...common} />;
+          return (
+            <SortableRow key={s.id} id={dragId("item", s.id)} disabled={busy}
+              edge={edge?.id === s.id ? edge.side : null}>
+              {(b) => (
+                <LibraryRow {...common}
+                  innerRef={b.innerRef} style={b.style} className={b.className}
+                  handle={<DragHandle label={`Drag to reorder ${s.title || "this item"}`}
+                    attributes={b.attributes} listeners={b.listeners} disabled={busy} />} />
+              )}
+            </SortableRow>
+          );
+        })}
+      </ul>
+    );
     return (
       <>
-        <ul className={`${indent} space-y-2`}>
-          {rows.map((s, i) => (
-            <LibraryRow key={s.id} item={s} selectable={selectable}
-              selected={selected.includes(s.id)} onToggle={onToggle} onOpen={onOpen}
-              star={star(s)}
-              controls={reorder && !selectable ? (
-                // isLast IS NOT "the last row loaded". A paged container has
-                // more below the fold, and disabling Move down there would put
-                // the rest of the section out of reach from the one row that
-                // needs to walk into it — the page boundary leaking into
-                // behaviour, which is the whole thing the server-side move
-                // exists to avoid.
-                <Controls busy={busy} isFirst={i === 0}
-                  isLast={i === rows.length - 1 && !st.hasMore}
-                  onUp={() => move("item", s.id, "up")} onDown={() => move("item", s.id, "down")}
-                  onMove={onMove ? () => onMove(s.id) : undefined} />
-              ) : null} />
-          ))}
-        </ul>
+        {sortable
+          ? <SortableContext items={rows.map((r) => dragId("item", r.id))}
+              strategy={verticalListSortingStrategy}>{body}</SortableContext>
+          : body}
         {st.hasMore && (
           <div className={`${indent} mt-2`}>
             <button type="button" onClick={() => showMore(c)} disabled={busy}
@@ -284,8 +427,13 @@ export function LibraryStructureView({
   const headingIds = [...sections.map((x) => x.id), ...groups.map((x) => x.id)];
   const anyOpen = headingIds.some((id) => open[id]);
 
-  return (
+  const tree = (
     <div className="space-y-5">
+      {notice && (
+        <p role="status" className="rounded-md bg-amber-50 px-2.5 py-1.5 text-xs text-amber-900">
+          {notice}
+        </p>
+      )}
       {/* ONE CONTROL, and only when there is more than one thing to act on.
           A single section already has its own chevron, so a global toggle
           beside it would be two ways to do the same thing. */}
@@ -308,38 +456,61 @@ export function LibraryStructureView({
         const shut = !open[sec.id];
         return (
           <section key={sec.id}>
+            <SortableHeading id={dragId("section", sec.id)} disabled={!dragEnabled || busy}
+              highlight={dragging?.kind === "item" && overHeading === dragId("section", sec.id)}>
+              {(h) => (
             <Header
               level="section" name={sec.name} count={total} collapsed={!!shut}
               onCollapse={() => toggle(sec.id)}
               onRename={reorder ? (n) => rename("section", sec.id, n) : undefined}
               busy={busy}
+              handle={dragEnabled ? (
+                <DragHandle label={`Drag to reorder section ${sec.name}`}
+                  attributes={h.attributes} listeners={h.listeners} disabled={busy} />
+              ) : null}
               controls={reorder ? (
                 <Controls busy={busy} isFirst={si === 0} isLast={si === sections.length - 1}
+                  label={`section ${sec.name}`}
                   onUp={() => move("section", sec.id, "up")} onDown={() => move("section", sec.id, "down")} />
               ) : null} />
+              )}
+            </SortableHeading>
             {!shut && (
               <div className="mt-2 space-y-3">
                 {/* Organized first, remainder last — the same rule as the page
                     itself: groups in order, then whatever sits loose in the
                     section. */}
+                <SortableContext items={mine.map((g) => dragId("group", g.id))}
+                  strategy={verticalListSortingStrategy}>
                 {mine.map((g, gi) => {
                   const c = container(sec.id, g.id);
                   const gshut = !open[g.id];
                   return (
                     <div key={g.id} className="pl-3 border-l border-border">
+                      <SortableHeading id={dragId("group", g.id)} disabled={!dragEnabled || busy}
+                        highlight={dragging?.kind === "item" && overHeading === dragId("group", g.id)}>
+                        {(h) => (
                       <Header
                         level="group" name={g.name} count={c?.total ?? 0} collapsed={!!gshut}
                         onCollapse={() => toggle(g.id)}
                         onRename={reorder ? (n) => rename("group", g.id, n) : undefined}
                         busy={busy}
+                        handle={dragEnabled ? (
+                          <DragHandle label={`Drag to reorder group ${g.name}`}
+                            attributes={h.attributes} listeners={h.listeners} disabled={busy} />
+                        ) : null}
                         controls={reorder ? (
                           <Controls busy={busy} isFirst={gi === 0} isLast={gi === mine.length - 1}
+                            label={`group ${g.name}`}
                             onUp={() => move("group", g.id, "up")} onDown={() => move("group", g.id, "down")} />
                         ) : null} />
+                        )}
+                      </SortableHeading>
                       {!gshut && <div className="mt-2">{itemList(c, "")}</div>}
                     </div>
                   );
                 })}
+                </SortableContext>
                 {itemList(loose, "")}
               </div>
             )}
@@ -360,13 +531,74 @@ export function LibraryStructureView({
       )}
     </div>
   );
+
+  // Without drag the tree is exactly what it always was — a picker, a filtered
+  // view and selection mode all land here.
+  if (!dragEnabled) return tree;
+
+  return (
+    <DndContext
+      sensors={sensors}
+      collisionDetection={libraryCollision}
+      onDragStart={onDragStart}
+      onDragOver={onDragOver}
+      onDragEnd={onDragEnd}
+      onDragCancel={() => { setDragging(null); setEdge(null); setOverHeading(null); }}
+      // SAY THE NAME, NOT THE ID. dnd-kit's default announcements read the
+      // sortable id, which here is a uuid — true, and useless to listen to.
+      accessibility={{
+        announcements: {
+          onDragStart: ({ active }) => {
+            const a = parseDragId(active.id);
+            return a ? `Picked up ${nameOf(a.kind, a.id)}.` : "Picked up.";
+          },
+          onDragOver: ({ active, over }) => {
+            const a = parseDragId(active.id), o = over ? parseDragId(over.id) : null;
+            if (!a || !o) return "";
+            if (a.kind === "item" && o.kind !== "item")
+              return `${nameOf(a.kind, a.id)} would move into ${nameOf(o.kind, o.id)}.`;
+            return `${nameOf(a.kind, a.id)} is over ${nameOf(o.kind, o.id)}.`;
+          },
+          onDragEnd: ({ active, over }) => {
+            const a = parseDragId(active.id), o = over ? parseDragId(over.id) : null;
+            if (!a) return "";
+            if (!o) return `${nameOf(a.kind, a.id)} was returned to where it started.`;
+            if (a.kind === "item" && o.kind !== "item")
+              return `${nameOf(a.kind, a.id)} moved into ${nameOf(o.kind, o.id)}.`;
+            return `${nameOf(a.kind, a.id)} was placed next to ${nameOf(o.kind, o.id)}.`;
+          },
+          onDragCancel: ({ active }) => {
+            const a = parseDragId(active.id);
+            return a ? `${nameOf(a.kind, a.id)} was left where it was.` : "Cancelled.";
+          },
+        },
+      }}
+    >
+      <SortableContext items={sections.map((x) => dragId("section", x.id))}
+        strategy={verticalListSortingStrategy}>
+        {tree}
+      </SortableContext>
+      {/* THE THING IN THE HAND. A lifted label that follows the pointer is what
+          makes this feel like moving an object rather than editing a list. */}
+      <DragOverlay dropAnimation={null}>
+        {dragging ? (
+          <div className="pointer-events-none rounded-md border border-accent bg-white px-2.5 py-1.5
+                          text-sm font-medium text-foreground shadow-lg">
+            {dragging.label}
+          </div>
+        ) : null}
+      </DragOverlay>
+    </DndContext>
+  );
 }
 
 function Header({
-  level, name, count, collapsed, onCollapse, controls, onRename, busy,
+  level, name, count, collapsed, onCollapse, controls, onRename, busy, handle,
 }: {
   level: "section" | "group"; name: string; count: number;
   collapsed: boolean; onCollapse: () => void; controls?: React.ReactNode;
+  /** The drag grip, rendered outside the heading's own buttons. */
+  handle?: React.ReactNode;
   /** Omitted wherever the structure is not the professional's to change —
    *  inside a picker, and while a filter is narrowing the list. */
   onRename?: (name: string) => Promise<boolean>;
@@ -411,6 +643,7 @@ function Header({
 
   return (
     <div className="group/head flex items-center gap-1.5">
+      {handle}
       <button type="button" onClick={onCollapse} aria-expanded={!collapsed}
         className="flex min-w-0 items-center gap-1.5 text-left">
         <span className={`text-muted transition-transform ${collapsed ? "" : "rotate-90"}`} aria-hidden="true">›</span>
@@ -500,18 +733,24 @@ function HeadingMenu({
  *  anything extra, and "Move…" hands the item to the Organize panel rather
  *  than inventing a second way to pick a destination. */
 function Controls({
-  busy, isFirst, isLast, onUp, onDown, onMove,
+  busy, isFirst, isLast, label, onUp, onDown, onMove,
 }: {
   busy: boolean; isFirst: boolean; isLast: boolean;
+  /** WHAT is being moved. "Move up" repeated down a list tells a screen-reader
+   *  user the shape of the controls and nothing about which row they are on. */
+  label: string;
   onUp: () => void; onDown: () => void; onMove?: () => void;
 }) {
   const b = "px-1 text-gray-400 hover:text-accent disabled:opacity-25 disabled:hover:text-gray-400";
   return (
     <span className="flex flex-none items-center">
-      <button type="button" onClick={onUp} disabled={busy || isFirst} aria-label="Move up" className={b}>↑</button>
-      <button type="button" onClick={onDown} disabled={busy || isLast} aria-label="Move down" className={b}>↓</button>
+      <button type="button" onClick={onUp} disabled={busy || isFirst}
+        aria-label={`Move ${label} up`} className={b}>↑</button>
+      <button type="button" onClick={onDown} disabled={busy || isLast}
+        aria-label={`Move ${label} down`} className={b}>↓</button>
       {onMove && (
         <button type="button" onClick={onMove} disabled={busy}
+          aria-label={`Move ${label} somewhere else`}
           className="ml-0.5 text-[11px] font-medium text-muted hover:text-accent disabled:opacity-40">
           Move…
         </button>
