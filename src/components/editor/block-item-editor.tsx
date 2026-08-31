@@ -156,7 +156,7 @@ export function BlockItemEditor({
   vocabulary?: { labels: string[] };
   /** Where this entry currently lives, e.g. "Communities › Santa Rosa".
    *  Shown, not edited: moving something is a placement, made against a
-   *  selection in Organize, not a text field that could disagree with it. */
+   *  selection in Select items, not a text field that could disagree with it. */
   locationLabel?: string;
 }) {
   const [title, setTitle] = useState(item.title || "");
@@ -331,13 +331,16 @@ export function BlockItemEditor({
               {/* WHERE IT LIVES, SHOWN RATHER THAN TYPED. A free-text field
                   here could name a section that does not exist, or disagree
                   with the one the item is actually in. Moving something is a
-                  placement — chosen from what exists, or created inline while
-                  filing — so it belongs to Organize, not to a text box in an
-                  editor that is otherwise about content. */}
+                  placement — dragged to where it goes, or chosen from what
+                  exists — so it belongs to the Library, not to a text box in an
+                  editor that is otherwise about content.
+                  This used to say "use Organize", which now names a mode that
+                  hides the drag handles. It points at the two things that
+                  actually move an item instead. */}
               <p className="mt-3 text-xs text-muted">
                 {locationLabel
-                  ? <>In <span className="font-medium text-foreground">{locationLabel}</span>. Use Organize to move it.</>
-                  : <>Not in a section. Use Organize to put it in one.</>}
+                  ? <>In <span className="font-medium text-foreground">{locationLabel}</span>. Drag it in your Library to move it, or use Move… on its row.</>
+                  : <>Not in a section. Drag it into one, or use Move… on its row.</>}
               </p>
 
               <label className="mt-3 block text-xs text-muted">Labels</label>

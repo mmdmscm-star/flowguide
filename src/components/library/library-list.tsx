@@ -53,7 +53,7 @@ export function LibraryList({
    *  filter chips can be drawn from the professional's own words. */
   onVocabulary?: (v: LibraryVocabulary) => void;
   /** The sections and groups in use, reported from the first page so the
-   *  Organize panel can offer real destinations without another round trip. */
+   *  Select items panel can offer real destinations without another round trip. */
   onStructure?: (s: { sections: SectionRow[]; groups: GroupRow[] }) => void;
   /** Star straight from the row. Omitted where a star would be noise — inside a
    *  picker the professional is choosing, not filing. */

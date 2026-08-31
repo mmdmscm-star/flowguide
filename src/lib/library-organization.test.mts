@@ -213,23 +213,29 @@ test("the vocabulary query actually reads is_favorite", () => {
 // So a professional looking for how to organize their Library found Favorites,
 // which is on every row, and reasonably concluded that was the whole release.
 // ---------------------------------------------------------------------------
-test("the Library offers an explicit Organize entry point, beside Create", () => {
+test("the Library offers an explicit SELECT ITEMS entry point, beside Create", () => {
   const ws = bodyOf("src/components/library/library-workspace.tsx");
   const header = ws.slice(ws.indexOf("Import with AI"), ws.indexOf("{notice &&"));
   assert.match(header, />\s*Create a FlowGuide\s*</, "the create entry point is gone");
-  assert.match(header, />\s*Organize\s*</,
-    "organizing is only reachable through a button named after the other destination");
-  assert.match(header, /setOrganizing\(true\); setSelecting\(true\)/, "Organize does not open the organizing intent");
+  // RENAMED, because the Library itself became draggable. "Organize" led to
+  // the one mode where the drag handles are hidden, so it read as "to organize
+  // your Library, do not press Organize". The mode is unchanged; its name was.
+  assert.match(header, />\s*Select items\s*</,
+    "multi-selection is only reachable through a button named after something else");
+  assert.ok(!/>\s*Organize\s*</.test(header),
+    "the old label is still on a button, beside the Library that now drags");
+  assert.match(header, /setOrganizing\(true\); setSelecting\(true\)/,
+    "Select items does not open the bulk-action intent");
   assert.match(header, /setOrganizing\(false\); setSelecting\(true\)/, "Create no longer opens with the create intent");
   assert.match(ws, /hasAny === true && \(/, "the entry points are offered over an empty Library");
 });
 
 // ---------------------------------------------------------------------------
-// ARRIVING THROUGH ORGANIZE MUST BE AN ORGANIZE EXPERIENCE.
+// ARRIVING THROUGH SELECT ITEMS MUST BE A SELECTION EXPERIENCE.
 //
 // Selection state is shared underneath, and that is an implementation detail.
-// Showing a dimmed "Create FlowGuide" and a disabled "Organize" beside it —
-// after clicking Organize — is the machinery leaking into the room: it says
+// Showing a dimmed "Create FlowGuide" and a disabled "Select items" beside it —
+// after clicking Select items — is the machinery leaking into the room: it says
 // nothing about what to do next and quite a lot about how the code is arranged.
 // ---------------------------------------------------------------------------
 const organizePanel = () => {
@@ -241,14 +247,21 @@ const createPanel = () => {
   return ws.slice(ws.indexOf("{selecting && !organizing && ("), ws.indexOf("{importing && ("));
 };
 
-test("ORGANIZE MODE shows no Create action, and no second Organize button", () => {
+test("SELECT ITEMS MODE shows no Create action, and no second entry button", () => {
   const panel = organizePanel();
   assert.ok(!/Create FlowGuide/.test(panel),
     "a dimmed Create FlowGuide is still offered inside the organizing experience");
   assert.ok(!/setOrganizing\(\(o\) => !o\)/.test(panel),
-    "the disabled Organize toggle is still there, beneath the button that opened it");
-  assert.match(panel, /Organize your Library/, "the mode does not name itself");
-  assert.match(panel, /Select the things you want to organize/, "the mode does not say what to do first");
+    "the disabled toggle is still there, beneath the button that opened it");
+  assert.match(panel, /Select items/, "the mode does not name itself");
+  assert.match(panel, /Choose several Library items to organize them together/,
+    "the mode describes organizing the Library rather than choosing several things");
+  // The boundary that was always in this sentence has to survive the rewrite.
+  // Compared with whitespace collapsed, because JSX wraps prose and a reflow is
+  // not a change of meaning.
+  assert.match(panel.replace(/\s+/g, " "),
+    /These changes only affect your Library — nothing is copied into a FlowGuide or seen by a client/,
+    "the panel stopped saying that filing never reaches a client");
 });
 
 test("ZERO SELECTED says so, and offers nothing that cannot work", () => {
@@ -311,7 +324,7 @@ test("THE RESULT IS VISIBLE — a row shows what it now carries", () => {
 test("THE CREATE PATH keeps its own intent, and its own words", () => {
   const panel = createPanel();
   assert.match(panel, /Start a FlowGuide/, "the create experience does not name itself");
-  assert.ok(!/Organize your Library|library-categories|library-labels/.test(panel),
+  assert.ok(!/Choose several Library items|library-categories|library-labels/.test(panel),
     "organizing controls leaked into the create experience");
   assert.match(panel, /createFromLibrary\(chosen\)/, "creating from the selection is gone");
   assert.match(panel, /disabled=\{busy \|\| chosen\.length === 0\}/,

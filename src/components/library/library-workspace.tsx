@@ -310,22 +310,21 @@ export default function LibraryWorkspace() {
                 >
                   Create a FlowGuide
                 </button>
-                {/* THE OTHER DOOR, SAID OUT LOUD.
-                    Selection has been neutral since Phase 2 — pick items, then
-                    decide — but the only way IN was a button that named one of
-                    the two destinations. So a professional looking for how to
-                    organize their Library found Favorites, which is on every
-                    row, and concluded that was the whole release. Everything
-                    else was behind "Create a FlowGuide", which is the last
-                    place anyone would look for it.
-                    The mode is the same one; only the intent it opens with
-                    differs, so nothing here is a second organizing system. */}
+                {/* THE OTHER DOOR, AND IT SAYS WHAT IT OPENS.
+                    This was called "Organize", which stopped being true the
+                    moment the Library itself became draggable: the fastest way
+                    to organize is now to drag something, and this button leads
+                    to a mode where the handles are deliberately gone. So it
+                    read as "to organize your Library, do not press Organize".
+                    What it actually opens is multi-selection — pick several
+                    things, then act on them together — so that is what it is
+                    called. The mode is unchanged; only its name was wrong. */}
                 <button
                   onClick={() => { setNotice(""); setChosen([]); setOrganizing(true); setSelecting(true); }}
                   className="px-3 py-2 rounded-lg border border-border bg-white text-sm font-medium
                              text-foreground hover:border-accent hover:text-accent"
                 >
-                  Organize
+                  Select items
                 </button>
               </>
             )}
@@ -343,16 +342,16 @@ export default function LibraryWorkspace() {
         {/* TWO ENTRY POINTS, TWO EXPERIENCES.
             Selection state is shared underneath — one mode, internally — but a
             professional should never have to understand that. Arriving through
-            Organize and being shown a dimmed "Create FlowGuide" and a disabled
-            "Organize" beside it is the machinery leaking into the room: it says
+            Select items and being shown a dimmed "Create FlowGuide" and a disabled
+            "Select items" beside it is the machinery leaking into the room: it says
             nothing about what to do next and quite a lot about how the code is
             arranged. Each intent now shows only its own action. */}
         {selecting && organizing && (
           <div className="mb-4 rounded-xl border border-accent/40 bg-accent/5 p-3">
-            <p className="text-sm font-medium text-foreground">Organize your Library</p>
+            <p className="text-sm font-medium text-foreground">Select items</p>
             <p className="mt-1 text-sm text-muted">
-              Select the things you want to organize. This is only for finding them
-              again — none of it is copied into a FlowGuide or seen by a client.
+              Choose several Library items to organize them together. These changes only
+              affect your Library — nothing is copied into a FlowGuide or seen by a client.
             </p>
 
             <div className="mt-3 flex items-center gap-2">
@@ -516,7 +515,7 @@ export default function LibraryWorkspace() {
             </p>
             {/* CANCEL IS CORRECT HERE, and stays. Nothing is written until
                 Create FlowGuide: the selection is a staged choice, so there is
-                something real to abandon. The Organize panel says Done for the
+                something real to abandon. The Select items panel says Done for the
                 opposite reason — its writes have already happened. */}
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <span className={`text-sm font-medium ${chosen.length ? "text-foreground" : "text-muted"}`}>
@@ -642,7 +641,7 @@ export default function LibraryWorkspace() {
               onToggleFavorite={selecting ? undefined : toggleFavorite}
               onMove={(id) => {
                 // The same mechanism, reached from a row: hand this one item to
-                // the Organize panel rather than growing a second way to pick a
+                // the Select items panel rather than growing a second way to pick a
                 // destination.
                 setNotice(""); setChosen([id]); setOrganizing(true); setSelecting(true);
                 window.scrollTo({ top: 0, behavior: "smooth" });

@@ -60,7 +60,7 @@ export function LibraryStructureView({
   onToggle?: (id: string) => void;
   onOpen?: (s: LibrarySnapshot) => void;
   onToggleFavorite?: (id: string, next: boolean) => void;
-  /** "Move…" on a row — hands the item to the Organize panel rather than
+  /** "Move…" on a row — hands the item to the Select items panel rather than
    *  inventing a second way to choose a destination. */
   onMove?: (id: string) => void;
   /** Move up / Move down. Never in a picker: choosing is not filing. */
@@ -730,7 +730,7 @@ function HeadingMenu({
  *  No drag handle. Dragging is not the requirement — easy movement is, and on a
  *  phone inside a scrolling list a drag is the least reliable way to get it.
  *  Two buttons work with a mouse, a keyboard and a screen reader without
- *  anything extra, and "Move…" hands the item to the Organize panel rather
+ *  anything extra, and "Move…" hands the item to the Select items panel rather
  *  than inventing a second way to pick a destination. */
 function Controls({
   busy, isFirst, isLast, label, onUp, onDown, onMove,
