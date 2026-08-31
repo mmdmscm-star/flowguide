@@ -5,10 +5,12 @@ import { parseClaims } from "./claim-parser.ts";
 import { reconcile } from "./reconcile.ts";
 import { enforceItem, sourceGrantsPrivacy, contractEnforcementEnabled } from "./enforce.ts";
 
-const run = (src: string, item: Record<string, unknown>, privacyGranted = false) => {
+// `privateSource` is the TEXT the record marks private, not a flag. Authority
+// is now content: a note stands only where that text actually supports it.
+const run = (src: string, item: Record<string, unknown>, privateSource = "") => {
   const p = parseClaims(src);
   const r = reconcile(p, item);
-  return { ...enforceItem(item, r.resolutions, p.claims, { privacyGranted }), rec: r };
+  return { ...enforceItem(item, r.resolutions, p.claims, { privateSource }), rec: r };
 };
 
 test("enforcement is OFF unless explicitly enabled", () => {
@@ -54,11 +56,35 @@ test("the privacy rule clears a note the source never authorised", () => {
   assert.ok(applied.some((a) => a.action.includes("no source authority")));
 });
 
-test("a note IS kept when the source grants privacy", () => {
+test("a note IS kept when the private source actually says it", () => {
   assert.equal(sourceGrantsPrivacy("Private note: do not share with the family"), true);
   assert.equal(sourceGrantsPrivacy("Type: AL, MC\nCapacity: 58"), false);
-  const { item } = run("Type: AL", { notes: "the director is slow to reply", details: [] }, true);
+  const { item } = run("Type: AL", { notes: "the director is slow to reply", details: [] },
+    "Private note: the director is slow to reply");
   assert.equal(item.notes, "the director is slow to reply");
+});
+
+test("AUTHORITY DOES NOT BLEED BETWEEN FIELDS OF ONE RECORD", () => {
+  // The row holds a genuinely private field AND a client-facing one. A
+  // per-record flag would have kept both; only what the private text supports
+  // may stand.
+  const PRIVATE = "INTERNAL ONLY — Luis can hold the November slot without a deposit";
+  const kept = run("Type: AL", { notes: PRIVATE, details: [] }, PRIVATE);
+  assert.equal(kept.item.notes, PRIVATE, "the genuinely private field was stripped");
+
+  const bled = run("Type: AL",
+    { notes: "Make sure the client understands which finish materials are excluded", details: [] },
+    PRIVATE);
+  assert.equal(bled.item.notes, "",
+    "a client-facing field was hidden on the strength of a marker in a different field");
+  assert.equal(bled.unresolvedNotes.length, 1, "and it was not surfaced for a decision");
+});
+
+test("one directive does not authorise everything piled in beside it", () => {
+  const { item } = run("Type: AL",
+    { notes: "Private note: the director is retiring. Waitlist is 6 months and the fee is $4,200.", details: [] },
+    "Private note: the director is retiring");
+  assert.equal(item.notes, "", "the waitlist and the fee rode in on the director's coat-tails");
 });
 
 test("specialized destinations win — an email becomes a contact, not a detail", () => {

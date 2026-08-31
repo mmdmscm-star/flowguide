@@ -33,6 +33,7 @@ import type { Resolution } from "./reconcile.ts";
 import { canonicalLabel, canonicalValue, meaningPreserved, type ValueKind } from "./canonical.ts";
 import { locate } from "./placement.ts";
 import { probe } from "./fact-match.ts";
+import { factTokens, privateRegions } from "./notes-provenance.ts";
 
 export function contractEnforcementEnabled(): boolean {
   return process.env.FLOWGUIDE_ENFORCE_CONTRACT === "1";
@@ -93,13 +94,100 @@ const PRIVACY_LABEL = new RegExp(
 const PRIVACY_DIRECTIVE = /\b(do not share|don't share|not for the client|not for the family|for my reference|internal use only)\b/i;
 
 /**
- * Does THIS RECORD'S OWN TEXT carry explicit authority to treat content as
- * private? Callers must pass one record's span — a whole chunk would let one
- * record's marker speak for its neighbours.
+ * Does THIS TEXT carry an explicit declaration of privacy?
+ *
+ * Callers pass the narrowest span they can prove: one FIELD where the source is
+ * structured, one record otherwise. A whole chunk would let one record's marker
+ * speak for its neighbours; a whole record would let one field's marker speak
+ * for the others beside it.
  */
-export function sourceGrantsPrivacy(recordText: string): boolean {
-  const t = String(recordText ?? "");
+export function sourceGrantsPrivacy(text: string): boolean {
+  const t = String(text ?? "");
   return STANDALONE.test(t) || PRIVACY_LABEL.test(t) || PRIVACY_DIRECTIVE.test(t);
+}
+
+/** A column HEADING that announces privacy — the cell is the marker and
+ *  essentially nothing else.
+ *
+ *  Deliberately stricter than sourceGrantsPrivacy. A heading names what the
+ *  column is for; a value that merely opens with the marker is one record's
+ *  content. Reading `INTERNAL ONLY — Luis said…` as a heading would authorise
+ *  that column in EVERY row, which is the chunk-scope mistake wearing a
+ *  different hat. */
+const PRIVACY_HEADING =
+  /^[ \t"']*(private\s+notes?|internal\s+notes?|internal\s+only|internal\s+use\s+only|confidential(\s+notes?)?)[ \t]*:?[ \t"']*$/i;
+
+/** RFC4180 fields of one row. Small on purpose — the source layer already
+ *  tiled the file into records with quote state; this only needs the columns
+ *  inside one of them. */
+export function splitFields(row: string, delimiter: string): string[] {
+  const out: string[] = [];
+  let cur = "", quoted = false;
+  for (let i = 0; i < row.length; i++) {
+    const ch = row[i];
+    if (quoted) {
+      if (ch === '"' && row[i + 1] === '"') { cur += '"'; i++; continue; }
+      if (ch === '"') { quoted = false; continue; }
+      cur += ch; continue;
+    }
+    if (ch === '"') { quoted = true; continue; }
+    if (ch === delimiter) { out.push(cur); cur = ""; continue; }
+    if (ch === "\r") continue;
+    cur += ch;
+  }
+  out.push(cur);
+  return out;
+}
+
+/**
+ * THE PRIVATELY-AUTHORISED TEXT of one record — not a yes/no for the record.
+ *
+ * A row can hold an INTERNAL ONLY column AND a Client-Facing Notes column. A
+ * whole-record grant would let the first authorise the second, so a note the
+ * model misfiled out of the client-facing column would be hidden from the
+ * client on the strength of a marker that had nothing to do with it. Scope has
+ * to reach the field.
+ *
+ * Two ways a field earns authority, and both are declarations:
+ *   * its OWN value declares privacy — `INTERNAL ONLY — Luis said…`
+ *   * its COLUMN HEADING does — a field headed `INTERNAL ONLY` authorises its
+ *     value even when the value does not repeat the label. The heading speaks
+ *     for that column only, never for the row.
+ *
+ * Where the source is not delimited there are no fields to divide, so the
+ * record's own privately-marked LINES are used instead — the same regions the
+ * Library path derives. Returns "" when nothing is authorised.
+ */
+export function privateSourceOf(
+  recordText: string, opts: { headerRow?: string | null; delimiter?: string | null } = {},
+): string {
+  const row = String(recordText ?? "");
+  const delimiter = opts.delimiter || null;
+  if (delimiter) {
+    const cells = splitFields(row, delimiter);
+    const heads = opts.headerRow ? splitFields(String(opts.headerRow), delimiter) : [];
+    const kept: string[] = [];
+    for (let i = 0; i < cells.length; i++) {
+      const v = cells[i].trim();
+      if (!v) continue;
+      const headed = i < heads.length && PRIVACY_HEADING.test(heads[i].trim());
+      if (headed || sourceGrantsPrivacy(cells[i])) kept.push(v);
+    }
+    return kept.join("\n");
+  }
+  return privateRegions(row).join("\n");
+}
+
+/** Is every fact-bearing token of the note present in the authorised text?
+ *
+ *  The same question the Library path asks. One directive authorises what it
+ *  introduces, not everything the model chose to pile in beside it. */
+export function noteSupportedBy(note: string, privateSource: string): boolean {
+  const want = factTokens(String(note ?? ""));
+  if (!want.length) return true;
+  if (!String(privateSource ?? "").trim()) return false;
+  const have = new Set(factTokens(privateSource));
+  return want.every((t) => have.has(t));
 }
 
 type Item = Record<string, unknown>;
@@ -120,7 +208,7 @@ export interface Enforcement {
 
 /** Apply the contract to ONE item, given that item's resolutions. */
 export function enforceItem(
-  item: Item, resolutions: Resolution[], claims: Claim[], opts: { privacyGranted: boolean },
+  item: Item, resolutions: Resolution[], claims: Claim[], opts: { privateSource: string },
 ): Enforcement {
   const next: Item = { ...item };
   const applied: { claimId: string; action: string }[] = [];
@@ -305,11 +393,18 @@ export function enforceItem(
     return out;
   });
 
-  // THE PRIVACY RULE. Without source authority a note may not stand: the field
-  // is private, so anything left there is content the recipient will never see.
-  // The claims it held have already been placed by their own rung above, so
-  // clearing it removes a duplicate, not a fact.
-  if (!opts.privacyGranted && String(next.notes ?? "").trim()) {
+  // THE PRIVACY RULE. A note may only stand on the strength of source that is
+  // itself marked private — and only for what that source actually says.
+  //
+  // The check is CONTENT, not a flag. `privateSource` is the text of the fields
+  // (or lines) this record marks private, and every fact-bearing word of the
+  // note must appear in it. So a row holding both an INTERNAL ONLY column and a
+  // Client-Facing Notes column authorises the first and refuses the second,
+  // where a per-record boolean would have waved both through.
+  //
+  // The claims the note held have already been placed by their own rung above,
+  // so clearing it removes a duplicate, not a fact.
+  if (String(next.notes ?? "").trim() && !noteSupportedBy(String(next.notes), opts.privateSource)) {
     // SURFACED, NOT DELETED. The ice-cream import put 13 "Why it made the list"
     // paragraphs into notes — prose plainly written FOR the recipient, which a
     // private field hides. Removing it from notes is right; discarding it is
@@ -317,7 +412,7 @@ export function enforceItem(
     // item for the professional to place.
     unresolvedNotes.push({
       text: String(next.notes),
-      reason: "recipient-intended prose placed in a private field with no source authority",
+      reason: "recipient-intended prose placed in a private field with no source authority for it",
     });
     applied.push({ claimId: "-", action: "notes surfaced as unresolved — no source authority for privacy" });
     next.notes = "";

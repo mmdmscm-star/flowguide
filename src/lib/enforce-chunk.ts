@@ -11,7 +11,7 @@
 import { parseClaims } from "./claim-parser.ts";
 import { recordEnvelopes, attributeAll, bindByProvenance } from "./attribution.ts";
 import { reconcile } from "./reconcile.ts";
-import { enforceItem, sourceGrantsPrivacy, contractEnforcementEnabled } from "./enforce.ts";
+import { enforceItem, privateSourceOf, contractEnforcementEnabled } from "./enforce.ts";
 import { locate } from "./placement.ts";
 import { specializedValueKind, type Claim } from "./claim-parser.ts";
 import { buildReviewUnits, type ReviewFailure } from "./review-units.ts";
@@ -157,27 +157,42 @@ export function enforceChunkResult(opts: {
   t.attributionUnresolved = a.unattributedClaims.length + a.unattributedAmbiguous.length;
 
   const bound = env ? bindByProvenance(env, sourceText, items).bound : new Map<number, Record<string, unknown>>();
-  // THE CHUNK IS NOT THE RECORD — the same rule notes-provenance already
-  // applies on the Library path, now applied here.
+  // THE CHUNK IS NOT THE RECORD — AND THE RECORD IS NOT THE FIELD.
   //
-  // Privacy authority used to be read from the WHOLE chunk and handed to every
-  // record in it. On a real import that put an "INTERNAL ONLY" column beside a
-  // "Client-Facing Notes" column, one record's internal marker would have
-  // authorised its neighbour's client-facing prose into the private field — the
-  // exact silent hiding this contract exists to prevent, and the reason
-  // widening the marker pattern without this change first would have been a
-  // regression rather than a fix.
+  // Authority used to be read from the whole chunk and handed to every record
+  // in it, so one record's INTERNAL ONLY marker could authorise its neighbour's
+  // client-facing prose. Narrowing to the record fixed that and left a smaller
+  // version of the same hole: a single row can hold an INTERNAL ONLY column AND
+  // a Client-Facing Notes column, and a per-record answer lets the first speak
+  // for the second.
+  //
+  // So what is computed here is not a flag but the TEXT this record marks
+  // private — field by field where the source is delimited, using the column
+  // heading as well as the value, and line by line where it is not. enforceItem
+  // then asks whether the note is actually supported by it.
   //
   // The record's own text comes from its ENVELOPE, which is provenance rather
   // than a title search: seg-v4 already tiled the source into records, and
   // start/end are that tiling. When a record has no envelope there is no proof
-  // of what it owns, so authority is refused and the note is surfaced for a
+  // of what it owns, so nothing is authorised and the note is surfaced for a
   // decision — fail closed, exactly as before.
   const envByIndex = new Map((env ?? []).map((e) => [e.index, e]));
-  const grantsPrivacy = (rec: number): boolean => {
+  // The heading row is the first record the tiling produced. The delimiter is
+  // the declared one where the file supplied it, and is otherwise inferred from
+  // the heading itself — whichever candidate splits it into the most columns.
+  const headerRow = env && env.length ? sourceText.slice(env[0].start, env[0].end) : null;
+  const delimiter = delimiterHint
+    || (headerRow ? [",", "\t", ";", "|"]
+        .map((d) => ({ d, n: headerRow.split(d).length }))
+        .sort((a, b) => b.n - a.n)
+        .filter((x) => x.n >= 3)[0]?.d ?? null
+      : null);
+  const privateSourceFor = (rec: number): string => {
     const e = envByIndex.get(rec);
-    if (!e) return false;
-    return sourceGrantsPrivacy(sourceText.slice(e.start, e.end));
+    if (!e) return "";
+    // The heading is not a record with content of its own; it names columns.
+    if (env && env.length && e.index === env[0].index) return "";
+    return privateSourceOf(sourceText.slice(e.start, e.end), { headerRow, delimiter });
   };
   const replaced = new Map<Record<string, unknown>, Record<string, unknown>>();
 
@@ -185,7 +200,7 @@ export function enforceChunkResult(opts: {
     const item = bound.get(rec);
     if (!item) { t.attributionUnresolved += g.claims.length + g.ambiguous.length; continue; }
     const res = reconcile({ claims: g.claims, ambiguous: g.ambiguous, fragments: g.fragments }, item);
-    const e = enforceItem(item, res.resolutions, g.claims, { privacyGranted: grantsPrivacy(rec) });
+    const e = enforceItem(item, res.resolutions, g.claims, { privateSource: privateSourceFor(rec) });
     t.accepted += res.counts.accepted; t.repaired += res.counts.repaired;
     t.sourceUnresolved += res.counts.sourceUnresolved;
     t.stripped += e.stripped.length;

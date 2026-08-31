@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { sourceGrantsPrivacy } from "./enforce.ts";
+import { sourceGrantsPrivacy, privateSourceOf, noteSupportedBy, splitFields } from "./enforce.ts";
 import { recordEnvelopes } from "./attribution.ts";
 import { INTERNAL_ONLY_CSV as CSV } from "./__fixtures__/internal-only-import.ts";
 
@@ -99,6 +99,90 @@ test("the header row naming the column does not authorise the rows beneath it", 
     assert.equal(sourceGrantsPrivacy(CSV.slice(e.start, e.end)), false,
       `${n} was authorised by the column heading rather than its own content`);
   }
+});
+
+// ---------------------------------------------------------------------------
+// AND THE RECORD IS NOT THE FIELD
+//
+// Record scope fixed the neighbour problem and left a smaller version of it.
+// Redfern's row holds BOTH an INTERNAL ONLY column and a Client-Facing Notes
+// column ("Make sure the client understands which finish materials are outside
+// the quoted number."). If the model misfiles that client-facing sentence into
+// the private field, the internal marker sitting a few columns away must not
+// authorise hiding it.
+// ---------------------------------------------------------------------------
+const HEADER = CSV.split("\n")[0];
+
+test("the authorised text of a row is the PRIVATE FIELD, not the whole row", () => {
+  const priv = privateSourceOf(recordText("Redfern Renovation"), { headerRow: HEADER, delimiter: "," });
+  assert.match(priv, /INTERNAL ONLY — Luis said/, "the private column is not authorised");
+  assert.ok(!priv.includes("Make sure the client understands"),
+    "the client-facing column was authorised by its neighbour");
+  assert.ok(!priv.includes("Corte Madera"), "an ordinary column was authorised");
+});
+
+test("A MISROUTED CLIENT-FACING FIELD IS REJECTED, from the same row", () => {
+  const row = recordText("Redfern Renovation");
+  const priv = privateSourceOf(row, { headerRow: HEADER, delimiter: "," });
+  // The genuinely private one stands.
+  assert.equal(noteSupportedBy(
+    "INTERNAL ONLY — Luis said he can probably hold the November slot for one week without a deposit, but does not want that promised to the client yet.",
+    priv), true, "the record's own internal note was refused");
+  // Its neighbour does not.
+  assert.equal(noteSupportedBy(
+    "Make sure the client understands which finish materials are outside the quoted number.",
+    priv), false,
+    "a client-facing field was hidden because a DIFFERENT field in the same row was marked internal");
+});
+
+test("a column HEADING authorises its own column, and only that column", () => {
+  // The value need not repeat the label: a field headed INTERNAL ONLY is
+  // authorised by the heading alone.
+  const row = 'Acme Co,Someplace,Held the slot for a week,Tell the client about the allowance';
+  const head = 'Firm,City,INTERNAL ONLY,Client-Facing Notes';
+  const priv = privateSourceOf(row, { headerRow: head, delimiter: "," });
+  assert.equal(priv, "Held the slot for a week", `authorised: ${JSON.stringify(priv)}`);
+  assert.equal(noteSupportedBy("Held the slot for a week", priv), true);
+  assert.equal(noteSupportedBy("Tell the client about the allowance", priv), false,
+    "the heading authorised a column it does not head");
+});
+
+test("a VALUE that merely opens with the marker is not treated as a heading", () => {
+  // Otherwise `INTERNAL ONLY — Luis said…` sitting in row one would authorise
+  // that column in every row beneath it — chunk scope wearing a new hat.
+  const head = 'Firm,Notes,INTERNAL ONLY — Luis said he can hold the slot';
+  //                        ^ a first data ROW, mistaken for a heading
+  const row  = 'Acme Co,Tell the client about the allowance,Ordinary schedule detail';
+  const priv = privateSourceOf(row, { headerRow: head, delimiter: "," });
+  assert.ok(!priv.includes("Ordinary schedule detail"),
+    "a data value was read as a column heading and authorised that column in every row");
+  assert.ok(!priv.includes("Tell the client"), "a client-facing column was authorised");
+  assert.equal(priv, "", `nothing in this row is declared private, but got: ${JSON.stringify(priv)}`);
+});
+
+test("fields are split with quote state, so a comma inside a value is not a boundary", () => {
+  assert.deepEqual(splitFields('a,"b,c",d', ","), ["a", "b,c", "d"]);
+  assert.deepEqual(splitFields('a,"say ""hi""",d', ","), ["a", 'say "hi"', "d"]);
+});
+
+test("an undelimited source still uses its privately-marked LINES", () => {
+  // A directive's region deliberately runs across continuation lines until a
+  // blank line or a new labelled field — the Library path's existing rule, so a
+  // private note spanning two lines stays one note. The region therefore ends
+  // where the source says it ends, not at the first newline.
+  const prose = [
+    "Oak House",
+    "Capacity: 40",
+    "Private note: the director is retiring",
+    "and has not told the staff",
+    "",
+    "Tours daily",
+  ].join("\n");
+  const priv = privateSourceOf(prose, { headerRow: null, delimiter: null });
+  assert.match(priv, /the director is retiring/);
+  assert.match(priv, /has not told the staff/, "the note's own second line was dropped");
+  assert.ok(!priv.includes("Tours daily"), "an ordinary line beyond the region was authorised");
+  assert.ok(!priv.includes("Capacity"), "a line before the directive was authorised");
 });
 
 // ---------------------------------------------------------------------------

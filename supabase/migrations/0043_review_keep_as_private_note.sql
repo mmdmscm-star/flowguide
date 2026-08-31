@@ -53,7 +53,7 @@ set search_path = ''
 as $rru$
 declare
   v_run record; v_review jsonb; v_unit jsonb; v_failures jsonb; v_remaining int;
-  v_text text; v_title text; v_item uuid; v_matches int;
+  v_text text; v_item uuid; v_matches int;
 begin
   if p_status not in ('resolved', 'ignored', 'kept_private') then
     raise exception 'review: status must be resolved, ignored or kept_private (got %)', p_status;
@@ -126,31 +126,35 @@ begin
     if v_text is null or btrim(v_text) = '' then
       raise exception 'review: unit % has no text to keep', p_unit_id;
     end if;
-    v_title := v_unit->>'title';
-    if v_title is null or btrim(v_title) = '' then
-      raise exception 'review: unit % names no record to keep it on', p_unit_id;
+    -- IDENTITY IS THE ID, NOT THE NAME.
+    --
+    -- The unit already carries `itemIds`: finalize attaches it, and attaches it
+    -- only when the title resolves to exactly one item — so an ambiguous name
+    -- arrives here as no id rather than as a guess. Matching on title again
+    -- would rebuild that ambiguity after the pipeline had already settled it,
+    -- and two firms sharing a name would make an answerable question
+    -- unanswerable. The title stays display text; it is not the boundary.
+    if jsonb_typeof(v_unit->'itemIds') <> 'array' then
+      raise exception 'review: unit % carries no item to write to', p_unit_id;
     end if;
-    if v_run.packet_id is null then
-      raise exception 'review: run % has no packet to write a note on', p_run_id;
+    select count(*) into v_matches from jsonb_array_elements_text(v_unit->'itemIds');
+    if v_matches <> 1 then
+      raise exception 'review: unit % names % items — it must name exactly one', p_unit_id, v_matches;
     end if;
+    v_item := (v_unit->'itemIds'->>0)::uuid;
 
-    -- AMBIGUITY IS NOT RESOLVED BY PICKING ONE — the same rule the unit lookup
-    -- above follows. Two items sharing a title means we cannot know which one
-    -- the professional is looking at, and guessing writes private content onto
-    -- the wrong record.
+    -- OWNER-SCOPED, and scoped to THIS run's packet. The id came from our own
+    -- review JSON, but a stored id is still an input: an item belonging to
+    -- another packet — or another person — must not be writable through a
+    -- review unit, whatever the JSON says.
     select count(*) into v_matches
-      from public.items i join public.sections s on s.id = i.section_id
-     where s.packet_id = v_run.packet_id and i.title = v_title;
-    if v_matches = 0 then
-      raise exception 'review: no item titled % in this FlowGuide', v_title;
+      from public.items i
+      join public.sections s on s.id = i.section_id
+      join public.packets p on p.id = s.packet_id
+     where i.id = v_item and s.packet_id = v_run.packet_id and p.user_id = p_owner;
+    if v_matches <> 1 then
+      raise exception 'review: unit % points at an item that is not in this FlowGuide', p_unit_id;
     end if;
-    if v_matches > 1 then
-      raise exception 'review: % items titled % — cannot tell which to write to', v_matches, v_title;
-    end if;
-
-    select i.id into v_item
-      from public.items i join public.sections s on s.id = i.section_id
-     where s.packet_id = v_run.packet_id and i.title = v_title;
 
     -- APPEND, NEVER REPLACE. An existing private note is the professional's own
     -- writing and outranks anything arriving from an import.
@@ -170,7 +174,7 @@ begin
            end
      where id = v_item;
     if not found then
-      raise exception 'review: could not write the private note for %', v_title;
+      raise exception 'review: could not write the private note for unit %', p_unit_id;
     end if;
   end if;
 
