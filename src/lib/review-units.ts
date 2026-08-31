@@ -55,6 +55,27 @@ export interface ExceptionKind {
  *  discarding it deliberately. */
 export type ReviewDisposition = "kept_private" | "resolved" | "ignored";
 
+// WHICH KINDS MAY OFFER "KEEP AS PRIVATE NOTE", AND WHY.
+//
+// Exactly one question decides it: is the held material a PRIVATE-NOTE
+// PROPOSAL, so that filing it privately is one of the real answers?
+//
+//   privacy-rejected      yes — the model made it private without authority,
+//                         and "actually, it is private" is a real answer.
+//   unbound-private-note  yes — it IS a private note; only its provenance is
+//                         unproven.
+//   audience-undecided    yes — the source parked the audience, and private is
+//                         one of the two answers the professional can give.
+//   private-shown         yes — the source marks it private and no private copy
+//                         exists, so keeping one is the point.
+//
+//   cross-cell-detail          NO — a real fact with a neighbour's columns run
+//                              onto it. A placement problem, not a privacy one.
+//   unbound-recipient-content  NO — a bundle written for the client.
+//
+// The second group are placement and content-integrity decisions. Offering to
+// file them privately would hide material from the person it was written for,
+// on the button that reads like the careful choice.
 export const REVIEW_REQUIRED: Record<string, ExceptionKind> = {
   "privacy-rejected": {
     code: "privacy_rejected",
@@ -128,10 +149,14 @@ export const REVIEW_REQUIRED: Record<string, ExceptionKind> = {
   // different question, so it gets its own sentence rather than a borrowed one
   // that would have described it falsely.
   //
-  // The three existing dispositions all fit without change: keeping it moves the
-  // whole excerpt into creator-only notes where the real value can be recovered,
-  // and the other two settle it. Nothing is truncated or repaired on the
-  // professional's behalf.
+  // AND IT IS NOT A PRIVATE-NOTE DECISION EITHER, which an earlier version of
+  // this comment got wrong. The excerpt is a real fact with a neighbour's
+  // columns run onto the end of it — "$350" followed by another firm's address
+  // and availability. Offering to file that privately proposes hiding a price
+  // the client is supposed to see, in order to deal with text that should never
+  // have been attached to it. The two honest answers are the same as for held
+  // recipient content: the professional put the fact where it belongs, or it
+  // does not belong here. Nothing is truncated or repaired on their behalf.
   // A PRIVATE NOTE ON A PROPOSAL THAT COULD NOT BE PLACED IN THE SOURCE.
   //
   // Reuse of `privacy-rejected` was considered first and rejected, because its
@@ -158,6 +183,7 @@ export const REVIEW_REQUIRED: Record<string, ExceptionKind> = {
       "This detail ran past its own column in your file and picked up text from " +
       "elsewhere in the source, so FlowGuide did not show it to your client. " +
       "What should happen to it?",
+    dispositions: ["resolved", "ignored"],
   },
 };
 

@@ -1066,3 +1066,56 @@ test("held content survives until a disposition succeeds", () => {
   assert.ok(held && String(held.text).length > 100, "the held bundle is not readable");
   assert.equal((held as { status?: string }).status ?? "unresolved", "unresolved");
 });
+
+// ---------------------------------------------------------------------------
+// I. THE SAME PRINCIPLE, APPLIED TO THE OTHER MIXED BUNDLE
+// ---------------------------------------------------------------------------
+
+test("cross_cell_detail offers no private-note action either", () => {
+  const d = dispositionsFor(unit("cross-cell-detail"));
+  assert.deepEqual(d, ["resolved", "ignored"]);
+  assert.ok(!d.includes("kept_private"),
+    "a spilled detail offers to hide a client-facing price as a private note");
+});
+
+test("cross_cell_detail keeps the two actions that ARE honest for it", () => {
+  const d = dispositionsFor(unit("cross-cell-detail"));
+  assert.ok(d.includes("resolved"), "the professional cannot say they placed the fact");
+  assert.ok(d.includes("ignored"), "the professional cannot discard it deliberately");
+  // And its excerpt still carries the real fact, which is what makes
+  // "I added it where it belongs" a thing they can act on.
+  const spill = unitsFor("cross_cell_detail", "Assembly House")[0];
+  assert.ok(spill && String(spill.text).includes("$350"),
+    "the held excerpt no longer contains the fact the professional needs");
+});
+
+test("A STALE CLIENT'S kept_private IS REJECTED, for every restricted kind", () => {
+  // The decision itself, not a description of it.
+  for (const kind of ["cross-cell-detail", "unbound-recipient-content"])
+    assert.equal(dispositionsFor(unit(kind)).includes("kept_private"), false, kind);
+
+  // And the route asks the registry rather than naming kinds, which is what
+  // makes the line above true of cross_cell_detail without touching the route.
+  assert.ok(/dispositionsFor\(unit\)\.includes\("kept_private"\)/.test(routeSource),
+    "the route does not consult the registry");
+  for (const code of ["cross_cell_detail", "unbound_recipient_content", "privacy_rejected"])
+    assert.ok(!routeSource.includes(code),
+      `the route hardcodes ${code}; a future restricted kind would slip past it`);
+});
+
+test("REGISTRY AUDIT: only private-note decisions keep the private-note action", () => {
+  // Pinned as a list so adding a kind is a decision someone makes on purpose.
+  const privateNoteDecisions = ["privacy-rejected", "unbound-private-note",
+                                "audience-undecided", "private-shown"];
+  const placementDecisions = ["cross-cell-detail", "unbound-recipient-content"];
+  assert.deepEqual(
+    Object.keys(REVIEW_REQUIRED).sort(),
+    [...privateNoteDecisions, ...placementDecisions].sort(),
+    "a review kind was added or removed without classifying it");
+  for (const kind of privateNoteDecisions)
+    assert.ok(dispositionsFor(unit(kind)).includes("kept_private"),
+      `${kind} is a private-note decision and lost its private-note action`);
+  for (const kind of placementDecisions)
+    assert.ok(!dispositionsFor(unit(kind)).includes("kept_private"),
+      `${kind} is a placement decision and offers to file itself privately`);
+});
