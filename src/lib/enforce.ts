@@ -191,24 +191,62 @@ export function splitFields(row: string, delimiter: string): string[] {
  * record's own privately-marked LINES are used instead — the same regions the
  * Library path derives. Returns "" when nothing is authorised.
  */
+/*  A THIRD AUDIENCE STATE, BECAUSE THE SOURCE DECLARES ONE.
+ *
+ *  The event-planner file names a column `Planner Notes — Audience Not Yet
+ *  Decided`. That is not private and it is not client-facing; it is the
+ *  professional saying, in the file itself, that they have not decided. Reading
+ *  it as either one answers a question they explicitly left open — and until
+ *  now the answer was whichever field the MODEL happened to choose. The same
+ *  sentence became a private note on one venue and client-facing description
+ *  prose on another, from one import.
+ *
+ *  Structural, like the privacy heading and for the same reason: the heading
+ *  must name an AUDIENCE and say it is UNSETTLED. `Planner Notes — Audience Not
+ *  Yet Decided` qualifies; `Client-Facing Notes` names an audience and settles
+ *  it; `Private / Internal Notes` is handled by the privacy rule and mentions no
+ *  audience at all. No prose is scanned — only the column heading. */
+const AUDIENCE_WORD = new Set(["audience", "share", "shared", "sharing", "visibility", "recipient"]);
+const UNSETTLED_WORD = new Set(["undecided", "tbd", "unclear", "unknown", "undetermined", "pending"]);
+const SETTLED_WORD = new Set(["decided", "determined", "confirmed", "settled"]);
+
+export function headingDefersAudience(heading: string): boolean {
+  const words: string[] = String(heading ?? "").toLowerCase().match(/[a-z]+/g) ?? [];
+  if (!words.some((w) => AUDIENCE_WORD.has(w))) return false;
+  if (words.some((w) => UNSETTLED_WORD.has(w))) return true;
+  // "not yet decided", "not determined" — the negation has to reach the word.
+  const i = words.indexOf("not");
+  return i >= 0 && words.slice(i + 1, i + 4).some((w) => SETTLED_WORD.has(w));
+}
+
+/** What each audience state owns in ONE record, read from the column headings.
+ *
+ *  Undecided is checked FIRST: a heading that manages to say both is the more
+ *  conservative of the two, because an undecided item always asks rather than
+ *  silently hiding. */
+export function audienceSourceOf(
+  recordText: string, opts: { headerRow?: string | null; delimiter?: string | null } = {},
+): { private: string; undecided: string } {
+  const row = String(recordText ?? "");
+  const delimiter = opts.delimiter || null;
+  if (!delimiter) return { private: privateRegions(row).join("\n"), undecided: "" };
+  const cells = splitFields(row, delimiter);
+  const heads = opts.headerRow ? splitFields(String(opts.headerRow), delimiter) : [];
+  const priv: string[] = [], undec: string[] = [];
+  for (let i = 0; i < cells.length; i++) {
+    const v = cells[i].trim();
+    if (!v) continue;
+    const head = i < heads.length ? heads[i] : "";
+    if (head && headingDefersAudience(head)) { undec.push(v); continue; }
+    if ((head && headingGrantsPrivacy(head)) || sourceGrantsPrivacy(cells[i])) priv.push(v);
+  }
+  return { private: priv.join("\n"), undecided: undec.join("\n") };
+}
+
 export function privateSourceOf(
   recordText: string, opts: { headerRow?: string | null; delimiter?: string | null } = {},
 ): string {
-  const row = String(recordText ?? "");
-  const delimiter = opts.delimiter || null;
-  if (delimiter) {
-    const cells = splitFields(row, delimiter);
-    const heads = opts.headerRow ? splitFields(String(opts.headerRow), delimiter) : [];
-    const kept: string[] = [];
-    for (let i = 0; i < cells.length; i++) {
-      const v = cells[i].trim();
-      if (!v) continue;
-      const headed = i < heads.length && headingGrantsPrivacy(heads[i]);
-      if (headed || sourceGrantsPrivacy(cells[i])) kept.push(v);
-    }
-    return kept.join("\n");
-  }
-  return privateRegions(row).join("\n");
+  return audienceSourceOf(recordText, opts).private;
 }
 
 /** Is every fact-bearing token of the note present in the authorised text?
@@ -237,16 +275,23 @@ export interface Enforcement {
    *  rather than deleted. It is ordinary source prose the model made private;
    *  it needs a decision, not a bin. */
   unresolvedNotes: { text: string; reason: string }[];
+  /** Content taken OUT of a recipient-facing destination because the source
+   *  field it came from is not addressed to the recipient. `kept` is true when
+   *  the same content is already safely held in this item's private notes, in
+   *  which case removing the visible copy needs no question. */
+  audienceRemoved: { text: string; state: "private" | "undecided"; where: string; kept: boolean }[];
 }
 
 /** Apply the contract to ONE item, given that item's resolutions. */
 export function enforceItem(
-  item: Item, resolutions: Resolution[], claims: Claim[], opts: { privateSource: string },
+  item: Item, resolutions: Resolution[], claims: Claim[],
+  opts: { privateSource: string; undecidedSource?: string },
 ): Enforcement {
   const next: Item = { ...item };
   const applied: { claimId: string; action: string }[] = [];
   const stripped: Enforcement["stripped"] = [];
   const unresolvedNotes: Enforcement["unresolvedNotes"] = [];
+  const audienceRemoved: Enforcement["audienceRemoved"] = [];
   const byId = new Map(claims.map((c) => [c.id, c]));
 
   // OCCURRENCE-AWARE SLOT ASSIGNMENT. Two claims can share a label — "Care
@@ -426,6 +471,120 @@ export function enforceItem(
     return out;
   });
 
+  // THE SOURCE FIELD'S AUDIENCE CONSTRAINS EVERY DESTINATION, NOT JUST NOTES.
+  //
+  // Until now the contract asked one question — "is this NOTE allowed to be
+  // private?" — and never the reverse one. So a model that copied a private
+  // cell into a `details` row, or folded an undecided planner sentence into
+  // `description`, walked straight past it. Both happened in one ordinary
+  // import: the Clementine Room's private note was in Private Notes AND in a
+  // client-visible detail, and the Foundry Annex's "audience not yet decided"
+  // judgment went to the client as description prose with nothing asked.
+  //
+  // The model's choice of field must not settle the question the source left
+  // open, so the audience is read from the SOURCE FIELD and applied wherever
+  // the content landed.
+  //
+  //   UNDECIDED always asks. It is removed from wherever it is — private or
+  //   recipient-facing, notes included — and surfaced. That is the whole point
+  //   of the column: the professional has not decided yet.
+  //
+  //   PRIVATE never stays visible. If the same content is already held in this
+  //   item's notes AND those notes are themselves authorised, the visible copy
+  //   is a duplicate and goes without a question — nobody needs to be asked
+  //   whether explicitly private material should be public. If it is NOT held
+  //   anywhere, removing it would lose it, so it is surfaced instead.
+  //
+  // Matching is by FACT TOKENS against the record's own field text, which is the
+  // same provenance test the privacy rule already uses. It is not a keyword scan:
+  // nothing matches unless every fact-bearing word of the candidate appears in
+  // that record's restricted field, and a candidate with fewer than four such
+  // words is left alone as too slight to attribute.
+  {
+    const MIN_FACTS = 4;
+    const priv = String(opts.privateSource ?? "");
+    const undec = String(opts.undecidedSource ?? "");
+    const supported = (text: string, src: string) =>
+      Boolean(src.trim()) && factTokens(text).length >= MIN_FACTS && noteSupportedBy(text, src);
+    const verdict = (text: string): "private" | "undecided" | null =>
+      supported(text, undec) ? "undecided" : supported(text, priv) ? "private" : null;
+
+    // Notes only count as a safe home if they will themselves survive the
+    // privacy rule below — otherwise "already preserved" would be a promise
+    // about a field that is about to be emptied.
+    const noteText = String(next.notes ?? "");
+    const notesSurvive = Boolean(noteText.trim()) && noteSupportedBy(noteText, priv);
+    const held = (text: string) => notesSurvive && noteSupportedBy(text, noteText);
+
+    const take = (text: string, state: "private" | "undecided", where: string) => {
+      // Undecided is never "already safe": private is not a resolution of it.
+      const kept = state === "private" && held(text);
+      audienceRemoved.push({ text, state, where, kept });
+      applied.push({ claimId: "-", action: `${where}: removed ${state} source content` });
+    };
+
+    // PROSE, SENTENCE BY SENTENCE. The Foundry Annex's description is four
+    // legitimate client-facing sentences with two planner sentences folded in;
+    // dropping the whole field would discard the model's real work.
+    for (const field of ["description", "highlight"] as const) {
+      const whole = String(next[field] ?? "");
+      if (!whole.trim()) continue;
+      const parts = whole.split(/(?<=[.!?])\s+/);
+      const keep: string[] = [];
+      for (const part of parts) {
+        const v = verdict(part);
+        if (!v) { keep.push(part); continue; }
+        take(part.trim(), v, field);
+      }
+      if (keep.length !== parts.length) next[field] = keep.join(" ").trim();
+    }
+
+    // WHOLE-VALUE DESTINATIONS.
+    const detailRows = arr(next.details) as { label?: string; value?: string }[];
+    const keptDetails = detailRows.filter((d) => {
+      const text = `${String(d?.label ?? "")}: ${String(d?.value ?? "")}`.trim();
+      const v = verdict(text) ?? verdict(String(d?.value ?? ""));
+      if (!v) return true;
+      take(text, v, "details");
+      return false;
+    });
+    if (keptDetails.length !== detailRows.length) next.details = keptDetails;
+
+    const addr = String(next.address ?? "");
+    const addrVerdict = addr.trim() ? verdict(addr) : null;
+    if (addrVerdict) { take(addr.trim(), addrVerdict, "address"); next.address = ""; }
+
+    // LINK LABELS AND CONTACT NAMES. The URL, email and phone are identity and
+    // are left alone; only the free text beside them can carry a note.
+    next.links = arr(next.links).map((l) => {
+      const o = l as { label?: string };
+      const t = String(o?.label ?? "");
+      const v = t.trim() ? verdict(t) : null;
+      if (!v) return l;
+      take(t.trim(), v, "links");
+      return { ...(o as object), label: "" };
+    });
+    next.contacts = arr(next.contacts).map((c) => {
+      const o = c as Record<string, unknown>;
+      const out = { ...o };
+      for (const f of ["name", "role"]) {
+        const t = String(o?.[f] ?? "");
+        const v = t.trim() ? verdict(t) : null;
+        if (!v) continue;
+        take(t.trim(), v, `contacts.${f}`);
+        out[f] = null;
+      }
+      return out;
+    });
+
+    // AND NOTES ITSELF, for the undecided case only. Private content in notes is
+    // the privacy rule's business, immediately below.
+    if (noteText.trim() && supported(noteText, undec)) {
+      take(noteText, "undecided", "notes");
+      next.notes = "";
+    }
+  }
+
   // THE PRIVACY RULE. A note may only stand on the strength of source that is
   // itself marked private — and only for what that source actually says.
   //
@@ -450,5 +609,5 @@ export function enforceItem(
     applied.push({ claimId: "-", action: "notes surfaced as unresolved — no source authority for privacy" });
     next.notes = "";
   }
-  return { item: next, applied, stripped, unresolvedNotes };
+  return { item: next, applied, stripped, unresolvedNotes, audienceRemoved };
 }

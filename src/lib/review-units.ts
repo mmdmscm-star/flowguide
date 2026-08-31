@@ -51,6 +51,35 @@ export const REVIEW_REQUIRED: Record<string, ExceptionKind> = {
       "This was written as a private note, but nothing in your source marks it private — " +
       "so your client would never see it. What should FlowGuide do with it?",
   },
+  // THE SOURCE SAID IT HAD NOT DECIDED YET.
+  //
+  // `Planner Notes — Audience Not Yet Decided` is a column heading that asks a
+  // question rather than answering one. Neither existing kind can say that
+  // honestly: `privacy-rejected` would claim the source marks nothing private,
+  // which is true but beside the point, and would invite "leave it out" for a
+  // judgment the professional explicitly parked. So it gets its own sentence.
+  //
+  // It surfaces from WHEREVER the model put it. The one thing that must not
+  // happen is the model's choice of field settling an audience the source left
+  // open — private on one venue and client-facing on the next, from one import.
+  "audience-undecided": {
+    code: "audience_undecided",
+    guidance:
+      "Your file marks this as not yet decided for sharing, so FlowGuide has not " +
+      "shown it to your client or filed it as a private note. Which is it?",
+  },
+  // PRIVATE SOURCE CONTENT THAT WAS ABOUT TO BE VISIBLE, AND IS HELD NOWHERE ELSE.
+  //
+  // The ordinary case needs no question: if the same content is already in the
+  // item's private notes, the visible copy is a duplicate and is simply removed.
+  // This kind is the remainder — the content would be LOST by that removal, and
+  // losing it silently is the one outcome worse than asking.
+  "private-shown": {
+    code: "private_shown",
+    guidance:
+      "Your source marks this private, but it was written where your client would " +
+      "see it and FlowGuide found no private copy of it. What should happen to it?",
+  },
   // A DETAIL THAT RAN PAST ITS OWN COLUMN.
   //
   // This is NOT `privacy-rejected` wearing a different label. That kind asks

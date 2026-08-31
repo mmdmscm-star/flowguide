@@ -25,7 +25,8 @@ import assert from "node:assert/strict";
 // must not be parked behind a broken harness.
 import { EVENT_PLANNER_CSV as CSV, EVENT_PLANNER_DELIMITER as DELIM } from "./__fixtures__/event-planner-import.ts";
 import { recordEnvelopes, bindByProvenance, sourceCells, spansCells } from "./attribution.ts";
-import { privateSourceOf, noteSupportedBy, splitFields, headingGrantsPrivacy } from "./enforce.ts";
+import { privateSourceOf, noteSupportedBy, splitFields, headingGrantsPrivacy,
+  headingDefersAudience, audienceSourceOf } from "./enforce.ts";
 import { enforceChunkResult } from "./enforce-chunk.ts";
 import { parseClaims } from "./claim-parser.ts";
 import { createRequire } from "node:module";
@@ -355,10 +356,16 @@ test("Foundry Annex and Atlas Courtyard no longer hide planner judgment", () => 
   ] as [string, string][]) {
     assert.equal(String(byTitle(title).notes ?? "").trim(), "",
       `${title} still hides its planner note as creator-only content`);
-    const units = unitsFor("privacy_rejected", title);
+    // ITS OWN KIND NOW. `privacy_rejected` says the source marks nothing
+    // private, which is true but beside the point: this column declares the
+    // audience UNDECIDED, and saying so is what stops "leave it out" from
+    // looking like the obvious answer to a question the professional parked.
+    const units = unitsFor("audience_undecided", title);
     assert.equal(units.length, 1, `${title} produced no question about its planner note`);
     assert.ok(String(units[0].text).includes(phrase),
       `${title}'s planner note was not preserved verbatim`);
+    assert.equal(unitsFor("privacy_rejected", title).length, 0,
+      `${title} was reported as an unauthorised private note rather than an undecided one`);
   }
 
   // NOT VACUOUS: a note the source DOES authorise is still kept privately and
@@ -495,4 +502,228 @@ test("privacy words in client-facing prose stay client-facing", () => {
     "text the source says the client may review was authorised as private");
   assert.equal(String(byTitle("Clementine Club").notes ?? "").trim(), "",
     "Clementine Club's client-facing note was stored as a private note");
+});
+
+// ---------------------------------------------------------------------------
+// F. SOURCE AUDIENCE CONSTRAINS EVERY DESTINATION
+//
+// A SECOND PRODUCTION RUN of the SAME FILE, whose model output differs. It is
+// the run that exposed the gap: the model copied the Clementine Room's private
+// cell into a client-visible detail, and folded the Foundry Annex's "audience
+// not yet decided" planner judgment into its description. Neither was governed,
+// because the contract only ever inspected `notes`.
+// ---------------------------------------------------------------------------
+
+const RUN2 = createRequire(import.meta.url)("./__fixtures__/event-planner-chunks-run2.json") as {
+  ordinal: number; source_start: number; segment_text: string; result: unknown;
+}[];
+
+/** Every destination `item-card.tsx` and `print-packet.tsx` put in front of a
+ *  recipient. `notes` is deliberately absent: it renders only when the viewer is
+ *  the professional. */
+const recipientFacing = (it: Item) => JSON.stringify([
+  it.description, it.highlight, it.address,
+  ...detailsOf(it).map((d) => `${d.label}: ${d.value}`),
+  ...(Array.isArray(it.links) ? it.links : []).map((l) => (l as { label?: string })?.label),
+  ...(Array.isArray(it.contacts) ? it.contacts : []).map((c) => {
+    const o = c as { name?: string; role?: string }; return `${o?.name ?? ""} ${o?.role ?? ""}`;
+  }),
+]);
+
+function runChunks(chunks: typeof RUN2) {
+  process.env.FLOWGUIDE_ENFORCE_CONTRACT = "1";
+  const items: Item[] = [], units: { code: string; title?: string | null; text?: string }[] = [];
+  for (const c of chunks) {
+    const out = enforceChunkResult({
+      segmentText: c.segment_text, chunkOrdinal: c.ordinal, sourceStart: c.source_start,
+      sourceText: CSV, result: c.result, runId: "run2", destination: "packet", delimiterHint: DELIM,
+    });
+    items.push(...itemsOf(out.result));
+    units.push(...out.reviewUnits);
+  }
+  return { items, units };
+}
+const R2 = runChunks(RUN2);
+const r2 = (t: string) => {
+  const it = R2.items.find((x) => String(x.title ?? "").startsWith(t));
+  assert.ok(it, `run 2 has no item titled ${t}`);
+  return it!;
+};
+
+test("private source content is in Private Notes and in no recipient-facing field", () => {
+  const cases: [string, string][] = [
+    ["Clementine Room at Parkline Hotel", "this hotel waived the meeting-room rental"],
+    ["Redwood Assembly", "Keep between the planning team"],
+    ["Glasshouse Studio", "Do not share with the client yet"],
+    ["The Foundry Hall", "For planner only"],
+  ];
+  for (const [title, phrase] of cases) {
+    const it = r2(title);
+    assert.ok(String(it.notes ?? "").includes(phrase),
+      `${title}: the private note is not in Private Notes`);
+    assert.ok(!recipientFacing(it).includes(phrase),
+      `${title}: private text is visible to the recipient — ${recipientFacing(it).slice(0, 200)}`);
+  }
+});
+
+test("NOT VACUOUS: the model really did publish the Clementine Room's private note", () => {
+  // Without this, the assertion above would pass on a run where nothing was
+  // wrong. The model emitted a detail LABELLED with the private field's own
+  // opening words, carrying its text, alongside the correct private note.
+  const model = RUN2.flatMap((c) => itemsOf(c.result));
+  const cr = model.find((x) => String(x.title ?? "").startsWith("Clementine Room"))!;
+  const leak = detailsOf(cr).find((d) => String(d.value ?? "").includes("this hotel waived the meeting-room rental"));
+  assert.ok(leak, "the run-2 fixture no longer contains the leak it exists to prove");
+  assert.equal(String(leak!.label), "Private note for our team");
+});
+
+test("a held private duplicate is removed WITHOUT asking a question", () => {
+  // Nobody needs to be asked whether explicitly private material should be
+  // public. The copy in notes is the answer, so the visible one just goes.
+  const asked = R2.units.filter((u) => String(u.title ?? "").startsWith("Clementine Room"));
+  assert.deepEqual(asked, [], `a question was raised about a duplicate: ${JSON.stringify(asked)}`);
+  assert.ok(String(r2("Clementine Room at Parkline Hotel").notes ?? "")
+    .includes("this hotel waived the meeting-room rental"), "the private copy was not kept");
+});
+
+test("undecided-audience judgment leaves the description and becomes ONE question", () => {
+  const fa = r2("The Foundry Annex");
+  for (const phrase of ["85 people may feel tight", "I would probably discuss layout"])
+    assert.ok(!recipientFacing(fa).includes(phrase),
+      `the Foundry Annex still shows undecided planner text: ${phrase}`);
+  assert.equal(String(fa.notes ?? "").trim(), "",
+    "undecided material was filed as private instead of asked about");
+
+  const units = R2.units.filter((u) => String(u.title ?? "").startsWith("The Foundry Annex"));
+  assert.equal(units.length, 1, `expected one question, got ${units.length}`);
+  assert.equal(units[0].code, "audience_undecided");
+  // NO CONTENT LOSS: both sentences survive inside the one question.
+  for (const phrase of ["85 people may feel tight", "I would probably discuss layout"])
+    assert.ok(String(units[0].text).includes(phrase), `the question lost: ${phrase}`);
+
+  // The client-facing sentences around them are untouched.
+  const desc = String(fa.description ?? "");
+  assert.ok(desc.includes("Smaller sister space next door to The Foundry Hall"),
+    "a client-facing sentence was removed with the planner text");
+  assert.ok(desc.includes("Separate venue from The Foundry Hall"),
+    "the trailing client-facing sentence was lost");
+});
+
+test("undecided material surfaces from NOTES too, wherever the model puts it", () => {
+  // Atlas Courtyard's soft hold went into `notes` in production and raised a
+  // card. The stored proposal is POST-enforcement, so the text is no longer in
+  // it — the note is restored here from the source's own planner column, which
+  // is what the model had proposed.
+  const env = recordEnvelopes(CSV, DELIM)!;
+  const e = env.find((x) => x.name.startsWith("Atlas Courtyard"))!;
+  const planner = splitFields(CSV.slice(e.start, e.end), DELIM)[17].trim();
+  assert.ok(planner.includes("another group has a soft hold"), "the fixture's planner column changed");
+
+  const restored = RUN2.map((c) => ({
+    ...c,
+    result: c.result && (c.result as { sections?: unknown[] }).sections
+      ? { ...(c.result as object), sections: ((c.result as { sections: { items?: Item[] }[] }).sections)
+          .map((s) => ({ ...s, items: (s.items ?? []).map((it) =>
+            String(it.title ?? "").startsWith("Atlas Courtyard") ? { ...it, notes: planner } : it) })) }
+      : c.result,
+  }));
+  const out = runChunks(restored);
+  const ac = out.items.find((x) => String(x.title ?? "").startsWith("Atlas Courtyard"))!;
+  assert.equal(String(ac.notes ?? "").trim(), "",
+    "an undecided note was filed as private rather than asked about");
+  assert.ok(!recipientFacing(ac).includes("another group has a soft hold"));
+  const unit = out.units.find((u) => String(u.title ?? "").startsWith("Atlas Courtyard"));
+  assert.ok(unit, "the soft hold was dropped instead of surfaced");
+  assert.equal(unit!.code, "audience_undecided");
+  assert.ok(String(unit!.text).includes("another group has a soft hold"));
+});
+
+test("client-facing source proposed as private still fails closed, not silently", () => {
+  // Clementine Club's note is CLIENT-FACING in the source and the model put it
+  // in `notes`. Restored the same way, and for the same reason.
+  const env = recordEnvelopes(CSV, DELIM)!;
+  const e = env.find((x) => x.name.startsWith("Clementine Club"))!;
+  const row = CSV.slice(e.start, e.end);
+  const clientNote = splitFields(row, DELIM)[15].trim();
+  assert.ok(clientNote.includes("The client may review it now"), "the fixture's client-facing note changed");
+
+  // It is neither private nor undecided as far as the source is concerned.
+  const aud = audienceSourceOf(row, {
+    headerRow: CSV.slice(env[0].start, env[0].end), delimiter: DELIM });
+  assert.equal(noteSupportedBy(clientNote, aud.private), false, "client-facing text was authorised as private");
+  assert.equal(noteSupportedBy(clientNote, aud.undecided), false, "client-facing text was treated as undecided");
+
+  const restored = RUN2.map((c) => ({
+    ...c,
+    result: c.result && (c.result as { sections?: unknown[] }).sections
+      ? { ...(c.result as object), sections: ((c.result as { sections: { items?: Item[] }[] }).sections)
+          .map((s) => ({ ...s, items: (s.items ?? []).map((it) =>
+            String(it.title ?? "").startsWith("Clementine Club") ? { ...it, notes: clientNote } : it) })) }
+      : c.result,
+  }));
+  const out = runChunks(restored);
+  const cc = out.items.find((x) => String(x.title ?? "").startsWith("Clementine Club"))!;
+  assert.equal(String(cc.notes ?? "").trim(), "", "client-facing text was left hidden in a private field");
+  const unit = out.units.find((u) => String(u.title ?? "").startsWith("Clementine Club"));
+  assert.ok(unit, "the client-facing note was discarded");
+  assert.equal(unit!.code, "privacy_rejected",
+    "a client-facing note was reported as an undecided-audience question");
+  assert.ok(String(unit!.text).includes("The client may review it now"));
+});
+
+test("an undecided heading is recognised, and settled headings are not", () => {
+  for (const h of ["Planner Notes — Audience Not Yet Decided", "Notes — Audience TBD", "Sharing Undecided"])
+    assert.equal(headingDefersAudience(h), true, JSON.stringify(h));
+  for (const h of ["Client-Facing Notes", "Private / Internal Notes", "Included / Amenities",
+                   "Related / Cross-Reference", "Pricing", "Availability / Date"])
+    assert.equal(headingDefersAudience(h), false, JSON.stringify(h));
+  // The two states are exclusive on this file: the private column is not
+  // undecided, and the undecided column grants no privacy.
+  assert.equal(headingGrantsPrivacy("Planner Notes — Audience Not Yet Decided"), false);
+  assert.equal(headingDefersAudience("Private / Internal Notes"), false);
+});
+
+test("run 2 introduces no cross-cell regression and loses nothing", () => {
+  const cells = sourceCells(CSV, DELIM);
+  for (const it of R2.items) {
+    for (const d of detailsOf(it))
+      assert.equal(spansCells(cells, String(d.value ?? "")), false,
+        `${it.title} [${d.label}] spans source cells`);
+    for (const f of ["description", "highlight"] as const)
+      assert.equal(spansCells(cells, String(it[f] ?? "")), false, `${it.title} ${f} spans source cells`);
+  }
+  // The ordinary phrases the file exists to protect are all still visible.
+  for (const [title, phrase] of [["Redwood Assembly", "internal courtyard"],
+                                 ["Assembly House", "private office"],
+                                 ["Glasshouse Studio", "private roof deck"],
+                                 ["Larkspur Landing Conference Center", "confidentiality screens"]] as [string, string][])
+    assert.ok(recipientFacing(r2(title)).toLowerCase().includes(phrase),
+      `${title} lost a client-facing phrase: ${phrase}`);
+});
+
+test("private content with NO private copy is surfaced, never silently dropped", () => {
+  // The remainder case. On this file every private leak had a correct copy in
+  // notes, so removal was deterministic and silent. Strip that copy away and the
+  // same removal would LOSE the content — which is the one outcome worse than
+  // asking, so it becomes a question instead.
+  const stripped = RUN2.map((c) => ({
+    ...c,
+    result: c.result && (c.result as { sections?: unknown[] }).sections
+      ? { ...(c.result as object), sections: ((c.result as { sections: { items?: Item[] }[] }).sections)
+          .map((s) => ({ ...s, items: (s.items ?? []).map((it) =>
+            String(it.title ?? "").startsWith("Clementine Room") ? { ...it, notes: "" } : it) })) }
+      : c.result,
+  }));
+  const out = runChunks(stripped);
+  const cr = out.items.find((x) => String(x.title ?? "").startsWith("Clementine Room"))!;
+  const phrase = "this hotel waived the meeting-room rental";
+  assert.ok(!recipientFacing(cr).includes(phrase), "private text stayed visible");
+  const unit = out.units.find((u) => String(u.title ?? "").startsWith("Clementine Room"));
+  assert.ok(unit, "the only copy of the private note was deleted");
+  assert.equal(unit!.code, "private_shown");
+  assert.ok(String(unit!.text).includes(phrase), "the question did not preserve the text");
+
+  // CONTRAST: with the private copy present, the same removal asks nothing.
+  assert.deepEqual(R2.units.filter((u) => String(u.title ?? "").startsWith("Clementine Room")), [],
+    "the held-duplicate case started asking questions");
 });

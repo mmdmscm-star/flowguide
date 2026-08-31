@@ -12,7 +12,7 @@ import { parseClaims } from "./claim-parser.ts";
 import { recordEnvelopes, attributeAll, bindByProvenance, sourceCells, spansCells,
   type SourceCells } from "./attribution.ts";
 import { reconcile } from "./reconcile.ts";
-import { enforceItem, privateSourceOf, contractEnforcementEnabled } from "./enforce.ts";
+import { enforceItem, audienceSourceOf, contractEnforcementEnabled } from "./enforce.ts";
 import { locate } from "./placement.ts";
 import { specializedValueKind, type Claim } from "./claim-parser.ts";
 import { buildReviewUnits, type ReviewFailure } from "./review-units.ts";
@@ -29,6 +29,9 @@ export interface EnforcementTelemetry {
    *  surfaced whether or not anyone reads these numbers. Telemetry records
    *  the contract; it has never been the thing that enforces it. */
   crossCellRejected: number; unboundSurfaced: number;
+  /** Content taken out of a recipient-facing destination because its source
+   *  field is not addressed to the recipient. */
+  audienceRemoved: number;
   /** Why enforcement did or did not run for this chunk. Recorded even when it
    *  declined, so "we were asked and said no" is a fact in the evidence rather
    *  than an absence someone has to interpret. */
@@ -76,7 +79,8 @@ export function enforcementScope(destination: string | null | undefined): ScopeV
 export interface UnresolvedUnit {
   record: number;
   title: string | null;
-  kind: "privacy-rejected" | "source-unresolved" | "cross-cell-detail" | "unbound-private-note";
+  kind: "privacy-rejected" | "source-unresolved" | "cross-cell-detail" | "unbound-private-note"
+    | "audience-undecided" | "private-shown";
   text: string;
   reason: string;
   /** Absolute source offset where the fact was written, when known. Provenance
@@ -99,7 +103,7 @@ const empty = (): EnforcementTelemetry => ({
   accepted: 0, repaired: 0, stripped: 0, sourceUnresolved: 0,
   wholeSourceChecked: 0, wholeSourcePresent: 0, wholeSourceMissing: 0,
   attributionUnresolved: 0, privacyRejected: 0, itemsGoverned: 0,
-  crossCellRejected: 0, unboundSurfaced: 0,
+  crossCellRejected: 0, unboundSurfaced: 0, audienceRemoved: 0,
 });
 
 /** Rebuild a result object with the same shape, items replaced. */
@@ -252,12 +256,13 @@ export function enforceChunkResult(opts: {
   // start/end are that tiling. When a record has no envelope there is no proof
   // of what it owns, so nothing is authorised and the note is surfaced for a
   // decision — fail closed, exactly as before.
-  const privateSourceFor = (rec: number): string => {
+  const EMPTY_AUDIENCE = { private: "", undecided: "" };
+  const audienceFor = (rec: number): { private: string; undecided: string } => {
     const e = envByIndex.get(rec);
-    if (!e) return "";
+    if (!e) return EMPTY_AUDIENCE;
     // The heading is not a record with content of its own; it names columns.
-    if (env && env.length && e.index === env[0].index) return "";
-    return privateSourceOf(sourceText.slice(e.start, e.end), { headerRow, delimiter });
+    if (env && env.length && e.index === env[0].index) return EMPTY_AUDIENCE;
+    return audienceSourceOf(sourceText.slice(e.start, e.end), { headerRow, delimiter });
   };
   const replaced = new Map<Record<string, unknown>, Record<string, unknown>>();
 
@@ -282,7 +287,9 @@ export function enforceChunkResult(opts: {
       crossCell.push({ record: rec, title: String(item.title ?? ""),
                        label: c.label ?? "", value: c.value });
     const res = reconcile({ claims: gc.kept, ambiguous: g.ambiguous, fragments: g.fragments }, item);
-    const e = enforceItem(item, res.resolutions, gc.kept, { privateSource: privateSourceFor(rec) });
+    const audience = audienceFor(rec);
+    const e = enforceItem(item, res.resolutions, gc.kept,
+      { privateSource: audience.private, undecidedSource: audience.undecided });
     t.accepted += res.counts.accepted; t.repaired += res.counts.repaired;
     t.sourceUnresolved += res.counts.sourceUnresolved;
     t.stripped += e.stripped.length;
@@ -300,6 +307,28 @@ export function enforceChunkResult(opts: {
       t.privacyRejected++;
       unresolved.push({ record: rec, title: String(item.title ?? "") || null,
         kind: "privacy-rejected", text: un.text, reason: un.reason });
+    }
+    // WHAT THE AUDIENCE SWEEP TOOK OUT. A removal whose content is already held
+    // privately is a duplicate and asks nothing; everything else becomes a
+    // question, so nothing is removed and lost in the same motion.
+    //
+    // ONE DECISION PER ITEM PER AUDIENCE STATE. The Foundry Annex had two
+    // planner sentences folded into its description; they are one question
+    // about one column, not two, and splitting them would make the review queue
+    // a function of the model's sentence breaks.
+    t.audienceRemoved += e.audienceRemoved.length;
+    for (const state of ["undecided", "private"] as const) {
+      const parts = e.audienceRemoved.filter((a) => a.state === state && !a.kept);
+      if (!parts.length) continue;
+      const where = [...new Set(parts.map((a) => a.where))].join(", ");
+      unresolved.push({
+        record: rec, title: String(item.title ?? "") || null,
+        kind: state === "undecided" ? "audience-undecided" : "private-shown",
+        text: parts.map((a) => a.text).join(" "),
+        reason: state === "undecided"
+          ? `the source column this came from declares its audience undecided; it was proposed in ${where}`
+          : `the source marks this private and it was proposed in ${where}, with no private copy kept`,
+      });
     }
     for (const r of res.resolutions.filter((x) => x.outcome === "SOURCE_UNRESOLVED")) {
       unresolved.push({ record: rec, title: String(item.title ?? "") || null,

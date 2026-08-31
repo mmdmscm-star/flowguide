@@ -1,0 +1,653 @@
+[
+  {
+    "ordinal": 0,
+    "source_start": 0,
+    "source_end": 10577,
+    "segment_text": "Venue,City,Address,Venue Type,Client-Facing Description,Capacity / Layout,Contact Name,Role,Phone,Email,Website,Pricing,Availability / Date,Included / Amenities,Food & Beverage,Client-Facing Notes,Private / Internal Notes,Planner Notes — Audience Not Yet Decided,Related / Cross-Reference\nHarbor House Loft,Sausalito,\"22 Bridgeway, Sausalito, CA 94965\",Waterfront loft / private events,\"Bright second-floor loft overlooking the bay, with exposed beams, large windows, and a separate private dining room that can be closed for an executive dinner.\",85 seated at rounds; 120 reception; private dining room seats 18,Lauren Pike,Director of Events,(415) 555-0211,lauren@harborhospitality.example,https://harborhouseloft.example,\"Venue rental: $8,500\nRequired staffing: $1,200\nSecurity after 9:00 PM: $450\",October 16 available; October 17 on hold for another event,\"Tables, chairs, basic house lighting, coat check area, waterfront terrace\",Preferred caterer list; outside caterers allowed with $750 kitchen fee,The private dining room is client-facing information and may be useful for the leadership dinner.,,,\"Harbor House Loft and Harbor House Garden share an events team, but they are separate venues.\"\nHarbor House Garden,Sausalito,\"8 Princess St, Sausalito, CA 94965\",Outdoor garden / tented event space,\"Landscaped courtyard and lawn two blocks from the waterfront. Best for a daytime reception, dinner under a tent, or a casual closing event.\",100 seated under tent; 150 reception,Lauren Pike,Director of Events,(415) 555-0211,lauren@harborhospitality.example,https://harborhousegarden.example,\"Site fee: $6,200\nTent package: $4,800\nPower distribution: $900\",October 16 and 17 currently available,\"Garden furniture, string lighting, two restrooms, small prep room\",Catering must be licensed; no exclusive caterer,Lauren also represents Harbor House Loft. The repeated contact is intentional.,,,Guests can walk from Harbor House Garden to Harbor House Loft in about 4 minutes; this does not make the two spaces one venue.\nThe Foundry Hall,Oakland,\"390 3rd St, Oakland, CA 94607\",Industrial event hall,\"Large brick-and-timber hall with a flexible floor plan, built-in stage, and good production access for presentations followed by dinner.\",140 seated; 225 reception; classroom layout up to 110,Omar Reed,Senior Sales Manager,(510) 555-0240,omar@foundryevents.example,https://foundryhall.example,\"Friday rental: $12,000\nAV package: $3,600\nCleaning: $800\",October 17 available; access from 10:00 AM to midnight,\"Stage, projector, screen, green room, loading door, 20A power drops\",Exclusive in-house bar; outside caterers from approved list,The green room is backstage but is ordinary client-facing venue information.,For planner only — Omar offered a 7% courtesy reduction if we sign by September 12. Do not quote this to the client until he sends the revised proposal.,,\nThe Foundry Annex,Oakland,\"404 3rd St, Oakland, CA 94607\",Small industrial event space,\"Smaller sister space next door to The Foundry Hall. It works well for workshops, breakouts, or a dinner when the full Hall feels oversized.\",72 seated; 95 reception,Omar Reed,Senior Sales Manager,(510) 555-0240,omar@foundryevents.example,https://foundryannex.example,\"Rental: $6,800\nBasic AV: $1,250\",October 17 available,\"Portable screen, lounge furniture, two breakout nooks\",May use The Foundry Hall kitchen for catering prep if the Hall is not booked simultaneously,The kitchen arrangement belongs to the Annex record even though it mentions The Foundry Hall.,,Omar said 85 people may feel tight for a fully seated program even though the published maximum is 95. I would probably discuss layout with the client before recommending it.,Separate venue from The Foundry Hall despite the similar name and shared contact.\nRedwood Assembly,San Rafael,\"910 B St, San Rafael, CA 94901\",Meeting venue / courtyard,\"Warm, modern meeting venue with a main room and an internal courtyard that can be opened during breaks. The courtyard is part of the guest experience, not a staff-only area.\",90 seated theater; 64 classroom; 110 reception,Tessa Morgan,Venue Manager,(415) 555-0264,tessa@redwoodassembly.example,https://redwoodassembly.example,\"Full-day rental: $7,400\nEvening extension after 6:00 PM: $1,100\",October 17 available,\"Wi-Fi, 2 wireless mics, display, internal courtyard, coffee station\",Outside catering allowed; beer and wine permit available,The phrase “internal courtyard” is descriptive and should remain client-facing.,\"Keep between the planning team: the owner is considering a stricter outdoor-noise policy after 10:00 PM, but nothing has been adopted or published.\",,\nAssembly House,San Anselmo,\"17 Tunstead Ave, San Anselmo, CA 94960\",Historic house / meeting venue,Restored historic house suited to smaller leadership gatherings. A private office off the library can be used as a speaker prep room or confidential one-on-one meeting space.,54 seated; 75 reception,Nora Bell,Events Coordinator,(415) 555-0255,nora@assemblyhouse.example,https://assemblyhouse.example,\"Day rental: $5,900\nFurniture reset fee: $350\",October 17 available until 9:30 PM,\"Library, dining room, private office, garden patio, house sound system\",Approved caterer list; wine service allowed,“Private office” and “confidential one-on-one meeting space” describe client-usable rooms; those words do not make the source note private.,,,Assembly House is unrelated to Redwood Assembly.\nAtlas Hall (formerly Pier 27 Gallery),San Francisco,\"270 The Embarcadero, San Francisco, CA 94111\",Gallery / event hall,\"Large contemporary gallery with bay views and strong built-in production capability. Suitable for a keynote, reception, and dinner in one room.\",180 seated; 300 reception,Jae Kim,Group Sales Director,(415) 555-0291,jae@atlasevents.example,https://atlashall.example,\"Venue rental: $14,500\nMandatory building engineer: $1,100\nAV starting package: $4,250\",October 17 available after 2:00 PM load-in,\"Stage, 16-foot screen, house sound, freight elevator, waterfront lobby\",Exclusive beverage service; outside catering allowed,The former name is part of the venue identity and should not cause this record to merge with Atlas Courtyard.,,,\"Same ownership group as Atlas Courtyard; different room, address, capacity, and pricing.\"\nAtlas Courtyard,San Francisco,\"288 The Embarcadero, San Francisco, CA 94111\",Outdoor courtyard / reception venue,\"Open-air courtyard operated by Atlas Events. Best for cocktails, lunch, or a closing reception rather than a full-day meeting.\",110 seated; 180 reception,Jae Kim,Group Sales Director,(415) 555-0291,jae@atlasevents.example,https://atlascourtyard.example,\"Courtyard rental: $7,250\nWeather tent: $3,900 if requested\",October 16 confirmed open; October 17 status pending,\"Market lights, heaters, portable bar, adjacent loading access\",Same approved catering list as Atlas Hall,Jae Kim and the Atlas Events email domain legitimately appear on both Atlas records.,,Jae said another group has a soft hold on October 17 but expects to know tomorrow whether it will clear. She did not tell me whether we should treat the date as available yet.,Shares a loading entrance with Atlas Hall; that fact belongs to Atlas Courtyard too.\nLarkspur Landing Conference Center,Larkspur,\"500 Larkspur Landing Cir, Larkspur, CA 94939\",Conference center,\"Straightforward conference venue near the ferry, with multiple meeting rooms and easy parking. Less distinctive visually, but operationally simple for an all-day program.\",Main room: 120 theater / 80 classroom; 4 breakout rooms,Devon Ross,Conference Services,(415) 555-0228,devon@larkspurconference.example,https://larkspurconference.example,\"Day package: $165 per person, 60-person minimum\nIncludes room rental, continental breakfast, lunch, and standard AV\",October 17 available,\"Parking, Wi-Fi, standard projector, 4 breakout rooms, confidentiality screens available on request\",In-house conference catering,Confidentiality screens are a normal client-facing amenity and should not be treated as a privacy instruction.,,,\nGlasshouse Studio,Berkeley,\"1420 4th St, Berkeley, CA 94710\",Creative studio / event rental,\"Light-filled studio with movable walls, a demonstration kitchen, and a private roof deck. Good for an interactive workshop followed by drinks.\",80 seated; 130 reception,Imani Wells,Studio Director,(510) 555-0233,imani@glasshousestudio.example,https://glasshousestudio.example,\"Studio rental: $7,900\nKitchen use: $650\nRoof deck staffing: $500\",October 17 available,\"Demonstration kitchen, movable walls, private roof deck, basic furniture\",Outside catering and wine allowed with insurance certificate,The private roof deck is client-facing venue information.,\"Do not share with the client yet — Imani verbally offered to waive corkage if we use her preferred caterer, but she has not confirmed the waiver in writing.\",,\nClementine Club,San Francisco,\"88 Clement St, San Francisco, CA 94118\",Restaurant buyout / private dining,\"Neighborhood restaurant available for a full private buyout. Strong option for a closing dinner, with a bar area and two connected dining rooms.\",96 seated; 125 reception,Marco Ruiz,Private Events Manager,(415) 555-0280,marco@clementineclub.example,https://clementineclub.example,\"Food & beverage minimum: $18,000\nService charge: 24%\nRoom fee waived with minimum\",October 17 dinner available,\"Full restaurant buyout, bar, two dining rooms, printed menus\",Seasonal three-course and family-style menus available,\"The fall menu is confidential until September 20. The client may review it now, but the restaurant asks that it not be posted or shared publicly before launch.\",,,\nClementine Room at Parkline Hotel,San Francisco,\"705 Market St, San Francisco, CA 94103\",Hotel meeting room,\"Dedicated hotel meeting room with natural light, adjacent foyer, and easy guest-room access. Despite the similar name, it is not affiliated with Clementine Club.\",70 classroom; 100 theater; 80 banquet,Sara Ng,Group Events Manager,(415) 555-0272,sara@parklinehotel.example,https://parklinehotel.example/clementine-room,\"Meeting room rental: $4,800\nGuest-room block: $349/night before taxes\nCoffee service: $28 per person\",October 17 available; 20 guestrooms currently held as a courtesy,\"Built-in display, foyer, hotel Wi-Fi, guestrooms upstairs\",Hotel catering required,The similar “Clementine” name should not pull information from Clementine Club onto this record.,Private note for our team: this hotel waived the meeting-room rental for this same client two years ago. Do not assume or promise that concession this time.,,",
+    "result": null
+  },
+  {
+    "ordinal": 1,
+    "source_start": 0,
+    "source_end": 5434,
+    "segment_text": "Venue,City,Address,Venue Type,Client-Facing Description,Capacity / Layout,Contact Name,Role,Phone,Email,Website,Pricing,Availability / Date,Included / Amenities,Food & Beverage,Client-Facing Notes,Private / Internal Notes,Planner Notes — Audience Not Yet Decided,Related / Cross-Reference\nHarbor House Loft,Sausalito,\"22 Bridgeway, Sausalito, CA 94965\",Waterfront loft / private events,\"Bright second-floor loft overlooking the bay, with exposed beams, large windows, and a separate private dining room that can be closed for an executive dinner.\",85 seated at rounds; 120 reception; private dining room seats 18,Lauren Pike,Director of Events,(415) 555-0211,lauren@harborhospitality.example,https://harborhouseloft.example,\"Venue rental: $8,500\nRequired staffing: $1,200\nSecurity after 9:00 PM: $450\",October 16 available; October 17 on hold for another event,\"Tables, chairs, basic house lighting, coat check area, waterfront terrace\",Preferred caterer list; outside caterers allowed with $750 kitchen fee,The private dining room is client-facing information and may be useful for the leadership dinner.,,,\"Harbor House Loft and Harbor House Garden share an events team, but they are separate venues.\"\nHarbor House Garden,Sausalito,\"8 Princess St, Sausalito, CA 94965\",Outdoor garden / tented event space,\"Landscaped courtyard and lawn two blocks from the waterfront. Best for a daytime reception, dinner under a tent, or a casual closing event.\",100 seated under tent; 150 reception,Lauren Pike,Director of Events,(415) 555-0211,lauren@harborhospitality.example,https://harborhousegarden.example,\"Site fee: $6,200\nTent package: $4,800\nPower distribution: $900\",October 16 and 17 currently available,\"Garden furniture, string lighting, two restrooms, small prep room\",Catering must be licensed; no exclusive caterer,Lauren also represents Harbor House Loft. The repeated contact is intentional.,,,Guests can walk from Harbor House Garden to Harbor House Loft in about 4 minutes; this does not make the two spaces one venue.\nThe Foundry Hall,Oakland,\"390 3rd St, Oakland, CA 94607\",Industrial event hall,\"Large brick-and-timber hall with a flexible floor plan, built-in stage, and good production access for presentations followed by dinner.\",140 seated; 225 reception; classroom layout up to 110,Omar Reed,Senior Sales Manager,(510) 555-0240,omar@foundryevents.example,https://foundryhall.example,\"Friday rental: $12,000\nAV package: $3,600\nCleaning: $800\",October 17 available; access from 10:00 AM to midnight,\"Stage, projector, screen, green room, loading door, 20A power drops\",Exclusive in-house bar; outside caterers from approved list,The green room is backstage but is ordinary client-facing venue information.,For planner only — Omar offered a 7% courtesy reduction if we sign by September 12. Do not quote this to the client until he sends the revised proposal.,,\nThe Foundry Annex,Oakland,\"404 3rd St, Oakland, CA 94607\",Small industrial event space,\"Smaller sister space next door to The Foundry Hall. It works well for workshops, breakouts, or a dinner when the full Hall feels oversized.\",72 seated; 95 reception,Omar Reed,Senior Sales Manager,(510) 555-0240,omar@foundryevents.example,https://foundryannex.example,\"Rental: $6,800\nBasic AV: $1,250\",October 17 available,\"Portable screen, lounge furniture, two breakout nooks\",May use The Foundry Hall kitchen for catering prep if the Hall is not booked simultaneously,The kitchen arrangement belongs to the Annex record even though it mentions The Foundry Hall.,,Omar said 85 people may feel tight for a fully seated program even though the published maximum is 95. I would probably discuss layout with the client before recommending it.,Separate venue from The Foundry Hall despite the similar name and shared contact.\nRedwood Assembly,San Rafael,\"910 B St, San Rafael, CA 94901\",Meeting venue / courtyard,\"Warm, modern meeting venue with a main room and an internal courtyard that can be opened during breaks. The courtyard is part of the guest experience, not a staff-only area.\",90 seated theater; 64 classroom; 110 reception,Tessa Morgan,Venue Manager,(415) 555-0264,tessa@redwoodassembly.example,https://redwoodassembly.example,\"Full-day rental: $7,400\nEvening extension after 6:00 PM: $1,100\",October 17 available,\"Wi-Fi, 2 wireless mics, display, internal courtyard, coffee station\",Outside catering allowed; beer and wine permit available,The phrase “internal courtyard” is descriptive and should remain client-facing.,\"Keep between the planning team: the owner is considering a stricter outdoor-noise policy after 10:00 PM, but nothing has been adopted or published.\",,\nAssembly House,San Anselmo,\"17 Tunstead Ave, San Anselmo, CA 94960\",Historic house / meeting venue,Restored historic house suited to smaller leadership gatherings. A private office off the library can be used as a speaker prep room or confidential one-on-one meeting space.,54 seated; 75 reception,Nora Bell,Events Coordinator,(415) 555-0255,nora@assemblyhouse.example,https://assemblyhouse.example,\"Day rental: $5,900\nFurniture reset fee: $350\",October 17 available until 9:30 PM,\"Library, dining room, private office, garden patio, house sound system\",Approved caterer list; wine service allowed,“Private office” and “confidential one-on-one meeting space” describe client-usable rooms; those words do not make the source note private.,,,Assembly House is unrelated to Redwood Assembly.\n",
+    "result": {
+      "sections": [
+        {
+          "items": [
+            {
+              "links": [
+                {
+                  "url": "https://harborhouseloft.example/",
+                  "label": "Website"
+                }
+              ],
+              "notes": null,
+              "title": "Harbor House Loft",
+              "photos": [],
+              "address": "22 Bridgeway, Sausalito, CA 94965",
+              "details": [
+                {
+                  "label": "Capacity - Seated at rounds",
+                  "value": "85"
+                },
+                {
+                  "label": "Capacity - Reception",
+                  "value": "120"
+                },
+                {
+                  "label": "Private dining room capacity",
+                  "value": "18 seated"
+                },
+                {
+                  "label": "Venue rental",
+                  "value": "$8,500"
+                },
+                {
+                  "label": "Required staffing",
+                  "value": "$1,200"
+                },
+                {
+                  "label": "Security after 9:00 PM",
+                  "value": "$450"
+                },
+                {
+                  "label": "Availability",
+                  "value": "October 16 available; October 17 on hold for another event"
+                }
+              ],
+              "contacts": [
+                {
+                  "name": "Lauren Pike",
+                  "role": "Director of Events",
+                  "email": "lauren@harborhospitality.example",
+                  "phone": "(415) 555-0211",
+                  "website": null
+                }
+              ],
+              "description": "Bright second-floor loft overlooking the bay, with exposed beams, large windows, and a separate private dining room that can be closed for an executive dinner. The private dining room is client-facing information and may be useful for the leadership dinner."
+            },
+            {
+              "links": [
+                {
+                  "url": "https://harborhousegarden.example/",
+                  "label": "Website"
+                }
+              ],
+              "notes": null,
+              "title": "Harbor House Garden",
+              "photos": [],
+              "address": "8 Princess St, Sausalito, CA 94965",
+              "details": [
+                {
+                  "label": "Capacity - Seated under tent",
+                  "value": "100"
+                },
+                {
+                  "label": "Capacity - Reception",
+                  "value": "150"
+                },
+                {
+                  "label": "Site fee",
+                  "value": "$6,200"
+                },
+                {
+                  "label": "Tent package",
+                  "value": "$4,800"
+                },
+                {
+                  "label": "Power distribution",
+                  "value": "$900"
+                },
+                {
+                  "label": "Availability",
+                  "value": "October 16 and 17 currently available"
+                }
+              ],
+              "contacts": [
+                {
+                  "name": "Lauren Pike",
+                  "role": "Director of Events",
+                  "email": "lauren@harborhospitality.example",
+                  "phone": "(415) 555-0211",
+                  "website": null
+                }
+              ],
+              "description": "Landscaped courtyard and lawn two blocks from the waterfront. Best for a daytime reception, dinner under a tent, or a casual closing event. Lauren also represents Harbor House Loft. The repeated contact is intentional. Guests can walk from Harbor House Garden to Harbor House Loft in about 4 minutes; this does not make the two spaces one venue."
+            }
+          ],
+          "title": "Waterfront and Garden Venues",
+          "description": null
+        },
+        {
+          "items": [
+            {
+              "links": [
+                {
+                  "url": "https://foundryhall.example/",
+                  "label": "Website"
+                }
+              ],
+              "notes": "For planner only — Omar offered a 7% courtesy reduction if we sign by September 12. Do not quote this to the client until he sends the revised proposal.",
+              "title": "The Foundry Hall",
+              "photos": [],
+              "address": "390 3rd St, Oakland, CA 94607",
+              "details": [
+                {
+                  "label": "Capacity - Seated",
+                  "value": "140"
+                },
+                {
+                  "label": "Capacity - Reception",
+                  "value": "225"
+                },
+                {
+                  "label": "Capacity - Classroom layout",
+                  "value": "up to 110"
+                },
+                {
+                  "label": "Friday rental",
+                  "value": "$12,000"
+                },
+                {
+                  "label": "AV package",
+                  "value": "$3,600"
+                },
+                {
+                  "label": "Cleaning",
+                  "value": "$800"
+                },
+                {
+                  "label": "Availability",
+                  "value": "October 17 available; access from 10:00 AM to midnight"
+                }
+              ],
+              "contacts": [
+                {
+                  "name": "Omar Reed",
+                  "role": "Senior Sales Manager",
+                  "email": "omar@foundryevents.example",
+                  "phone": "(510) 555-0240",
+                  "website": null
+                }
+              ],
+              "description": "Large brick-and-timber hall with a flexible floor plan, built-in stage, and good production access for presentations followed by dinner. The green room is backstage but is ordinary client-facing venue information."
+            },
+            {
+              "links": [
+                {
+                  "url": "https://foundryannex.example/",
+                  "label": "Website"
+                }
+              ],
+              "notes": null,
+              "title": "The Foundry Annex",
+              "photos": [],
+              "address": "404 3rd St, Oakland, CA 94607",
+              "details": [
+                {
+                  "label": "Capacity - Seated",
+                  "value": "72"
+                },
+                {
+                  "label": "Capacity - Reception",
+                  "value": "95"
+                },
+                {
+                  "label": "Rental",
+                  "value": "$6,800"
+                },
+                {
+                  "label": "Basic AV",
+                  "value": "$1,250"
+                },
+                {
+                  "label": "Availability",
+                  "value": "October 17 available"
+                }
+              ],
+              "contacts": [
+                {
+                  "name": "Omar Reed",
+                  "role": "Senior Sales Manager",
+                  "email": "omar@foundryevents.example",
+                  "phone": "(510) 555-0240",
+                  "website": null
+                }
+              ],
+              "description": "Smaller sister space next door to The Foundry Hall. It works well for workshops, breakouts, or a dinner when the full Hall feels oversized. The kitchen arrangement belongs to the Annex record even though it mentions The Foundry Hall. Omar said 85 people may feel tight for a fully seated program even though the published maximum is 95. I would probably discuss layout with the client before recommending it. Separate venue from The Foundry Hall despite the similar name and shared contact."
+            }
+          ],
+          "title": "Industrial Event Spaces",
+          "description": null
+        },
+        {
+          "items": [
+            {
+              "links": [
+                {
+                  "url": "https://redwoodassembly.example/",
+                  "label": "Website"
+                }
+              ],
+              "notes": "Keep between the planning team: the owner is considering a stricter outdoor-noise policy after 10:00 PM, but nothing has been adopted or published.",
+              "title": "Redwood Assembly",
+              "photos": [],
+              "address": "910 B St, San Rafael, CA 94901",
+              "details": [
+                {
+                  "label": "Capacity - Seated theater",
+                  "value": "90"
+                },
+                {
+                  "label": "Capacity - Classroom",
+                  "value": "64"
+                },
+                {
+                  "label": "Capacity - Reception",
+                  "value": "110"
+                },
+                {
+                  "label": "Full-day rental",
+                  "value": "$7,400"
+                },
+                {
+                  "label": "Evening extension after 6:00 PM",
+                  "value": "$1,100"
+                },
+                {
+                  "label": "Availability",
+                  "value": "October 17 available"
+                }
+              ],
+              "contacts": [
+                {
+                  "name": "Tessa Morgan",
+                  "role": "Venue Manager",
+                  "email": "tessa@redwoodassembly.example",
+                  "phone": "(415) 555-0264",
+                  "website": null
+                }
+              ],
+              "description": "Warm, modern meeting venue with a main room and an internal courtyard that can be opened during breaks. The courtyard is part of the guest experience, not a staff-only area. The phrase \"internal courtyard\" is descriptive and should remain client-facing."
+            },
+            {
+              "links": [
+                {
+                  "url": "https://assemblyhouse.example/",
+                  "label": "Website"
+                }
+              ],
+              "notes": null,
+              "title": "Assembly House",
+              "photos": [],
+              "address": "17 Tunstead Ave, San Anselmo, CA 94960",
+              "details": [
+                {
+                  "label": "Capacity - Seated",
+                  "value": "54"
+                },
+                {
+                  "label": "Capacity - Reception",
+                  "value": "75"
+                },
+                {
+                  "label": "Day rental",
+                  "value": "$5,900"
+                },
+                {
+                  "label": "Furniture reset fee",
+                  "value": "$350"
+                },
+                {
+                  "label": "Availability",
+                  "value": "October 17 available until 9:30 PM"
+                }
+              ],
+              "contacts": [
+                {
+                  "name": "Nora Bell",
+                  "role": "Events Coordinator",
+                  "email": "nora@assemblyhouse.example",
+                  "phone": "(415) 555-0255",
+                  "website": null
+                }
+              ],
+              "description": "Restored historic house suited to smaller leadership gatherings. A private office off the library can be used as a speaker prep room or confidential one-on-one meeting space. \"Private office\" and \"confidential one-on-one meeting space\" describe client-usable rooms; those words do not make the source note private. Assembly House is unrelated to Redwood Assembly."
+            }
+          ],
+          "title": "Meeting and Historic Venues",
+          "description": null
+        }
+      ]
+    }
+  },
+  {
+    "ordinal": 2,
+    "source_start": 5434,
+    "source_end": 10577,
+    "segment_text": "Atlas Hall (formerly Pier 27 Gallery),San Francisco,\"270 The Embarcadero, San Francisco, CA 94111\",Gallery / event hall,\"Large contemporary gallery with bay views and strong built-in production capability. Suitable for a keynote, reception, and dinner in one room.\",180 seated; 300 reception,Jae Kim,Group Sales Director,(415) 555-0291,jae@atlasevents.example,https://atlashall.example,\"Venue rental: $14,500\nMandatory building engineer: $1,100\nAV starting package: $4,250\",October 17 available after 2:00 PM load-in,\"Stage, 16-foot screen, house sound, freight elevator, waterfront lobby\",Exclusive beverage service; outside catering allowed,The former name is part of the venue identity and should not cause this record to merge with Atlas Courtyard.,,,\"Same ownership group as Atlas Courtyard; different room, address, capacity, and pricing.\"\nAtlas Courtyard,San Francisco,\"288 The Embarcadero, San Francisco, CA 94111\",Outdoor courtyard / reception venue,\"Open-air courtyard operated by Atlas Events. Best for cocktails, lunch, or a closing reception rather than a full-day meeting.\",110 seated; 180 reception,Jae Kim,Group Sales Director,(415) 555-0291,jae@atlasevents.example,https://atlascourtyard.example,\"Courtyard rental: $7,250\nWeather tent: $3,900 if requested\",October 16 confirmed open; October 17 status pending,\"Market lights, heaters, portable bar, adjacent loading access\",Same approved catering list as Atlas Hall,Jae Kim and the Atlas Events email domain legitimately appear on both Atlas records.,,Jae said another group has a soft hold on October 17 but expects to know tomorrow whether it will clear. She did not tell me whether we should treat the date as available yet.,Shares a loading entrance with Atlas Hall; that fact belongs to Atlas Courtyard too.\nLarkspur Landing Conference Center,Larkspur,\"500 Larkspur Landing Cir, Larkspur, CA 94939\",Conference center,\"Straightforward conference venue near the ferry, with multiple meeting rooms and easy parking. Less distinctive visually, but operationally simple for an all-day program.\",Main room: 120 theater / 80 classroom; 4 breakout rooms,Devon Ross,Conference Services,(415) 555-0228,devon@larkspurconference.example,https://larkspurconference.example,\"Day package: $165 per person, 60-person minimum\nIncludes room rental, continental breakfast, lunch, and standard AV\",October 17 available,\"Parking, Wi-Fi, standard projector, 4 breakout rooms, confidentiality screens available on request\",In-house conference catering,Confidentiality screens are a normal client-facing amenity and should not be treated as a privacy instruction.,,,\nGlasshouse Studio,Berkeley,\"1420 4th St, Berkeley, CA 94710\",Creative studio / event rental,\"Light-filled studio with movable walls, a demonstration kitchen, and a private roof deck. Good for an interactive workshop followed by drinks.\",80 seated; 130 reception,Imani Wells,Studio Director,(510) 555-0233,imani@glasshousestudio.example,https://glasshousestudio.example,\"Studio rental: $7,900\nKitchen use: $650\nRoof deck staffing: $500\",October 17 available,\"Demonstration kitchen, movable walls, private roof deck, basic furniture\",Outside catering and wine allowed with insurance certificate,The private roof deck is client-facing venue information.,\"Do not share with the client yet — Imani verbally offered to waive corkage if we use her preferred caterer, but she has not confirmed the waiver in writing.\",,\nClementine Club,San Francisco,\"88 Clement St, San Francisco, CA 94118\",Restaurant buyout / private dining,\"Neighborhood restaurant available for a full private buyout. Strong option for a closing dinner, with a bar area and two connected dining rooms.\",96 seated; 125 reception,Marco Ruiz,Private Events Manager,(415) 555-0280,marco@clementineclub.example,https://clementineclub.example,\"Food & beverage minimum: $18,000\nService charge: 24%\nRoom fee waived with minimum\",October 17 dinner available,\"Full restaurant buyout, bar, two dining rooms, printed menus\",Seasonal three-course and family-style menus available,\"The fall menu is confidential until September 20. The client may review it now, but the restaurant asks that it not be posted or shared publicly before launch.\",,,\nClementine Room at Parkline Hotel,San Francisco,\"705 Market St, San Francisco, CA 94103\",Hotel meeting room,\"Dedicated hotel meeting room with natural light, adjacent foyer, and easy guest-room access. Despite the similar name, it is not affiliated with Clementine Club.\",70 classroom; 100 theater; 80 banquet,Sara Ng,Group Events Manager,(415) 555-0272,sara@parklinehotel.example,https://parklinehotel.example/clementine-room,\"Meeting room rental: $4,800\nGuest-room block: $349/night before taxes\nCoffee service: $28 per person\",October 17 available; 20 guestrooms currently held as a courtesy,\"Built-in display, foyer, hotel Wi-Fi, guestrooms upstairs\",Hotel catering required,The similar “Clementine” name should not pull information from Clementine Club onto this record.,Private note for our team: this hotel waived the meeting-room rental for this same client two years ago. Do not assume or promise that concession this time.,,",
+    "result": {
+      "sections": [
+        {
+          "items": [
+            {
+              "links": [
+                {
+                  "url": "https://atlashall.example/",
+                  "label": "Website"
+                }
+              ],
+              "notes": null,
+              "title": "Atlas Hall (formerly Pier 27 Gallery)",
+              "photos": [],
+              "address": "270 The Embarcadero, San Francisco, CA 94111",
+              "details": [
+                {
+                  "label": "Capacity",
+                  "value": "180 seated; 300 reception"
+                },
+                {
+                  "label": "Venue rental",
+                  "value": "$14,500"
+                },
+                {
+                  "label": "Mandatory building engineer",
+                  "value": "$1,100"
+                },
+                {
+                  "label": "AV starting package",
+                  "value": "$4,250"
+                },
+                {
+                  "label": "October 17 availability",
+                  "value": "available after 2:00 PM load-in"
+                },
+                {
+                  "label": "Amenities",
+                  "value": "Stage, 16-foot screen, house sound, freight elevator, waterfront lobby"
+                },
+                {
+                  "label": "Catering",
+                  "value": "Exclusive beverage service; outside catering allowed"
+                }
+              ],
+              "contacts": [
+                {
+                  "name": "Jae Kim",
+                  "role": "Group Sales Director",
+                  "email": "jae@atlasevents.example",
+                  "phone": "(415) 555-0291",
+                  "website": null
+                }
+              ],
+              "description": "Large contemporary gallery with bay views and strong built-in production capability. Suitable for a keynote, reception, and dinner in one room."
+            },
+            {
+              "links": [
+                {
+                  "url": "https://atlascourtyard.example/",
+                  "label": "Website"
+                }
+              ],
+              "notes": "",
+              "title": "Atlas Courtyard",
+              "photos": [],
+              "address": "288 The Embarcadero, San Francisco, CA 94111",
+              "details": [
+                {
+                  "label": "Capacity",
+                  "value": "110 seated; 180 reception"
+                },
+                {
+                  "label": "Courtyard rental",
+                  "value": "$7,250"
+                },
+                {
+                  "label": "Weather tent",
+                  "value": "$3,900 if requested"
+                },
+                {
+                  "label": "October 16",
+                  "value": "confirmed open"
+                },
+                {
+                  "label": "October 17",
+                  "value": "status pending"
+                },
+                {
+                  "label": "Amenities",
+                  "value": "Market lights, heaters, portable bar, adjacent loading access"
+                },
+                {
+                  "label": "Catering",
+                  "value": "Same approved catering list as Atlas Hall"
+                }
+              ],
+              "contacts": [
+                {
+                  "name": "Jae Kim",
+                  "role": "Group Sales Director",
+                  "email": "jae@atlasevents.example",
+                  "phone": "(415) 555-0291",
+                  "website": null
+                }
+              ],
+              "description": "Open-air courtyard operated by Atlas Events. Best for cocktails, lunch, or a closing reception rather than a full-day meeting. Shares a loading entrance with Atlas Hall."
+            },
+            {
+              "links": [
+                {
+                  "url": "https://larkspurconference.example/",
+                  "label": "Website"
+                }
+              ],
+              "notes": null,
+              "title": "Larkspur Landing Conference Center",
+              "photos": [],
+              "address": "500 Larkspur Landing Cir, Larkspur, CA 94939",
+              "details": [
+                {
+                  "label": "Main room",
+                  "value": "120 theater / 80 classroom; 4 breakout rooms"
+                },
+                {
+                  "label": "Day package",
+                  "value": "$165 per person, 60-person minimum"
+                },
+                {
+                  "label": "Package includes",
+                  "value": "room rental, continental breakfast, lunch, and standard AV"
+                },
+                {
+                  "label": "October 17",
+                  "value": "available"
+                },
+                {
+                  "label": "Amenities",
+                  "value": "Parking, Wi-Fi, standard projector, 4 breakout rooms, confidentiality screens available on request"
+                },
+                {
+                  "label": "Catering",
+                  "value": "In-house conference catering"
+                }
+              ],
+              "contacts": [
+                {
+                  "name": "Devon Ross",
+                  "role": "Conference Services",
+                  "email": "devon@larkspurconference.example",
+                  "phone": "(415) 555-0228",
+                  "website": null
+                }
+              ],
+              "description": "Straightforward conference venue near the ferry, with multiple meeting rooms and easy parking. Less distinctive visually, but operationally simple for an all-day program."
+            },
+            {
+              "links": [
+                {
+                  "url": "https://glasshousestudio.example/",
+                  "label": "Website"
+                }
+              ],
+              "notes": "Do not share with the client yet — Imani verbally offered to waive corkage if we use her preferred caterer, but she has not confirmed the waiver in writing.",
+              "title": "Glasshouse Studio",
+              "photos": [],
+              "address": "1420 4th St, Berkeley, CA 94710",
+              "details": [
+                {
+                  "label": "Capacity",
+                  "value": "80 seated; 130 reception"
+                },
+                {
+                  "label": "Studio rental",
+                  "value": "$7,900"
+                },
+                {
+                  "label": "Kitchen use",
+                  "value": "$650"
+                },
+                {
+                  "label": "Roof deck staffing",
+                  "value": "$500"
+                },
+                {
+                  "label": "October 17",
+                  "value": "available"
+                },
+                {
+                  "label": "Amenities",
+                  "value": "Demonstration kitchen, movable walls, private roof deck, basic furniture"
+                },
+                {
+                  "label": "Catering",
+                  "value": "Outside catering and wine allowed with insurance certificate"
+                }
+              ],
+              "contacts": [
+                {
+                  "name": "Imani Wells",
+                  "role": "Studio Director",
+                  "email": "imani@glasshousestudio.example",
+                  "phone": "(510) 555-0233",
+                  "website": null
+                }
+              ],
+              "description": "Light-filled studio with movable walls, a demonstration kitchen, and a private roof deck. Good for an interactive workshop followed by drinks."
+            },
+            {
+              "links": [
+                {
+                  "url": "https://clementineclub.example/",
+                  "label": "Website"
+                }
+              ],
+              "notes": "",
+              "title": "Clementine Club",
+              "photos": [],
+              "address": "88 Clement St, San Francisco, CA 94118",
+              "details": [
+                {
+                  "label": "Capacity",
+                  "value": "96 seated; 125 reception"
+                },
+                {
+                  "label": "Food & beverage minimum",
+                  "value": "$18,000"
+                },
+                {
+                  "label": "Service charge",
+                  "value": "24%"
+                },
+                {
+                  "label": "Room fee",
+                  "value": "waived with minimum"
+                },
+                {
+                  "label": "October 17",
+                  "value": "dinner available"
+                },
+                {
+                  "label": "Amenities",
+                  "value": "Full restaurant buyout, bar, two dining rooms, printed menus"
+                },
+                {
+                  "label": "Catering",
+                  "value": "Seasonal three-course and family-style menus available"
+                }
+              ],
+              "contacts": [
+                {
+                  "name": "Marco Ruiz",
+                  "role": "Private Events Manager",
+                  "email": "marco@clementineclub.example",
+                  "phone": "(415) 555-0280",
+                  "website": null
+                }
+              ],
+              "description": "Neighborhood restaurant available for a full private buyout. Strong option for a closing dinner, with a bar area and two connected dining rooms."
+            },
+            {
+              "links": [
+                {
+                  "url": "https://parklinehotel.example/clementine-room",
+                  "label": "Website"
+                }
+              ],
+              "notes": "Private note for our team: this hotel waived the meeting-room rental for this same client two years ago. Do not assume or promise that concession this time.",
+              "title": "Clementine Room at Parkline Hotel",
+              "photos": [],
+              "address": "705 Market St, San Francisco, CA 94103",
+              "details": [
+                {
+                  "label": "Capacity",
+                  "value": "70 classroom; 100 theater; 80 banquet"
+                },
+                {
+                  "label": "Meeting room rental",
+                  "value": "$4,800"
+                },
+                {
+                  "label": "Guest-room block",
+                  "value": "$349/night before taxes"
+                },
+                {
+                  "label": "Coffee service",
+                  "value": "$28 per person"
+                },
+                {
+                  "label": "October 17",
+                  "value": "available; 20 guestrooms currently held as a courtesy"
+                },
+                {
+                  "label": "Amenities",
+                  "value": "Built-in display, foyer, hotel Wi-Fi, guestrooms upstairs"
+                },
+                {
+                  "label": "Catering",
+                  "value": "Hotel catering required"
+                },
+                {
+                  "label": "Private note for our team",
+                  "value": "this hotel waived the meeting-room rental for this same client two years ago. Do not assume or promise that concession this time."
+                }
+              ],
+              "contacts": [
+                {
+                  "name": "Sara Ng",
+                  "role": "Group Events Manager",
+                  "email": "sara@parklinehotel.example",
+                  "phone": "(415) 555-0272",
+                  "website": null
+                }
+              ],
+              "description": "Dedicated hotel meeting room with natural light, adjacent foyer, and easy guest-room access. Despite the similar name, it is not affiliated with Clementine Club."
+            }
+          ],
+          "title": "Event Venues",
+          "description": null
+        }
+      ]
+    }
+  }
+]
