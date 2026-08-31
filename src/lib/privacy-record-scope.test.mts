@@ -259,6 +259,7 @@ const REPLAY = JSON.parse(
 function replay() {
   const notes = new Map<string, string>();
   const cards: Array<{ title: string | null; text: string }> = [];
+  const unprovable: Array<{ title: string | null; text: string }> = [];
   for (const c of REPLAY.chunks) {
     const out = enforceChunkResult({
       segmentText: c.segmentText, chunkOrdinal: c.ordinal, sourceStart: c.sourceStart,
@@ -270,16 +271,45 @@ function replay() {
     for (const it of items) notes.set(String(it.title ?? ""), String(it.notes ?? "").trim());
     for (const u of out.unresolved.filter((x) => x.kind === "privacy-rejected"))
       cards.push({ title: u.title, text: String(u.text) });
+    for (const u of out.unresolved.filter((x) => x.kind === "unbound-private-note"))
+      unprovable.push({ title: u.title, text: String(u.text) });
   }
-  return { notes, cards };
+  return { notes, cards, unprovable };
 }
 
-test("REPLAY: Redfern and Finch keep their private notes automatically", () => {
+test("REPLAY: a PROVABLE internal note is still kept automatically", () => {
   const { notes } = replay();
-  assert.match(notes.get("Redfern Renovation") ?? "", /^INTERNAL ONLY — Luis said he can probably hold/,
-    "an explicitly internal note was still stripped");
   assert.match(notes.get("Finch & Frame Renovation") ?? "", /^INTERNAL ONLY — Naomi mentioned by phone/,
     "an explicitly internal note was still stripped");
+});
+
+// REDFERN CHANGED, AND THE CHANGE IS THE POINT.
+//
+// This assertion used to read like Finch's, and it passed for a reason nobody
+// had checked: Redfern's proposal never bound to a source record, so
+// enforcement SKIPPED it entirely and the model's choice of `notes` stood
+// unexamined. The note happened to be genuinely internal, so the outcome looked
+// right and proved nothing.
+//
+// Binding fails here for a real reason that is still true: the neighbouring
+// Baylight proposal carries Redfern's email, phone and website, so two
+// proposals claim the one record. Solving that would mean guessing identity
+// from a shared contact, which is the move this contract refuses.
+//
+// So the note becomes a question instead of a silent decision — and a question
+// that says the true thing, which is that FlowGuide could not place the note,
+// NOT that the source failed to mark it. One click of "Keep as private note"
+// restores exactly what used to happen by accident.
+test("REPLAY: an UNPROVABLE internal note is surfaced instead of silently kept", () => {
+  const { notes, unprovable, cards } = replay();
+  assert.equal(notes.get("Redfern Renovation"), "",
+    "an unbindable proposal kept a private note on the model's say-so");
+  const held = unprovable.find((c) => c.title === "Redfern Renovation");
+  assert.ok(held, "the note was dropped rather than surfaced");
+  assert.match(held!.text, /^INTERNAL ONLY — Luis said he can probably hold/,
+    "the note's text was not preserved for the decision");
+  assert.ok(!cards.some((c) => c.title === "Redfern Renovation"),
+    "Redfern was told its source marks nothing private, which is false of this file");
 });
 
 test("REPLAY: they no longer produce unresolved cards", () => {
@@ -298,9 +328,12 @@ test("REPLAY: Coastline's CLIENT-FACING note is still surfaced, not hidden", () 
   assert.match(card!.text, /Same Maya Chen who appears at Marin Cabinet Studio/);
 });
 
-test("REPLAY: exactly ONE question, where there were three", () => {
-  const { cards } = replay();
+test("REPLAY: exactly ONE privacy question, where there were three", () => {
+  const { cards, unprovable } = replay();
   assert.equal(cards.length, 1, `expected one card, got ${JSON.stringify(cards.map((c) => c.title))}`);
+  assert.equal(cards[0].title, "Coastline Craft Construction");
+  // The second question is a different question, and it is the only other one.
+  assert.deepEqual(unprovable.map((c) => c.title), ["Redfern Renovation"]);
 });
 
 // ---------------------------------------------------------------------------

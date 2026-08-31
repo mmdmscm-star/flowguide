@@ -114,8 +114,41 @@ export function sourceGrantsPrivacy(text: string): boolean {
  *  content. Reading `INTERNAL ONLY — Luis said…` as a heading would authorise
  *  that column in EVERY row, which is the chunk-scope mistake wearing a
  *  different hat. */
-const PRIVACY_HEADING =
-  /^[ \t"']*(private\s+notes?|internal\s+notes?|internal\s+only|internal\s+use\s+only|confidential(\s+notes?)?)[ \t]*:?[ \t"']*$/i;
+/*  A LIST OF EXACT PHRASES WAS THE WRONG SHAPE. The event-planner file names
+ *  its column `Private / Internal Notes` — an entirely ordinary heading that
+ *  matched nothing, because the pattern wanted `private` and `notes` adjacent.
+ *  That column therefore authorised NOTHING, in every row, and the only reason
+ *  one venue's note was correctly kept private was an inline "do not share"
+ *  sentence that happened to be in its text.
+ *
+ *  So the rule is structural instead: a heading authorises when EVERY word in
+ *  it is a privacy word or a filler word, and at least one is a privacy word.
+ *  Order, punctuation and separators stop mattering — `Private / Internal
+ *  Notes`, `Internal — Notes` and `Notes (Confidential)` all pass — while the
+ *  whitelist keeps it from drifting into phrase matching.
+ *
+ *  WHAT IT MUST NOT DO IS THE POINT. `Planner Notes — Audience Not Yet
+ *  Decided` contains no privacy word and is refused, which is correct twice
+ *  over: the source itself says the audience is undecided, so hiding it would
+ *  answer a question the professional has not been asked. And because every
+ *  word must be listed, none of the client-facing prose in this file can reach
+ *  it — `private office`, `internal courtyard`, `confidential one-on-one
+ *  meeting space`, `confidentiality screens` (not even the same word) and
+ *  Clementine Club's menu that is confidential to the public but explicitly
+ *  reviewable by the client all stay client-facing.
+ *
+ *  This widens ONLY the heading. The inline patterns above are untouched: a
+ *  value that opens with a marker is still one record's content, and reading it
+ *  as a heading would authorise that column in every row. */
+const HEADING_PRIVACY = new Set(["private", "internal", "confidential"]);
+const HEADING_FILLER = new Set(["note", "notes", "only", "use"]);
+
+export function headingGrantsPrivacy(heading: string): boolean {
+  const words = String(heading ?? "").toLowerCase().match(/[a-z]+/g) ?? [];
+  if (!words.length) return false;
+  if (!words.some((w) => HEADING_PRIVACY.has(w))) return false;
+  return words.every((w) => HEADING_PRIVACY.has(w) || HEADING_FILLER.has(w));
+}
 
 /** RFC4180 fields of one row. Small on purpose — the source layer already
  *  tiled the file into records with quote state; this only needs the columns
@@ -170,7 +203,7 @@ export function privateSourceOf(
     for (let i = 0; i < cells.length; i++) {
       const v = cells[i].trim();
       if (!v) continue;
-      const headed = i < heads.length && PRIVACY_HEADING.test(heads[i].trim());
+      const headed = i < heads.length && headingGrantsPrivacy(heads[i]);
       if (headed || sourceGrantsPrivacy(cells[i])) kept.push(v);
     }
     return kept.join("\n");

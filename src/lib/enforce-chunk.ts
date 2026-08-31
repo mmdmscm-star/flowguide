@@ -9,7 +9,8 @@
 // inferred — those stay SOURCE_UNRESOLVED — and no vertical vocabulary is
 // consulted anywhere in the chain.
 import { parseClaims } from "./claim-parser.ts";
-import { recordEnvelopes, attributeAll, bindByProvenance } from "./attribution.ts";
+import { recordEnvelopes, attributeAll, bindByProvenance, sourceCells, spansCells,
+  type SourceCells } from "./attribution.ts";
 import { reconcile } from "./reconcile.ts";
 import { enforceItem, privateSourceOf, contractEnforcementEnabled } from "./enforce.ts";
 import { locate } from "./placement.ts";
@@ -22,6 +23,12 @@ export interface EnforcementTelemetry {
   wholeSourceChecked: number; wholeSourcePresent: number; wholeSourceMissing: number;
   sourceUnresolved: number; attributionUnresolved: number;
   privacyRejected: number; itemsGoverned: number;
+  /** Recipient-facing values proven to have crossed a source cell boundary,
+   *  and proposals refused governance because they could not be bound. Both
+   *  are COUNTS OF A SAFETY ACTION THAT ALREADY HAPPENED - the material is
+   *  surfaced whether or not anyone reads these numbers. Telemetry records
+   *  the contract; it has never been the thing that enforces it. */
+  crossCellRejected: number; unboundSurfaced: number;
   /** Why enforcement did or did not run for this chunk. Recorded even when it
    *  declined, so "we were asked and said no" is a fact in the evidence rather
    *  than an absence someone has to interpret. */
@@ -69,7 +76,7 @@ export function enforcementScope(destination: string | null | undefined): ScopeV
 export interface UnresolvedUnit {
   record: number;
   title: string | null;
-  kind: "privacy-rejected" | "source-unresolved";
+  kind: "privacy-rejected" | "source-unresolved" | "cross-cell-detail" | "unbound-private-note";
   text: string;
   reason: string;
   /** Absolute source offset where the fact was written, when known. Provenance
@@ -92,6 +99,7 @@ const empty = (): EnforcementTelemetry => ({
   accepted: 0, repaired: 0, stripped: 0, sourceUnresolved: 0,
   wholeSourceChecked: 0, wholeSourcePresent: 0, wholeSourceMissing: 0,
   attributionUnresolved: 0, privacyRejected: 0, itemsGoverned: 0,
+  crossCellRejected: 0, unboundSurfaced: 0,
 });
 
 /** Rebuild a result object with the same shape, items replaced. */
@@ -114,6 +122,27 @@ function maybeThrowForTest(): void {
   if (process.env.NODE_ENV === "production") return;
   if (process.env.FLOWGUIDE_TEST_ENFORCE_THROW === "1")
     throw new Error("injected enforcement failure (test hook)");
+}
+
+/** ONE RULE, APPLIED EVERYWHERE A RECIPIENT-FACING VALUE CAN ARRIVE.
+ *
+ *  A value can reach `details` from two places, and BOTH produced the same
+ *  spill on the event-planner import: the model emitted one, and the claim
+ *  parser independently split the same quoted multi-line pricing block on the
+ *  colon inside "6:00" and ran past the field. Guarding only the model's copy
+ *  left enforcement free to write the parser's copy back in — and worse, to
+ *  overwrite a perfectly good detail with it. The Foundry Hall's cleaning fee
+ *  was proposed correctly as "$800" and replaced by 768 characters of the next
+ *  three columns.
+ *
+ *  So the rule lives here, in one place, and is applied to claims before they
+ *  are materialized and to details on the way out. */
+function partitionSpanning<T>(
+  values: T[], cells: SourceCells, valueOf: (v: T) => string,
+): { kept: T[]; rejected: T[] } {
+  const kept: T[] = [], rejected: T[] = [];
+  for (const v of values) (spansCells(cells, valueOf(v)) ? rejected : kept).push(v);
+  return { kept, rejected };
 }
 
 /** The kinds whose canonical form makes presence-matching exact. Deliberately
@@ -156,7 +185,52 @@ export function enforceChunkResult(opts: {
   const unresolved: UnresolvedUnit[] = [];
   t.attributionUnresolved = a.unattributedClaims.length + a.unattributedAmbiguous.length;
 
-  const bound = env ? bindByProvenance(env, sourceText, items).bound : new Map<number, Record<string, unknown>>();
+  const envByIndex = new Map((env ?? []).map((e) => [e.index, e]));
+  // The heading row is the first record the tiling produced. The delimiter is
+  // the declared one where the file supplied it, and is otherwise inferred from
+  // the heading itself — whichever candidate splits it into the most columns.
+  const headerRow = env && env.length ? sourceText.slice(env[0].start, env[0].end) : null;
+  const delimiter = delimiterHint
+    || (headerRow ? [",", "\t", ";", "|"]
+        .map((d) => ({ d, n: headerRow.split(d).length }))
+        .sort((a, b) => b.n - a.n)
+        .filter((x) => x.n >= 3)[0]?.d ?? null
+      : null);
+
+  // A VALUE THAT CROSSED A CELL BOUNDARY IS NOT A FIELD CLAIM.
+  //
+  // This runs BEFORE binding, because a spilled value is not merely wrong
+  // output — it is bad evidence. The four observed spills carried the NEXT
+  // record's email, phone and website inside them, so the binder saw one
+  // proposal claiming two records and refused both. Removing the proven-invalid
+  // value first lets provenance work on what the model actually asserted about
+  // this record.
+  //
+  // Nothing is truncated and nothing is repaired: the value goes out whole, to
+  // a question. Only `details` are examined, because that is the recipient-
+  // facing destination whose values are supposed to BE single source cells.
+  const cells = delimiter ? sourceCells(sourceText, delimiter) : null;
+  // Collected from every pass and surfaced ONCE, at the end. The model and the
+  // claim parser mis-split the same field in the same way, so the same excerpt
+  // arrives from two directions; one excerpt is one decision.
+  const crossCell: { record: number; title: string; label: string; value: string }[] = [];
+  const detailValue = (d: unknown) => String((d as { value?: unknown })?.value ?? "");
+  const detailLabel = (d: unknown) => String((d as { label?: unknown })?.label ?? "");
+  const scanned = cells
+    ? items.map((it) => {
+        const details = Array.isArray(it.details) ? it.details : null;
+        if (!details) return it;
+        const { kept, rejected } = partitionSpanning(details, cells, detailValue);
+        for (const d of rejected)
+          crossCell.push({ record: -1, title: String(it.title ?? ""),
+                           label: detailLabel(d), value: detailValue(d) });
+        return rejected.length ? { ...it, details: kept } : it;
+      })
+    : items;
+  // `scanned` is what everything downstream sees. Keeping the original array
+  // around to fall back on would be exactly the silent second source of truth
+  // this contract exists to prevent.
+  const bound = env ? bindByProvenance(env, sourceText, scanned).bound : new Map<number, Record<string, unknown>>();
   // THE CHUNK IS NOT THE RECORD — AND THE RECORD IS NOT THE FIELD.
   //
   // Authority used to be read from the whole chunk and handed to every record
@@ -176,17 +250,6 @@ export function enforceChunkResult(opts: {
   // start/end are that tiling. When a record has no envelope there is no proof
   // of what it owns, so nothing is authorised and the note is surfaced for a
   // decision — fail closed, exactly as before.
-  const envByIndex = new Map((env ?? []).map((e) => [e.index, e]));
-  // The heading row is the first record the tiling produced. The delimiter is
-  // the declared one where the file supplied it, and is otherwise inferred from
-  // the heading itself — whichever candidate splits it into the most columns.
-  const headerRow = env && env.length ? sourceText.slice(env[0].start, env[0].end) : null;
-  const delimiter = delimiterHint
-    || (headerRow ? [",", "\t", ";", "|"]
-        .map((d) => ({ d, n: headerRow.split(d).length }))
-        .sort((a, b) => b.n - a.n)
-        .filter((x) => x.n >= 3)[0]?.d ?? null
-      : null);
   const privateSourceFor = (rec: number): string => {
     const e = envByIndex.get(rec);
     if (!e) return "";
@@ -199,8 +262,25 @@ export function enforceChunkResult(opts: {
   for (const [rec, g] of a.byRecord) {
     const item = bound.get(rec);
     if (!item) { t.attributionUnresolved += g.claims.length + g.ambiguous.length; continue; }
-    const res = reconcile({ claims: g.claims, ambiguous: g.ambiguous, fragments: g.fragments }, item);
-    const e = enforceItem(item, res.resolutions, g.claims, { privateSource: privateSourceFor(rec) });
+    // A CLAIM THAT SPANS CELLS IS NOT A CLAIM ABOUT THIS FIELD.
+    //
+    // Dropped BEFORE reconciliation rather than after, because a materialized
+    // spanning claim does not merely add a bad detail — it can REPLACE a good
+    // one. The Foundry Hall proposed its cleaning fee correctly as "$800" and
+    // enforcement overwrote it with the next three columns, on the authority of
+    // a claim the parser had mis-split. Refusing the claim leaves "$800" alone.
+    //
+    // CLAIMS ONLY. An ambiguous unit never reaches `details` — it resolves to
+    // SOURCE_UNRESOLVED, which is recorded and shown to nobody — so filtering it
+    // here would remove nothing from the recipient and would only make the
+    // ledger less complete.
+    const gc = cells ? partitionSpanning(g.claims, cells, (c) => c.value)
+                     : { kept: g.claims, rejected: [] as Claim[] };
+    for (const c of gc.rejected)
+      crossCell.push({ record: rec, title: String(item.title ?? ""),
+                       label: c.label ?? "", value: c.value });
+    const res = reconcile({ claims: gc.kept, ambiguous: g.ambiguous, fragments: g.fragments }, item);
+    const e = enforceItem(item, res.resolutions, gc.kept, { privateSource: privateSourceFor(rec) });
     t.accepted += res.counts.accepted; t.repaired += res.counts.repaired;
     t.sourceUnresolved += res.counts.sourceUnresolved;
     t.stripped += e.stripped.length;
@@ -248,7 +328,89 @@ export function enforceChunkResult(opts: {
   // NINE were `labelled` claims where a whole line became one claim and the
   // content survived reshaped, and ONE was a genuine loss. Governing only these
   // kinds catches that one and none of the nine.
-  const finalItems = items.map((it) => replaced.get(it) ?? it);
+  // FAIL CLOSED WHEN PROVENANCE COULD NOT BE ESTABLISHED.
+  //
+  // `bound.get(rec)` returning nothing used to `continue`, and that was the
+  // whole of it: the proposal was never enforced, never surfaced, and the only
+  // trace was a counter. A note the model decided to hide therefore reached the
+  // packet as creator-only content on the strength of the model's own choice —
+  // the exact thing the privacy rule exists to refuse. Three venues in the
+  // event-planner import hid planner judgment this way, and nobody was asked.
+  //
+  // Being unable to bind is not evidence that the material is safe. It is the
+  // absence of evidence either way, so it becomes a question. This does NOT
+  // reach for a weaker identity: no title match, no shared contact, no
+  // neighbouring record, no domain. It simply declines to grant privacy that
+  // nothing proved.
+  //
+  // Only `notes` is governed here, because that is the field whose meaning is
+  // "the client will never see this". A proposal FlowGuide could not attribute
+  // is left otherwise untouched.
+  const governed = new Set(bound.values());
+  for (const it of scanned) {
+    if (governed.has(it)) continue;
+    const note = String(it.notes ?? "");
+    if (!note.trim()) continue;
+    t.unboundSurfaced++;
+    t.privacyRejected++;
+    unresolved.push({
+      record: -1,
+      title: String(it.title ?? "") || null,
+      // ITS OWN KIND, because the reason differs from the ordinary privacy
+      // rejection and the professional is owed the true one. The source may
+      // well mark this private; what is absent is proof that it is THIS row's.
+      kind: "unbound-private-note",
+      text: note,
+      reason: "FlowGuide could not establish which source record this came from, "
+        + "so nothing proves the source meant it to be private",
+    });
+    replaced.set(it, { ...it, notes: "" });
+  }
+
+  // THE INVARIANT, CHECKED WHERE IT MATTERS: ON THE WAY OUT.
+  //
+  // The two passes above cover the two writers we know about. This one states
+  // the guarantee itself — no value leaving here is one that provably crossed a
+  // cell boundary — so a future write path cannot quietly reopen the hole. If
+  // the earlier passes are complete this finds nothing, which is the point.
+  const enforced = scanned.map((it) => replaced.get(it) ?? it);
+  const finalItems = cells
+    ? enforced.map((it) => {
+        const details = Array.isArray(it.details) ? it.details : null;
+        if (!details) return it;
+        const { kept, rejected } = partitionSpanning(details, cells, detailValue);
+        if (!rejected.length) return it;
+        for (const d of rejected)
+          crossCell.push({ record: -1, title: String(it.title ?? ""),
+                           label: detailLabel(d), value: detailValue(d) });
+        return { ...it, details: kept };
+      })
+    : enforced;
+  // SURFACED ONCE, WITH THE WHOLE EXCERPT.
+  //
+  // The label is kept with the value so the professional can see both the real
+  // fact and where it ran on to — Redwood's "$1,100 evening extension" is in
+  // there, followed by three columns that are not. Which part was meant is
+  // their decision; making it here would be the silent choice this contract
+  // exists to refuse, so nothing is truncated or repaired.
+  //
+  // `crossCellRejected` counts values REMOVED, which is more than the number of
+  // questions asked when two passes catch the same excerpt. The count is a
+  // record of what the contract did; the unit is what the professional sees.
+  {
+    const seen = new Set<string>();
+    for (const c of crossCell) {
+      t.crossCellRejected++;
+      const text = c.label ? `${c.label}: ${c.value}` : c.value;
+      if (seen.has(text)) continue;
+      seen.add(text);
+      unresolved.push({
+        record: c.record, title: c.title || null, kind: "cross-cell-detail", text,
+        reason: "this value spans more than one cell of the source file, so it is not a single field value",
+      });
+    }
+  }
+
   const ungoverned: Claim[] = [...a.unattributedClaims];
   for (const [rec, g] of a.byRecord) if (!bound.get(rec)) ungoverned.push(...g.claims);
 

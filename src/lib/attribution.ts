@@ -110,6 +110,94 @@ export function envelopesInRange(envelopes: Envelope[], start: number, end: numb
   return envelopes.filter((e) => e.start < end && e.end > start);
 }
 
+/** WHICH DELIMITED CELL EACH SOURCE CHARACTER BELONGS TO.
+ *
+ *  A quoted field may legitimately contain the delimiter and may legitimately
+ *  run across several physical lines — "Wi-Fi, 2 wireless mics, display" is ONE
+ *  value, and so is a two-line pricing block. So the boundary cannot be found
+ *  by splitting on commas or newlines; it needs the quote state, which is what
+ *  this single pass carries.
+ *
+ *  The counter advances at an unquoted delimiter AND at an unquoted newline, so
+ *  one number distinguishes both "a different column" and "a different record".
+ *  That is deliberate: the two spill shapes observed differ only in how far they
+ *  ran, and neither is a valid field value. */
+export interface SourceCells {
+  source: string;
+  /** cell ordinal per character offset */
+  map: Int32Array;
+}
+
+export function sourceCells(source: string, delimiter: string): SourceCells {
+  const s = String(source ?? "");
+  const d = delimiter && delimiter.length === 1 ? delimiter : ",";
+  const map = new Int32Array(s.length);
+  let cell = 0, quoted = false;
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (quoted) {
+      // "" is an escaped quote INSIDE the field, not the end of it.
+      if (ch === '"') {
+        if (s[i + 1] === '"') { map[i] = cell; map[++i] = cell; continue; }
+        quoted = false;
+      }
+      map[i] = cell;
+      continue;
+    }
+    if (ch === '"') { quoted = true; map[i] = cell; continue; }
+    if (ch === d || ch === "\n") { map[i] = cell; cell++; continue; }
+    map[i] = cell;
+  }
+  return { source: s, map };
+}
+
+/** PROVEN TO HAVE CROSSED A CELL BOUNDARY — not merely suspected.
+ *
+ *  The model split a quoted multi-line pricing block on its first colon, landed
+ *  inside the clock time "6:00", and then ran past the field's closing quote and
+ *  kept consuming raw CSV — in two cases straight through the record boundary
+ *  and into the next venue's columns. The result reached the recipient as a
+ *  "detail" carrying another venue's address, contact and private notes.
+ *
+ *  The test is structural and needs no vocabulary, no title matching and no
+ *  guess about which record the value came from: find the value in the source,
+ *  and ask whether the text it matched lies inside ONE cell.
+ *
+ *  IT ONLY EVER SPEAKS FROM EVIDENCE. Three restraints keep it from accusing
+ *  ordinary content:
+ *
+ *    * a value that cannot be located in the source at all is left alone. The
+ *      model reformats legitimately ("18 seated"), and absence of a match is
+ *      absence of proof, not proof of a defect.
+ *    * if ANY occurrence fits inside a single cell, the value is fine. A phrase
+ *      that reads naturally as one field somewhere is not condemned because it
+ *      also happens to straddle a boundary elsewhere.
+ *    * whitespace is compared loosely, because a source newline arrives in the
+ *      proposal as a space. Everything else must match exactly.
+ *
+ *  Measured on the event-planner import: 78 details, 77 locatable, exactly the
+ *  4 known spills flagged and no legitimate value touched. */
+export function spansCells(cells: SourceCells, value: string): boolean {
+  const t = String(value ?? "").trim();
+  // Too short to distinguish a spill from a coincidence. The observed spills
+  // ran 400-800 characters; nothing near this floor can be shown to have
+  // crossed a boundary rather than to have landed on one by chance.
+  if (t.length < 24) return false;
+  const pattern = t.split(/\s+/)
+    .map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+    .join("\\s+");
+  if (!pattern) return false;
+  let re: RegExp;
+  try { re = new RegExp(pattern, "g"); } catch { return false; }
+  let m: RegExpExecArray | null, found = false;
+  while ((m = re.exec(cells.source))) {
+    if (!m[0].length) break;
+    found = true;
+    if (cells.map[m.index] === cells.map[m.index + m[0].length - 1]) return false;
+  }
+  return found;
+}
+
 /** BIND PROPOSALS TO SOURCE RECORDS BY SOURCE-BACKED ANCHORS.
  *
  *  POSITIONAL BINDING WAS UNSAFE and is gone. Adversarial testing showed it
@@ -142,8 +230,35 @@ function anchorsOf(text: string): Set<string> {
   // spellings. Keying on the raw string meant a source whose only identifier was
   // a bare domain produced NO anchors and could never be bound, which is exactly
   // the shape of a pasted directory.
+  //
+  // AND THE DELIMITER IS NOT PART OF THE HOST. A URL at the end of a CSV field
+  // is followed immediately by the delimiter, and the match class above stops
+  // only at whitespace, quotes and brackets — so the SOURCE side produced
+  // `harborhouseloft.example,` while the proposal, carrying the same URL in a
+  // JSON field, produced `harborhouseloft.example`. The two could never match.
+  //
+  // That stays invisible until a website is a record's LAST surviving anchor,
+  // which is exactly what happens when two records share a contact person: the
+  // shared email and phone are correctly discarded as non-unique and the
+  // corrupted host is all that is left. Six of the twelve venues in the
+  // event-planner import were unbindable by any proposal content for this
+  // reason alone — three pairs, each sharing one coordinator.
+  //
+  // Trimming trailing punctuation is not enough, because the run-on does not
+  // always END at the delimiter: `…example,First` swallows the next field whole.
+  // What is true regardless is that a HOSTNAME cannot contain a comma, a quote
+  // or a space, so the host is cut at the first character that cannot appear in
+  // one. Everything past the first `/`, `?` or `#` is already discarded, so this
+  // narrows nothing that identity depended on.
+  //
+  // This is not fuzzy matching: no host is rewritten, nothing is compared
+  // approximately, and two hosts differing by a real character still differ.
+  // The bare-hostname branch below has always trimmed; the URL branch did not,
+  // and that asymmetry was the defect.
   for (const m of t.match(URL_A) ?? []) {
-    const host = m.toLowerCase().replace(/^https?:\/\//, "").split(/[/?#]/)[0].replace(/\.$/, "");
+    const host = (m.toLowerCase().replace(/^https?:\/\//, "").split(/[/?#]/)[0]
+      .match(/^[a-z0-9.-]*/)?.[0] ?? "")
+      .replace(/[.-]+$/, "");
     if (host) out.add(`u:${host}`);
   }
   for (const tok of t.split(/[\s"'<>(),;]+/)) {

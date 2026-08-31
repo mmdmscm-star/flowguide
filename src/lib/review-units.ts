@@ -51,6 +51,47 @@ export const REVIEW_REQUIRED: Record<string, ExceptionKind> = {
       "This was written as a private note, but nothing in your source marks it private — " +
       "so your client would never see it. What should FlowGuide do with it?",
   },
+  // A DETAIL THAT RAN PAST ITS OWN COLUMN.
+  //
+  // This is NOT `privacy-rejected` wearing a different label. That kind asks
+  // about text the model chose to hide; this one is about text the model chose
+  // to SHOW, which turned out to include a neighbouring column — in the venue
+  // import, another venue's address and contact, and in three cases the source's
+  // own private-notes column. The question the professional is being asked is a
+  // different question, so it gets its own sentence rather than a borrowed one
+  // that would have described it falsely.
+  //
+  // The three existing dispositions all fit without change: keeping it moves the
+  // whole excerpt into creator-only notes where the real value can be recovered,
+  // and the other two settle it. Nothing is truncated or repaired on the
+  // professional's behalf.
+  // A PRIVATE NOTE ON A PROPOSAL THAT COULD NOT BE PLACED IN THE SOURCE.
+  //
+  // Reuse of `privacy-rejected` was considered first and rejected, because its
+  // sentence would be FALSE here. It tells the professional "nothing in your
+  // source marks it private" — and for the contractor import, the source marks
+  // that column `INTERNAL ONLY` and plainly does. What is missing is not the
+  // marker but the PROOF that this note is that row's, because a neighbouring
+  // proposal carried the same firm's email, phone and website.
+  //
+  // Getting that sentence wrong is not cosmetic: a professional told their
+  // source says nothing could reasonably answer "leave it out" and discard a
+  // note their file did mark internal. So the decision is the same and the
+  // three dispositions are the same; only the explanation differs, which is
+  // exactly what a separate kind is for.
+  "unbound-private-note": {
+    code: "unbound_private_note",
+    guidance:
+      "FlowGuide could not tell which row of your file this note came from, so it " +
+      "could not confirm your source meant to keep it private. What should happen to it?",
+  },
+  "cross-cell-detail": {
+    code: "cross_cell_detail",
+    guidance:
+      "This detail ran past its own column in your file and picked up text from " +
+      "elsewhere in the source, so FlowGuide did not show it to your client. " +
+      "What should happen to it?",
+  },
 };
 
 /** Recognized, recorded, and deliberately NOT a question. */
