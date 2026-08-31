@@ -140,13 +140,27 @@ export default function ImportProgress({
               {/* From the exception registry, not hardcoded here, so a future
                   review-required kind arrives with its own wording. */}
               <p className="mt-1 text-xs text-muted">{guidanceFor(f)}</p>
-              <div className="mt-2 flex items-center gap-2">
+              {/* THE BUTTON SHOULD PERFORM THE DECISION.
+                  "I've handled this" resolved the unit and did nothing to the
+                  material — and because settling removes the excerpt, and the
+                  contract had already cleared it off the item, pressing it
+                  destroyed the note. Keeping it as a private note is now a real
+                  action FlowGuide carries out; the manual path says plainly
+                  that FlowGuide is NOT the one moving anything. */}
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <button
+                  disabled={resolving === f.id}
+                  onClick={() => resolveUnit(f.id, "kept_private")}
+                  className="px-2.5 py-1 rounded-md bg-amber-700 text-white text-xs font-medium hover:bg-amber-800 disabled:opacity-60"
+                >
+                  {resolving === f.id ? "Saving\u2026" : "Keep as private note"}
+                </button>
                 <button
                   disabled={resolving === f.id}
                   onClick={() => resolveUnit(f.id, "resolved")}
-                  className="px-2.5 py-1 rounded-md bg-amber-700 text-white text-xs font-medium hover:bg-amber-800 disabled:opacity-60"
+                  className="px-2.5 py-1 rounded-md border border-border text-xs font-medium text-foreground hover:border-accent hover:text-accent disabled:opacity-60"
                 >
-                  {resolving === f.id ? "Saving\u2026" : "I've handled this"}
+                  I added it elsewhere
                 </button>
                 <button
                   disabled={resolving === f.id}
@@ -156,6 +170,12 @@ export default function ImportProgress({
                   Leave it out
                 </button>
               </div>
+              {/* Said once per card, quietly, because the difference between
+                  the first button and the second is the whole point. */}
+              <p className="mt-1.5 text-[11px] text-muted/80">
+                Only you would see a private note. “I added it elsewhere” just closes this —
+                FlowGuide does not move the text for you.
+              </p>
             </li>
           ))}
         </ul>

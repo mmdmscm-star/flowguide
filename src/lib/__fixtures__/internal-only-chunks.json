@@ -1,0 +1,699 @@
+{
+ "delimiterHint": ",",
+ "chunks": [
+  {
+   "ordinal": 1,
+   "sourceStart": 0,
+   "segmentText": "Firm,City,Address,Specialty,Description,Contact Name,Role,Main Phone,Direct / Secondary Phone,Email,Website,Estimate / Pricing,Timeline,Warranty,Availability,Client-Facing Notes,INTERNAL ONLY,Related / Cross-Reference\nAlder & Stone Remodel,San Rafael,\"1180 4th St, San Rafael, CA 94901\",Full-service kitchen remodels,\"Design-build contractor focused on kitchens in older Marin homes. Handles design, permitting, cabinetry coordination, electrical, plumbing, and finish work. Their proposal process usually starts with an in-home visit and a written scope.\",Elena Vargas,Principal,(415) 555-0138,,elena@alderstone.example,https://alderstone.example,\"Typical kitchen projects: $55,000–$90,000\n Design retainer: $2,500, credited toward construction if hired.\",\"Design: about 2–3 weeks\n Construction: typically 8–12 weeks after permits/materials\",2-year workmanship warranty,Next site visits available in about 10 days,Good fit for a client who wants one firm coordinating the whole job.,,They occasionally use Marin Cabinet Studio for specialty cabinet work.\nHarbor & Pine Kitchen Co. (formerly Northstar Kitchens),Mill Valley,\"36 Miller Ave, Mill Valley, CA 94941\",Kitchen design + construction,\"Small design-build team known for warm, traditional kitchens and detailed finish carpentry. They will work from an architect's plans or provide their own design service.\",Owen Blake,Owner,(415) 555-0194,(415) 555-0187,owen@harborpine.example,https://harborpine.example,\"Initial budget conversation: $70,000–$105,000 for a full kitchen.\n Cabinet allowance is quoted separately after design.\",Current lead time: roughly 6 weeks to start design; construction scheduled after selections are finalized.,1-year workmanship; manufacturer warranties passed through,Booking design work for October,Client should ask whether appliance installation is included in the final construction number.,,\nNorth Bay Buildworks,Novato,\"7427 Redwood Blvd, Novato, CA 94945\",General contractor / remodels,\"General contractor doing kitchens, baths, additions, and structural work. Less design-forward than some of the boutique firms, but able to manage larger scopes when a kitchen project also touches walls, windows, or structural framing.\",Marcus Lee,Estimator,(415) 555-0106,,marcus@northbaybuildworks.example,https://northbaybuildworks.example,\"Preliminary estimate from 7/08: $52,400\n Revised estimate from 8/19: $58,900 after electrical-panel and lighting work were added.\",Estimated 9–11 weeks of construction after permit issuance,1-year workmanship warranty,Could start late October if permit is ready,The two estimates reflect different scopes; both are useful context.,,\nMarin Cabinet Studio,Larkspur,\"280 Magnolia Ave, Larkspur, CA 94939\",Custom cabinetry and millwork,\"Cabinet design studio rather than a general contractor. Best used when the client already has a contractor or wants high-touch cabinet design. Offers inset, frameless, and painted custom cabinetry.\",Maya Chen,Design Director,(415) 555-0161,(415) 555-0168,maya@coastlinecraft.example,https://marincabinetstudio.example,\"Cabinetry for a medium kitchen often runs $28,000–$48,000 before installation.\n Design deposit: $1,500.\",\"Design drawings: usually 2 weeks\n Cabinet production: approximately 10–14 weeks after approval\",Cabinet manufacturer's warranty varies by line,Taking new design appointments,Maya's email uses the Coastline Craft domain because she works with both businesses.,,Maya Chen also manages finish selections for Coastline Craft Construction.\nBaylight Design + Build,Sausalito,\"215 Caledonia St, Sausalito, CA 94965\",Design-build / contemporary remodels,Contemporary-focused studio with in-house design and construction management. Strong portfolio of smaller kitchens where storage and layout efficiency matter more than adding square footage.,Priya Shah,Project Consultant,(415) 555-0112,,priya@baylightdb.example,https://baylightdb.example,\"Design package: $8,500\n Construction pricing comes after design development and selections.\",Design phase typically 4–6 weeks,2-year workmanship warranty,Consultations available next week,Could be a good fit if the client wants help making layout decisions before pricing the build.,,\nRedfern Renovation,Corte Madera,\"44 Casa Buena Dr, Corte Madera, CA 94925\",Construction-only remodel contractor,Construction-focused firm that often works from plans prepared by independent designers. Good for clients who already know what they want and need a contractor to execute it.,Luis Ortega,Owner,(415) 555-0143,,luis@redfernreno.example,https://redfernreno.example,\"Labor + general construction estimate: $39,500\n Cabinetry, appliances, countertops, and decorative fixtures are owner-provided allowances and are not included.\",About 7–9 weeks on site once materials are ready,1-year workmanship warranty,Earliest start currently mid-November,Make sure the client understands which finish materials are outside the quoted number.,\"INTERNAL ONLY — Luis said he can probably hold the November slot for one week without a deposit, but does not want that promised to the client yet.\",\n",
+   "result": {
+    "sections": [
+     {
+      "items": [
+       {
+        "links": [
+         {
+          "url": "https://alderstone.example/",
+          "label": "Website"
+         }
+        ],
+        "notes": null,
+        "title": "Alder & Stone Remodel",
+        "photos": [],
+        "address": "1180 4th St, San Rafael, CA 94901",
+        "details": [
+         {
+          "label": "Specialty",
+          "value": "Full-service kitchen remodels"
+         },
+         {
+          "label": "Typical kitchen projects",
+          "value": "$55,000–$90,000"
+         },
+         {
+          "label": "Design retainer",
+          "value": "$2,500, credited toward construction if hired.\",\"Design: about 2–3 weeks"
+         },
+         {
+          "label": "Design timeline",
+          "value": "about 2–3 weeks"
+         },
+         {
+          "label": "Construction timeline",
+          "value": "typically 8–12 weeks after permits/materials"
+         },
+         {
+          "label": "Warranty",
+          "value": "2-year workmanship warranty"
+         },
+         {
+          "label": "Availability",
+          "value": "Next site visits available in about 10 days"
+         },
+         {
+          "label": "Construction",
+          "value": "typically 8–12 weeks after permits/materials\",2-year workmanship warranty,Next site visits available in about 10 days,Good fit for a client who wants one firm coordinating the whole job.,,They occasionally use Marin Cabinet Studio for specialty cabinet work."
+         }
+        ],
+        "contacts": [
+         {
+          "name": null,
+          "role": "Community",
+          "email": null,
+          "phone": "(415) 555-0138",
+          "website": null
+         },
+         {
+          "name": "Elena Vargas",
+          "role": "Principal",
+          "email": "elena@alderstone.example",
+          "phone": null,
+          "website": null
+         }
+        ],
+        "description": "Design-build contractor focused on kitchens in older Marin homes. Handles design, permitting, cabinetry coordination, electrical, plumbing, and finish work. Their proposal process usually starts with an in-home visit and a written scope. Good fit for a client who wants one firm coordinating the whole job. They occasionally use Marin Cabinet Studio for specialty cabinet work."
+       },
+       {
+        "links": [
+         {
+          "url": "https://harborpine.example/",
+          "label": "Website"
+         },
+         {
+          "url": "https://northbaybuildworks.example,/",
+          "label": "Website"
+         }
+        ],
+        "notes": null,
+        "title": "Harbor & Pine Kitchen Co. (formerly Northstar Kitchens)",
+        "photos": [],
+        "address": "36 Miller Ave, Mill Valley, CA 94941",
+        "details": [
+         {
+          "label": "Specialty",
+          "value": "Kitchen design + construction"
+         },
+         {
+          "label": "Initial budget conversation",
+          "value": "$70,000–$105,000 for a full kitchen"
+         },
+         {
+          "label": "Cabinet allowance",
+          "value": "quoted separately after design"
+         },
+         {
+          "label": "Lead time",
+          "value": "roughly 6 weeks to start design; construction scheduled after selections are finalized"
+         },
+         {
+          "label": "Warranty",
+          "value": "1-year workmanship; manufacturer warranties passed through"
+         },
+         {
+          "label": "Availability",
+          "value": "Booking design work for October"
+         }
+        ],
+        "contacts": [
+         {
+          "name": null,
+          "role": "Community",
+          "email": null,
+          "phone": "(415) 555-0194",
+          "website": null
+         },
+         {
+          "name": "Owen Blake",
+          "role": "Owner",
+          "email": "owen@harborpine.example",
+          "phone": "(415) 555-0187",
+          "website": null
+         },
+         {
+          "name": null,
+          "email": "marcus@northbaybuildworks.example"
+         },
+         {
+          "name": null,
+          "phone": "(415) 555-0106"
+         }
+        ],
+        "description": "Small design-build team known for warm, traditional kitchens and detailed finish carpentry. They will work from an architect's plans or provide their own design service. Client should ask whether appliance installation is included in the final construction number."
+       },
+       {
+        "links": [
+         {
+          "url": "https://northbaybuildworks.example/",
+          "label": "Website"
+         }
+        ],
+        "notes": null,
+        "title": "North Bay Buildworks",
+        "photos": [],
+        "address": "7427 Redwood Blvd, Novato, CA 94945",
+        "details": [
+         {
+          "label": "Specialty",
+          "value": "General contractor / remodels"
+         },
+         {
+          "label": "Preliminary estimate from 7/08",
+          "value": "$52,400"
+         },
+         {
+          "label": "Revised estimate from 8/19",
+          "value": "$58,900 after electrical-panel and lighting work were added.\",Estimated 9–11 weeks of construction after permit issuance,1-year workmanship warranty,Could start late"
+         },
+         {
+          "label": "Construction timeline",
+          "value": "Estimated 9–11 weeks of construction after permit issuance"
+         },
+         {
+          "label": "Warranty",
+          "value": "1-year workmanship warranty"
+         },
+         {
+          "label": "Availability",
+          "value": "Could start late October if permit is ready"
+         }
+        ],
+        "contacts": [
+         {
+          "name": null,
+          "role": "Community",
+          "email": null,
+          "phone": "(415) 555-0106",
+          "website": null
+         },
+         {
+          "name": "Marcus Lee",
+          "role": "Estimator",
+          "email": "marcus@northbaybuildworks.example",
+          "phone": null,
+          "website": null
+         }
+        ],
+        "description": "General contractor doing kitchens, baths, additions, and structural work. Less design-forward than some of the boutique firms, but able to manage larger scopes when a kitchen project also touches walls, windows, or structural framing. The two estimates reflect different scopes; both are useful context."
+       },
+       {
+        "links": [
+         {
+          "url": "https://marincabinetstudio.example/",
+          "label": "Website"
+         }
+        ],
+        "notes": null,
+        "title": "Marin Cabinet Studio",
+        "photos": [],
+        "address": "280 Magnolia Ave, Larkspur, CA 94939",
+        "details": [
+         {
+          "label": "Specialty",
+          "value": "Custom cabinetry and millwork"
+         },
+         {
+          "label": "Cabinetry for a medium kitchen",
+          "value": "often runs $28,000–$48,000 before installation"
+         },
+         {
+          "label": "Design deposit",
+          "value": "$1,500.\",\"Design drawings: usually 2 weeks"
+         },
+         {
+          "label": "Design drawings",
+          "value": "usually 2 weeks"
+         },
+         {
+          "label": "Cabinet production",
+          "value": "approximately 10–14 weeks after approval\",Cabinet manufacturer's warranty varies by line,Taking new design appointments,Maya's email uses the Coastline Craft domain because she works with both businesses.,,Maya Chen also manages finish selections for Coastline Craft Construction."
+         },
+         {
+          "label": "Warranty",
+          "value": "Cabinet manufacturer's warranty varies by line"
+         },
+         {
+          "label": "Availability",
+          "value": "Taking new design appointments"
+         }
+        ],
+        "contacts": [
+         {
+          "name": null,
+          "role": "Community",
+          "email": null,
+          "phone": "(415) 555-0161",
+          "website": null
+         },
+         {
+          "name": "Maya Chen",
+          "role": "Design Director",
+          "email": "maya@coastlinecraft.example",
+          "phone": "(415) 555-0168",
+          "website": null
+         }
+        ],
+        "description": "Cabinet design studio rather than a general contractor. Best used when the client already has a contractor or wants high-touch cabinet design. Offers inset, frameless, and painted custom cabinetry. Maya's email uses the Coastline Craft domain because she works with both businesses. Maya Chen also manages finish selections for Coastline Craft Construction."
+       },
+       {
+        "links": [
+         {
+          "url": "https://baylightdb.example/",
+          "label": "Website"
+         },
+         {
+          "url": "https://redfernreno.example,/",
+          "label": "Website"
+         }
+        ],
+        "notes": null,
+        "title": "Baylight Design + Build",
+        "photos": [],
+        "address": "215 Caledonia St, Sausalito, CA 94965",
+        "details": [
+         {
+          "label": "Specialty",
+          "value": "Design-build / contemporary remodels"
+         },
+         {
+          "label": "Design package",
+          "value": "$8,500"
+         },
+         {
+          "label": "Construction pricing",
+          "value": "comes after design development and selections"
+         },
+         {
+          "label": "Design phase",
+          "value": "typically 4–6 weeks"
+         },
+         {
+          "label": "Warranty",
+          "value": "2-year workmanship warranty"
+         },
+         {
+          "label": "Availability",
+          "value": "Consultations available next week"
+         }
+        ],
+        "contacts": [
+         {
+          "name": null,
+          "role": "Community",
+          "email": null,
+          "phone": "(415) 555-0112",
+          "website": null
+         },
+         {
+          "name": "Priya Shah",
+          "role": "Project Consultant",
+          "email": "priya@baylightdb.example",
+          "phone": null,
+          "website": null
+         },
+         {
+          "name": null,
+          "email": "luis@redfernreno.example"
+         },
+         {
+          "name": null,
+          "phone": "(415) 555-0143"
+         }
+        ],
+        "description": "Contemporary-focused studio with in-house design and construction management. Strong portfolio of smaller kitchens where storage and layout efficiency matter more than adding square footage. Could be a good fit if the client wants help making layout decisions before pricing the build."
+       },
+       {
+        "links": [
+         {
+          "url": "https://redfernreno.example/",
+          "label": "Website"
+         }
+        ],
+        "notes": "INTERNAL ONLY — Luis said he can probably hold the November slot for one week without a deposit, but does not want that promised to the client yet.",
+        "title": "Redfern Renovation",
+        "photos": [],
+        "address": "44 Casa Buena Dr, Corte Madera, CA 94925",
+        "details": [
+         {
+          "label": "Specialty",
+          "value": "Construction-only remodel contractor"
+         },
+         {
+          "label": "Labor + general construction estimate",
+          "value": "$39,500"
+         },
+         {
+          "label": "Additional costs",
+          "value": "Cabinetry, appliances, countertops, and decorative fixtures are owner-provided allowances and are not included"
+         },
+         {
+          "label": "Timeline",
+          "value": "About 7–9 weeks on site once materials are ready"
+         },
+         {
+          "label": "Warranty",
+          "value": "1-year workmanship warranty"
+         },
+         {
+          "label": "Availability",
+          "value": "Earliest start currently mid-November"
+         }
+        ],
+        "contacts": [
+         {
+          "name": null,
+          "role": "Community",
+          "email": null,
+          "phone": "(415) 555-0143",
+          "website": null
+         },
+         {
+          "name": "Luis Ortega",
+          "role": "Owner",
+          "email": "luis@redfernreno.example",
+          "phone": null,
+          "website": null
+         }
+        ],
+        "description": "Construction-focused firm that often works from plans prepared by independent designers. Good for clients who already know what they want and need a contractor to execute it. Make sure the client understands which finish materials are outside the quoted number."
+       }
+      ],
+      "title": "Kitchen Remodel Contractors",
+      "description": "Full-service and specialized contractors for kitchen renovation projects in Marin County"
+     }
+    ]
+   },
+   "restored": 1
+  },
+  {
+   "ordinal": 2,
+   "sourceStart": 5088,
+   "segmentText": "Coastline Craft Construction,San Anselmo,\"101 San Anselmo Ave, San Anselmo, CA 94960\",High-end finish carpentry + remodels,\"Small construction company specializing in detailed carpentry, built-ins, and kitchens. Often collaborates with independent designers and cabinet studios. Good fit for projects where finish quality matters more than the fastest schedule.\",Maya Chen,Project & Design Liaison,(415) 555-0177,(415) 555-0168,maya@coastlinecraft.example,https://coastlinecraft.example,\"Recent comparable kitchens: $62,000–$85,000, excluding appliances.\",Typically 10–12 weeks of construction,2-year workmanship warranty,Currently estimating December starts,Same Maya Chen who appears at Marin Cabinet Studio; this is intentional and should stay on both records.,,Frequently coordinates cabinetry with Marin Cabinet Studio.\nOak & Tile Interiors,San Rafael,\"1535 4th St, San Rafael, CA 94901\",\"Design, finishes, and project coordination\",\"Interior design studio that can handle space planning, finish selections, lighting, tile, fixtures, and contractor coordination. Does not employ construction crews directly.\",Sophie Grant,Senior Designer,(415) 555-0150,,sophie@oakandtile.example,https://oakandtile.example,\"Fixed design fee: $12,000 for concept through construction selections.\n Hourly consulting option: $225/hour for smaller scopes.\",Design work can begin within 2 weeks,Not applicable — design services,Accepting one new kitchen project this fall,Useful if the client wants a designer but plans to bid construction separately.,,\nWillow Creek Remodels,Petaluma,\"620 Petaluma Blvd N, Petaluma, CA 94952\",Value-oriented kitchens and baths,Family-run remodeler serving Marin and Sonoma. Offers semi-custom cabinet packages and standardized kitchen scopes intended to keep projects more predictable.,Jon Bell,Project Manager,(707) 555-0133,,jon@willowcreekremodels.example,https://willowcreekremodels.example,\"Standard kitchen package starts around $42,000.\n Upgraded cabinet package starts around $49,500.\n Stone countertops are included up to a stated allowance.\",Usually 6–8 weeks of construction,1-year workmanship warranty,Site visits available this month,\"More standardized than the design-build firms, which may help a client who wants fewer decisions.\",,\nJuniper Homeworks,Fairfax,\"9 Bolinas Rd, Fairfax, CA 94930\",Small remodels / owner-led contractor,\"Owner-led contractor doing one or two projects at a time. Juniper Homeworks often collaborates with Marin Cabinet Studio when a client wants fully custom cabinetry, but Juniper remains the construction contractor.\",Rachel Kim,Owner,(415) 555-0122,,rachel@juniperhomeworks.example,https://juniperhomeworks.example,\"No firm estimate yet. Site visit required before pricing.\n Rachel said projects of this size have recently ranged from about $48,000 to $75,000 depending on cabinetry and structural work.\",Schedule depends on current project completion; likely 8–10 weeks after start,1-year workmanship warranty,Can schedule a site visit next Thursday,\"A good candidate for a smaller, relationship-driven project.\",,May use Marin Cabinet Studio for cabinets; that does not make Marin Cabinet Studio the contractor.\nDelta Millwork & Build,Richmond,\"1250 Marina Way S, Richmond, CA 94804\",Cabinet fabrication + installation,,Andre Foster,Sales / Estimating,(510) 555-0198,,andre@deltamillwork.example,https://deltamillwork.example,\"Cabinet quote: $31,750\n Installation: $6,400\n Delivery: $950\",Shop drawings in 10 business days; production approximately 9 weeks,5-year cabinet-box warranty; hardware warranty by manufacturer,Production slot available if approved by September 15,This record is intentionally sparse; the source does not contain a narrative description.,,\nFinch & Frame Renovation,Tiburon,\"1550 Tiburon Blvd, Tiburon, CA 94920\",Boutique design-build,\"Boutique remodeler focused on highly customized kitchens and architectural detailing. Their process is slower and more expensive than many alternatives, but the firm handles design, finish specifications, and construction as one engagement.\",Naomi Price,Client Lead,(415) 555-0181,,naomi@finchframe.example,https://finchframe.example,\"Phase 1 design + feasibility: $6,000\n Phase 2 design development: $9,500\n Construction budget discussed as $95,000–$140,000, depending on cabinetry and structural scope.\",Design may take 8–10 weeks before construction pricing is final,2-year workmanship warranty,New-project intake open; construction calendar is filling for winter,Probably best for a client prioritizing a highly finished result over speed or lowest cost.,INTERNAL ONLY — Naomi mentioned by phone that a current project is running late because of a specialty stone order; do not present that as a general schedule claim.,",
+   "result": {
+    "sections": [
+     {
+      "items": [
+       {
+        "links": [
+         {
+          "url": "https://coastlinecraft.example/",
+          "label": "Website"
+         }
+        ],
+        "notes": "Same Maya Chen who appears at Marin Cabinet Studio; this is intentional and should stay on both records.",
+        "title": "Coastline Craft Construction",
+        "photos": [],
+        "address": "101 San Anselmo Ave, San Anselmo, CA 94960",
+        "details": [
+         {
+          "label": "Recent comparable kitchens",
+          "value": "$62,000–$85,000, excluding appliances"
+         },
+         {
+          "label": "Construction timeline",
+          "value": "Typically 10–12 weeks of construction"
+         },
+         {
+          "label": "Warranty",
+          "value": "2-year workmanship warranty"
+         },
+         {
+          "label": "Availability",
+          "value": "Currently estimating December starts"
+         }
+        ],
+        "contacts": [
+         {
+          "name": "Maya Chen",
+          "role": "Project & Design Liaison",
+          "email": "maya@coastlinecraft.example",
+          "phone": "(415) 555-0177",
+          "website": null
+         },
+         {
+          "name": null,
+          "phone": "(415) 555-0168"
+         }
+        ],
+        "description": "Small construction company specializing in detailed carpentry, built-ins, and kitchens. Often collaborates with independent designers and cabinet studios. Good fit for projects where finish quality matters more than the fastest schedule. Frequently coordinates cabinetry with Marin Cabinet Studio."
+       },
+       {
+        "links": [
+         {
+          "url": "https://oakandtile.example/",
+          "label": "Website"
+         }
+        ],
+        "notes": null,
+        "title": "Oak & Tile Interiors",
+        "photos": [],
+        "address": "1535 4th St, San Rafael, CA 94901",
+        "details": [
+         {
+          "label": "Fixed design fee",
+          "value": "$12,000 for concept through construction selections"
+         },
+         {
+          "label": "Hourly consulting option",
+          "value": "$225/hour for smaller scopes.\",Design work can begin within 2 weeks,Not applicable — design services,Accepting one new kitchen project this fall,Useful if the client wants a designer but plans to bid construction separately.,, Willow Creek Remodels,Petaluma,\"620 Petaluma Blvd N, Petaluma, CA 94952\",Value-oriented kitchens and baths,Family-run remodeler serving Marin and Sonoma. Offers semi-custom cabinet packages and standardized kitchen scopes intended to keep projects more predictable.,Jon"
+         },
+         {
+          "label": "Timeline",
+          "value": "Design work can begin within 2 weeks"
+         },
+         {
+          "label": "Warranty",
+          "value": "Not applicable — design services"
+         },
+         {
+          "label": "Availability",
+          "value": "Accepting one new kitchen project this fall"
+         }
+        ],
+        "contacts": [
+         {
+          "name": "Sophie Grant",
+          "role": "Senior Designer",
+          "email": "sophie@oakandtile.example",
+          "phone": "(415) 555-0150",
+          "website": null
+         }
+        ],
+        "description": "Interior design studio that can handle space planning, finish selections, lighting, tile, fixtures, and contractor coordination. Does not employ construction crews directly. Useful if the client wants a designer but plans to bid construction separately."
+       },
+       {
+        "links": [
+         {
+          "url": "https://willowcreekremodels.example/",
+          "label": "Website"
+         },
+         {
+          "url": "https://juniperhomeworks.example,/",
+          "label": "Website"
+         }
+        ],
+        "notes": null,
+        "title": "Willow Creek Remodels",
+        "photos": [],
+        "address": "620 Petaluma Blvd N, Petaluma, CA 94952",
+        "details": [
+         {
+          "label": "Standard kitchen package",
+          "value": "starts around $42,000"
+         },
+         {
+          "label": "Upgraded cabinet package",
+          "value": "starts around $49,500"
+         },
+         {
+          "label": "Stone countertops",
+          "value": "included up to a stated allowance"
+         },
+         {
+          "label": "Construction timeline",
+          "value": "Usually 6–8 weeks of construction"
+         },
+         {
+          "label": "Warranty",
+          "value": "1-year workmanship warranty"
+         },
+         {
+          "label": "Availability",
+          "value": "Site visits available this month"
+         }
+        ],
+        "contacts": [
+         {
+          "name": "Jon Bell",
+          "role": "Project Manager",
+          "email": "jon@willowcreekremodels.example",
+          "phone": "(707) 555-0133",
+          "website": null
+         },
+         {
+          "name": null,
+          "email": "rachel@juniperhomeworks.example"
+         },
+         {
+          "name": null,
+          "phone": "(415) 555-0122"
+         }
+        ],
+        "description": "Family-run remodeler serving Marin and Sonoma. Offers semi-custom cabinet packages and standardized kitchen scopes intended to keep projects more predictable. More standardized than the design-build firms, which may help a client who wants fewer decisions."
+       },
+       {
+        "links": [
+         {
+          "url": "https://juniperhomeworks.example/",
+          "label": "Website"
+         }
+        ],
+        "notes": null,
+        "title": "Juniper Homeworks",
+        "photos": [],
+        "address": "9 Bolinas Rd, Fairfax, CA 94930",
+        "details": [
+         {
+          "label": "Pricing",
+          "value": "No firm estimate yet. Site visit required before pricing"
+         },
+         {
+          "label": "Recent project range",
+          "value": "Rachel said projects of this size have recently ranged from about $48,000 to $75,000 depending on cabinetry and structural work"
+         },
+         {
+          "label": "Timeline",
+          "value": "Schedule depends on current project completion; likely 8–10 weeks after start"
+         },
+         {
+          "label": "Warranty",
+          "value": "1-year workmanship warranty"
+         },
+         {
+          "label": "Availability",
+          "value": "Can schedule a site visit next Thursday"
+         }
+        ],
+        "contacts": [
+         {
+          "name": "Rachel Kim",
+          "role": "Owner",
+          "email": "rachel@juniperhomeworks.example",
+          "phone": "(415) 555-0122",
+          "website": null
+         }
+        ],
+        "description": "Owner-led contractor doing one or two projects at a time. Juniper Homeworks often collaborates with Marin Cabinet Studio when a client wants fully custom cabinetry, but Juniper remains the construction contractor. A good candidate for a smaller, relationship-driven project. May use Marin Cabinet Studio for cabinets; that does not make Marin Cabinet Studio the contractor."
+       },
+       {
+        "links": [
+         {
+          "url": "https://deltamillwork.example/",
+          "label": "Website"
+         }
+        ],
+        "notes": null,
+        "title": "Delta Millwork & Build",
+        "photos": [],
+        "address": "1250 Marina Way S, Richmond, CA 94804",
+        "details": [
+         {
+          "label": "Cabinet quote",
+          "value": "$31,750"
+         },
+         {
+          "label": "Installation",
+          "value": "$6,400"
+         },
+         {
+          "label": "Delivery",
+          "value": "$950\",Shop drawings in 10 business days; production approximately 9 weeks,5-year cabinet-box warranty; hardware warranty by manufacturer,Production slot available if approved by"
+         },
+         {
+          "label": "Shop drawings",
+          "value": "10 business days"
+         },
+         {
+          "label": "Production",
+          "value": "approximately 9 weeks"
+         },
+         {
+          "label": "Cabinet-box warranty",
+          "value": "5-year"
+         },
+         {
+          "label": "Hardware warranty",
+          "value": "by manufacturer"
+         },
+         {
+          "label": "Availability",
+          "value": "Production slot available if approved by September 15"
+         }
+        ],
+        "contacts": [
+         {
+          "name": "Andre Foster",
+          "role": "Sales / Estimating",
+          "email": "andre@deltamillwork.example",
+          "phone": "(510) 555-0198",
+          "website": null
+         }
+        ],
+        "description": "This record is intentionally sparse; the source does not contain a narrative description."
+       },
+       {
+        "links": [
+         {
+          "url": "https://finchframe.example/",
+          "label": "Website"
+         }
+        ],
+        "notes": "INTERNAL ONLY — Naomi mentioned by phone that a current project is running late because of a specialty stone order; do not present that as a general schedule claim.",
+        "title": "Finch & Frame Renovation",
+        "photos": [],
+        "address": "1550 Tiburon Blvd, Tiburon, CA 94920",
+        "details": [
+         {
+          "label": "Phase 1 design + feasibility",
+          "value": "$6,000"
+         },
+         {
+          "label": "Phase 2 design development",
+          "value": "$9,500"
+         },
+         {
+          "label": "Construction budget",
+          "value": "$95,000–$140,000, depending on cabinetry and structural scope"
+         },
+         {
+          "label": "Design timeline",
+          "value": "Design may take 8–10 weeks before construction pricing is final"
+         },
+         {
+          "label": "Warranty",
+          "value": "2-year workmanship warranty"
+         },
+         {
+          "label": "Availability",
+          "value": "New-project intake open; construction calendar is filling for winter"
+         }
+        ],
+        "contacts": [
+         {
+          "name": "Naomi Price",
+          "role": "Client Lead",
+          "email": "naomi@finchframe.example",
+          "phone": "(415) 555-0181",
+          "website": null
+         }
+        ],
+        "description": "Boutique remodeler focused on highly customized kitchens and architectural detailing. Their process is slower and more expensive than many alternatives, but the firm handles design, finish specifications, and construction as one engagement. Probably best for a client prioritizing a highly finished result over speed or lowest cost."
+       }
+      ],
+      "title": "Construction & Remodeling",
+      "description": null
+     }
+    ]
+   },
+   "restored": 2
+  }
+ ]
+}

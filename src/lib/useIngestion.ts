@@ -1,4 +1,5 @@
 "use client";
+import type { ReviewDisposition } from "./review-units.ts";
 import { useCallback, useRef, useState } from "react";
 import { classifyChunkResponse, CHUNK_NETWORK_FAILURE, type ChunkOutcome } from "./chunk-outcome.ts";
 import type { ReviewFailure } from "./review-units.ts";
@@ -186,7 +187,7 @@ export function useIngestion(packetId: string, opts?: { onComplete?: () => void;
    *  whether this was the LAST unit is a question only the database can answer,
    *  and answering it optimistically here is how a client comes to believe
    *  publishing is unblocked while the run still blocks it. */
-  const resolveUnit = useCallback(async (unitId: string, status: "resolved" | "ignored") => {
+  const resolveUnit = useCallback(async (unitId: string, status: ReviewDisposition) => {
     const runId = runIdRef.current; if (!runId) return;
     setState((s) => ({ ...s, resolving: unitId, error: "" }));
     const res = await postJSON(`/api/ingest/${runId}/review/${encodeURIComponent(unitId)}`, { status });

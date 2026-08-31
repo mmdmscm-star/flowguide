@@ -138,15 +138,27 @@ test("the held excerpt is shown to the creator", () => {
   assert.match(c, /disabled=\{resolving === f\.id\}/);
 });
 
-test("neither control writes the held prose anywhere", () => {
+test("NO CONTROL SENDS CONTENT — a disposition is all the client may say", () => {
   const c = read("src/components/ImportProgress.tsx");
-  // FlowGuide choosing a destination is the error this panel exists to prevent,
-  // so the only thing either button sends is a status.
+  // This mattered before because FlowGuide must not choose a destination. It
+  // matters MORE now that one disposition writes: `kept_private` takes its text
+  // from the stored unit, server-side, so a tampered client cannot post
+  // arbitrary prose into somebody's private notes. The browser says which
+  // decision was made and nothing else.
   const calls = [...c.matchAll(/resolveUnit\(([^)]*)\)/g)].map((m) => m[1]);
-  assert.ok(calls.length >= 2);
+  assert.ok(calls.length >= 3, "the three dispositions are not all offered");
   for (const c2 of calls) {
-    assert.match(c2, /^f\.id,\s*"(resolved|ignored)"$/, `resolveUnit carries content: ${c2}`);
+    assert.match(c2, /^f\.id,\s*"(kept_private|resolved|ignored)"$/,
+      `resolveUnit carries content: ${c2}`);
   }
+});
+
+test("the RPC reads the text from the STORED unit, never from a parameter", () => {
+  const sql = readFileSync("supabase/migrations/0043_review_keep_as_private_note.sql", "utf8");
+  assert.match(sql, /v_text := v_unit->>'text';/,
+    "the note text does not come from the unit the server already holds");
+  // The signature is unchanged, so there is no parameter that could carry prose.
+  assert.match(sql, /p_owner uuid, p_run_id uuid, p_unit_id text, p_status text/);
 });
 
 test("finalize aggregates the dedicated channel, and does not re-derive units", () => {

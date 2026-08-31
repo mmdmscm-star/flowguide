@@ -157,14 +157,35 @@ export function enforceChunkResult(opts: {
   t.attributionUnresolved = a.unattributedClaims.length + a.unattributedAmbiguous.length;
 
   const bound = env ? bindByProvenance(env, sourceText, items).bound : new Map<number, Record<string, unknown>>();
-  const privacyGranted = sourceGrantsPrivacy(segmentText);
+  // THE CHUNK IS NOT THE RECORD — the same rule notes-provenance already
+  // applies on the Library path, now applied here.
+  //
+  // Privacy authority used to be read from the WHOLE chunk and handed to every
+  // record in it. On a real import that put an "INTERNAL ONLY" column beside a
+  // "Client-Facing Notes" column, one record's internal marker would have
+  // authorised its neighbour's client-facing prose into the private field — the
+  // exact silent hiding this contract exists to prevent, and the reason
+  // widening the marker pattern without this change first would have been a
+  // regression rather than a fix.
+  //
+  // The record's own text comes from its ENVELOPE, which is provenance rather
+  // than a title search: seg-v4 already tiled the source into records, and
+  // start/end are that tiling. When a record has no envelope there is no proof
+  // of what it owns, so authority is refused and the note is surfaced for a
+  // decision — fail closed, exactly as before.
+  const envByIndex = new Map((env ?? []).map((e) => [e.index, e]));
+  const grantsPrivacy = (rec: number): boolean => {
+    const e = envByIndex.get(rec);
+    if (!e) return false;
+    return sourceGrantsPrivacy(sourceText.slice(e.start, e.end));
+  };
   const replaced = new Map<Record<string, unknown>, Record<string, unknown>>();
 
   for (const [rec, g] of a.byRecord) {
     const item = bound.get(rec);
     if (!item) { t.attributionUnresolved += g.claims.length + g.ambiguous.length; continue; }
     const res = reconcile({ claims: g.claims, ambiguous: g.ambiguous, fragments: g.fragments }, item);
-    const e = enforceItem(item, res.resolutions, g.claims, { privacyGranted });
+    const e = enforceItem(item, res.resolutions, g.claims, { privacyGranted: grantsPrivacy(rec) });
     t.accepted += res.counts.accepted; t.repaired += res.counts.repaired;
     t.sourceUnresolved += res.counts.sourceUnresolved;
     t.stripped += e.stripped.length;

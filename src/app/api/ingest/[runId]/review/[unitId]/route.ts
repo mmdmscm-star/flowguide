@@ -4,7 +4,12 @@ import { createServerClient } from "@/lib/supabase";
 
 type Context = { params: Promise<{ runId: string; unitId: string }> };
 
-// POST /api/ingest/:runId/review/:unitId  { status: "resolved" | "ignored" }
+// POST /api/ingest/:runId/review/:unitId
+//   { status: "kept_private" | "resolved" | "ignored" }
+//
+// `kept_private` is the disposition that DOES something: the RPC writes the
+// excerpt into that item's creator-only notes and only then settles the unit.
+// The professional chose the destination — FlowGuide still cannot.
 //
 // THE OWNER IS THE SESSION. It is read from getSession() and from nowhere else.
 // A body-supplied owner id would reduce "resolve someone else's review" to
@@ -31,9 +36,9 @@ export async function POST(request: Request, context: Context) {
   }
   // Checked here as well as in the RPC. The database refusal is the guarantee;
   // this one exists so a typo comes back as a sentence instead of a 500.
-  if (status !== "resolved" && status !== "ignored") {
+  if (status !== "resolved" && status !== "ignored" && status !== "kept_private") {
     return NextResponse.json(
-      { error: "bad_status", message: "A unit can be marked resolved or ignored." },
+      { error: "bad_status", message: "A unit can be kept as a private note, marked handled, or left out." },
       { status: 400 },
     );
   }
@@ -51,7 +56,7 @@ export async function POST(request: Request, context: Context) {
     // guard working. Reporting them as 500 would send the client into a retry
     // loop against a decision the database has already made.
     const msg = error.message || "Could not update this review item.";
-    const denied = /does not own|not found|needs review|must be resolved or ignored|appears .* times/i.test(msg);
+    const denied = /does not own|not found|needs review|must be resolved|appears .* times|no item titled|items titled|has no text|names no record|no packet/i.test(msg);
     console.error("[review] resolve_review_unit failed", { runId, unitId, status, msg });
     return NextResponse.json(
       { error: denied ? "review_refused" : "review_failed", message: msg },

@@ -47,15 +47,59 @@ export function contractEnforcementEnabled(): boolean {
  *  vertical-vocabulary failure again, wearing a policy costume: the rule looked
  *  horizontal and was decided by industry nouns.
  *
- *  Two shapes count, both of them declarations:
+ *  Three shapes count, all of them declarations:
  *    * a field whose LABEL announces privacy — "Private Note:", "Internal:"
+ *    * a standalone marker heading a field or value — "INTERNAL ONLY — …"
  *    * an explicit instruction — "do not share", "not for the client"
- *  A descriptive adjective in a product name is neither. */
-const PRIVACY_LABEL = /^[ \t]*[-•*]?[ \t]*(private[ \t]+note|private[ \t]+notes|internal[ \t]+note|internal[ \t]+notes|internal|confidential)[ \t]*:/im;
-const PRIVACY_DIRECTIVE = /\b(do not share|don't share|not for the client|not for the family|for my reference|internal use only|confidential[: ])/i;
-export function sourceGrantsPrivacy(segmentText: string): boolean {
-  const t = String(segmentText ?? "");
-  return PRIVACY_LABEL.test(t) || PRIVACY_DIRECTIVE.test(t);
+ *  A descriptive adjective in a product name is none of them. */
+//  THE COLON WAS DOING TOO MUCH WORK. A real import declared privacy in a
+//  column headed `INTERNAL ONLY` and wrote values as `INTERNAL ONLY — Luis
+//  said…`. Both are unmistakable declarations, and neither matched: an em dash
+//  is not a colon, and the phrase list held `internal use only` but not
+//  `internal only`. Two legitimately private notes were surfaced as problems.
+//
+//  So a declaration is now a MARKER plus a SEPARATOR, and which separators
+//  count depends on how explicit the marker is.
+//
+//    STANDALONE markers say "private" and nothing else — `internal only`,
+//    `private note`. They may head a field or a value, so a colon, a dash, or
+//    simply the end of the field is enough.
+//
+//    BARE markers — `internal`, `confidential` — are ordinary English before
+//    they are declarations ("internal staircase", "confidential to both
+//    parties"). They still require a colon, exactly as before.
+//
+//  A marker must also BEGIN a field: line start, a delimiter, or an opening
+//  quote. That is what keeps `internal` inside a sentence from declaring
+//  anything, and it is why this widening is safe only now that authority is
+//  read from one record's own text rather than a whole chunk's.
+const FIELD_START = "(?:^|[\\n\\r,;\\t|])[ \\t]*[-•*]?[ \\t]*[\"'\u201c]?[ \\t]*";
+/** Explicit enough to stand alone as a heading or a value prefix. */
+const STANDALONE = new RegExp(
+  FIELD_START +
+  "(private[ \\t]+notes?|internal[ \\t]+notes?|internal[ \\t]+only|internal[ \\t]+use[ \\t]+only|confidential[ \\t]+notes?)" +
+  "[ \\t]*(?:[\"'\u201d][ \\t]*)?(?::|[\u2014\u2013]|-[ \\t]|[,;\\r\\n]|$)", "im");
+/** Ordinary words until punctuated as a label, so the colon stays required. */
+const PRIVACY_LABEL = new RegExp(
+  FIELD_START + "(private[ \\t]+notes?|internal[ \\t]+notes?|internal|confidential)[ \\t]*:", "im");
+/** An instruction, wherever it appears in the record's own text.
+ *
+ *  `confidential` here once matched a colon OR A SPACE, so any sentence opening
+ *  "confidential to both parties…" granted privacy over the record. Both
+ *  legitimate shapes are covered above — `Confidential:` by the label, and
+ *  `Confidential note` by the standalone — so the loose form is gone rather
+ *  than kept for safety it was not providing. An over-grant hides client-facing
+ *  content, which is the failure that costs the most. */
+const PRIVACY_DIRECTIVE = /\b(do not share|don't share|not for the client|not for the family|for my reference|internal use only)\b/i;
+
+/**
+ * Does THIS RECORD'S OWN TEXT carry explicit authority to treat content as
+ * private? Callers must pass one record's span — a whole chunk would let one
+ * record's marker speak for its neighbours.
+ */
+export function sourceGrantsPrivacy(recordText: string): boolean {
+  const t = String(recordText ?? "");
+  return STANDALONE.test(t) || PRIVACY_LABEL.test(t) || PRIVACY_DIRECTIVE.test(t);
 }
 
 type Item = Record<string, unknown>;

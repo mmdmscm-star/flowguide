@@ -36,12 +36,20 @@ export interface ExceptionKind {
   guidance: string;
 }
 
+/** What a professional can decide about one unit.
+ *
+ *  `kept_private` is the only one that CHANGES anything: it writes the excerpt
+ *  into that item's creator-only notes. The other two settle the question —
+ *  one asserting the professional placed the material themselves, one
+ *  discarding it deliberately. */
+export type ReviewDisposition = "kept_private" | "resolved" | "ignored";
+
 export const REVIEW_REQUIRED: Record<string, ExceptionKind> = {
   "privacy-rejected": {
     code: "privacy_rejected",
     guidance:
-      "This was written as a private note, but nothing in your source said it was private. " +
-      "Add it wherever it belongs, then mark it done.",
+      "This was written as a private note, but nothing in your source marks it private — " +
+      "so your client would never see it. What should FlowGuide do with it?",
   },
 };
 
