@@ -34,6 +34,17 @@ export interface ExceptionKind {
   code: string;
   /** What the professional is being asked, in their language. */
   guidance: string;
+  /** WHICH DECISIONS THIS KIND CAN HONESTLY OFFER.
+   *
+   *  The panel used to render all three for every kind, which was fine while
+   *  every kind was a question about a private note. It stopped being fine the
+   *  moment a kind held a bundle of RECIPIENT-facing material: offering "keep as
+   *  private note" there proposes writing a venue's public description, address,
+   *  pricing and contact names into a creator-only field, which is not what the
+   *  card is about and not what the button appears to promise.
+   *
+   *  Omit to offer all three. */
+  dispositions?: ReviewDisposition[];
 }
 
 /** What a professional can decide about one unit.
@@ -96,8 +107,16 @@ export const REVIEW_REQUIRED: Record<string, ExceptionKind> = {
   "unbound-recipient-content": {
     code: "unbound_recipient_content",
     guidance:
-      "FlowGuide could not match this to a row in your file, so it did not publish " +
-      "the details written about it. Everything proposed is kept here. What should happen to it?",
+      "FlowGuide couldn't reliably tell which source record this information belongs to, " +
+      "so it left it out rather than risk showing it under the wrong item. " +
+      "Everything proposed is kept here until you decide.",
+    // NOT A PRIVATE-NOTE DECISION. What is held is a mixed bundle of material
+    // meant for the CLIENT — description, address, priced details, a contact's
+    // name. Filing that privately would hide the whole item from the person it
+    // was written for, on a button that reads like a safe choice. The two
+    // honest actions are: the professional put it where it belongs, or they
+    // decided it does not belong in this FlowGuide.
+    dispositions: ["resolved", "ignored"],
   },
   // A DETAIL THAT RAN PAST ITS OWN COLUMN.
   //
@@ -228,6 +247,14 @@ export function attachItems(
  *  existing exit. */
 export function isResolvable(f: ReviewFailure): boolean {
   return REVIEW_REQUIRED_CODES.has(f?.code) && typeof f?.id === "string" && f.id.length > 0;
+}
+
+/** The decisions a kind can honestly offer. Registry-driven for the same reason
+ *  the guidance is: a future kind arrives with its own answer set, and the panel
+ *  does not have to know the difference. */
+const ALL_DISPOSITIONS: ReviewDisposition[] = ["kept_private", "resolved", "ignored"];
+export function dispositionsFor(f: ReviewFailure): ReviewDisposition[] {
+  return REVIEW_REQUIRED[f?.kind ?? ""]?.dispositions ?? ALL_DISPOSITIONS;
 }
 
 /** The sentence shown with a held unit, from the registry rather than the panel,

@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useRef } from "react";
 import { useIngestion } from "@/lib/useIngestion";
-import { isResolvable, hasUnresolvableBlocker, guidanceFor } from "@/lib/review-units";
+import { isResolvable, hasUnresolvableBlocker, guidanceFor, dispositionsFor } from "@/lib/review-units";
 
 // Drives (resumes) a persisted ingestion run and shows real progress. Rendered
 // whenever a packet has an active run — from a fresh Organize, an Add-with-AI, or
@@ -152,20 +152,28 @@ export default function ImportProgress({
                   destroyed the note. Keeping it as a private note is now a real
                   action FlowGuide carries out; the manual path says plainly
                   that FlowGuide is NOT the one moving anything. */}
+              {/* WHICH ACTIONS, FROM THE REGISTRY. A kind holding recipient-facing
+                  material does not offer to file it privately: that would hide
+                  the whole item from the person it was written for, behind a
+                  button that reads like the cautious choice. */}
               <div className="mt-2 flex flex-wrap items-center gap-2">
-                <button
-                  disabled={resolving === f.id}
-                  onClick={() => resolveUnit(f.id, "kept_private")}
-                  className="px-2.5 py-1 rounded-md bg-amber-700 text-white text-xs font-medium hover:bg-amber-800 disabled:opacity-60"
-                >
-                  {resolving === f.id ? "Saving\u2026" : "Keep as private note"}
-                </button>
+                {dispositionsFor(f).includes("kept_private") && (
+                  <button
+                    disabled={resolving === f.id}
+                    onClick={() => resolveUnit(f.id, "kept_private")}
+                    className="px-2.5 py-1 rounded-md bg-amber-700 text-white text-xs font-medium hover:bg-amber-800 disabled:opacity-60"
+                  >
+                    {resolving === f.id ? "Saving\u2026" : "Keep as private note"}
+                  </button>
+                )}
                 <button
                   disabled={resolving === f.id}
                   onClick={() => resolveUnit(f.id, "resolved")}
                   className="px-2.5 py-1 rounded-md border border-border text-xs font-medium text-foreground hover:border-accent hover:text-accent disabled:opacity-60"
                 >
-                  I added it elsewhere
+                  {dispositionsFor(f).includes("kept_private")
+                    ? "I added it elsewhere"
+                    : "I added it where it belongs"}
                 </button>
                 <button
                   disabled={resolving === f.id}
@@ -175,11 +183,14 @@ export default function ImportProgress({
                   Leave it out
                 </button>
               </div>
-              {/* Said once per card, quietly, because the difference between
-                  the first button and the second is the whole point. */}
+              {/* Said once per card, quietly, because the difference between the
+                  buttons is the whole point \u2014 and because BOTH acknowledgement
+                  paths clear FlowGuide\u2019s copy of this text, which the
+                  professional should know before pressing one. */}
               <p className="mt-1.5 text-[11px] text-muted/80">
-                Only you would see a private note. “I added it elsewhere” just closes this —
-                FlowGuide does not move the text for you.
+                {dispositionsFor(f).includes("kept_private")
+                  ? "Only you would see a private note. \u201cI added it elsewhere\u201d just closes this \u2014 FlowGuide does not move the text for you."
+                  : "FlowGuide does not move this for you. Copy anything you still need before closing this \u2014 either button clears FlowGuide\u2019s copy."}
               </p>
             </li>
           ))}

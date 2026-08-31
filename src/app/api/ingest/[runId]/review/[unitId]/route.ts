@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { dispositionsFor, type ReviewFailure } from "@/lib/review-units";
 import { getSession } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase";
 
@@ -44,6 +45,35 @@ export async function POST(request: Request, context: Context) {
   }
 
   const supabase = createServerClient();
+
+  // NOT EVERY KIND OFFERS EVERY DECISION, and the panel is not the guarantee.
+  // A tab opened before this shipped still renders "Keep as private note" on a
+  // card holding recipient-facing material, and pressing it would write a
+  // venue's description, address, pricing and contact names into a creator-only
+  // note. The registry decides which dispositions a kind can honestly take, so
+  // it decides here too.
+  //
+  // Owner-scoped by the same query that reads the run, so this cannot be used to
+  // probe another person's runs: an unreadable run yields no kind and the RPC's
+  // own ownership check refuses whatever follows.
+  if (status === "kept_private") {
+    const { data: run } = await supabase
+      .from("ingestion_runs")
+      .select("review")
+      .eq("id", runId)
+      .eq("user_id", session.userId)
+      .maybeSingle();
+    const failures = ((run?.review as { failures?: ReviewFailure[] } | null)?.failures ?? []);
+    const unit = failures.find((f) => f?.id === unitId);
+    if (unit && !dispositionsFor(unit).includes("kept_private")) {
+      return NextResponse.json(
+        { error: "bad_status",
+          message: "This one is not a private note — it holds information written for your client." },
+        { status: 400 },
+      );
+    }
+  }
+
   const { data, error } = await supabase.rpc("resolve_review_unit", {
     p_owner: session.userId,
     p_run_id: runId,

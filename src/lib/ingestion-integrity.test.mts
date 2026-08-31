@@ -982,3 +982,87 @@ riverbend.example.com | Booking: Nia Patel 646-555-0188
     "an unbindable proposal published prose on a source that HAS records");
   assert.equal(out2.reviewUnits.filter((u) => u.code === "unbound_recipient_content").length, 1);
 });
+
+// ---------------------------------------------------------------------------
+// H. THE REVIEW INTERACTION FOR HELD RECIPIENT CONTENT
+//
+// The three dispositions were designed for a question about a PRIVATE NOTE, and
+// the panel rendered all three for every kind. A card holding a venue's
+// description, address, priced details and a contact's name is not that
+// question: "Keep as private note" there proposes hiding the whole item from
+// the person it was written for, on the button that reads like the safe one.
+// ---------------------------------------------------------------------------
+
+import { dispositionsFor, guidanceFor, REVIEW_REQUIRED } from "./review-units.ts";
+
+const panelSource = readFileSync(
+  new URL("../components/ImportProgress.tsx", import.meta.url), "utf8");
+const routeSource = readFileSync(
+  new URL("../app/api/ingest/[runId]/review/[unitId]/route.ts", import.meta.url), "utf8");
+const unit = (kind: string) => ({ id: "u1", code: REVIEW_REQUIRED[kind].code, kind });
+
+test("the held-content card offers NO private-note action", () => {
+  const d = dispositionsFor(unit("unbound-recipient-content"));
+  assert.deepEqual(d, ["resolved", "ignored"]);
+  assert.ok(!d.includes("kept_private"),
+    "a bundle of client-facing material offers to be filed as a private note");
+});
+
+test("private-note kinds keep all three, so this narrowed one thing and not the panel", () => {
+  for (const kind of ["privacy-rejected", "unbound-private-note", "audience-undecided", "private-shown"])
+    assert.ok(dispositionsFor(unit(kind)).includes("kept_private"),
+      `${kind} lost the disposition that actually preserves its content`);
+});
+
+test("the card's wording is truthful and non-private", () => {
+  const g = guidanceFor(unit("unbound-recipient-content"));
+  assert.match(g, /could(n't| not) reliably tell which source record/i);
+  assert.match(g, /left it out rather than risk showing it under the wrong item/i);
+  assert.ok(!/private/i.test(g), `the wording calls it private: ${JSON.stringify(g)}`);
+  // It says the material is still here, because the professional is about to
+  // decide whether to go and copy it.
+  assert.match(g, /kept here until you decide/i);
+});
+
+test("the panel renders actions from the registry, not a hardcoded three", () => {
+  assert.ok(/dispositionsFor\(f\)\.includes\("kept_private"\) && \(/.test(panelSource),
+    "the private-note button is still unconditional");
+  // And the footnote no longer promises a private note on a card that has none.
+  assert.ok(/either button clears FlowGuide/.test(panelSource),
+    "the non-private card does not warn that both buttons clear the held copy");
+});
+
+test("the server refuses kept_private for a kind that does not offer it", () => {
+  // The panel is not the guarantee: a tab opened before this shipped still
+  // shows the button.
+  assert.ok(/if \(status === "kept_private"\)/.test(routeSource),
+    "the route accepts any disposition for any kind");
+  assert.ok(/dispositionsFor\(unit\)\.includes\("kept_private"\)/.test(routeSource),
+    "the route does not consult the registry");
+  assert.ok(/\.eq\("user_id", session\.userId\)/.test(routeSource),
+    "the route's lookup is not owner-scoped");
+});
+
+test("ACKNOWLEDGEMENT WRITES NOTHING, and discard is the only other option", () => {
+  // `resolved` and `ignored` both leave every item untouched — the RPC writes
+  // only under `kept_private`, and only to `notes`. That is what makes "I added
+  // it where it belongs" an acknowledgement rather than a move.
+  const rpc = readFileSync(
+    new URL("../../supabase/migrations/0043_review_keep_as_private_note.sql", import.meta.url), "utf8");
+  const writeBlock = rpc.slice(rpc.indexOf("if p_status = 'kept_private' then"),
+                               rpc.indexOf("select jsonb_agg("));
+  assert.ok(/update public\.items/.test(writeBlock), "the fixture no longer contains the write");
+  assert.equal((rpc.match(/update public\.items/g) ?? []).length, 1,
+    "something outside the kept_private branch now writes to items");
+  assert.ok(/set notes = case/.test(writeBlock), "the write reaches a field other than notes");
+  // Both settling paths strip the excerpt — which is why the card has to say so.
+  assert.ok(/then \(f - 'text'\)/.test(rpc), "the excerpt is no longer cleared on settle");
+});
+
+test("held content survives until a disposition succeeds", () => {
+  // Nothing clears the excerpt outside the resolve transaction, so an item's
+  // held bundle stays readable while the card is open.
+  const held = unitsFor("unbound_recipient_content", "Larkspur Landing Conference Center")[0];
+  assert.ok(held && String(held.text).length > 100, "the held bundle is not readable");
+  assert.equal((held as { status?: string }).status ?? "unresolved", "unresolved");
+});
