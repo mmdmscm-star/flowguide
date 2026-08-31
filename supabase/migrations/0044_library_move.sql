@@ -72,6 +72,27 @@ begin
     raise exception 'library_move: a thing cannot be placed relative to itself';
   end if;
 
+  -- ONE OWNER'S MOVES HAPPEN ONE AT A TIME.
+  --
+  -- Every branch below reads a container's current order and then rewrites it.
+  -- Those reads take no locks of their own, so two calls could both read the
+  -- pre-move state and the second would write an order computed without the
+  -- first — a LOST UPDATE. Nothing would be malformed, because each writes a
+  -- complete dense sequence; the earlier move would simply be undone, silently,
+  -- which under drag reads as "it jumped back".
+  --
+  -- A transaction-scoped advisory lock on the OWNER is the simplest thing that
+  -- closes it. Locking the affected rows instead would mean taking several row
+  -- sets — source and destination — in a consistent order, and would still have
+  -- nothing to lock when a destination container is empty. There is no such
+  -- thing as an empty owner.
+  --
+  -- This serializes calls to library_move FOR THAT OWNER, and nothing else. It
+  -- does not touch the legacy Move Up / Move Down / Move To implementation,
+  -- which still writes through its own statements and is unchanged by this
+  -- migration. One professional gains nothing from moving two things at once.
+  perform pg_advisory_xact_lock(hashtextextended(p_owner::text, 0));
+
   -- =======================================================================
   -- ITEM — reorder within a container, or move into another one.
   -- =======================================================================
@@ -135,7 +156,11 @@ begin
     elsif p_after is not null then
       v_pos := array_position(v_ids, p_after) + 1;
     else
-      v_pos := array_length(v_ids, 1) + 1;
+      -- array_length of an empty array is NULL, not 0 — so an append into a
+      -- container with nothing in it would compute a NULL position, slice to
+      -- NULL, and unnest nothing: the item would land in the container and keep
+      -- whatever sort_order it arrived with.
+      v_pos := coalesce(array_length(v_ids, 1), 0) + 1;
     end if;
     v_ids := v_ids[1:v_pos - 1] || p_id || v_ids[v_pos:];
 
@@ -178,7 +203,7 @@ begin
 
     if p_before is not null then v_pos := array_position(v_ids, p_before);
     elsif p_after is not null then v_pos := array_position(v_ids, p_after) + 1;
-    else v_pos := array_length(v_ids, 1) + 1;
+    else v_pos := coalesce(array_length(v_ids, 1), 0) + 1;
     end if;
     v_ids := v_ids[1:v_pos - 1] || p_id || v_ids[v_pos:];
 
@@ -217,7 +242,7 @@ begin
 
     if p_before is not null then v_pos := array_position(v_ids, p_before);
     elsif p_after is not null then v_pos := array_position(v_ids, p_after) + 1;
-    else v_pos := array_length(v_ids, 1) + 1;
+    else v_pos := coalesce(array_length(v_ids, 1), 0) + 1;
     end if;
     v_ids := v_ids[1:v_pos - 1] || p_id || v_ids[v_pos:];
 
