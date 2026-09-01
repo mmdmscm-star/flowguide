@@ -4,9 +4,10 @@ import { JSDOM } from "jsdom";
 
 // DONE MEANS DONE — asserted by mounting the real workspace.
 //
-// The mode is entered through "Select items" now. It was called "Organize"
-// until the Library itself became draggable, at which point the name pointed
-// at the one place the drag handles are hidden.
+// The mode is entered through "Select & Organize" now. It was called "Organize"
+// until the Library itself became draggable, at which point the name pointed at
+// the one place the drag handles are hidden — and then "Select items", which was
+// true but never said what the selecting was for.
 //
 // The panel's actions write immediately. A button labelled "Cancel" therefore
 // said something false: by the time it was reachable, the placing and labelling
@@ -115,9 +116,9 @@ const click = async (el: Element) => {
 
 // ---------------------------------------------------------------------------
 
-test("the Select items panel offers DONE, and no Cancel", async () => {
+test("the Select & Organize panel offers DONE, and no Cancel", async () => {
   const host = await mount();
-  await click(byText(host, /^Select items$/)!);
+  await click(byText(host, /^Select & Organize$/)!);
   assert.ok(byText(host, /^Done$/), "the organize panel has no Done");
   assert.equal(byText(host, /^Cancel$/), undefined,
     "the organize panel still offers to cancel work it has already saved");
@@ -126,7 +127,7 @@ test("the Select items panel offers DONE, and no Cancel", async () => {
 test("organization SURVIVES Done — and Done writes nothing at all", async () => {
   writes.length = 0;
   const host = await mount();
-  await click(byText(host, /^Select items$/)!);
+  await click(byText(host, /^Select & Organize$/)!);
 
   // Choose an item and star it. That save happens immediately.
   const box = [...host.querySelectorAll('input[type="checkbox"]')][0] as HTMLInputElement;
@@ -153,7 +154,7 @@ test("organization SURVIVES Done — and Done writes nothing at all", async () =
   // The mode and the temporary selection are gone...
   assert.equal(byText(host, /^Done$/), undefined, "the organize panel is still open");
   assert.ok(!(host.textContent ?? "").includes("item selected"), "a stale selection survived Done");
-  assert.ok(byText(host, /^Select items$/), "the normal Library did not come back");
+  assert.ok(byText(host, /^Select & Organize$/), "the normal Library did not come back");
 
   // ...and the organization itself is still there.
   assert.equal(ITEMS[0].isFavorite, true, "leaving undid the save");
@@ -163,7 +164,7 @@ test("organization SURVIVES Done — and Done writes nothing at all", async () =
 
 test("Done clears the notice, so it does not linger over the normal Library", async () => {
   const host = await mount();
-  await click(byText(host, /^Select items$/)!);
+  await click(byText(host, /^Select & Organize$/)!);
   const box = [...host.querySelectorAll('input[type="checkbox"]')][0] as HTMLInputElement;
   await act(async () => { box.click(); });
   await click(byText(host, /★ Favorite/)!);

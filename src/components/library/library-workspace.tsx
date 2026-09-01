@@ -316,15 +316,16 @@ export default function LibraryWorkspace() {
                     to organize is now to drag something, and this button leads
                     to a mode where the handles are deliberately gone. So it
                     read as "to organize your Library, do not press Organize".
-                    What it actually opens is multi-selection — pick several
-                    things, then act on them together — so that is what it is
-                    called. The mode is unchanged; only its name was wrong. */}
+                    "Select items" fixed the false half and left an open one —
+                    select them for WHAT — so the name now carries both the
+                    action and its purpose. The mode is unchanged throughout;
+                    only what it was called was wrong. */}
                 <button
                   onClick={() => { setNotice(""); setChosen([]); setOrganizing(true); setSelecting(true); }}
                   className="px-3 py-2 rounded-lg border border-border bg-white text-sm font-medium
                              text-foreground hover:border-accent hover:text-accent"
                 >
-                  Select items
+                  Select &amp; Organize
                 </button>
               </>
             )}
@@ -342,16 +343,18 @@ export default function LibraryWorkspace() {
         {/* TWO ENTRY POINTS, TWO EXPERIENCES.
             Selection state is shared underneath — one mode, internally — but a
             professional should never have to understand that. Arriving through
-            Select items and being shown a dimmed "Create FlowGuide" and a disabled
-            "Select items" beside it is the machinery leaking into the room: it says
+            Select & Organize and being shown a dimmed "Create FlowGuide" and a
+            disabled "Select & Organize" beside it is the machinery leaking into
+            the room: it says
             nothing about what to do next and quite a lot about how the code is
             arranged. Each intent now shows only its own action. */}
         {selecting && organizing && (
           <div className="mb-4 rounded-xl border border-accent/40 bg-accent/5 p-3">
-            <p className="text-sm font-medium text-foreground">Select items</p>
+            <p className="text-sm font-medium text-foreground">Select &amp; Organize</p>
             <p className="mt-1 text-sm text-muted">
-              Choose several Library items to organize them together. These changes only
-              affect your Library — nothing is copied into a FlowGuide or seen by a client.
+              Choose one or more Library items to move, label, or favorite together. These
+              changes only affect your Library — nothing is copied into a FlowGuide or seen
+              by a client.
             </p>
 
             <div className="mt-3 flex items-center gap-2">
@@ -515,7 +518,7 @@ export default function LibraryWorkspace() {
             </p>
             {/* CANCEL IS CORRECT HERE, and stays. Nothing is written until
                 Create FlowGuide: the selection is a staged choice, so there is
-                something real to abandon. The Select items panel says Done for the
+                something real to abandon. The Select & Organize panel says Done for the
                 opposite reason — its writes have already happened. */}
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <span className={`text-sm font-medium ${chosen.length ? "text-foreground" : "text-muted"}`}>
@@ -641,7 +644,7 @@ export default function LibraryWorkspace() {
               onToggleFavorite={selecting ? undefined : toggleFavorite}
               onMove={(id) => {
                 // The same mechanism, reached from a row: hand this one item to
-                // the Select items panel rather than growing a second way to pick a
+                // the Select & Organize panel rather than growing a second way to pick a
                 // destination.
                 setNotice(""); setChosen([id]); setOrganizing(true); setSelecting(true);
                 window.scrollTo({ top: 0, behavior: "smooth" });

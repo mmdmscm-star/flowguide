@@ -156,7 +156,8 @@ export function BlockItemEditor({
   vocabulary?: { labels: string[] };
   /** Where this entry currently lives, e.g. "Communities › Santa Rosa".
    *  Shown, not edited: moving something is a placement, made against a
-   *  selection in Select items, not a text field that could disagree with it. */
+   *  selection in Select & Organize, not a text field that could disagree with
+   *  it. */
   locationLabel?: string;
 }) {
   const [title, setTitle] = useState(item.title || "");
