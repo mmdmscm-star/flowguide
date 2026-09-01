@@ -25,6 +25,7 @@ export function LibraryList({
   onStructure,
   onToggleFavorite,
   locationOf,
+  rowSlot,
 }: {
   selectable?: boolean;
   selected?: string[];
@@ -63,6 +64,11 @@ export function LibraryList({
    *  hierarchy is not on screen — a search result, a label or Favorites view —
    *  because under a heading that already says it, repeating it is noise. */
   locationOf?: (s: LibrarySnapshot) => string | undefined;
+  /** Per-row extras for a caller that is composing rather than browsing: the
+   *  grip that copies this item into a FlowGuide, and whether it is already in
+   *  one. Absent everywhere else, which is why the Library's own surfaces are
+   *  unchanged by the composition experience. */
+  rowSlot?: (s: LibrarySnapshot) => { handle?: React.ReactNode; muted?: boolean };
 }) {
   const [innerQ, setInnerQ] = useState("");
   const q = query ?? innerQ;
@@ -230,6 +236,8 @@ export function LibraryList({
             onToggle={onToggle}
             onOpen={selectable ? undefined : onOpen}
             location={locationOf?.(s)}
+            handle={rowSlot?.(s).handle}
+            muted={rowSlot?.(s).muted}
             star={onToggleFavorite ? (
               <button
                 type="button"

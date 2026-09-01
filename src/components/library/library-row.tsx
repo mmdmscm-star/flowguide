@@ -21,7 +21,7 @@ export function LocationLine({ location }: { location: string }) {
 
 export function LibraryRow({
   item, selectable, selected, onToggle, onOpen, star, location, controls,
-  handle, innerRef, style, className,
+  handle, innerRef, style, className, muted,
 }: {
   item: LibrarySnapshot;
   selectable: boolean;
@@ -41,6 +41,10 @@ export function LibraryRow({
   innerRef?: (node: HTMLElement | null) => void;
   style?: React.CSSProperties;
   className?: string;
+  /** Already added to the FlowGuide being composed. Kept visible and quietly
+   *  stepped back rather than removed: a row that vanishes when you add it
+   *  makes the Library look like it lost something. */
+  muted?: boolean;
 }) {
   const photo = heroPhoto(item);
 
@@ -81,7 +85,8 @@ export function LibraryRow({
   // with a branch inside its handler: selecting wraps a checkbox in a label,
   // reading is a button. Neither can fire in the other's mode.
   return (
-    <li ref={innerRef} style={style} className={`flex items-center gap-1 ${className ?? ""}`}>
+    <li ref={innerRef} style={style}
+        className={`flex items-center gap-1 ${muted ? "opacity-55" : ""} ${className ?? ""}`}>
       {handle}
       {selectable ? (
         <label className={`${shell} cursor-pointer`}>

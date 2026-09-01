@@ -1,4 +1,13 @@
 "use client";
+import {
+  DndContext, DragOverlay, KeyboardSensor, PointerSensor, useDraggable, useSensor, useSensors,
+  type DragEndEvent, type DragStartEvent,
+} from "@dnd-kit/core";
+import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
+import { FlowGuideTray, type TrayEntry } from "@/components/library/flowguide-tray";
+import {
+  applyCompose, libDragId, parseComposeId, planCompose,
+} from "@/lib/compose-drag";
 import { useCallback, useState } from "react";
 import { BlockItemEditor, type LibraryOrganization } from "@/components/editor/block-item-editor";
 import { LibraryList } from "@/components/library/library-list";
@@ -33,6 +42,53 @@ const BLANK: Item = {
   id: "new", title: "", address: "", description: "", notes: "",
   photos: [], details: [], links: [], contacts: [],
 };
+
+/** ONE CONTROL, TWO GESTURES.
+ *
+ *  Press it and the item goes to the end of the FlowGuide; drag it and you
+ *  choose exactly where. Separating those into two affordances would put a grip
+ *  and an Add button on every row and make the professional decide which one
+ *  they meant — when they mean the same thing, differing only in how precise
+ *  they are being.
+ *
+ *  It says ADD, not a grip's dots, because dots now mean "reorder my Library"
+ *  three feet to the left and this does not touch the Library at all. */
+function AddToFlowGuide({
+  item, added, onAdd,
+}: {
+  item: LibrarySnapshot; added: boolean; onAdd: () => void;
+}) {
+  const name = item.title || "this item";
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id: libDragId(item.id),
+    disabled: added,
+    data: { title: item.title ?? "" },
+  });
+  if (added) {
+    return (
+      <span className="flex-none rounded px-1.5 py-1 text-[11px] font-medium text-accent"
+        aria-label={`${name} is already in this FlowGuide`}>
+        ✓ Added
+      </span>
+    );
+  }
+  return (
+    <button
+      ref={setNodeRef}
+      type="button"
+      onClick={onAdd}
+      aria-label={`Add ${name} to this FlowGuide`}
+      {...attributes}
+      {...listeners}
+      className={`flex-none touch-none cursor-grab active:cursor-grabbing rounded border border-border
+                  px-1.5 py-1 text-[11px] font-medium text-muted hover:border-accent hover:text-accent
+                  focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent
+                  ${isDragging ? "opacity-40" : ""}`}
+    >
+      Add
+    </button>
+  );
+}
 
 export default function LibraryWorkspace() {
   const [editing, setEditing] = useState<LibrarySnapshot | null>(null);
@@ -132,7 +188,76 @@ export default function LibraryWorkspace() {
   });
 
   const [selecting, setSelecting] = useState(false);
+
   const [chosen, setChosen] = useState<string[]>([]);
+  /** WHAT EACH PENDING ENTRY IS CALLED, remembered when it was added.
+   *
+   *  `chosen` holds ids, and the tray has to keep showing an item after the
+   *  professional has searched away from it — otherwise composing means never
+   *  changing the filter. Captured on add rather than looked up on render,
+   *  because the row it came from may no longer be loaded. */
+  const [addedTitles, setAddedTitles] = useState<Record<string, string>>({});
+  const [dragging, setDragging] = useState<{ id: string; title: string } | null>(null);
+
+  // =========================================================================
+  // COMPOSING A FLOWGUIDE — find, drag, place, arrange, create.
+  //
+  // COPY, NOT MOVE, and the whole design turns on that. Dragging inside the
+  // Library rearranges the Library; dragging out of it does nothing to the
+  // Library at all. So this has its own planner, its own drag ids and its own
+  // context — nothing is shared with library-drag, because the day they share a
+  // rule is the day a copy becomes a move.
+  //
+  // The Library's own grips are already absent here: they are gated on
+  // `reorder && !selectable`, and composing is a selection mode. What appears
+  // on a row instead is a grip that says "add", beside a button that does the
+  // same thing without a pointer.
+  // =========================================================================
+  const composing = selecting && !organizing;
+  const composeSensors = useSensors(
+    // Desktop pointer and keyboard. `distance` is what lets one control be both
+    // a button and a drag handle: a press that never moves stays a click.
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+
+  const remember = (id: string, title: string) =>
+    setAddedTitles((m) => (m[id] ? m : { ...m, [id]: title || "Untitled" }));
+
+  /** Add at the end — the button path, and what a drop on the tray itself does. */
+  function addToTray(item: LibrarySnapshot) {
+    remember(item.id, item.title ?? "");
+    setChosen((c) => (c.includes(item.id) ? c : [...c, item.id]));
+  }
+  const removeFromTray = (id: string) => setChosen((c) => c.filter((x) => x !== id));
+  function nudge(id: string, dir: -1 | 1) {
+    setChosen((c) => {
+      const i = c.indexOf(id), j = i + dir;
+      if (i < 0 || j < 0 || j >= c.length) return c;
+      const next = [...c];
+      next.splice(j, 0, next.splice(i, 1)[0]);
+      return next;
+    });
+  }
+  const trayEntries: TrayEntry[] = chosen.map((id) => ({ id, title: addedTitles[id] ?? "Untitled" }));
+
+  function onComposeDragEnd(e: DragEndEvent) {
+    setDragging(null);
+    const plan = planCompose(e.active.id, e.over?.id ?? null, chosen);
+    if (!plan) return;
+    if (plan.kind === "add") {
+      const t = (e.active.data.current as { title?: string } | undefined)?.title;
+      remember(plan.id, t ?? "Untitled");
+    }
+    setChosen((c) => applyCompose(c, plan));
+  }
+  function onComposeDragStart(e: DragStartEvent) {
+    const p = parseComposeId(e.active.id);
+    if (!p) return;
+    const carried = (e.active.data.current as { title?: string } | undefined)?.title;
+    setDragging({ id: p.id, title: carried ?? addedTitles[p.id] ?? "Item" });
+  }
+
   const router = useRouter();
 
   const save = useCallback(async (
@@ -304,7 +429,7 @@ export default function LibraryWorkspace() {
             {hasAny === true && (
               <>
                 <button
-                  onClick={() => { setNotice(""); setChosen([]); setOrganizing(false); setSelecting(true); }}
+                  onClick={() => { setNotice(""); setChosen([]); setAddedTitles({}); setOrganizing(false); setSelecting(true); }}
                   className="px-3 py-2 rounded-lg border border-border bg-white text-sm font-medium
                              text-foreground hover:border-accent hover:text-accent"
                 >
@@ -513,8 +638,8 @@ export default function LibraryWorkspace() {
           <div className="mb-4 rounded-xl border border-accent/40 bg-accent/5 p-3">
             <p className="text-sm font-medium text-foreground">Start a FlowGuide</p>
             <p className="mt-1 text-sm text-muted">
-              Choose what to start it with. Each one is copied in — changing it there
-              never changes what is saved here.
+              Drag items across, or press Add. The order on the right is the order your
+              client will read them in.
             </p>
             {/* CANCEL IS CORRECT HERE, and stays. Nothing is written until
                 Create FlowGuide: the selection is a staged choice, so there is
@@ -537,7 +662,7 @@ export default function LibraryWorkspace() {
                 {busy ? "Creating…" : "Create FlowGuide"}
               </button>
               <button
-                onClick={() => { setSelecting(false); setChosen([]); }}
+                onClick={() => { setSelecting(false); setChosen([]); setAddedTitles({}); }}
                 disabled={busy}
                 className="ml-auto text-sm font-medium text-muted hover:text-foreground"
               >
@@ -625,6 +750,40 @@ export default function LibraryWorkspace() {
           </div>
         ) : (
           <>
+          {/* TWO PANES WHILE COMPOSING: the Library on the left, the FlowGuide
+              being assembled on the right. The left pane is the ordinary
+              Library — same search, same filters, same rows — because finding
+              something to reuse is the same problem as finding it at all. What
+              differs is one control per row.
+
+              THE TRAY IS NOT A LIBRARY CONTAINER, and is drawn so it cannot be
+              mistaken for one: dashed frame, numbered rows, its own title.
+
+              ONE DndContext, and it exists only while composing. The Library's
+              own drag context is not rendered here at all — its handles are
+              gated on `reorder && !selectable`, and composing is a selection
+              mode — so there is never a moment when a drag could mean either
+              "move this in my Library" or "copy this into a FlowGuide". */}
+          <DndContext
+            sensors={composeSensors}
+            onDragStart={onComposeDragStart}
+            onDragEnd={onComposeDragEnd}
+            onDragCancel={() => setDragging(null)}
+            accessibility={{
+              announcements: {
+                onDragStart: ({ active }) =>
+                  `Picked up ${(active.data.current as { title?: string } | undefined)?.title || "item"}.`,
+                onDragOver: () => "",
+                onDragEnd: ({ active, over }) => {
+                  const t = (active.data.current as { title?: string } | undefined)?.title || "item";
+                  return over ? `${t} placed in this FlowGuide.` : `${t} was not added.`;
+                },
+                onDragCancel: () => "Cancelled.",
+              },
+            }}
+          >
+            <div className={composing ? "grid gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]" : ""}>
+              <div className="min-w-0">
           <LibrarySearch value={q} onChange={setQ} className="mb-3" />
           <LibraryFilters vocabulary={vocab} value={filters} onChange={setFilters} className="mb-3" />
           {/* Suggestions for the label input, from the professional's own
@@ -649,7 +808,18 @@ export default function LibraryWorkspace() {
                 setNotice(""); setChosen([id]); setOrganizing(true); setSelecting(true);
                 window.scrollTo({ top: 0, behavior: "smooth" });
               }}
-              reorder={canReorder({ labels: filters.labels, favorite: filters.favorite })}
+              rowSlot={composing ? (it) => ({
+                handle: <AddToFlowGuide item={it} added={chosen.includes(it.id)}
+                            onAdd={() => addToTray(it)} />,
+                muted: chosen.includes(it.id),
+              }) : undefined}
+              // NOT WHILE COMPOSING. `reorder` carries the Library's own
+              // rearranging — section and group Move up/down, and rename — and
+              // this surface does not rearrange the Library. Item handles were
+              // already gone (they gate on `!selectable`); the HEADING controls
+              // were not, so a professional assembling a FlowGuide could still
+              // reorder the shelf underneath it from the same screen.
+              reorder={!composing && canReorder({ labels: filters.labels, favorite: filters.favorite })}
               onVocabulary={setVocab}
               onEmpty={(empty) => { if (empty) setStructure({ sections: [], groups: [] }); }}
             />
@@ -666,6 +836,11 @@ export default function LibraryWorkspace() {
             // The location belongs on the row exactly here — in a flat,
             // filtered result, where no heading above it says where the item
             // lives. Under the hierarchy it would be noise.
+            rowSlot={composing ? (it) => ({
+              handle: <AddToFlowGuide item={it} added={chosen.includes(it.id)}
+                        onAdd={() => addToTray(it)} />,
+              muted: chosen.includes(it.id),
+            }) : undefined}
             locationOf={locationOf}
             selectable={selecting}
             selected={chosen}
@@ -684,6 +859,27 @@ export default function LibraryWorkspace() {
             }
           />
           )}
+              </div>
+              {composing && (
+                <aside className="lg:sticky lg:top-4 lg:self-start">
+                  <FlowGuideTray
+                    entries={trayEntries} busy={busy}
+                    onUp={(id) => nudge(id, -1)}
+                    onDown={(id) => nudge(id, 1)}
+                    onRemove={removeFromTray}
+                  />
+                </aside>
+              )}
+            </div>
+            <DragOverlay dropAnimation={null}>
+              {dragging ? (
+                <div className="pointer-events-none rounded-md border border-accent bg-white px-2.5 py-1.5
+                                text-sm font-medium text-foreground shadow-lg">
+                  {dragging.title}
+                </div>
+              ) : null}
+            </DragOverlay>
+          </DndContext>
           </>
         )}
       </div>

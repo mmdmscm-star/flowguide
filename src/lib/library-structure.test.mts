@@ -240,8 +240,10 @@ test("the workspace actually WIRES those two rules, rather than only exporting t
   const ws = bodyOf("src/components/library/library-workspace.tsx");
   assert.match(ws, /showStructure\(structure\.sections\.length > 0, \{\s*q, labels: filters\.labels, favorite: filters\.favorite,?\s*\}\)/,
     "the workspace decides structure by some other rule");
-  assert.match(ws, /reorder=\{canReorder\(\{ labels: filters\.labels, favorite: filters\.favorite \}\)\}/,
-    "reorder controls are not gated on the filters");
+  // Still gated on the filters — and now on composing too, because assembling
+  // a FlowGuide is not an occasion for rearranging the shelf it draws from.
+  assert.match(ws, /reorder=\{!composing && canReorder\(\{ labels: filters\.labels, favorite: filters\.favorite \}\)\}/,
+    "reorder controls are not gated on the filters and the composition mode");
 });
 
 test("SEARCH survives the switch between the two views", () => {

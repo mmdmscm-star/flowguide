@@ -52,7 +52,7 @@ const keyOf = (s: string | null, g: string | null) => `${s ?? ""}|${g ?? ""}`;
 
 export function LibraryStructureView({
   refreshKey = 0, selectable = false, selected = [], onToggle, onOpen,
-  onToggleFavorite, onMove, reorder = false, onVocabulary, onEmpty,
+  onToggleFavorite, onMove, reorder = false, onVocabulary, onEmpty, rowSlot,
 }: {
   refreshKey?: number;
   selectable?: boolean;
@@ -66,6 +66,11 @@ export function LibraryStructureView({
   /** Move up / Move down. Never in a picker: choosing is not filing. */
   reorder?: boolean;
   onVocabulary?: (v: LibraryVocabulary) => void;
+  /** Per-row extras for a caller that is composing rather than browsing. When
+   *  present the row shows THAT grip — a copy into a FlowGuide — and never the
+   *  Library's own move handle, which cannot appear here anyway because
+   *  composing is a selection mode. */
+  rowSlot?: (s: LibrarySnapshot) => { handle?: React.ReactNode; muted?: boolean };
   /** Reports that no structure exists, so the caller can fall back to the flat
    *  list rather than rendering an empty hierarchy. */
   onEmpty?: (empty: boolean) => void;
@@ -385,9 +390,11 @@ export function LibraryStructureView({
               onUp={() => move("item", s.id, "up")} onDown={() => move("item", s.id, "down")}
               onMove={onMove ? () => onMove(s.id) : undefined} />
           ) : null;
+          const slot = rowSlot?.(s);
           const common = {
             item: s, selectable, selected: selected.includes(s.id),
             onToggle, onOpen, star: star(s), controls,
+            handle: slot?.handle, muted: slot?.muted,
           };
           if (!sortable) return <LibraryRow key={s.id} {...common} />;
           return (
@@ -396,8 +403,10 @@ export function LibraryStructureView({
               {(b) => (
                 <LibraryRow {...common}
                   innerRef={b.innerRef} style={b.style} className={b.className}
-                  handle={<DragHandle label={`Drag to reorder ${s.title || "this item"}`}
-                    attributes={b.attributes} listeners={b.listeners} disabled={busy} />} />
+                  handle={slot?.handle ?? (
+                    <DragHandle label={`Drag to reorder ${s.title || "this item"}`}
+                      attributes={b.attributes} listeners={b.listeners} disabled={busy} />
+                  )} />
               )}
             </SortableRow>
           );
