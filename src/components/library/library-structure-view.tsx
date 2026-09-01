@@ -70,7 +70,8 @@ export function LibraryStructureView({
    *  present the row shows THAT grip — a copy into a FlowGuide — and never the
    *  Library's own move handle, which cannot appear here anyway because
    *  composing is a selection mode. */
-  rowSlot?: (s: LibrarySnapshot) => { handle?: React.ReactNode; muted?: boolean };
+  rowSlot?: (s: LibrarySnapshot) => {
+    handle?: React.ReactNode; controls?: React.ReactNode; muted?: boolean };
   /** Reports that no structure exists, so the caller can fall back to the flat
    *  list rather than rendering an empty hierarchy. */
   onEmpty?: (empty: boolean) => void;
@@ -393,7 +394,8 @@ export function LibraryStructureView({
           const slot = rowSlot?.(s);
           const common = {
             item: s, selectable, selected: selected.includes(s.id),
-            onToggle, onOpen, star: star(s), controls,
+            onToggle, onOpen, star: star(s),
+            controls: slot?.controls ?? controls,
             handle: slot?.handle, muted: slot?.muted,
           };
           if (!sortable) return <LibraryRow key={s.id} {...common} />;

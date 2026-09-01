@@ -181,11 +181,18 @@ test("the CREATE experience still says Cancel, because nothing is saved yet", as
   assert.ok(byText(host, /^Cancel$/), "the create panel lost its Cancel");
   assert.equal(byText(host, /^Done$/), undefined, "the create panel says Done, but nothing is saved yet");
 
-  const box = [...host.querySelectorAll('input[type="checkbox"]')][0] as HTMLInputElement;
-  await act(async () => { box.click(); });
-  assert.equal(writes.length, 0, "choosing something in the create flow wrote to the server");
+  // THE CHECKBOX IS GONE FROM HERE, and its going is the point: it was a second
+  // way to toggle the same pending list, and it made an assembly surface read
+  // as the old record picker. Add adds; the tray's × removes.
+  assert.equal([...host.querySelectorAll('input[type="checkbox"]')].length, 0,
+    "the composition surface still offers selection checkboxes");
+  const add = [...host.querySelectorAll("button")]
+    .find((b) => /^Add .* to this FlowGuide$/.test(b.getAttribute("aria-label") ?? ""));
+  assert.ok(add, "there is no way to add an item without a checkbox");
+  await click(add!);
+  assert.equal(writes.length, 0, "adding something in the create flow wrote to the server");
 
   await click(byText(host, /^Cancel$/)!);
   assert.equal(writes.length, 0, "cancelling wrote to the server");
-  assert.ok(!(host.textContent ?? "").includes("item selected"), "a stale selection survived Cancel");
+  assert.ok(!(host.textContent ?? "").includes("item added"), "a stale composition survived Cancel");
 });

@@ -43,48 +43,69 @@ const BLANK: Item = {
   photos: [], details: [], links: [], contacts: [],
 };
 
-/** ONE CONTROL, TWO GESTURES.
+/** THE GRIP, AND WHY IT IS NOT THE BUTTON.
  *
- *  Press it and the item goes to the end of the FlowGuide; drag it and you
- *  choose exactly where. Separating those into two affordances would put a grip
- *  and an Add button on every row and make the professional decide which one
- *  they meant — when they mean the same thing, differing only in how precise
- *  they are being.
+ *  These were one control: a button labelled "Add" that was also the drag
+ *  handle. It read as a button, so the first professional to use it never
+ *  discovered the drag at all — which is the whole gesture this surface exists
+ *  for. A control that looks like one thing and secretly does two is a control
+ *  that does one.
  *
- *  It says ADD, not a grip's dots, because dots now mean "reorder my Library"
- *  three feet to the left and this does not touch the Library at all. */
-function AddToFlowGuide({
-  item, added, onAdd,
-}: {
-  item: LibrarySnapshot; added: boolean; onAdd: () => void;
-}) {
+ *  So the grip is visible and separate, and says what dragging it does. It is
+ *  NOT the Library's own move handle: that one rearranges the shelf and is
+ *  absent here entirely. This one copies, and its label says so.
+ */
+function ComposeGrip({ item, added }: { item: LibrarySnapshot; added: boolean }) {
   const name = item.title || "this item";
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: libDragId(item.id),
     disabled: added,
     data: { title: item.title ?? "" },
   });
+  // Already in the tray: the space is held so the rows do not jump sideways.
+  if (added) return <span className="w-6 flex-none" aria-hidden="true" />;
+  return (
+    <button
+      ref={setNodeRef}
+      type="button"
+      aria-label={`Drag ${name} into FlowGuide`}
+      {...attributes}
+      {...listeners}
+      className={`flex-none touch-none cursor-grab active:cursor-grabbing rounded p-1 text-gray-300
+                  hover:text-accent focus-visible:outline focus-visible:outline-2
+                  focus-visible:outline-accent ${isDragging ? "opacity-40" : ""}`}
+    >
+      <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+        <circle cx="7" cy="4" r="1.5" /><circle cx="13" cy="4" r="1.5" />
+        <circle cx="7" cy="10" r="1.5" /><circle cx="13" cy="10" r="1.5" />
+        <circle cx="7" cy="16" r="1.5" /><circle cx="13" cy="16" r="1.5" />
+      </svg>
+    </button>
+  );
+}
+
+/** The same outcome without a pointer: click, keyboard, or a touch screen where
+ *  dragging is not asked for. */
+function AddButton({
+  item, added, onAdd,
+}: {
+  item: LibrarySnapshot; added: boolean; onAdd: () => void;
+}) {
+  const name = item.title || "this item";
   if (added) {
     return (
-      <span className="flex-none rounded px-1.5 py-1 text-[11px] font-medium text-accent"
+      <span className="flex-none px-1.5 py-1 text-[11px] font-medium text-accent"
         aria-label={`${name} is already in this FlowGuide`}>
         ✓ Added
       </span>
     );
   }
   return (
-    <button
-      ref={setNodeRef}
-      type="button"
-      onClick={onAdd}
+    <button type="button" onClick={onAdd}
       aria-label={`Add ${name} to this FlowGuide`}
-      {...attributes}
-      {...listeners}
-      className={`flex-none touch-none cursor-grab active:cursor-grabbing rounded border border-border
-                  px-1.5 py-1 text-[11px] font-medium text-muted hover:border-accent hover:text-accent
-                  focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent
-                  ${isDragging ? "opacity-40" : ""}`}
-    >
+      className="flex-none rounded border border-border px-1.5 py-1 text-[11px] font-medium
+                 text-muted hover:border-accent hover:text-accent
+                 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent">
       Add
     </button>
   );
@@ -381,15 +402,26 @@ export default function LibraryWorkspace() {
     }
   }
 
+  // ONE COLUMN IS THE RIGHT LIBRARY AND THE WRONG WORKSHOP.
+  //
+  // `max-w-lg` is 32rem: a comfortable reading column for a list, and far too
+  // little for two working panes. Squeezed into it, names and addresses
+  // truncated and the tray was too thin to read as a destination at all. So the
+  // shell widens while composing and returns to its column the moment that ends.
+  //
+  // The nav bar widens with it. A page whose header stays narrow while its body
+  // does not looks broken rather than roomy.
+  const shell = composing ? "max-w-6xl" : "max-w-lg";
+
   return (
     <div className="min-h-screen bg-background">
       <div className="sticky top-0 z-20 bg-white border-b border-border">
-        <div className="max-w-lg mx-auto px-5 py-3 flex items-center gap-3">
+        <div className={`${shell} mx-auto px-5 py-3 flex items-center gap-3`}>
           <CreatorNav current="library" />
         </div>
       </div>
 
-      <div className="max-w-lg mx-auto px-5 pb-24">
+      <div className={`${shell} mx-auto px-5 pb-24`}>
         <header className="pt-6 pb-4">
           <h1 className="text-2xl font-bold text-foreground">Your Library</h1>
           {/* ONE SENTENCE. The independence rule — that inserting makes a copy —
@@ -647,7 +679,7 @@ export default function LibraryWorkspace() {
                 opposite reason — its writes have already happened. */}
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <span className={`text-sm font-medium ${chosen.length ? "text-foreground" : "text-muted"}`}>
-                {chosen.length} item{chosen.length === 1 ? "" : "s"} selected
+                {chosen.length} item{chosen.length === 1 ? "" : "s"} added
               </span>
               <button
                 onClick={async () => {
@@ -782,7 +814,14 @@ export default function LibraryWorkspace() {
               },
             }}
           >
-            <div className={composing ? "grid gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]" : ""}>
+            <div className={composing
+              // Two panes only where two panes fit. Below `lg` this is one
+              // column and the tray follows the Library down the page — a
+              // usable narrow layout rather than two unusable ones.
+              // `minmax(0,…)` is what stops a long name widening its column
+              // past its share and pushing the page into horizontal scroll.
+              ? "grid gap-5 lg:grid-cols-[minmax(0,55fr)_minmax(0,45fr)]"
+              : ""}>
               <div className="min-w-0">
           <LibrarySearch value={q} onChange={setQ} className="mb-3" />
           <LibraryFilters vocabulary={vocab} value={filters} onChange={setFilters} className="mb-3" />
@@ -796,7 +835,7 @@ export default function LibraryWorkspace() {
           {structured ? (
             <LibraryStructureView
               refreshKey={refreshKey}
-              selectable={selecting}
+              selectable={selecting && organizing}
               selected={chosen}
               onToggle={(id) => setChosen((c) => c.includes(id) ? c.filter((x) => x !== id) : [...c, id])}
               onOpen={selecting ? undefined : openEntry}
@@ -809,7 +848,8 @@ export default function LibraryWorkspace() {
                 window.scrollTo({ top: 0, behavior: "smooth" });
               }}
               rowSlot={composing ? (it) => ({
-                handle: <AddToFlowGuide item={it} added={chosen.includes(it.id)}
+                handle: <ComposeGrip item={it} added={chosen.includes(it.id)} />,
+                controls: <AddButton item={it} added={chosen.includes(it.id)}
                             onAdd={() => addToTray(it)} />,
                 muted: chosen.includes(it.id),
               }) : undefined}
@@ -837,12 +877,13 @@ export default function LibraryWorkspace() {
             // filtered result, where no heading above it says where the item
             // lives. Under the hierarchy it would be noise.
             rowSlot={composing ? (it) => ({
-              handle: <AddToFlowGuide item={it} added={chosen.includes(it.id)}
-                        onAdd={() => addToTray(it)} />,
+              handle: <ComposeGrip item={it} added={chosen.includes(it.id)} />,
+              controls: <AddButton item={it} added={chosen.includes(it.id)}
+                          onAdd={() => addToTray(it)} />,
               muted: chosen.includes(it.id),
             }) : undefined}
             locationOf={locationOf}
-            selectable={selecting}
+            selectable={selecting && organizing}
             selected={chosen}
             onToggle={(id) => setChosen((c) => c.includes(id) ? c.filter((x) => x !== id) : [...c, id])}
             onOpen={selecting ? undefined : openEntry}

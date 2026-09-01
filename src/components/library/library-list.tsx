@@ -68,7 +68,8 @@ export function LibraryList({
    *  grip that copies this item into a FlowGuide, and whether it is already in
    *  one. Absent everywhere else, which is why the Library's own surfaces are
    *  unchanged by the composition experience. */
-  rowSlot?: (s: LibrarySnapshot) => { handle?: React.ReactNode; muted?: boolean };
+  rowSlot?: (s: LibrarySnapshot) => {
+    handle?: React.ReactNode; controls?: React.ReactNode; muted?: boolean };
 }) {
   const [innerQ, setInnerQ] = useState("");
   const q = query ?? innerQ;
@@ -237,6 +238,7 @@ export function LibraryList({
             onOpen={selectable ? undefined : onOpen}
             location={locationOf?.(s)}
             handle={rowSlot?.(s).handle}
+            controls={rowSlot?.(s).controls}
             muted={rowSlot?.(s).muted}
             star={onToggleFavorite ? (
               <button

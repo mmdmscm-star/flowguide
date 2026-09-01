@@ -274,3 +274,115 @@ test("the create payload has no room for Library organization", () => {
   for (const forbidden of ["sectionId", "groupId", "labels", "favorite"])
     assert.ok(!accepts.includes(forbidden), `the create route accepts ${forbidden}`);
 });
+
+// ---------------------------------------------------------------------------
+// WHAT THE FIRST HANDS-ON RUN FOUND
+//
+// Three presentation faults, none of them in the copy semantics: two panes
+// crushed into a 32rem reading column, a drag nobody could see because its
+// handle was a button labelled Add, and the old picker's checkboxes and
+// "0 items selected" still sitting on top of an assembly surface.
+// ---------------------------------------------------------------------------
+
+const shellOf = (host: Element) =>
+  [...host.querySelectorAll("div")].map((d) => d.className)
+    .filter((c) => /max-w-\S+ mx-auto/.test(c));
+
+test("COMPOSING WIDENS THE WORKSPACE; the ordinary Library keeps its column", async () => {
+  const host = await mount();
+  // Browsing: one reading column, unchanged.
+  const browsing = shellOf(host);
+  assert.ok(browsing.length >= 2, "the page shell was not found");
+  for (const c of browsing)
+    assert.match(c, /max-w-lg\b/, `the ordinary Library is no longer a column: ${c}`);
+
+  await openCompose(host);
+  const composingShell = shellOf(host);
+  for (const c of composingShell)
+    assert.ok(!/max-w-lg\b/.test(c), `the composition surface is still a 32rem column: ${c}`);
+  // The nav bar widens WITH the body — a narrow header over a wide page reads
+  // as broken rather than roomy.
+  assert.equal(composingShell.length, browsing.length,
+    "the header and the body no longer share a width");
+  for (const c of composingShell) assert.match(c, /max-w-6xl/, c);
+});
+
+test("the two panes are a real split, and collapse rather than crush", async () => {
+  const host = await mount();
+  await openCompose(host);
+  const grid = [...host.querySelectorAll("div")].map((d) => d.className)
+    .find((c) => c.includes("lg:grid-cols-"));
+  assert.ok(grid, "the composition surface is not two panes");
+  // 55/45, and only at lg and above: below it this is one column.
+  assert.match(grid!, /lg:grid-cols-\[minmax\(0,55fr\)_minmax\(0,45fr\)\]/,
+    `the panes are not a readable split: ${grid}`);
+  assert.ok(!/^grid-cols-|(?<!lg:)grid-cols-\[/.test(grid!),
+    "two columns are forced at every width");
+  // minmax(0,…) is what keeps a long name from pushing the page sideways.
+  assert.ok(grid!.includes("minmax(0,"), "a long title can widen a column into horizontal scroll");
+});
+
+test("A VISIBLE GRIP, separate from Add — the drag is discoverable", async () => {
+  const host = await mount();
+  await openCompose(host);
+  const grips = byLabel(host, /^Drag .* into FlowGuide$/);
+  assert.ok(grips.length > 0, "there is no visible way to drag an item into the FlowGuide");
+  // Named per item, and not hidden until hover.
+  assert.match(grips[0].getAttribute("aria-label") ?? "", /^Drag \S.* into FlowGuide$/);
+  for (const g of grips)
+    assert.ok(!/opacity-0|invisible|hidden/.test(g.className), `a grip is hidden until hover: ${g.className}`);
+  // The button survives beside it, as the click/keyboard/touch path.
+  assert.ok(addFor(host, "Alpha House"), "Add is gone");
+  // They are two controls, not one wearing two hats.
+  assert.notEqual(grips[0], addFor(host, "Alpha House"));
+  // And the grip is NOT the Library's move handle, which stays absent.
+  assert.equal(byLabel(host, /^Drag to reorder /).filter((b) => !b.closest("ol")).length, 0,
+    "a Library reorder handle came back with the compose grip");
+});
+
+test("BOTH AFFORDANCES PRODUCE THE SAME PENDING COPY", async () => {
+  // The grip drags and the button clicks; what they mean is identical, and the
+  // planner is what says so — the button calls the same add, at the end.
+  const host = await mount();
+  await openCompose(host);
+  await click(addFor(host, "Alpha House")!);
+  assert.deepEqual(trayOrder(host), ["Alpha House"]);
+  // Once added, the row offers neither a grip nor an Add — it says ✓ Added.
+  assert.equal(byLabel(host, /^Drag Alpha House into FlowGuide$/).length, 0,
+    "an item already in the tray can still be dragged in again");
+  assert.equal(addFor(host, "Alpha House"), undefined, "Add survives on an added item");
+  assert.match(host.textContent ?? "", /✓ Added/);
+});
+
+test("NO SELECTION LANGUAGE while composing — it says ADDED", async () => {
+  const host = await mount();
+  await openCompose(host);
+  const text = host.textContent ?? "";
+  assert.match(text, /0 items added/, "the composition summary still counts selections");
+  assert.ok(!/items selected|item selected/.test(text),
+    "the old picker's selection language is still on the composition surface");
+  assert.equal([...host.querySelectorAll('input[type="checkbox"]')].length, 0,
+    "checkboxes survive on the composition surface");
+
+  // Singular and plural both.
+  await click(addFor(host, "Alpha House")!);
+  assert.match(host.textContent ?? "", /1 item added/, "the singular is wrong");
+  await click(addFor(host, "Bravo Manor")!);
+  assert.match(host.textContent ?? "", /2 items added/, "the plural is wrong");
+});
+
+test("SELECT & ORGANIZE KEEPS ITS CHECKBOXES AND ITS WORDS", async () => {
+  // The redundancy was only in composition. Choosing several records to act on
+  // together is exactly what a checkbox is for, and that mode still says so.
+  const host = await mount();
+  await click(byText(host, /^Select & Organize$/)!);
+  const heading = [...host.querySelectorAll("button")].find((b) => /Communities/.test(b.textContent ?? ""));
+  if (heading) await click(heading);
+  assert.ok([...host.querySelectorAll('input[type="checkbox"]')].length > 0,
+    "Select & Organize lost its checkboxes");
+  assert.match(host.textContent ?? "", /0 items selected/,
+    "Select & Organize no longer counts what is selected");
+  // And it is not a composition surface: no grips, no Add, no tray.
+  assert.equal(byLabel(host, /into FlowGuide$/).length, 0, "compose controls leaked into Select & Organize");
+  assert.ok(!/This FlowGuide/.test(host.textContent ?? ""), "the tray leaked into Select & Organize");
+});
