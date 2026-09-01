@@ -17,6 +17,7 @@ let createRoot: typeof import("react-dom/client").createRoot;
 let act: typeof import("react").act;
 let Workspace: typeof import("../components/library/library-workspace.tsx").default;
 let AppRouterContext: React.Context<unknown>;
+let SearchParamsContext: React.Context<unknown>;
 
 const ITEMS = [
   { id: "i-1", title: "Alpha House", address: "1 A St", labels: ["Preferred"], isFavorite: true,
@@ -77,21 +78,29 @@ before(async () => {
   act = React.act;
   ({ AppRouterContext } = await import("next/dist/shared/lib/app-router-context.shared-runtime.js") as unknown as
     { AppRouterContext: React.Context<unknown> });
+  // The workspace reads `?compose=1` to know it was sent here to compose, so
+  // the tests supply the same context the App Router always does.
+  ({ SearchParamsContext } = await import("next/dist/shared/lib/hooks-client-context.shared-runtime.js") as unknown as
+    { SearchParamsContext: React.Context<unknown> });
   Workspace = (await import("../components/library/library-workspace.tsx")).default;
 });
 after(() => dom.window.close());
 
-const ROUTER = { push: () => {}, replace: () => {}, refresh: () => {}, back: () => {},
-  forward: () => {}, prefetch: async () => {} };
+/** Where the page asked to go. Cancel's destination depends on how the
+ *  professional arrived, so it has to be observable. */
+const pushed: string[] = [];
+const ROUTER = { push: (to: string) => { pushed.push(to); }, replace: () => {}, refresh: () => {},
+  back: () => {}, forward: () => {}, prefetch: async () => {} };
 
-async function mount() {
+async function mount(query = "") {
   const host = dom.window.document.getElementById("root")!;
   host.innerHTML = "";
-  writes.length = 0; created = null;
+  writes.length = 0; created = null; pushed.length = 0;
   const root = createRoot(host);
   await act(async () => {
     root.render(React.createElement(AppRouterContext.Provider, { value: ROUTER },
-      React.createElement(Workspace)));
+      React.createElement(SearchParamsContext.Provider, { value: new dom.window.URLSearchParams(query) },
+        React.createElement(Workspace))));
   });
   await act(async () => { await new Promise((r) => setTimeout(r, 30)); });
   return host;
@@ -385,4 +394,86 @@ test("SELECT & ORGANIZE KEEPS ITS CHECKBOXES AND ITS WORDS", async () => {
   // And it is not a composition surface: no grips, no Add, no tray.
   assert.equal(byLabel(host, /into FlowGuide$/).length, 0, "compose controls leaked into Select & Organize");
   assert.ok(!/This FlowGuide/.test(host.textContent ?? ""), "the tray leaked into Select & Organize");
+});
+
+// ---------------------------------------------------------------------------
+// TWO DOORS, ONE COMPOSER
+//
+// "Use my Library" on the New FlowGuide menu used to open a modal picker: a
+// second implementation of this job, with its own selection state and its own
+// Create. Which experience a professional got depended on which door they came
+// through. It now lands here, with `?compose=1`.
+// ---------------------------------------------------------------------------
+
+test("ARRIVING TO COMPOSE opens the workspace immediately", async () => {
+  const host = await mount("compose=1");
+  const text = host.textContent ?? "";
+  assert.match(text, /This FlowGuide/, "arriving to compose did not open the tray");
+  assert.match(text, /0 items added/, "the composition summary is not shown");
+  // The same surface, not a lookalike: wide shell, grips, Add, no checkboxes.
+  for (const c of shellOf(host)) assert.match(c, /max-w-6xl/, `not the wide workspace: ${c}`);
+  const heading = [...host.querySelectorAll("button")].find((b) => /Communities/.test(b.textContent ?? ""));
+  if (heading) await click(heading);
+  assert.ok(byLabel(host, /^Drag .* into FlowGuide$/).length > 0, "no drag grips on the arrival path");
+  assert.ok(addFor(host, "Alpha House"), "no Add on the arrival path");
+  assert.equal([...host.querySelectorAll('input[type="checkbox"]')].length, 0,
+    "the arrival path shows selection checkboxes");
+});
+
+test("the two doors reach the SAME surface", async () => {
+  // Arrived-to-compose, and opened-from-the-Library, rendered the same way.
+  const arrived = await mount("compose=1");
+  const a = (arrived.textContent ?? "").includes("This FlowGuide");
+  const opened = await mount();
+  await openCompose(opened);
+  const b = (opened.textContent ?? "").includes("This FlowGuide");
+  assert.ok(a && b, "one of the two doors does not reach the composer");
+  for (const c of shellOf(opened)) assert.match(c, /max-w-6xl/);
+});
+
+test("CANCEL GOES BACK THE WAY THEY CAME", async () => {
+  // From My FlowGuides: back to My FlowGuides. Being left standing in the
+  // Library is not a cancellation of anything they asked for.
+  const fromDash = await mount("compose=1");
+  await click(byText(fromDash, /^Cancel$/)!);
+  assert.deepEqual(pushed, ["/dashboard"], "cancelling from the menu did not return to My FlowGuides");
+
+  // From the Library: the Library comes back, and nothing navigates.
+  const fromLib = await mount();
+  await openCompose(fromLib);
+  await click(byText(fromLib, /^Cancel$/)!);
+  assert.deepEqual(pushed, [], "cancelling inside the Library navigated away from it");
+  assert.ok(!/This FlowGuide/.test(fromLib.textContent ?? ""), "the tray outlived Cancel");
+  assert.ok(byText(fromLib, /^Create a FlowGuide$/), "the ordinary Library did not come back");
+});
+
+test("SELECTIONS ACCUMULATE ACROSS SEARCHES, and Create submits the whole set", async () => {
+  // Carried over from the modal's session tests, because it is a property of
+  // the JOB and not of the old presentation: what was added stays added while
+  // the professional narrows the list to find the next thing.
+  const host = await mount("compose=1");
+  const heading = [...host.querySelectorAll("button")].find((b) => /Communities/.test(b.textContent ?? ""));
+  if (heading) await click(heading);
+  await click(addFor(host, "Alpha House")!);
+
+  const box = host.querySelector('input[type="search"]') as HTMLInputElement;
+  const type = async (v: string) => {
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, "value")!.set!;
+      setter.call(box, v);
+      box.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
+    });
+    await act(async () => { await new Promise((r) => setTimeout(r, 400)); });
+  };
+  await type("Cedar");
+  // The first one is off screen now, and still in the tray with its name.
+  assert.deepEqual(trayOrder(host), ["Alpha House"], "a selection was lost when the list was filtered");
+  await click(addFor(host, "Cedar Lodge")!);
+  assert.deepEqual(trayOrder(host), ["Alpha House", "Cedar Lodge"]);
+
+  await type("");
+  assert.deepEqual(trayOrder(host), ["Alpha House", "Cedar Lodge"], "clearing the search lost the tray");
+  await click(byText(host, /^Create FlowGuide$/)!);
+  assert.deepEqual(created?.libraryItemIds, ["i-1", "i-3"],
+    "Create did not submit the accumulated set in its order");
 });

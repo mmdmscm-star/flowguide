@@ -15,7 +15,6 @@ const code = (p: string) => read(p)
   .join("\n");
 const ROUTE = read("src/app/api/packets/from-library/route.ts");
 const EXISTING = read("src/app/api/packets/[id]/items/from-library/route.ts");
-const PICKER = read("src/components/library/use-library-picker.tsx");
 const WORKSPACE = read("src/components/library/library-workspace.tsx");
 // The dashboard gained a thin server shell (for the first-run identity
 // prompt); its menu and list live in the workspace component now.
@@ -107,19 +106,22 @@ test("the new FlowGuide is a legacy-composition draft, and nothing publishes", (
 });
 
 test("creation lands the professional inside the new FlowGuide", () => {
-  for (const [name, src] of [["picker", PICKER], ["library workspace", WORKSPACE]] as const) {
-    assert.match(src, /router\.push\(`\/edit\/\$\{packetId\}`\)/,
-      `${name} must open the new FlowGuide, not return to a list`);
-  }
+  assert.match(WORKSPACE, /router\.push\(`\/edit\/\$\{packetId\}`\)/,
+    "the composer must open the new FlowGuide, not return to a list");
 });
 
-test("both entry points call the one shared client helper", () => {
-  assert.match(PICKER, /createFromLibrary\(/);
+test("ONE COMPOSER, reached from both doors", () => {
+  // There were two implementations of this job: the Library's own workspace and
+  // a modal picker behind "Use my Library" on the New FlowGuide menu. Which one
+  // a professional got depended on which door they came through. The modal is
+  // gone; the menu item now routes to the workspace.
   assert.match(WORKSPACE, /createFromLibrary\(/);
-  for (const src of [PICKER, WORKSPACE]) {
-    assert.doesNotMatch(src, /fetch\("\/api\/packets\/from-library"/,
-      "the request shape must live in one place");
-  }
+  assert.doesNotMatch(WORKSPACE, /fetch\("\/api\/packets\/from-library"/,
+    "the request shape must live in one place");
+  assert.match(DASHBOARD, /router\.push\("\/library\?compose=1"\)/,
+    "Use my Library does not reach the canonical composer");
+  assert.doesNotMatch(DASHBOARD, /UseLibraryPicker|createFromLibrary/,
+    "the dashboard still creates FlowGuides from the Library by itself");
 });
 
 test("the New FlowGuide menu offers the Library first", () => {
@@ -134,12 +136,27 @@ test("the New FlowGuide menu offers the Library first", () => {
 // ---------------------------------------------------------------------------
 // Readability in the new surfaces
 // ---------------------------------------------------------------------------
-test("the new UI already meets the text-sm floor for decision text", () => {
-  for (const [name, src] of [["picker", PICKER]] as const) {
-    assert.doesNotMatch(src, /text-xs/,
-      `${name} is new work; text a professional reads to decide must be at least text-sm`);
-  }
-  const added = WORKSPACE.slice(WORKSPACE.indexOf("Choose what to start a FlowGuide with"),
-                               WORKSPACE.indexOf("Cancel") + 40);
-  assert.doesNotMatch(added, /text-xs/, "the new selection bar must not use text-xs");
+test("the composition panel meets the text-sm floor for decision text", () => {
+  const panel = WORKSPACE.slice(WORKSPACE.indexOf("{selecting && !organizing && ("),
+                                WORKSPACE.indexOf("Cancel") + 40);
+  assert.doesNotMatch(panel, /text-xs/, "the composition panel must not use text-xs");
+});
+
+test("the OTHER New FlowGuide choices are untouched", () => {
+  // Converging the Library door must not disturb the two beside it.
+  const menu = DASHBOARD.slice(DASHBOARD.indexOf("showNewMenu &&"));
+  assert.match(menu, /router\.push\("\/new"\)/, "Paste & organize with AI no longer goes to /new");
+  assert.match(menu, /createPacket\(\)/, "Start blank no longer creates a blank packet");
+  // And the Library door is the only one that changed.
+  assert.match(menu, /router\.push\("\/library\?compose=1"\)/);
+});
+
+test("THE SECOND COMPOSER IS GONE, not merely unused", () => {
+  // A dead 200-line duplicate of this job is an invitation to drift back into
+  // two experiences. Nothing in the app imports it because it no longer exists.
+  assert.ok(!existsSync(join(ROOT, "src/components/library/use-library-picker.tsx")),
+    "the modal Create-from-Library picker is still in the tree");
+  // The remaining picker is a different job: inserting into an EXISTING packet.
+  assert.ok(existsSync(join(ROOT, "src/components/library/library-picker.tsx")),
+    "the insert-into-existing-packet picker was removed by mistake");
 });

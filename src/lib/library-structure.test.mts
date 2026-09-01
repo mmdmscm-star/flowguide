@@ -258,10 +258,10 @@ test("SEARCH survives the switch between the two views", () => {
 // ---------------------------------------------------------------------------
 // THE PICKERS
 // ---------------------------------------------------------------------------
-for (const picker of [
-  "src/components/library/library-picker.tsx",
-  "src/components/library/use-library-picker.tsx",
-]) {
+// ONE PICKER LEFT. The "Use my Library" modal was a second Create-from-Library
+// UI and is gone; this one inserts into an EXISTING packet, which is a
+// different job and still a picker.
+for (const picker of ["src/components/library/library-picker.tsx"]) {
   test(`${picker.split("/").pop()} browses the structure but cannot CHANGE it`, () => {
     const src = bodyOf(picker);
     assert.match(src, /<LibraryStructureView/, "organization does not help while assembling");
@@ -389,8 +389,7 @@ test("rename is offered only where the structure is the professional's to change
   assert.match(view, /onRename=\{reorder \? \(n\) => rename\("group", g\.id, n\) : undefined\}/,
     "group rename is not gated the same way reordering is");
   // reorder is false in both pickers and whenever a filter is narrowing.
-  for (const picker of ["src/components/library/library-picker.tsx",
-                        "src/components/library/use-library-picker.tsx"]) {
+  for (const picker of ["src/components/library/library-picker.tsx"]) {
     assert.ok(!/reorder|onRename/.test(bodyOf(picker)), `${picker} can rename the structure`);
   }
 });

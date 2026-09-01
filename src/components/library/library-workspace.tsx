@@ -20,7 +20,7 @@ import type { LibraryVocabulary } from "@/lib/library-organization";
 import { CreatorNav } from "@/components/nav/creator-nav";
 import { ImportWithAI } from "@/components/library/import-with-ai";
 import { createFromLibrary } from "@/lib/create-from-library";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { snapshotToItem, type LibrarySnapshot } from "@/lib/library-adapter";
 import type { Item } from "@/lib/types";
 import type { ItemContentPayload } from "@/lib/item-content";
@@ -208,7 +208,22 @@ export default function LibraryWorkspace() {
     q, labels: filters.labels, favorite: filters.favorite,
   });
 
-  const [selecting, setSelecting] = useState(false);
+  // ARRIVED HERE TO COMPOSE, from somewhere that had no list to choose in.
+  //
+  // "Use my Library" on the New FlowGuide menu used to open its own modal
+  // picker — a second implementation of this same job. It now lands here with
+  // `?compose=1`, which opens the composition workspace directly, so both doors
+  // reach one composer rather than two that can drift apart.
+  //
+  // The flag is also what Cancel reads: someone who came from My FlowGuides
+  // expects to go back there, and someone who opened this from the Library
+  // expects their Library back.
+  const arrivedToCompose = useSearchParams().get("compose") === "1";
+
+  // Composition opens immediately when it is the reason for the visit, so
+  // "Use my Library" lands ON the workspace rather than beside a button that
+  // opens it.
+  const [selecting, setSelecting] = useState(arrivedToCompose);
 
   const [chosen, setChosen] = useState<string[]>([]);
   /** WHAT EACH PENDING ENTRY IS CALLED, remembered when it was added.
@@ -694,7 +709,13 @@ export default function LibraryWorkspace() {
                 {busy ? "Creating…" : "Create FlowGuide"}
               </button>
               <button
-                onClick={() => { setSelecting(false); setChosen([]); setAddedTitles({}); }}
+                onClick={() => {
+                  setSelecting(false); setChosen([]); setAddedTitles({});
+                  // BACK THE WAY THEY CAME. Arriving from My FlowGuides and
+                  // being left standing in the Library is not a cancellation of
+                  // anything they asked for.
+                  if (arrivedToCompose) router.push("/dashboard");
+                }}
                 disabled={busy}
                 className="ml-auto text-sm font-medium text-muted hover:text-foreground"
               >

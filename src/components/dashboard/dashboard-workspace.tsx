@@ -3,7 +3,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { deleteConfirmMessage, deletePacketRequest } from "@/lib/delete-packet";
 import { useRouter } from "next/navigation";
-import { UseLibraryPicker } from "@/components/library/use-library-picker";
 import { filterPackets, isPublished, type StatusFilter } from "@/lib/packet-filter";
 
 interface PacketSummary {
@@ -29,7 +28,6 @@ export default function DashboardWorkspace() {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [duplicatingId, setDuplicatingId] = useState<string | null>(null);
   const [showNewMenu, setShowNewMenu] = useState(false);
-  const [useLibrary, setUseLibrary] = useState(false);
   // FINDING, not fetching. The list is already fully loaded, so filtering it
   // client-side needs no API and no schema change - and it stays instant, which
   // an unbounded list that only ever grows benefits from more than pagination
@@ -144,7 +142,6 @@ export default function DashboardWorkspace() {
 
   return (
     <main className="max-w-2xl mx-auto px-5 py-8">
-      {useLibrary && <UseLibraryPicker onClose={() => setUseLibrary(false)} />}
 
       {/* Header */}
       <div className="flex items-center justify-between mb-8">
@@ -179,8 +176,16 @@ export default function DashboardWorkspace() {
             </button>
             {showNewMenu && (
               <div className="absolute right-0 top-full mt-2 w-56 bg-white rounded-xl border border-border shadow-lg z-10 overflow-hidden">
+                {/* ONE COMPOSER, REACHED FROM BOTH DOORS.
+                    This used to open a modal picker: a second implementation of
+                    the same job, with its own selection state, its own filters
+                    and its own Create. Once the Library grew a real composition
+                    workspace — two panes, drag or Add, an ordered tray — the
+                    modal was the older of two answers to one question, and the
+                    professional's experience depended on which door they came
+                    through. So this now goes to the same place. */}
                 <button
-                  onClick={() => { setShowNewMenu(false); setUseLibrary(true); }}
+                  onClick={() => { setShowNewMenu(false); router.push("/library?compose=1"); }}
                   className="w-full text-left px-4 py-3 hover:bg-gray-50 transition-colors border-b border-border"
                 >
                   <div className="font-medium text-sm text-foreground">Use my Library</div>

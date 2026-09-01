@@ -22,6 +22,7 @@ let createRoot: typeof import("react-dom/client").createRoot;
 let act: typeof import("react").act;
 let Workspace: typeof import("../components/library/library-workspace.tsx").default;
 let AppRouterContext: React.Context<unknown>;
+let SearchParamsContext: React.Context<unknown>;
 
 const ITEMS = [
   { id: "a-1", title: "Alpha House", address: "1 A St", labels: [] as string[], isFavorite: false,
@@ -87,6 +88,10 @@ before(async () => {
   act = React.act;
   ({ AppRouterContext } = await import("next/dist/shared/lib/app-router-context.shared-runtime.js") as unknown as
     { AppRouterContext: React.Context<unknown> });
+  // The workspace reads `?compose=1` to know it was sent here to compose, so
+  // the tests supply the same context the App Router always does.
+  ({ SearchParamsContext } = await import("next/dist/shared/lib/hooks-client-context.shared-runtime.js") as unknown as
+    { SearchParamsContext: React.Context<unknown> });
   Workspace = (await import("../components/library/library-workspace.tsx")).default;
 });
 
@@ -101,7 +106,8 @@ async function mount() {
   const root = createRoot(host);
   await act(async () => {
     root.render(React.createElement(AppRouterContext.Provider, { value: ROUTER },
-      React.createElement(Workspace)));
+      React.createElement(SearchParamsContext.Provider, { value: new dom.window.URLSearchParams("") },
+        React.createElement(Workspace))));
   });
   await act(async () => { await new Promise((r) => setTimeout(r, 20)); });
   return host;
