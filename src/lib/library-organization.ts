@@ -90,6 +90,39 @@ export function vocabularyOf(
 // the comparison it lands. id is the primary key, so the pair is unique.
 // ---------------------------------------------------------------------------
 
+// SEARCH-AS-YOU-TYPE MATCHES PREFIXES, because that is what typing is.
+//
+// `search_tsv` is a tsvector, and full-text search matches whole LEXEMES. A
+// name written as one word — `MuirWoods` — indexes as the single lexeme
+// `muirwood` (the English stemmer drops the trailing s). So `websearch_to_tsquery`
+// on "Muir" produced the lexeme `muir`, which is simply a different word, and
+// the item stayed invisible until enough had been typed to stem to the same
+// thing: it appeared at exactly `MuirWood`. Not a ranking problem, and not
+// fuzziness — an equality test on words, being asked a prefix question.
+//
+// So the terms become prefix terms. `muir:*` matches `muirwood`; typing the
+// whole name still works, because Postgres stems the query term too and
+// `muirwoods:*` becomes `muirwood:*`.
+//
+// SAFE BY CONSTRUCTION, which is what `websearch` was giving us and what a
+// hand-built tsquery would otherwise lose. Everything that is not a letter or a
+// digit is a separator, so every tsquery operator a professional might type —
+// `& | ! ( ) : *` and quotes — is stripped rather than escaped. Letters are kept
+// by Unicode class, so an accented or non-Latin name is not mangled into
+// nothing.
+//
+// A ONE-CHARACTER TERM STAYS EXACT. `m:*` would match a large share of any
+// Library and tell the professional nothing; matching begins to be useful, and
+// stays quiet, from two characters on.
+export function librarySearchQuery(raw: string): string {
+  const terms = String(raw ?? "")
+    .toLowerCase()
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter(Boolean);
+  if (!terms.length) return "";
+  return terms.map((t) => (t.length >= 2 ? `${t}:*` : t)).join(" & ");
+}
+
 export interface LibraryCursor {
   /** The RAW postgres timestamp string, never a Date round-trip: timestamptz is
    *  microsecond precision and a JS Date is milliseconds, so a round-trip

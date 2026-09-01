@@ -17,6 +17,7 @@ import type { ItemContentPayload } from "./item-content.ts";
 import { REVISION_CONFLICT, type LibraryAncestry } from "./library.ts";
 
 import { cursorFilter, cursorFrom, vocabularyOf, containerCursorFilter, containerCursorFrom,
+  librarySearchQuery,
   type LibraryCursor, type ContainerCursor, type LibraryVocabulary } from "./library-organization";
 import { appendOrders, cleanName, findByName,
   type GroupRow, type Placement, type SectionRow } from "./library-structure";
@@ -105,10 +106,11 @@ export async function searchLibrary(
   const limit = Math.min(Math.max(query.limit ?? 30, 1), 100);
   let q = db.from("library_items").select(COLUMNS).eq("user_id", userId);
 
-  // websearch_to_tsquery tolerates whatever a professional actually types —
-  // quotes, stray operators — instead of erroring on it.
-  const text = String(query.q ?? "").trim();
-  if (text) q = q.textSearch("search_tsv", text, { type: "websearch" });
+  // PREFIX TERMS, built safely from whatever was typed. See
+  // librarySearchQuery: `websearch` matched whole lexemes, so "Muir" could not
+  // find "MuirWoods" until enough had been typed to stem to the same word.
+  const tsq = librarySearchQuery(String(query.q ?? ""));
+  if (tsq) q = q.textSearch("search_tsv", tsq, { config: "english" });
 
   const labels = (query.labels ?? []).map((l) => String(l).trim()).filter(Boolean);
   if (labels.length) q = q.contains("labels", labels);

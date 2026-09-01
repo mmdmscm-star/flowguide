@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
-  normalizeLabels, vocabularyOf, cursorFrom, cursorFilter,
+  normalizeLabels, vocabularyOf, cursorFrom, cursorFilter, librarySearchQuery,
 } from "./library-organization.ts";
 import { shouldShowFilters } from "../components/library/library-filters.tsx";
 
@@ -378,4 +378,77 @@ test("a row is selectable by its card, not only by the checkbox", () => {
   assert.match(row, /<label className=\{`\$\{shell\} cursor-pointer`\}>/,
     "the row card is not a label, so tapping it does not select");
   assert.match(row, /selected \? "border-accent bg-accent\/5"/, "a selected row is not visibly selected");
+});
+
+// ---------------------------------------------------------------------------
+// TYPING IS A PREFIX QUESTION
+//
+// `MuirWoods` never appeared while typing `Muir`. It arrived at exactly
+// `MuirWood`, which looked like fuzziness warming up and was the opposite:
+// `search_tsv` is a tsvector, full-text search compares whole LEXEMES, and
+// `MuirWoods` indexes as the single lexeme `muirwood` — the English stemmer
+// drops the trailing s. So `muir` was simply a different word until enough had
+// been typed to stem to the same one.
+//
+// The terms are prefix terms now. What these assert is the QUERY, because that
+// is where the logic lives; that `muir:*` matches the lexeme `muirwood` is
+// Postgres's own behaviour, verified against the real generated column in a
+// disposable Postgres rather than restated here.
+// ---------------------------------------------------------------------------
+
+test("MUIR FINDS MUIRWOODS — terms become prefix terms", () => {
+  assert.equal(librarySearchQuery("Muir"), "muir:*");
+  assert.equal(librarySearchQuery("MuirW"), "muirw:*");
+  // Typing the whole name still works: Postgres stems the query term too, so
+  // `muirwoods:*` becomes `muirwood:*` and matches.
+  assert.equal(librarySearchQuery("MuirWoods"), "muirwoods:*");
+  assert.equal(librarySearchQuery("muirwoods"), "muirwoods:*");
+});
+
+test("SEVERAL WORDS ALL NARROW, and each is a prefix", () => {
+  assert.equal(librarySearchQuery("memory care"), "memory:* & care:*");
+  assert.equal(librarySearchQuery("  Muir   Woods  "), "muir:* & woods:*");
+});
+
+test("A ONE-CHARACTER TERM STAYS EXACT, so a short query is not noise", () => {
+  // `m:*` would match a large share of any Library and say nothing.
+  assert.equal(librarySearchQuery("m"), "m");
+  assert.equal(librarySearchQuery("Mu"), "mu:*", "matching should be useful from two characters");
+  // Mixed lengths keep the rule per term.
+  assert.equal(librarySearchQuery("a muir"), "a & muir:*");
+});
+
+test("SAFE BY CONSTRUCTION — every tsquery operator is a separator", () => {
+  // This is what `websearch` was buying and what a hand-built tsquery would
+  // otherwise lose. None of these may reach Postgres as syntax.
+  for (const hostile of ["a & b", "a | b", "!a", "(a)", "a:*", "'a'", "a <-> b", "\\", '"a"']) {
+    const out = librarySearchQuery(hostile);
+    assert.ok(!/[&|!()<>'"\\]/.test(out.replace(/ & /g, " ").replace(/:\*/g, "")),
+      `an operator survived: ${JSON.stringify(hostile)} -> ${JSON.stringify(out)}`);
+  }
+  // A query of pure punctuation searches for nothing rather than erroring.
+  for (const empty of ["", "   ", "!!!", "&|()", "***"])
+    assert.equal(librarySearchQuery(empty), "", JSON.stringify(empty));
+});
+
+test("LETTERS ARE KEPT BY CLASS, so a non-Latin name is not erased", () => {
+  // Stripping to /[a-z0-9]/ would turn these into nothing or into fragments.
+  assert.equal(librarySearchQuery("Café"), "café:*");
+  assert.equal(librarySearchQuery("Björk Lodge"), "björk:* & lodge:*");
+  assert.equal(librarySearchQuery("大阪"), "大阪:*");
+  assert.equal(librarySearchQuery("Suite 12B"), "suite:* & 12b:*");
+});
+
+test("the service asks Postgres the prefix question, on both surfaces", () => {
+  const svc = readFileSync(new URL("./library-service.ts", import.meta.url), "utf8");
+  assert.match(svc, /librarySearchQuery\(String\(query\.q \?\? ""\)\)/,
+    "the search term no longer goes through the prefix builder");
+  assert.match(svc, /textSearch\("search_tsv", tsq, \{ config: "english" \}\)/,
+    "the query is not run against the english config the column was built with");
+  assert.ok(!/type: "websearch"/.test(svc),
+    "websearch matching is still in place, which is what could not see a prefix");
+  // ONE search path. The Library list and the composition surface both reach
+  // Postgres through searchLibrary, so neither can drift from the other.
+  assert.equal((svc.match(/textSearch\(/g) ?? []).length, 1,
+    "there is more than one place that searches, and they can disagree");
 });
