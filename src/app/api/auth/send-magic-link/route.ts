@@ -70,8 +70,24 @@ export async function POST(request: Request) {
     });
 
     if (!res.ok) {
+      // Resend's body is diagnostics: a status code, a validation name, and
+      // sometimes the account's own address. It goes to the log — which is
+      // where it was read the one time this fired in production — and no part
+      // of it is handed to the person signing in.
       console.error("Failed to send email:", await res.text());
-      // Don't expose email delivery failure to user — they can retry
+      // AND THE ANSWER IS NO. Returning ok here sent someone to an inbox the
+      // server already knew would stay empty; they waited twenty minutes on a
+      // request that had failed in under a second. "Check your email" is a
+      // claim about something that happened, so it may only be made when it did.
+      //
+      // Says nothing about the ADDRESS. This is the send failing, not a verdict
+      // on whether an account exists — the route never looked, and the answer
+      // is the same for an address it has seen a hundred times and one it has
+      // never seen.
+      return NextResponse.json(
+        { error: "We couldn't send the sign-in email. Please try again." },
+        { status: 502 }
+      );
     }
   } else {
     // Dev mode: log the link
