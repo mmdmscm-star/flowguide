@@ -20,7 +20,7 @@ const geistSans = Geist({
 // /p/[slug] and its print route carry a client's name and a personal note, and
 // they override everything here deliberately.
 export const metadata: Metadata = {
-  metadataBase: new URL("https://flowguide-ruddy.vercel.app"),
+  metadataBase: new URL("https://guidelinks.io"),
   title: "FlowGuide",
   description:
     "Turn the notes you already have into one clear guide your client can use — and send it by link, email, message, or print.",

@@ -106,6 +106,26 @@ test("no per-packet OpenGraph image route was added", () => {
 // AND THE MARKETING PAGE IS UNCHANGED
 // ---------------------------------------------------------------------------
 
+test("metadataBase IS THE CANONICAL DOMAIN, not a deploy alias", () => {
+  // This is the only hard-coded production host in the application, and it is
+  // what every RELATIVE metadata URL resolves against — including the recipient
+  // card's /og-recipient.png. Left pointing at a .vercel.app alias, a private
+  // link's preview image is fetched from a host the client was never given and
+  // that no longer matches the product they are looking at.
+  //
+  // Asserted here rather than trusted, because nothing else in the build fails
+  // when it is stale: the alias keeps resolving, so a wrong value stays wrong
+  // silently.
+  const layout = codeOf("src/app/layout.tsx");
+  assert.match(layout, /metadataBase: new URL\("https:\/\/guidelinks\.io"\)/,
+    "metadataBase is not the canonical apex domain");
+  assert.doesNotMatch(layout, /vercel\.app/,
+    "a deploy alias is hard-coded as the metadata base");
+  // No trailing slash: `new URL` would keep it, and Next joins onto it.
+  assert.doesNotMatch(layout, /metadataBase: new URL\("[^"]*\/"\)/,
+    "metadataBase has a trailing slash");
+});
+
 test("the public homepage KEEPS its marketing metadata", () => {
   const layout = codeOf("src/app/layout.tsx");
   assert.match(layout, /Turn the notes you already have/, "the marketing description was removed");
