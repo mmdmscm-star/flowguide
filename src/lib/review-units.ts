@@ -81,7 +81,7 @@ export const REVIEW_REQUIRED: Record<string, ExceptionKind> = {
     code: "privacy_rejected",
     guidance:
       "This was written as a private note, but nothing in your source marks it private — " +
-      "so your client would never see it. What should FlowGuide do with it?",
+      "so your client would never see it. What should Sendset do with it?",
   },
   // THE SOURCE SAID IT HAD NOT DECIDED YET.
   //
@@ -97,7 +97,7 @@ export const REVIEW_REQUIRED: Record<string, ExceptionKind> = {
   "audience-undecided": {
     code: "audience_undecided",
     guidance:
-      "Your file marks this as not yet decided for sharing, so FlowGuide has not " +
+      "Your file marks this as not yet decided for sharing, so Sendset has not " +
       "shown it to your client or filed it as a private note. Which is it?",
   },
   // PRIVATE SOURCE CONTENT THAT WAS ABOUT TO BE VISIBLE, AND IS HELD NOWHERE ELSE.
@@ -110,7 +110,7 @@ export const REVIEW_REQUIRED: Record<string, ExceptionKind> = {
     code: "private_shown",
     guidance:
       "Your source marks this private, but it was written where your client would " +
-      "see it and FlowGuide found no private copy of it. What should happen to it?",
+      "see it and Sendset found no private copy of it. What should happen to it?",
   },
   // A PROPOSAL THAT COULD NOT BE PLACED IN THE SOURCE AT ALL.
   //
@@ -128,7 +128,7 @@ export const REVIEW_REQUIRED: Record<string, ExceptionKind> = {
   "unbound-recipient-content": {
     code: "unbound_recipient_content",
     guidance:
-      "FlowGuide couldn't reliably tell which source record this information belongs to, " +
+      "Sendset couldn't reliably tell which source record this information belongs to, " +
       "so it left it out rather than risk showing it under the wrong item. " +
       "Everything proposed is kept here until you decide.",
     // NOT A PRIVATE-NOTE DECISION. What is held is a mixed bundle of material
@@ -174,14 +174,14 @@ export const REVIEW_REQUIRED: Record<string, ExceptionKind> = {
   "unbound-private-note": {
     code: "unbound_private_note",
     guidance:
-      "FlowGuide could not tell which row of your file this note came from, so it " +
+      "Sendset could not tell which row of your file this note came from, so it " +
       "could not confirm your source meant to keep it private. What should happen to it?",
   },
   "cross-cell-detail": {
     code: "cross_cell_detail",
     guidance:
       "This detail ran past its own column in your file and picked up text from " +
-      "elsewhere in the source, so FlowGuide did not show it to your client. " +
+      "elsewhere in the source, so Sendset did not show it to your client. " +
       "What should happen to it?",
     dispositions: ["resolved", "ignored"],
   },

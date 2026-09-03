@@ -40,7 +40,7 @@ export async function POST(request: Request) {
   }
   if (typeof packetId !== "string" || !packetId) {
     return NextResponse.json(
-      { error: "bad_request", message: "Which FlowGuide is being reordered?" }, { status: 400 });
+      { error: "bad_request", message: "Which Sendset is being reordered?" }, { status: 400 });
   }
   if (!Array.isArray(orderedIds) || orderedIds.length === 0) {
     return NextResponse.json({ error: "bad_request", message: "orderedIds required" }, { status: 400 });
@@ -60,7 +60,7 @@ export async function POST(request: Request) {
   // Not "forbidden": a packet the caller does not own is, to them, not a packet.
   if (!packet) {
     return NextResponse.json(
-      { error: "not_found", message: "That FlowGuide could not be found." }, { status: 404 });
+      { error: "not_found", message: "That Sendset could not be found." }, { status: 404 });
   }
 
   // ---- 2. every id named is in that packet, and 3. every write says so ----
@@ -74,7 +74,7 @@ export async function POST(request: Request) {
       .from("sections").select("id").eq("packet_id", packetId).in("id", ids);
     if ((owned ?? []).length !== ids.length) {
       return NextResponse.json(
-        { error: "not_found", message: "Those sections are not in this FlowGuide." }, { status: 404 });
+        { error: "not_found", message: "Those sections are not in this Sendset." }, { status: 404 });
     }
     writes = await Promise.all(ids.map((id, index) =>
       supabase.from("sections").update({ sort_order: index })
@@ -84,13 +84,13 @@ export async function POST(request: Request) {
     const sectionIds = ((secs ?? []) as Array<{ id: string }>).map((s) => String(s.id));
     if (!sectionIds.length) {
       return NextResponse.json(
-        { error: "not_found", message: "Those items are not in this FlowGuide." }, { status: 404 });
+        { error: "not_found", message: "Those items are not in this Sendset." }, { status: 404 });
     }
     const { data: owned } = await supabase
       .from("items").select("id").in("section_id", sectionIds).in("id", ids);
     if ((owned ?? []).length !== ids.length) {
       return NextResponse.json(
-        { error: "not_found", message: "Those items are not in this FlowGuide." }, { status: 404 });
+        { error: "not_found", message: "Those items are not in this Sendset." }, { status: 404 });
     }
     writes = await Promise.all(ids.map((id, index) =>
       supabase.from("items").update({ sort_order: index })

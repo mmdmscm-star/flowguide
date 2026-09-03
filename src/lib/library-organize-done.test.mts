@@ -183,7 +183,7 @@ test("Done clears the notice, so it does not linger over the normal Library", as
 test("the CREATE experience still says Cancel, because nothing is saved yet", async () => {
   writes.length = 0;
   const host = await mount();
-  await click(byText(host, /Create a FlowGuide/)!);
+  await click(byText(host, /Create a Sendset/)!);
   assert.ok(byText(host, /^Cancel$/), "the create panel lost its Cancel");
   assert.equal(byText(host, /^Done$/), undefined, "the create panel says Done, but nothing is saved yet");
 
@@ -193,7 +193,7 @@ test("the CREATE experience still says Cancel, because nothing is saved yet", as
   assert.equal([...host.querySelectorAll('input[type="checkbox"]')].length, 0,
     "the composition surface still offers selection checkboxes");
   const add = [...host.querySelectorAll("button")]
-    .find((b) => /^Add .* to this FlowGuide$/.test(b.getAttribute("aria-label") ?? ""));
+    .find((b) => /^Add .* to this Sendset$/.test(b.getAttribute("aria-label") ?? ""));
   assert.ok(add, "there is no way to add an item without a checkbox");
   await click(add!);
   assert.equal(writes.length, 0, "adding something in the create flow wrote to the server");

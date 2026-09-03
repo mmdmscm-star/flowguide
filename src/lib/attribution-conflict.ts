@@ -121,7 +121,7 @@ export function attributionWarningsFor(
 ): string[] {
   const a = auditAttribution(proposal, fullSource, allTitles);
   if (!a.resolved) {
-    return [`${String(proposal.title ?? "This record")}: FlowGuide could not locate this record in your source, so it cannot confirm the description belongs to it. Check it before saving.`];
+    return [`${String(proposal.title ?? "This record")}: Sendset could not locate this record in your source, so it cannot confirm the description belongs to it. Check it before saving.`];
   }
   return a.conflicts.map((c) =>
     `${String(proposal.title ?? "This record")}: part of this description appears in your source under “${c.owner}”, not under this community. Confirm where it belongs before saving — “${c.anchor.slice(0, 90)}${c.anchor.length > 90 ? "…" : ""}”`);

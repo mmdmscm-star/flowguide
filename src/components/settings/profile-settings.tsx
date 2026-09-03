@@ -63,17 +63,17 @@ export default function ProfileSettings({ initial }: { initial: ProfileFields })
       </div>
 
       <p className="text-sm text-muted mb-4">
-        This is how you appear to clients — at the top of every FlowGuide, and in
+        This is how you appear to clients — at the top of every Sendset, and in
         the contact card at the bottom. It is used by the web, email and printed
-        versions alike. Changes apply to FlowGuides you publish from now on;
-        already-published FlowGuides keep the details they were published with.
+        versions alike. Changes apply to Sendsets you publish from now on;
+        already-published Sendsets keep the details they were published with.
       </p>
 
       {/* The gap, when there is one — said once, here, where it can be fixed. */}
       {gap && (
         <p className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
           {IDENTITY_GAP_PROMPT[gap]} Until then, publishing will ask you to
-          confirm before sending a FlowGuide with no contact details.
+          confirm before sending a Sendset with no contact details.
         </p>
       )}
 

@@ -155,8 +155,8 @@ test("the trust-model claim is about REVIEW, not about the model", () => {
 
 test("both CTAs, pointing where they should", () => {
   const src = codeOf(LANDING);
-  assert.match(src, /See a real FlowGuide/);
-  assert.match(src, /Start your first FlowGuide/);
+  assert.match(src, /See a real Sendset/);
+  assert.match(src, /Start your first Sendset/);
   assert.ok(src.includes('href="/p/demo"'), "the primary CTA does not reach the demo");
   assert.ok(src.includes('href="/login"'), "the secondary CTA does not reach sign-in");
   // No social proof we do not have.

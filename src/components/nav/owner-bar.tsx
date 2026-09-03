@@ -18,7 +18,7 @@ export function OwnerBar({ packetId }: { packetId: string }) {
     <div className="w-full border-b border-amber-200 bg-amber-50/80 print:hidden">
       <div className="mx-auto flex max-w-lg flex-wrap items-center gap-x-3 gap-y-1 px-5 py-2">
         <span className="text-xs text-amber-900">
-          This is your own FlowGuide. Your client does not see this bar.
+          This is your own Sendset. Your client does not see this bar.
         </span>
         <span className="ml-auto flex items-center gap-3 text-xs font-medium">
           <Link href={`/edit/${packetId}`} className="text-amber-900 underline underline-offset-2 hover:text-amber-950">

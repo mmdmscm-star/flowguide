@@ -52,7 +52,7 @@ let calls: Array<{ path: string; body: unknown }> = [];
 
 before(async () => {
   dom = new JSDOM('<!doctype html><html><body><div id="root"></div></body></html>',
-    { url: "https://guidelinks.io/login", pretendToBeVisual: true });
+    { url: "https://sendset.io/login", pretendToBeVisual: true });
   const g = globalThis as unknown as Record<string, unknown>;
   g.window = dom.window; g.document = dom.window.document;
   g.HTMLElement = dom.window.HTMLElement; g.Node = dom.window.Node;
@@ -61,7 +61,7 @@ before(async () => {
   g.self = dom.window; g.location = dom.window.location;
   g.IS_REACT_ACT_ENVIRONMENT = true;
   g.fetch = ((url: string, init?: { method?: string; body?: string }) => {
-    calls.push({ path: new URL(url, "https://guidelinks.io").pathname,
+    calls.push({ path: new URL(url, "https://sendset.io").pathname,
                  body: JSON.parse(init?.body ?? "{}") });
     return Promise.resolve({
       ok: sendOutcome.ok, status: sendOutcome.status,
@@ -210,6 +210,6 @@ test("NOTHING ELSE ABOUT THE ROUTE MOVED", () => {
   assert.match(ROUTE, /15 \* 60 \* 1000/, "the token lifetime changed");
   assert.match(ROUTE, /from\("magic_links"\)\s*\.insert/, "the row it writes changed");
   assert.match(ROUTE, /🔗 Magic link for/, "the dev-mode path changed");
-  assert.match(ROUTE, /RESEND_FROM_EMAIL \|\| "FlowGuide <onboarding@resend\.dev>"/,
+  assert.match(ROUTE, /RESEND_FROM_EMAIL \|\| "Sendset <onboarding@resend\.dev>"/,
     "the sender or the email template changed");
 });

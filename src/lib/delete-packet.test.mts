@@ -15,7 +15,7 @@ const codeOf = (p: string) =>
 // dashboard cannot tell them.
 // ---------------------------------------------------------------------------
 
-test("a titled FlowGuide is named, with the client when there is one", () => {
+test("a titled Sendset is named, with the client when there is one", () => {
   assert.match(deleteConfirmMessage({ title: "Possible Communities" }),
     /^Delete "Possible Communities"\?/);
   assert.match(deleteConfirmMessage({ title: "Possible Communities", clientName: "the Alvarez family" }),
@@ -24,9 +24,9 @@ test("a titled FlowGuide is named, with the client when there is one", () => {
 
 test("AN UNTITLED FLOWGUIDE SAYS SO — it is never called by a made-up name", () => {
   const m = deleteConfirmMessage({ title: "", clientName: "the Alvarez family" });
-  assert.match(m, /^Delete this untitled FlowGuide \(for the Alvarez family\)\?/);
+  assert.match(m, /^Delete this untitled Sendset \(for the Alvarez family\)\?/);
   // Whitespace is not a title.
-  assert.match(deleteConfirmMessage({ title: "   " }), /untitled FlowGuide/);
+  assert.match(deleteConfirmMessage({ title: "   " }), /untitled Sendset/);
   // And it must not invent one, the way the old dashboard copy did.
   assert.doesNotMatch(m, /Untitled Packet/);
 });
@@ -124,7 +124,7 @@ test("BOTH editors mount the one component", () => {
     "src/components/editor/legacy-packet-editor.tsx",
     "src/components/editor/block-packet-editor.tsx",
   ]) {
-    assert.match(codeOf(editor), /<DeletePacketAction/, `${editor} cannot delete its own FlowGuide`);
+    assert.match(codeOf(editor), /<DeletePacketAction/, `${editor} cannot delete its own Sendset`);
   }
 });
 
@@ -182,9 +182,9 @@ const json = (status: number, body: unknown) =>
 test("a 404 surfaces the sentence, not the code", async () => {
   const msg = await messageFor(json(404, {
     error: "not_found",
-    message: "This FlowGuide no longer exists, or you no longer have access to it.",
+    message: "This Sendset no longer exists, or you no longer have access to it.",
   }));
-  assert.equal(msg, "This FlowGuide no longer exists, or you no longer have access to it.");
+  assert.equal(msg, "This Sendset no longer exists, or you no longer have access to it.");
   assert.doesNotMatch(msg, /not_found/, "the machine code reached the professional");
 });
 
@@ -193,7 +193,7 @@ test("a body with only `error` still says something useful", async () => {
 });
 
 test("a body with neither falls back to naming the status", async () => {
-  assert.match(await messageFor(json(500, {})), /Could not delete this FlowGuide \(500\)\./);
+  assert.match(await messageFor(json(500, {})), /Could not delete this Sendset \(500\)\./);
   assert.match(await messageFor(new Response("boom", { status: 502 })), /\(502\)\./);
 });
 

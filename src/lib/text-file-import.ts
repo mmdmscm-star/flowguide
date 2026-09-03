@@ -58,11 +58,11 @@ export function isSupportedTextFile(name: string): boolean {
  */
 export function rejectionFor(name: string, size: number): string | null {
   const ext = extensionOf(name);
-  if (ext === "pdf") return "FlowGuide can’t read PDFs yet. Copy the text out and paste it instead.";
+  if (ext === "pdf") return "Sendset can’t read PDFs yet. Copy the text out and paste it instead.";
   if (["doc", "docx", "pages", "rtf"].includes(ext))
-    return "FlowGuide can’t read Word documents yet. Copy the text out and paste it instead.";
+    return "Sendset can’t read Word documents yet. Copy the text out and paste it instead.";
   if (["xls", "xlsx", "numbers"].includes(ext))
-    return "Save the sheet as CSV and try again — FlowGuide reads .csv.";
+    return "Save the sheet as CSV and try again — Sendset reads .csv.";
   if (!isSupportedTextFile(name))
     return "That file type isn’t supported. Use a .csv, .txt or .md file, or paste the text instead.";
   // Bytes, not characters — a rough gate before reading, so a 40MB file is

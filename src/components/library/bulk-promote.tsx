@@ -37,10 +37,10 @@ export function BulkPromote({
         const res = await fetch(`/api/packets/${packetId}/library-candidates`);
         const data = await res.json();
         if (!live) return;
-        if (!res.ok) { setError(data.message || data.error || "Could not load this FlowGuide."); return; }
+        if (!res.ok) { setError(data.message || data.error || "Could not load this Sendset."); return; }
         setItems(data.items ?? []);
       } catch {
-        if (live) setError("Could not load this FlowGuide.");
+        if (live) setError("Could not load this Sendset.");
       } finally {
         if (live) setLoading(false);
       }
@@ -83,7 +83,7 @@ export function BulkPromote({
            onClick={(e) => e.stopPropagation()}>
         <p className="text-base font-semibold text-foreground">Save to Library</p>
         <p className="mt-1 mb-3 text-xs text-muted">
-          Choose what you would use again. Each one is saved as a copy, so this FlowGuide
+          Choose what you would use again. Each one is saved as a copy, so this Sendset
           is not changed.
         </p>
 

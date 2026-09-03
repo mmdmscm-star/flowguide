@@ -360,7 +360,7 @@ export function renderPacketEmail(packet: Packet, opts: EmailRenderOptions): str
         ${buttonRows ? `<div style="height:14px;line-height:14px">&nbsp;</div>${buttonRows}` : ""}
       </td></tr>
     </table>
-    ${live ? p(`<a href="${esc(live)}" style="color:${LINK};text-decoration:underline">View this FlowGuide online</a>`, `font-size:14px;color:${MUTED};margin:12px 0 0`) : ""}
+    ${live ? p(`<a href="${esc(live)}" style="color:${LINK};text-decoration:underline">View this Sendset online</a>`, `font-size:14px;color:${MUTED};margin:12px 0 0`) : ""}
   </td></tr>`;
 
   return `<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse:collapse;background:${PAGE}">

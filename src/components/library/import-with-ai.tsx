@@ -184,7 +184,7 @@ export function ImportWithAI({ onClose, onSaved }: { onClose: () => void; onSave
             <p className="mt-1 mb-3 text-xs text-muted">
               Paste anything you already have — a list of communities, services, contacts. AI
               organizes it into reusable items, you review them, and only what you choose is
-              saved. No FlowGuide is created.
+              saved. No Sendset is created.
             </p>
             <textarea
               value={text}

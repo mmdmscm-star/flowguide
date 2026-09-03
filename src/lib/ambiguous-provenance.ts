@@ -186,12 +186,12 @@ export function provenanceWarningsFor(
   const title = String(proposal.title ?? "").trim() || "This record";
   const d = doubtFor(proposal, fullSource, allTitles, ranges);
   if (d.unresolved) {
-    return [`${title}: FlowGuide could not find this community in your source, so it cannot confirm which ` +
+    return [`${title}: Sendset could not find this community in your source, so it cannot confirm which ` +
             `information belongs to it. Check its name against your source before saving.`];
   }
   if (d.overlapping) {
     return [`${title}: part of your source next to this community could not be matched to a community name, ` +
-            `so FlowGuide cannot tell where this record ends. Confirm its photos and description before saving.`];
+            `so Sendset cannot tell where this record ends. Confirm its photos and description before saving.`];
   }
   return [];
 }

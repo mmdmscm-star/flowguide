@@ -15,7 +15,7 @@ import { PacketBlockBody } from "@/components/packet-block-body";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Persisted-block preview — FlowGuide",
+  title: "Persisted-block preview — Sendset",
   robots: { index: false, follow: false },
 };
 

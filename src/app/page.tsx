@@ -26,13 +26,13 @@ export default function Home() {
       {/* ---- 1. What it is ------------------------------------------------ */}
       <header className="pt-20 pb-16 sm:pt-28">
         <p className="text-sm font-semibold tracking-[0.14em] uppercase text-muted">
-          FlowGuide
+          Sendset
         </p>
         <h1 className="mt-5 text-[2.1rem] leading-[1.12] sm:text-[2.85rem] font-bold tracking-tight text-foreground text-balance">
           Everything you found, in one thing your client can actually use.
         </h1>
         <p className="mt-6 text-lg leading-relaxed text-muted max-w-2xl">
-          You&rsquo;ve already done the work. FlowGuide turns your notes into a clear,
+          You&rsquo;ve already done the work. Sendset turns your notes into a clear,
           client-ready guide &mdash; then lets you share it by link, email, message,
           print, or PDF without rebuilding it for every format.
         </p>
@@ -41,13 +41,13 @@ export default function Home() {
             href="/p/demo"
             className="inline-flex items-center rounded-lg bg-accent px-6 py-3 text-base font-medium text-white transition-colors hover:bg-accent-hover focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2"
           >
-            See a real FlowGuide
+            See a real Sendset
           </Link>
           <Link
             href="/login"
             className="text-base font-medium text-accent underline-offset-4 hover:underline"
           >
-            Start your first FlowGuide
+            Start your first Sendset
           </Link>
         </div>
       </header>
@@ -70,7 +70,7 @@ export default function Home() {
           to them.
         </P>
         <P>
-          FlowGuide exists to close that last gap. Not to do your research; to turn the
+          Sendset exists to close that last gap. Not to do your research; to turn the
           research you&rsquo;ve already done into one clear thing you can hand over.
         </P>
       </Section>
@@ -80,7 +80,7 @@ export default function Home() {
         <div className="grid gap-4 sm:grid-cols-2">
           <Panel label="In">
             Notes, lists, links, emails, and other material you&rsquo;ve already
-            gathered. FlowGuide helps organize it into a draft you can review and
+            gathered. Sendset helps organize it into a draft you can review and
             refine.
           </Panel>
           <Panel label="Out">
@@ -90,7 +90,7 @@ export default function Home() {
         </div>
         <P className="mt-6">
           <strong className="font-semibold text-foreground">You stay in the middle.</strong>{" "}
-          FlowGuide works from the material you give it &mdash; your words, your
+          Sendset works from the material you give it &mdash; your words, your
           findings &mdash; and organises it into a draft. That draft opens in an editor,
           and nothing reaches your client until you&rsquo;ve read it, corrected anything
           that&rsquo;s off, and decided it&rsquo;s right.
@@ -101,7 +101,7 @@ export default function Home() {
       <Section title="Three steps">
         <ol className="space-y-6">
           <Step n={1} heading="Paste what you have.">
-            However rough. FlowGuide reads it and pulls out the options, the details,
+            However rough. Sendset reads it and pulls out the options, the details,
             the links.
           </Step>
           <Step n={2} heading="Review and edit.">
@@ -151,7 +151,7 @@ export default function Home() {
           the world and no easy way to know which one your client is looking at.
         </P>
         <P>
-          With FlowGuide there&rsquo;s one guide. Update it, and the link your client
+          With Sendset there&rsquo;s one guide. Update it, and the link your client
           already has shows the current version. Nothing to resend, nothing to correct.
         </P>
       </Section>
@@ -165,7 +165,7 @@ export default function Home() {
         </P>
         <P>
           If your work ends with <em>&ldquo;here&rsquo;s what I found, and here&rsquo;s
-          what I&rsquo;d do&rdquo;</em>, FlowGuide is for that handover.
+          what I&rsquo;d do&rdquo;</em>, Sendset is for that handover.
         </P>
       </Section>
 
@@ -183,7 +183,7 @@ export default function Home() {
             href="/login"
             className="inline-flex items-center rounded-lg bg-accent px-6 py-3 text-base font-medium text-white transition-colors hover:bg-accent-hover focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2"
           >
-            Start your first FlowGuide
+            Start your first Sendset
           </Link>
           <Link
             href="/p/demo"
@@ -194,7 +194,7 @@ export default function Home() {
         </div>
         {/* The honest substitute for social proof we do not have. */}
         <p className="mt-8 border-t border-border pt-6 text-base leading-relaxed text-muted max-w-xl">
-          FlowGuide is new, and built by one person. If you try it and something
+          Sendset is new, and built by one person. If you try it and something
           doesn&rsquo;t fit how you work, I&rsquo;d genuinely like to hear it.
         </p>
       </section>

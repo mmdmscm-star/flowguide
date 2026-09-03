@@ -326,7 +326,7 @@ export function BlockItemEditor({
               </div>
               <p className="mt-1 text-xs text-muted">
                 Only you see this. It is how you find this again — it is never copied
-                into a FlowGuide.
+                into a Sendset.
               </p>
 
               {/* WHERE IT LIVES, SHOWN RATHER THAN TYPED. A free-text field

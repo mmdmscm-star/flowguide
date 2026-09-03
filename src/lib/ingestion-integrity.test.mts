@@ -1028,7 +1028,7 @@ test("the panel renders actions from the registry, not a hardcoded three", () =>
   assert.ok(/dispositionsFor\(f\)\.includes\("kept_private"\) && \(/.test(panelSource),
     "the private-note button is still unconditional");
   // And the footnote no longer promises a private note on a card that has none.
-  assert.ok(/either button clears FlowGuide/.test(panelSource),
+  assert.ok(/either button clears Sendset/.test(panelSource),
     "the non-private card does not warn that both buttons clear the held copy");
 });
 

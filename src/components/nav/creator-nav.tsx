@@ -15,9 +15,9 @@ import Link from "next/link";
 // else, which meant that from inside an editor — where saving to the Library
 // actually happens — there was no way to go look at it.
 const TABS = [
-  { key: "packets", href: "/dashboard", label: "My FlowGuides" },
+  { key: "packets", href: "/dashboard", label: "My Sendsets" },
   { key: "library", href: "/library", label: "Library" },
-  { key: "new", href: "/new", label: "New FlowGuide" },
+  { key: "new", href: "/new", label: "New Sendset" },
   { key: "settings", href: "/settings", label: "Your details" },
 ] as const;
 
@@ -25,7 +25,7 @@ export type CreatorNavTab = (typeof TABS)[number]["key"];
 
 export function CreatorNav({ current }: { current?: CreatorNavTab }) {
   return (
-    <nav aria-label="Your FlowGuide workspace" className="flex items-center gap-3 text-sm">
+    <nav aria-label="Your Sendset workspace" className="flex items-center gap-3 text-sm">
       {TABS.map((t, i) => (
         <span key={t.key} className="flex items-center gap-3">
           {i > 0 && <span aria-hidden className="text-gray-300">·</span>}

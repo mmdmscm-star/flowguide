@@ -190,7 +190,7 @@ export function PrintPacket({ packet, liveUrl }: { packet: Packet; liveUrl: stri
         </div>
       )}
 
-      <p className="pg-tail">{readable(liveUrl)} · Powered by FlowGuide</p>
+      <p className="pg-tail">{readable(liveUrl)} · Powered by Sendset</p>
     </div>
   );
 }

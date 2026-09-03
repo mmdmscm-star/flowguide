@@ -76,7 +76,7 @@ export default function ImportProgress({
     const canApply = recovery?.canApply === true;
     return (
       <div className="rounded-xl border border-amber-300 bg-amber-50/70 p-4 mb-5">
-        <p className="text-sm font-medium text-foreground">This FlowGuide changed while AI was working</p>
+        <p className="text-sm font-medium text-foreground">This Sendset changed while AI was working</p>
         <p className="mt-1 text-sm text-muted">{error}</p>
         <div className="mt-3 flex flex-wrap items-center gap-3">
           {canApply && (
@@ -98,7 +98,7 @@ export default function ImportProgress({
         </div>
         {canApply && (
           <p className="mt-2 text-xs text-muted">
-            It will be added after your existing sections. Nothing already in this FlowGuide is changed or replaced.
+            It will be added after your existing sections. Nothing already in this Sendset is changed or replaced.
           </p>
         )}
       </div>
@@ -189,8 +189,8 @@ export default function ImportProgress({
                   professional should know before pressing one. */}
               <p className="mt-1.5 text-[11px] text-muted/80">
                 {dispositionsFor(f).includes("kept_private")
-                  ? "Only you would see a private note. \u201cI added it elsewhere\u201d just closes this \u2014 FlowGuide does not move the text for you."
-                  : "FlowGuide does not move this for you. Copy anything you still need before closing this \u2014 either button clears FlowGuide\u2019s copy."}
+                  ? "Only you would see a private note. \u201cI added it elsewhere\u201d just closes this \u2014 Sendset does not move the text for you."
+                  : "Sendset does not move this for you. Copy anything you still need before closing this \u2014 either button clears Sendset\u2019s copy."}
               </p>
             </li>
           ))}

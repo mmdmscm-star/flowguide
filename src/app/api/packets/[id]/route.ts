@@ -154,7 +154,7 @@ export async function DELETE(_request: Request, context: Context) {
   if (!data || data.length === 0) {
     return NextResponse.json({
       error: "not_found",
-      message: "This FlowGuide no longer exists, or you no longer have access to it.",
+      message: "This Sendset no longer exists, or you no longer have access to it.",
     }, { status: 404 });
   }
 

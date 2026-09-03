@@ -42,7 +42,7 @@ const bodyOf = (p: string) => codeOf(p).replace(/\/\*[\s\S]*?\*\//g, "").replace
 // ---------------------------------------------------------------------------
 test("EMAIL, no client title: no heading, and the internal name does not appear", () => {
   const html = renderPacketEmail(NO_CLIENT_TITLE, { liveUrl: LIVE });
-  assert.ok(!html.includes(INTERNAL), "the internal FlowGuide name reached the client's email");
+  assert.ok(!html.includes(INTERNAL), "the internal Sendset name reached the client's email");
   assert.doesNotMatch(html, /<h1[^>]*>\s*<\/h1>/, "an empty heading was emitted instead of none");
   assert.doesNotMatch(html, /<h1/, "a heading was rendered when none was chosen");
   // ...and the rest of the email is intact.
@@ -173,7 +173,7 @@ test("DUPLICATION marks only the internal name with (Copy)", () => {
 
 test("THE EDITOR CAN SET BOTH, and says which is which", () => {
   const editor = codeOf("src/components/editor/legacy-packet-editor.tsx");
-  assert.match(editor, /FlowGuide name/, "the internal field is not labelled");
+  assert.match(editor, /Sendset name/, "the internal field is not labelled");
   assert.match(editor, /Title your client sees/, "the client-facing field is not labelled");
   assert.match(editor, /updatePacketField\("clientTitle"/, "the client title cannot be edited");
   assert.match(editor, /Only you see this/, "nothing tells the professional the name stays backstage");
@@ -202,9 +202,9 @@ test("EXISTING FLOWGUIDES render exactly as before, because the backfill copied 
   // what they showed before this change existed.
   const migrated = { ...base, clientTitle: INTERNAL } as unknown as Packet;
   assert.ok(renderPacketEmail(migrated, { liveUrl: LIVE }).includes(INTERNAL),
-    "a pre-existing FlowGuide lost its heading in email");
+    "a pre-existing Sendset lost its heading in email");
   assert.match(header(INTERNAL), /<h1[^>]*>Options for Bonnie Smith<\/h1>/,
-    "a pre-existing FlowGuide lost its heading on the web");
+    "a pre-existing Sendset lost its heading on the web");
 });
 
 // ---------------------------------------------------------------------------

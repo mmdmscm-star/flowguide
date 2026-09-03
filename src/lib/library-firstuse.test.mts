@@ -133,7 +133,7 @@ test("the empty Library names every way to fill it, in one sentence", () => {
   const empty = WORKSPACE.slice(WORKSPACE.indexOf("Nothing saved yet"));
   const sentence = empty.slice(0, empty.indexOf("</p>", empty.indexOf("</p>") + 4));
   for (const [what, re] of [["importing", /Import/i], ["adding by hand", /manually/i],
-                            ["saving while building", /while building a FlowGuide/i]] as const) {
+                            ["saving while building", /while building a Sendset/i]] as const) {
     assert.match(sentence, re, `the empty state must mention ${what}`);
   }
   // SAY IT ONCE. The earlier version explained the same idea in the page
@@ -183,7 +183,7 @@ test("the creator nav is never rendered on a recipient's page", () => {
   // The owner's return path is a separate, much smaller component; see
   // owner-bar.test.mts for that boundary.
   assert.doesNotMatch(RECIPIENT, /CreatorNav/,
-    "/p/[slug] is the client's view of one FlowGuide, not an admin surface");
+    "/p/[slug] is the client's view of one Sendset, not an admin surface");
 });
 
 // ---------------------------------------------------------------------------

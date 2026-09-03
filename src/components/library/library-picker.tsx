@@ -84,7 +84,7 @@ export function LibraryPicker({
           selectable
           selected={selected}
           onToggle={(id) => setSelected((s) => s.includes(id) ? s.filter((x) => x !== id) : [...s, id])}
-          emptyHint="Your Library is empty. Save something from a FlowGuide first, then you can reuse it here."
+          emptyHint="Your Library is empty. Save something from a Sendset first, then you can reuse it here."
         />
         )}
 

@@ -41,7 +41,7 @@ test("THE DELIMITER MATCHES THE ONE FINALIZE WRITES", () => {
 test("A HISTORICAL EXTERNAL PHOTO DOES NOT BLOCK RECOVERY", () => {
   // An append whose new source has no reason to mention a photo from an
   // earlier import. Judging against the run's source alone reported it as
-  // media_not_in_source and refused recovery on an ordinary FlowGuide.
+  // media_not_in_source and refused recovery on an ordinary Sendset.
   const v = assessRecovery({
     entryPoint: "append", rawInput: EARLIER, sourceText: NEWSRC,
     storedPhotos: [{ url: OLD, itemId: "i1" }],
@@ -202,7 +202,7 @@ test("THE SECTION-DELETE GUARD USES A STABLE SQLSTATE, not English", () => {
   assert.match(sql, /before delete on public\.sections/, "the guard is not a BEFORE DELETE on sections");
   assert.match(sql, /status in \('active','finalizing'\)/, "the guard no longer scopes to in-flight runs");
   assert.match(sql, /packet_deleted_at is null/,
-    "the packet-cascade exemption is gone — deleting a FlowGuide will now fail");
+    "the packet-cascade exemption is gone — deleting a Sendset will now fail");
   assert.match(sql, /revoke all on function public\.block_section_delete_during_ingest\(\)/,
     "the trigger function is not revoked");
 });

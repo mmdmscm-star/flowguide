@@ -48,7 +48,7 @@ test("every packet field the brief names survives, in packet order", () => {
   // header. Done by transforming the string rather than with text-transform,
   // which several email clients ignore.
   assert.ok(!html.includes("INTERNAL Alvarez options"),
-    "the professional's internal FlowGuide name reached the client's email");
+    "the professional's internal Sendset name reached the client's email");
   for (const needed of ["WHITFIELD SENIOR ADVISORS", "Senior Living Options", "the Alvarez family",
     "Here are the three I&#39;d start with.", "Recommended Communities", "In order of fit.",
     "Vine Ridge Senior Living", "1247 Sonoma Ave", "A warm boutique community.",
@@ -59,7 +59,7 @@ test("every packet field the brief names survives, in packet order", () => {
   assert.ok(html.indexOf("Vine Ridge") < html.indexOf("Cedar Ridge"), "item order not preserved");
 });
 
-test("the live FlowGuide link appears, at the top and the bottom", () => {
+test("the live Sendset appears, at the top and the bottom", () => {
   assert.equal(html.split(LIVE).length - 1, 2);
 });
 

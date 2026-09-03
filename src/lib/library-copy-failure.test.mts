@@ -40,7 +40,7 @@ test("an unexpected failure on the ADD path is equally quiet, with its own wordi
   const { value, logged } = capturing(() =>
     libraryCopyFailure(RAW, "add-from-library", { error: "insert_failed", message: ADD_FAILED_MESSAGE }));
   assert.equal(value.message, ADD_FAILED_MESSAGE);
-  assert.match(value.message, /nothing was changed/i, "it does not say the FlowGuide was left alone");
+  assert.match(value.message, /nothing was changed/i, "it does not say the Sendset was left alone");
   assert.match(logged[0], /add-from-library/);
 });
 
@@ -67,9 +67,9 @@ test("an empty selection and a foreign section keep their own answers", () => {
   const empty = capturing(() => libraryCopyFailure("library: choose at least one saved item", "x",
     { error: "create_failed", message: CREATE_FAILED_MESSAGE })).value;
   assert.match(empty.message, /Choose something from your Library/i);
-  const section = capturing(() => libraryCopyFailure("library: section does not belong to this FlowGuide", "x",
+  const section = capturing(() => libraryCopyFailure("library: section does not belong to this Sendset", "x",
     { error: "insert_failed", message: ADD_FAILED_MESSAGE })).value;
-  assert.match(section.message, /not part of this FlowGuide/i);
+  assert.match(section.message, /not part of this Sendset/i);
 });
 
 test("every recognised refusal is logged too — a spike in them is worth seeing", () => {
@@ -157,7 +157,7 @@ test("the Library copy calls update_item_content with the arity it currently dec
   assert.ok(highlightAt >= 0, "p_highlight is no longer a parameter — revisit this check");
   assert.equal(args[highlightAt], "''",
     `the Library copy passes ${args[highlightAt]} as p_highlight; it must pass '' so a ` +
-    `highlight written for one client cannot ride into another's FlowGuide`);
+    `highlight written for one client cannot ride into another's Sendset`);
 });
 
 test("library_items still has no highlight column to copy FROM", () => {

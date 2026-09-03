@@ -29,8 +29,8 @@ test("NO MARKETING COPY REACHES A RECIPIENT PREVIEW", () => {
 });
 
 test("the recipient wording is exactly what was asked for", () => {
-  assert.equal(RECIPIENT_DESCRIPTION, "Information has been shared with you in FlowGuide.");
-  assert.equal(recipientMetadata.title, "FlowGuide");
+  assert.equal(RECIPIENT_DESCRIPTION, "A Sendset has been shared with you.");
+  assert.equal(recipientMetadata.title, "Sendset");
   assert.equal(recipientMetadata.description, RECIPIENT_DESCRIPTION);
 });
 
@@ -42,7 +42,7 @@ test("OPENGRAPH AND TWITTER ARE DECLARED IN FULL — the actual bug was their ab
   assert.ok(recipientMetadata.openGraph, "openGraph absent — the marketing card will be inherited");
   assert.ok(recipientMetadata.twitter, "twitter absent — the marketing card will be inherited");
   const og = recipientMetadata.openGraph as Record<string, unknown>;
-  assert.equal(og.title, "FlowGuide");
+  assert.equal(og.title, "Sendset");
   assert.equal(og.description, RECIPIENT_DESCRIPTION);
 });
 
@@ -71,7 +71,7 @@ test("NOINDEX, NOFOLLOW IS PRESERVED", () => {
 
 test("the metadata is a CONSTANT — it cannot be handed a packet", () => {
   // This is the load-bearing guarantee. A generateMetadata(packet) could put a
-  // client's name or a subject matter into an unfurl cache FlowGuide does not
+  // client's name or a subject matter into an unfurl cache Sendset does not
   // control and cannot retract. A constant has no such code path.
   assert.equal(typeof recipientMetadata, "object");
   for (const route of RECIPIENT_ROUTES) {
@@ -117,7 +117,7 @@ test("metadataBase IS THE CANONICAL DOMAIN, not a deploy alias", () => {
   // when it is stale: the alias keeps resolving, so a wrong value stays wrong
   // silently.
   const layout = codeOf("src/app/layout.tsx");
-  assert.match(layout, /metadataBase: new URL\("https:\/\/guidelinks\.io"\)/,
+  assert.match(layout, /metadataBase: new URL\("https:\/\/sendset\.io"\)/,
     "metadataBase is not the canonical apex domain");
   assert.doesNotMatch(layout, /vercel\.app/,
     "a deploy alias is hard-coded as the metadata base");

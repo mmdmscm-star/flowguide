@@ -68,7 +68,7 @@ function ComposeGrip({ item, added }: { item: LibrarySnapshot; added: boolean })
     <button
       ref={setNodeRef}
       type="button"
-      aria-label={`Drag ${name} into FlowGuide`}
+      aria-label={`Drag ${name} into this Sendset`}
       {...attributes}
       {...listeners}
       className={`flex-none touch-none cursor-grab active:cursor-grabbing rounded p-1 text-gray-300
@@ -95,14 +95,14 @@ function AddButton({
   if (added) {
     return (
       <span className="flex-none px-1.5 py-1 text-[11px] font-medium text-accent"
-        aria-label={`${name} is already in this FlowGuide`}>
+        aria-label={`${name} is already in this Sendset`}>
         ✓ Added
       </span>
     );
   }
   return (
     <button type="button" onClick={onAdd}
-      aria-label={`Add ${name} to this FlowGuide`}
+      aria-label={`Add ${name} to this Sendset`}
       className="flex-none rounded border border-border px-1.5 py-1 text-[11px] font-medium
                  text-muted hover:border-accent hover:text-accent
                  focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent">
@@ -402,7 +402,7 @@ export default function LibraryWorkspace() {
     // professional delete without hesitating.
     if (!confirm(
       `Delete "${s.title || "Untitled"}" from your Library?\n\n` +
-      `Any FlowGuide that already uses it is NOT affected — each holds its own copy.`
+      `Any Sendset that already uses it is NOT affected — each holds its own copy.`
     )) return;
     setBusy(true);
     try {
@@ -445,7 +445,7 @@ export default function LibraryWorkspace() {
               Repeating it here made the Library open with a paragraph about
               semantics before saying what it is for. */}
           <p className="mt-2 text-sm text-muted">
-            Save things you use often and add them to any FlowGuide.
+            Save things you use often and add them to any Sendset.
           </p>
         </header>
 
@@ -480,7 +480,7 @@ export default function LibraryWorkspace() {
                   className="px-3 py-2 rounded-lg border border-border bg-white text-sm font-medium
                              text-foreground hover:border-accent hover:text-accent"
                 >
-                  Create a FlowGuide
+                  Create a Sendset
                 </button>
                 {/* THE OTHER DOOR, AND IT SAYS WHAT IT OPENS.
                     This was called "Organize", which stopped being true the
@@ -525,7 +525,7 @@ export default function LibraryWorkspace() {
             <p className="text-sm font-medium text-foreground">Select &amp; Organize</p>
             <p className="mt-1 text-sm text-muted">
               Choose one or more Library items to move, label, or favorite together. These
-              changes only affect your Library — nothing is copied into a FlowGuide or seen
+              changes only affect your Library — nothing is copied into a Sendset or seen
               by a client.
             </p>
 
@@ -683,7 +683,7 @@ export default function LibraryWorkspace() {
 
         {selecting && !organizing && (
           <div className="mb-4 rounded-xl border border-accent/40 bg-accent/5 p-3">
-            <p className="text-sm font-medium text-foreground">Start a FlowGuide</p>
+            <p className="text-sm font-medium text-foreground">Start a Sendset</p>
             <p className="mt-1 text-sm text-muted">
               Drag items across, or press Add. The order on the right is the order your
               client will read them in.
@@ -706,7 +706,7 @@ export default function LibraryWorkspace() {
                 disabled={busy || chosen.length === 0}
                 className="ml-2 px-3 py-2 rounded-lg bg-accent hover:bg-accent-hover text-white text-sm font-medium disabled:opacity-60"
               >
-                {busy ? "Creating…" : "Create FlowGuide"}
+                {busy ? "Creating…" : "Create Sendset"}
               </button>
               <button
                 onClick={() => {
@@ -829,7 +829,7 @@ export default function LibraryWorkspace() {
                 onDragOver: () => "",
                 onDragEnd: ({ active, over }) => {
                   const t = (active.data.current as { title?: string } | undefined)?.title || "item";
-                  return over ? `${t} placed in this FlowGuide.` : `${t} was not added.`;
+                  return over ? `${t} placed in this Sendset.` : `${t} was not added.`;
                 },
                 onDragCancel: () => "Cancelled.",
               },
@@ -915,7 +915,7 @@ export default function LibraryWorkspace() {
                 <p className="text-base font-semibold text-foreground">Nothing saved yet</p>
                 <p className="mt-1 text-sm text-muted">
                   Import information you already have, add something manually, or save
-                  things while building a FlowGuide.
+                  things while building a Sendset.
                 </p>
               </div>
             }

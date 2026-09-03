@@ -39,7 +39,7 @@ const ACTIONABLE: Array<{ match: RegExp; error: string; message: string; status:
   {
     match: /section does not belong/i,
     error: "bad_request",
-    message: "That section is not part of this FlowGuide.",
+    message: "That section is not part of this Sendset.",
     status: 400,
   },
 ];
@@ -68,7 +68,7 @@ export function libraryCopyFailure(
 
 /** Shown when the failure is ours, not the professional's. */
 export const CREATE_FAILED_MESSAGE =
-  "FlowGuide could not create this from your Library. Nothing was created — please try again.";
+  "Sendset could not create this from your Library. Nothing was created — please try again.";
 
 export const ADD_FAILED_MESSAGE =
-  "FlowGuide could not add those Library items. Nothing was changed — please try again.";
+  "Sendset could not add those Library items. Nothing was changed — please try again.";

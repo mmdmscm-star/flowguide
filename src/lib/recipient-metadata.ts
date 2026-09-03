@@ -29,8 +29,8 @@ import type { Metadata } from "next";
 // `og:url` is deliberately absent. Emitting the packet URL would be redundant
 // (it is the link being shared) and emitting anything else would be wrong —
 // which is what inheriting the homepage URL was.
-export const RECIPIENT_TITLE = "FlowGuide";
-export const RECIPIENT_DESCRIPTION = "Information has been shared with you in FlowGuide.";
+export const RECIPIENT_TITLE = "Sendset";
+export const RECIPIENT_DESCRIPTION = "A Sendset has been shared with you.";
 const RECIPIENT_OG_IMAGE = "/og-recipient.png";
 
 export const recipientMetadata: Metadata = {
@@ -42,9 +42,9 @@ export const recipientMetadata: Metadata = {
   openGraph: {
     title: RECIPIENT_TITLE,
     description: RECIPIENT_DESCRIPTION,
-    siteName: "FlowGuide",
+    siteName: "Sendset",
     type: "website",
-    images: [{ url: RECIPIENT_OG_IMAGE, width: 1200, height: 630, alt: "FlowGuide" }],
+    images: [{ url: RECIPIENT_OG_IMAGE, width: 1200, height: 630, alt: "Sendset" }],
   },
   twitter: {
     card: "summary_large_image",

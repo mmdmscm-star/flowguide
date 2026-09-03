@@ -115,7 +115,7 @@ export default async function PacketPage({ params }: Props) {
         )}
 
         <p className="text-center text-xs text-muted/40 mt-4">
-          Powered by FlowGuide
+          Powered by Sendset
         </p>
       </main>
     </>

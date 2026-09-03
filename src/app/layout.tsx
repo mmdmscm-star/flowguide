@@ -20,22 +20,22 @@ const geistSans = Geist({
 // /p/[slug] and its print route carry a client's name and a personal note, and
 // they override everything here deliberately.
 export const metadata: Metadata = {
-  metadataBase: new URL("https://guidelinks.io"),
-  title: "FlowGuide",
+  metadataBase: new URL("https://sendset.io"),
+  title: "Sendset",
   description:
     "Turn the notes you already have into one clear guide your client can use — and send it by link, email, message, or print.",
   openGraph: {
-    title: "FlowGuide",
+    title: "Sendset",
     description:
       "Turn the notes you already have into one clear guide your client can use — and send it by link, email, message, or print.",
     url: "/",
-    siteName: "FlowGuide",
+    siteName: "Sendset",
     type: "website",
-    images: [{ url: "/og.png", width: 1200, height: 630, alt: "FlowGuide" }],
+    images: [{ url: "/og.png", width: 1200, height: 630, alt: "Sendset" }],
   },
   twitter: {
     card: "summary_large_image",
-    title: "FlowGuide",
+    title: "Sendset",
     description:
       "Turn the notes you already have into one clear guide your client can use — and send it by link, email, message, or print.",
     images: ["/og.png"],

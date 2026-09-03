@@ -139,7 +139,7 @@ export async function POST(request: Request, context: Context) {
         results.push({ id: t.id, title, outcome: "attribution_conflict",
           message: attrib.resolved
             ? `Part of ${title || "this record"}'s description appears in your source under “${owner}”, not under this community. Confirm where it belongs before saving.`
-            : `FlowGuide could not locate ${title || "this record"} in your source, so it cannot confirm the description belongs to it. Check it before saving.` });
+            : `Sendset could not locate ${title || "this record"} in your source, so it cannot confirm the description belongs to it. Check it before saving.` });
         continue;
       }
     }

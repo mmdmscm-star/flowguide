@@ -31,7 +31,7 @@ export const IDENTITY_GAP_MESSAGE: Record<IdentityGap, string> = {
 /** What a professional would still be asked for, phrased for them rather than
  *  for the API. Used by the dashboard prompt. */
 export const IDENTITY_GAP_PROMPT: Record<IdentityGap, string> = {
-  no_profile: "Add your name so your FlowGuides say who they are from.",
+  no_profile: "Add your name so your Sendsets say who they are from.",
   no_contact: "Add a phone number or email so clients can reach you.",
 };
 

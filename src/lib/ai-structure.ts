@@ -133,7 +133,7 @@ export async function callStructuringModel(opts: {
           status: 503,
           error: "no_private_endpoint",
           message:
-            "Organizing is unavailable right now: no AI provider currently meets FlowGuide’s privacy requirements (no logging, zero data retention) for this model. Your text was not organized, and nothing was sent to a non-compliant provider.",
+            "Organizing is unavailable right now: no AI provider currently meets Sendset’s privacy requirements (no logging, zero data retention) for this model. Your text was not organized, and nothing was sent to a non-compliant provider.",
         };
       }
 
@@ -189,7 +189,7 @@ export async function callStructuringModel(opts: {
           error: billingOrAuth === "credits" ? "ai_credits_exhausted" : "ai_key_rejected",
           message: billingOrAuth === "credits"
             ? "The AI account is out of credits, so this couldn't be organized. Add credits and retry — your text was not lost."
-            : "The AI service rejected FlowGuide's credentials, so this couldn't be organized. Your text was not lost.",
+            : "The AI service rejected Sendset's credentials, so this couldn't be organized. Your text was not lost.",
         };
       }
 

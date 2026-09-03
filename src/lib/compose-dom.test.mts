@@ -114,14 +114,14 @@ const byText = (host: Element, re: RegExp) =>
 const byLabel = (host: Element, re: RegExp) =>
   [...host.querySelectorAll("button")].filter((b) => re.test(b.getAttribute("aria-label") ?? ""));
 const addFor = (host: Element, title: string) =>
-  byLabel(host, new RegExp(`^Add ${title} to this FlowGuide$`))[0];
+  byLabel(host, new RegExp(`^Add ${title} to this Sendset$`))[0];
 /** The tray's entries, in order, read off the numbered list. */
 const trayOrder = (host: Element) =>
   [...host.querySelectorAll("ol li")].map((li) =>
     (li.textContent ?? "").replace(/^\d+/, "").replace(/[↑↓×]/g, "").trim());
 
 const openCompose = async (host: Element) => {
-  await click(byText(host, /^Create a FlowGuide$/)!);
+  await click(byText(host, /^Create a Sendset$/)!);
   // Sections open closed. Composing from inside one is the ordinary case, so
   // the tests work there rather than only among the unfiled remainder.
   const heading = [...host.querySelectorAll("button")]
@@ -135,7 +135,7 @@ test("composing opens a tray with an empty state that says what to do", async ()
   const host = await mount();
   await openCompose(host);
   const text = host.textContent ?? "";
-  assert.match(text, /This FlowGuide/, "the assembly pane is not shown");
+  assert.match(text, /This Sendset/, "the assembly pane is not shown");
   assert.match(text, /Nothing in it yet/, "there is no empty state");
   assert.match(text, /Drag something over from your Library/, "the empty state does not say how");
   assert.match(text, /press Add on any item/, "the non-drag path is not offered");
@@ -173,7 +173,7 @@ test("the tray REORDERS and REMOVES without a pointer", async () => {
   await click(byLabel(host, /^Move Bravo Manor down$/)[0]!);
   assert.deepEqual(trayOrder(host), ["Alpha House", "Bravo Manor"], "Move down did not reorder");
 
-  await click(byLabel(host, /^Remove Alpha House from this FlowGuide$/)[0]!);
+  await click(byLabel(host, /^Remove Alpha House from this Sendset$/)[0]!);
   assert.deepEqual(trayOrder(host), ["Bravo Manor"], "Remove did not take it out");
   // Removing from the tray must not remove it from the Library, or write.
   assert.match(host.textContent ?? "", /Alpha House/, "removing from the tray removed the Library item");
@@ -186,7 +186,7 @@ test("CREATE SENDS THE TRAY, IN ITS ORDER", async () => {
   await click(addFor(host, "Bravo Manor")!);
   await click(addFor(host, "Alpha House")!);
   assert.deepEqual(trayOrder(host), ["Bravo Manor", "Alpha House"]);
-  await click(byText(host, /^Create FlowGuide$/)!);
+  await click(byText(host, /^Create Sendset$/)!);
   assert.deepEqual(created?.libraryItemIds, ["i-2", "i-1"],
     "the order the professional arranged is not what was sent");
   // ONE payload key. No section, no group, no label, no favourite travels.
@@ -243,7 +243,7 @@ test("CANCEL abandons the whole staged composition", async () => {
   await click(addFor(host, "Alpha House")!);
   await click(byText(host, /^Cancel$/)!);
   assert.deepEqual(writes, [], "cancelling wrote something");
-  assert.ok(!/This FlowGuide/.test(host.textContent ?? ""), "the tray outlived the composition");
+  assert.ok(!/This Sendset/.test(host.textContent ?? ""), "the tray outlived the composition");
   // And starting again begins empty.
   await openCompose(host);
   assert.match(host.textContent ?? "", /Nothing in it yet/, "a cancelled selection came back");
@@ -334,10 +334,10 @@ test("the two panes are a real split, and collapse rather than crush", async () 
 test("A VISIBLE GRIP, separate from Add — the drag is discoverable", async () => {
   const host = await mount();
   await openCompose(host);
-  const grips = byLabel(host, /^Drag .* into FlowGuide$/);
-  assert.ok(grips.length > 0, "there is no visible way to drag an item into the FlowGuide");
+  const grips = byLabel(host, /^Drag .* into this Sendset$/);
+  assert.ok(grips.length > 0, "there is no visible way to drag an item into the Sendset");
   // Named per item, and not hidden until hover.
-  assert.match(grips[0].getAttribute("aria-label") ?? "", /^Drag \S.* into FlowGuide$/);
+  assert.match(grips[0].getAttribute("aria-label") ?? "", /^Drag \S.* into this Sendset$/);
   for (const g of grips)
     assert.ok(!/opacity-0|invisible|hidden/.test(g.className), `a grip is hidden until hover: ${g.className}`);
   // The button survives beside it, as the click/keyboard/touch path.
@@ -357,7 +357,7 @@ test("BOTH AFFORDANCES PRODUCE THE SAME PENDING COPY", async () => {
   await click(addFor(host, "Alpha House")!);
   assert.deepEqual(trayOrder(host), ["Alpha House"]);
   // Once added, the row offers neither a grip nor an Add — it says ✓ Added.
-  assert.equal(byLabel(host, /^Drag Alpha House into FlowGuide$/).length, 0,
+  assert.equal(byLabel(host, /^Drag Alpha House into this Sendset$/).length, 0,
     "an item already in the tray can still be dragged in again");
   assert.equal(addFor(host, "Alpha House"), undefined, "Add survives on an added item");
   assert.match(host.textContent ?? "", /✓ Added/);
@@ -392,8 +392,8 @@ test("SELECT & ORGANIZE KEEPS ITS CHECKBOXES AND ITS WORDS", async () => {
   assert.match(host.textContent ?? "", /0 items selected/,
     "Select & Organize no longer counts what is selected");
   // And it is not a composition surface: no grips, no Add, no tray.
-  assert.equal(byLabel(host, /into FlowGuide$/).length, 0, "compose controls leaked into Select & Organize");
-  assert.ok(!/This FlowGuide/.test(host.textContent ?? ""), "the tray leaked into Select & Organize");
+  assert.equal(byLabel(host, /into this Sendset$/).length, 0, "compose controls leaked into Select & Organize");
+  assert.ok(!/This Sendset/.test(host.textContent ?? ""), "the tray leaked into Select & Organize");
 });
 
 // ---------------------------------------------------------------------------
@@ -408,13 +408,13 @@ test("SELECT & ORGANIZE KEEPS ITS CHECKBOXES AND ITS WORDS", async () => {
 test("ARRIVING TO COMPOSE opens the workspace immediately", async () => {
   const host = await mount("compose=1");
   const text = host.textContent ?? "";
-  assert.match(text, /This FlowGuide/, "arriving to compose did not open the tray");
+  assert.match(text, /This Sendset/, "arriving to compose did not open the tray");
   assert.match(text, /0 items added/, "the composition summary is not shown");
   // The same surface, not a lookalike: wide shell, grips, Add, no checkboxes.
   for (const c of shellOf(host)) assert.match(c, /max-w-6xl/, `not the wide workspace: ${c}`);
   const heading = [...host.querySelectorAll("button")].find((b) => /Communities/.test(b.textContent ?? ""));
   if (heading) await click(heading);
-  assert.ok(byLabel(host, /^Drag .* into FlowGuide$/).length > 0, "no drag grips on the arrival path");
+  assert.ok(byLabel(host, /^Drag .* into this Sendset$/).length > 0, "no drag grips on the arrival path");
   assert.ok(addFor(host, "Alpha House"), "no Add on the arrival path");
   assert.equal([...host.querySelectorAll('input[type="checkbox"]')].length, 0,
     "the arrival path shows selection checkboxes");
@@ -423,10 +423,10 @@ test("ARRIVING TO COMPOSE opens the workspace immediately", async () => {
 test("the two doors reach the SAME surface", async () => {
   // Arrived-to-compose, and opened-from-the-Library, rendered the same way.
   const arrived = await mount("compose=1");
-  const a = (arrived.textContent ?? "").includes("This FlowGuide");
+  const a = (arrived.textContent ?? "").includes("This Sendset");
   const opened = await mount();
   await openCompose(opened);
-  const b = (opened.textContent ?? "").includes("This FlowGuide");
+  const b = (opened.textContent ?? "").includes("This Sendset");
   assert.ok(a && b, "one of the two doors does not reach the composer");
   for (const c of shellOf(opened)) assert.match(c, /max-w-6xl/);
 });
@@ -436,15 +436,15 @@ test("CANCEL GOES BACK THE WAY THEY CAME", async () => {
   // Library is not a cancellation of anything they asked for.
   const fromDash = await mount("compose=1");
   await click(byText(fromDash, /^Cancel$/)!);
-  assert.deepEqual(pushed, ["/dashboard"], "cancelling from the menu did not return to My FlowGuides");
+  assert.deepEqual(pushed, ["/dashboard"], "cancelling from the menu did not return to My Sendsets");
 
   // From the Library: the Library comes back, and nothing navigates.
   const fromLib = await mount();
   await openCompose(fromLib);
   await click(byText(fromLib, /^Cancel$/)!);
   assert.deepEqual(pushed, [], "cancelling inside the Library navigated away from it");
-  assert.ok(!/This FlowGuide/.test(fromLib.textContent ?? ""), "the tray outlived Cancel");
-  assert.ok(byText(fromLib, /^Create a FlowGuide$/), "the ordinary Library did not come back");
+  assert.ok(!/This Sendset/.test(fromLib.textContent ?? ""), "the tray outlived Cancel");
+  assert.ok(byText(fromLib, /^Create a Sendset$/), "the ordinary Library did not come back");
 });
 
 test("SELECTIONS ACCUMULATE ACROSS SEARCHES, and Create submits the whole set", async () => {
@@ -473,7 +473,7 @@ test("SELECTIONS ACCUMULATE ACROSS SEARCHES, and Create submits the whole set", 
 
   await type("");
   assert.deepEqual(trayOrder(host), ["Alpha House", "Cedar Lodge"], "clearing the search lost the tray");
-  await click(byText(host, /^Create FlowGuide$/)!);
+  await click(byText(host, /^Create Sendset$/)!);
   assert.deepEqual(created?.libraryItemIds, ["i-1", "i-3"],
     "Create did not submit the accumulated set in its order");
 });

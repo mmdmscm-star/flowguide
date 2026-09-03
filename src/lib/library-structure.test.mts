@@ -198,7 +198,7 @@ test("NEITHER placement NOR a move touches revision or updated_at", () => {
   }
 });
 
-test("no organization metadata can travel into a FlowGuide", () => {
+test("no organization metadata can travel into a Sendset", () => {
   // The copy function enumerates the fields it takes, so structure cannot ride
   // along; the adapter drops it on the way into the editor.
   const copy = readFileSync("supabase/migrations/0036_library_copy_calls_current_update_item_content.sql", "utf8");

@@ -66,7 +66,7 @@ export async function POST(_request: Request, context: Context) {
         error: gone ? "target_section_missing" : "rebaseline_failed",
         message: gone
           ? "The section this content was being added to no longer exists. Discard this import and run it again on the section you want."
-          : "Could not re-check this FlowGuide. Try again.",
+          : "Could not re-check this Sendset. Try again.",
       }, { status: 409 });
     }
   }

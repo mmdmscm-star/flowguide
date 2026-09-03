@@ -92,7 +92,7 @@ test("a missing or foreign entry is reported as unavailable, not as a partial su
 // ---------------------------------------------------------------------------
 // Product shape
 // ---------------------------------------------------------------------------
-test("the new FlowGuide is a legacy-composition draft, and nothing publishes", () => {
+test("the new Sendset is a legacy-composition draft, and nothing publishes", () => {
   // The invariant moved into SQL with the transaction. 0023 does not RESTATE
   // these values — the ordinary blank create relies on the same column defaults —
   // it ASSERTS the row it produced, so a changed default fails loudly instead of
@@ -105,9 +105,9 @@ test("the new FlowGuide is a legacy-composition draft, and nothing publishes", (
     "the route must not set composition mode behind the transaction's back");
 });
 
-test("creation lands the professional inside the new FlowGuide", () => {
+test("creation lands the professional inside the new Sendset", () => {
   assert.match(WORKSPACE, /router\.push\(`\/edit\/\$\{packetId\}`\)/,
-    "the composer must open the new FlowGuide, not return to a list");
+    "the composer must open the new Sendset, not return to a list");
 });
 
 test("ONE COMPOSER, reached from both doors", () => {
@@ -121,10 +121,10 @@ test("ONE COMPOSER, reached from both doors", () => {
   assert.match(DASHBOARD, /router\.push\("\/library\?compose=1"\)/,
     "Use my Library does not reach the canonical composer");
   assert.doesNotMatch(DASHBOARD, /UseLibraryPicker|createFromLibrary/,
-    "the dashboard still creates FlowGuides from the Library by itself");
+    "the dashboard still creates Sendsets from the Library by itself");
 });
 
-test("the New FlowGuide menu offers the Library first", () => {
+test("the New Sendset menu offers the Library first", () => {
   const menu = DASHBOARD.slice(DASHBOARD.indexOf("showNewMenu &&"));
   const lib = menu.indexOf("Use my Library");
   const ai = menu.indexOf("Paste &amp; organize with AI");
@@ -142,7 +142,7 @@ test("the composition panel meets the text-sm floor for decision text", () => {
   assert.doesNotMatch(panel, /text-xs/, "the composition panel must not use text-xs");
 });
 
-test("the OTHER New FlowGuide choices are untouched", () => {
+test("the OTHER New Sendset choices are untouched", () => {
   // Converging the Library door must not disturb the two beside it.
   const menu = DASHBOARD.slice(DASHBOARD.indexOf("showNewMenu &&"));
   assert.match(menu, /router\.push\("\/new"\)/, "Paste & organize with AI no longer goes to /new");

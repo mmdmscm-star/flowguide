@@ -201,7 +201,7 @@ function LibraryBar({ packetId, sectionId, disabled, itemCount, refreshKey, onSa
         <p className="text-sm font-medium text-foreground">Library</p>
         <p className="text-xs text-muted">
           {empty
-            ? "Nothing saved yet. Save something here to reuse it in your next FlowGuide."
+            ? "Nothing saved yet. Save something here to reuse it in your next Sendset."
             : "Reuse something you saved, or save one of these for next time."}
         </p>
       </div>
@@ -963,7 +963,7 @@ export function LegacyPacketEditor() {
     if (!res.ok) {
       if (res.status === 422 && (data.error === "no_profile" || data.error === "no_contact")) {
         const proceed = confirm(
-          "This FlowGuide does not include professional contact information. You can still publish it, but the contact footer will not appear."
+          "This Sendset does not include professional contact information. You can still publish it, but the contact footer will not appear."
         );
         if (proceed) {
           publishPacket(true);
@@ -980,7 +980,7 @@ export function LegacyPacketEditor() {
   }
 
   async function handleUnpublish() {
-    if (!confirm("Unpublish this FlowGuide? The link will stop working.")) return;
+    if (!confirm("Unpublish this Sendset? The link will stop working.")) return;
     await fetch(`/api/packets/${packetId}/publish`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1128,7 +1128,7 @@ export function LegacyPacketEditor() {
           Bonnie Smith saw. Two labelled inputs, no toggle and no settings. */}
       <div className="mb-6">
         <label className="block text-xs font-medium uppercase tracking-wide text-muted mb-1">
-          FlowGuide name
+          Sendset name
         </label>
         <textarea
           ref={titleRef}
@@ -1138,7 +1138,7 @@ export function LegacyPacketEditor() {
           rows={1}
           className="w-full text-2xl font-bold text-foreground bg-transparent border-none outline-none resize-none overflow-hidden placeholder:text-gray-300"
         />
-        <p className="text-xs text-muted">Only you see this. It is how you find this FlowGuide later.</p>
+        <p className="text-xs text-muted">Only you see this. It is how you find this Sendset later.</p>
 
         <label className="mt-4 block text-xs font-medium uppercase tracking-wide text-muted mb-1">
           Title your client sees <span className="normal-case font-normal">(optional)</span>
@@ -1395,7 +1395,7 @@ export function LegacyPacketEditor() {
         <div className="mb-8 rounded-xl border border-border bg-white p-4">
           <p className="text-sm font-medium text-foreground">Reuse any of these next time?</p>
           <p className="mt-1 text-xs text-muted">
-            Save any of these to your Library and use them in your next FlowGuide. You
+            Save any of these to your Library and use them in your next Sendset. You
             do not have to publish this one first.
           </p>
           <button
@@ -1439,7 +1439,7 @@ export function LegacyPacketEditor() {
                   {" "}— it won&apos;t create new sections or change existing content.
                 </>
               ) : (
-                "Paste new information below. AI will organize it into one or more new sections and add them to this FlowGuide without changing existing content."
+                "Paste new information below. AI will organize it into one or more new sections and add them to this Sendset without changing existing content."
               )}
             </p>
             <textarea
@@ -1482,7 +1482,7 @@ export function LegacyPacketEditor() {
             Your Default Profile
           </label>
           <p className="text-xs text-muted mb-3">
-            Editing these updates your profile on <strong>every</strong> FlowGuide set to “My default profile.”
+            Editing these updates your profile on <strong>every</strong> Sendset set to “My default profile.”
           </p>
           <ProfessionalProfileFields
             value={profile}
@@ -1498,7 +1498,7 @@ export function LegacyPacketEditor() {
             Custom Organization
           </label>
           <p className="text-xs text-muted mb-3">
-            These details apply to this FlowGuide only. Editing them does <strong>not</strong> change your default profile.
+            These details apply to this Sendset only. Editing them does <strong>not</strong> change your default profile.
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <input
@@ -1538,7 +1538,7 @@ export function LegacyPacketEditor() {
               placeholder="Footer label (optional)"
               className="w-full px-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:ring-2 focus:ring-accent"
             />
-            <p className="mt-1 text-xs text-muted">Shown above the name on the FlowGuide. Leave blank to hide it.</p>
+            <p className="mt-1 text-xs text-muted">Shown above the name on the Sendset. Leave blank to hide it.</p>
           </div>
           <div className="mt-3">
             <ImageUploadField
@@ -1620,9 +1620,9 @@ export function LegacyPacketEditor() {
         </p>
         <div className="space-y-2">
           {([
-            { value: "default", title: "My default profile", desc: "Show your saved default contact information on this FlowGuide." },
+            { value: "default", title: "My default profile", desc: "Show your saved default contact information on this Sendset." },
             { value: "none", title: "No sender", desc: "No sender shown — no name, logo, or contact footer." },
-            { value: "custom", title: "Custom organization", desc: "Enter a name, logo, and contact info just for this FlowGuide." },
+            { value: "custom", title: "Custom organization", desc: "Enter a name, logo, and contact info just for this Sendset." },
           ] as { value: IdentityMode; title: string; desc: string }[]).map((opt) => (
             <label
               key={opt.value}
@@ -1706,7 +1706,7 @@ export function LegacyPacketEditor() {
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-5">
           <div className="bg-white rounded-2xl p-6 max-w-sm w-full text-center">
             <div className="text-4xl mb-3">🎉</div>
-            <h2 className="text-xl font-bold text-foreground mb-2">Your FlowGuide is live!</h2>
+            <h2 className="text-xl font-bold text-foreground mb-2">Your Sendset is live!</h2>
             <p className="text-sm text-muted mb-4">Share this link with your client:</p>
             <div className="bg-surface border border-border rounded-lg px-3 py-2 text-sm text-foreground mb-4 break-all">
               {typeof window !== "undefined" ? `${window.location.origin}/p/${packet.slug}` : ""}

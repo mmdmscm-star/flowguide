@@ -96,7 +96,7 @@ test("ORGANIZING DOES NOT BUMP revision OR updated_at", () => {
   const fn = service.slice(service.indexOf("export async function setLibraryOrganization"));
   const body = fn.slice(0, fn.indexOf("\n}"));
   assert.ok(!/revision/.test(body),
-    "the organization write touches revision — every descendant FlowGuide would report a false conflict");
+    "the organization write touches revision — every descendant Sendset would report a false conflict");
   assert.ok(!/updated_at/.test(body),
     "the organization write touches updated_at — the Library list would reshuffle on organizing");
   assert.match(body, /is_favorite/, "the organization write does not set the star");
@@ -116,7 +116,7 @@ test("the ordering is the total one, in both columns and both directions", () =>
     "id is not the tiebreak, so rows sharing updated_at have no defined order");
 });
 
-test("a Library snapshot does not carry organization into a FlowGuide item", () => {
+test("a Library snapshot does not carry organization into a Sendset item", () => {
   const adapter = bodyOf("src/lib/library-adapter.ts");
   const fn = adapter.slice(adapter.indexOf("export function snapshotToItem"));
   const body = fn.slice(0, fn.indexOf("\n}"));
@@ -216,7 +216,7 @@ test("the vocabulary query actually reads is_favorite", () => {
 test("the Library offers an explicit SELECT & ORGANIZE entry point, beside Create", () => {
   const ws = bodyOf("src/components/library/library-workspace.tsx");
   const header = ws.slice(ws.indexOf("Import with AI"), ws.indexOf("{notice &&"));
-  assert.match(header, />\s*Create a FlowGuide\s*</, "the create entry point is gone");
+  assert.match(header, />\s*Create a Sendset\s*</, "the create entry point is gone");
   // RENAMED, because the Library itself became draggable. "Organize" led to
   // the one mode where the drag handles are hidden, so it read as "to organize
   // your Library, do not press Organize". The mode is unchanged; its name was.
@@ -254,8 +254,8 @@ const createPanel = () => {
 
 test("SELECT & ORGANIZE MODE shows no Create action, and no second entry button", () => {
   const panel = organizePanel();
-  assert.ok(!/Create FlowGuide/.test(panel),
-    "a dimmed Create FlowGuide is still offered inside the organizing experience");
+  assert.ok(!/Create Sendset/.test(panel),
+    "a dimmed Create Sendset is still offered inside the organizing experience");
   assert.ok(!/setOrganizing\(\(o\) => !o\)/.test(panel),
     "the disabled toggle is still there, beneath the button that opened it");
   assert.match(panel, /Select &amp; Organize/, "the mode does not name itself");
@@ -268,7 +268,7 @@ test("SELECT & ORGANIZE MODE shows no Create action, and no second entry button"
   // Compared with whitespace collapsed, because JSX wraps prose and a reflow is
   // not a change of meaning.
   assert.match(panel.replace(/\s+/g, " "),
-    /These changes only affect your Library — nothing is copied into a FlowGuide or seen by a client/,
+    /These changes only affect your Library — nothing is copied into a Sendset or seen by a client/,
     "the panel stopped saying that filing never reaches a client");
 });
 
@@ -331,7 +331,7 @@ test("THE RESULT IS VISIBLE — a row shows what it now carries", () => {
 
 test("THE CREATE PATH keeps its own intent, and its own words", () => {
   const panel = createPanel();
-  assert.match(panel, /Start a FlowGuide/, "the create experience does not name itself");
+  assert.match(panel, /Start a Sendset/, "the create experience does not name itself");
   assert.ok(!/Choose one or more Library items|library-categories|library-labels/.test(panel),
     "organizing controls leaked into the create experience");
   assert.match(panel, /createFromLibrary\(chosen\)/, "creating from the selection is gone");
@@ -358,7 +358,7 @@ test("ORGANIZE says DONE, because its writes have already happened", () => {
 });
 
 test("CREATE keeps Cancel, because it genuinely stages a choice", () => {
-  // Nothing is written until Create FlowGuide, so there IS something to abandon.
+  // Nothing is written until Create Sendset, so there IS something to abandon.
   const panel = createPanel();
   assert.match(panel, />\s*Cancel\s*</, "the create panel lost its Cancel");
   assert.ok(!/>\s*Done\s*</.test(panel), "the create panel says Done, but nothing is saved yet");

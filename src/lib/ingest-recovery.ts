@@ -89,7 +89,7 @@ export function assessRecovery(input: {
  *  recovery is refused — why, in terms of the thing they did. */
 export function recoveryMessage(v: RecoveryVerdict): string {
   if (v.canApply) {
-    return "This FlowGuide changed while AI was working, so the organized content wasn’t added automatically. Nothing has been lost — you can add it now, after your existing sections.";
+    return "This Sendset changed while AI was working, so the organized content wasn’t added automatically. Nothing has been lost — you can add it now, after your existing sections.";
   }
   const target = v.blockers.find((b) => b.code === "target_section_missing");
   if (target) {
@@ -98,5 +98,5 @@ export function recoveryMessage(v: RecoveryVerdict): string {
   const media = v.blockers.find((b) => b.code === "media_not_in_source") as
     { code: "media_not_in_source"; urls: string[] } | undefined;
   const n = media?.urls.length ?? 0;
-  return `This FlowGuide changed while AI was working, and ${n === 1 ? "a photo was" : `${n} photos were`} added that ${n === 1 ? "isn’t" : "aren’t"} part of the information you gave FlowGuide. Adding the organized content now would leave this FlowGuide unpublishable. Remove ${n === 1 ? "that photo" : "those photos"}, or discard this import and run it again.`;
+  return `This Sendset changed while AI was working, and ${n === 1 ? "a photo was" : `${n} photos were`} added that ${n === 1 ? "isn’t" : "aren’t"} part of the information you gave Sendset. Adding the organized content now would leave this Sendset unpublishable. Remove ${n === 1 ? "that photo" : "those photos"}, or discard this import and run it again.`;
 }

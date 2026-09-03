@@ -170,12 +170,12 @@ test("Library detail rows have a STABLE identity, not an array index", () => {
     "keyed by array index: a moved row would carry the wrong input's state with it");
 });
 
-test("the Library drag handle is keyboard-reachable, like the FlowGuide one", () => {
+test("the Library drag handle is keyboard-reachable, like the Sendset one", () => {
   const src = codeOf(BLOCK_EDITOR);
   assert.match(src, /KeyboardSensor/, "keyboard users cannot reorder Library details");
   assert.match(src, /sortableKeyboardCoordinates/);
   assert.match(src, /PointerSensor, \{ activationConstraint: \{ distance: 5 \} \}/,
-    "the pointer activation differs from the FlowGuide editor, so the two feel different");
+    "the pointer activation differs from the Sendset editor, so the two feel different");
 });
 
 test("the draft id is NEVER saved — the payload stays {label, value}", () => {

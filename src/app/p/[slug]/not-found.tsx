@@ -9,7 +9,7 @@ export default function PacketNotFound() {
       <p className="text-sm text-muted max-w-xs">
         This link doesn&apos;t match any packet. Check the URL and try again.
       </p>
-      <p className="mt-8 text-xs text-muted/60">FlowGuide</p>
+      <p className="mt-8 text-xs text-muted/60">Sendset</p>
     </div>
   );
 }

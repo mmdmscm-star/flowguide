@@ -103,7 +103,7 @@ test("drake source: all 19 photos survive, none duplicated across chunks", () =>
 // ------------------------------------------------------------------
 // The append marker: OUR shapes only
 // ------------------------------------------------------------------
-test("only FlowGuide's own generated append marker counts as a separator", () => {
+test("only Sendset's own generated append marker counts as a separator", () => {
   const row = (label: string) => `A\tB\tC\n${label}\nD\tE\tF\nG\tH\tI`;
   // Both shapes we emit: bare (finalize/SQL) and timestamped (append routes).
   for (const marker of ["--- Added ---", "--- Added Jun 30, 2026, 6:57 PM ---", "--- Added Jul 13, 2026, 7:24 PM ---", "----", "===="]) {

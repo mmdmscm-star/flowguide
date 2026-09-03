@@ -65,7 +65,7 @@ function Row({
         aria-label={`Move ${name} down`}
         className="flex-none px-1 text-gray-400 hover:text-accent disabled:opacity-25">↓</button>
       <button type="button" onClick={onRemove} disabled={busy}
-        aria-label={`Remove ${name} from this FlowGuide`}
+        aria-label={`Remove ${name} from this Sendset`}
         className="flex-none px-1 text-gray-400 hover:text-red-600 disabled:opacity-25">×</button>
     </li>
   );
@@ -89,7 +89,7 @@ export function FlowGuideTray({
       className={`rounded-xl border-2 border-dashed p-3 transition-colors ${
         isOver ? "border-accent bg-accent/10" : "border-border bg-white/60"}`}
     >
-      <p className="text-sm font-medium text-foreground">This FlowGuide</p>
+      <p className="text-sm font-medium text-foreground">This Sendset</p>
       <p className="mt-0.5 text-[11px] text-muted">
         {entries.length === 0
           ? "Nothing in it yet."

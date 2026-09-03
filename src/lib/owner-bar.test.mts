@@ -60,7 +60,7 @@ test("the recipient packet shape still carries no owner identity", () => {
     "an owner id inside the object that renders a client-facing page is how it reaches the client");
 });
 
-test("the owner's own visit no longer marks the FlowGuide as seen by the client", () => {
+test("the owner's own visit no longer marks the Sendset as seen by the client", () => {
   assert.match(RECIPIENT, /isSupabaseConfigured && !ownedId\) \{\n\s*markPacketViewed/,
     "`viewed` means the CLIENT opened it; the author checking their own link must not set it");
 });

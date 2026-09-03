@@ -53,7 +53,7 @@ export function deleteConfirmMessage(packet: PacketIdentity): string {
   const forWhom = client ? ` (for ${client})` : "";
 
   const lines: string[] = [
-    title ? `Delete "${title}"${forWhom}?` : `Delete this untitled FlowGuide${forWhom}?`,
+    title ? `Delete "${title}"${forWhom}?` : `Delete this untitled Sendset${forWhom}?`,
   ];
 
   // With NEITHER a title nor a client name there is nothing on screen that
@@ -87,7 +87,7 @@ export async function deletePacketRequest(id: string): Promise<void> {
   try {
     res = await fetch(`/api/packets/${id}`, { method: "DELETE" });
   } catch {
-    throw new Error("Could not reach FlowGuide. Check your connection and try again.");
+    throw new Error("Could not reach Sendset. Check your connection and try again.");
   }
   if (!res.ok) {
     const body = (await res.json().catch(() => ({}))) as { message?: string; error?: string };
@@ -97,7 +97,7 @@ export async function deletePacketRequest(id: string): Promise<void> {
     throw new Error(
       body?.message?.trim() ||
         body?.error?.trim() ||
-        `Could not delete this FlowGuide (${res.status}).`
+        `Could not delete this Sendset (${res.status}).`
     );
   }
 }

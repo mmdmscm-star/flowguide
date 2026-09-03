@@ -56,7 +56,7 @@ function LoginForm() {
         </p>
         <p className="text-sm text-muted max-w-xs">
           Click the link in the email to sign in. It expires in 15 minutes.
-          {next === "new" && " Then choose New FlowGuide from the top of your dashboard."}
+          {next === "new" && " Then choose New Sendset from the top of your dashboard."}
         </p>
         <button
           onClick={() => {
@@ -74,10 +74,10 @@ function LoginForm() {
   return (
     <main className="flex flex-col items-center justify-center min-h-screen px-5">
       <div className="w-full max-w-sm">
-        <h1 className="text-2xl font-bold text-foreground text-center mb-2">FlowGuide</h1>
+        <h1 className="text-2xl font-bold text-foreground text-center mb-2">Sendset</h1>
         <p className="text-base text-muted text-center mb-8">
           {next === "new"
-            ? "Sign in to start a new FlowGuide. It’ll be waiting on your dashboard."
+            ? "Sign in to start a new Sendset. It’ll be waiting on your dashboard."
             : "Sign in to your account"}
         </p>
 

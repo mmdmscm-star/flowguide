@@ -88,7 +88,7 @@ export default function DashboardWorkspace() {
       await deletePacketRequest(packet.id);
       loadPackets();
     } catch (e) {
-      setDeleteError(e instanceof Error ? e.message : "Could not delete that FlowGuide.");
+      setDeleteError(e instanceof Error ? e.message : "Could not delete that Sendset.");
     }
   }
 
@@ -107,7 +107,7 @@ export default function DashboardWorkspace() {
       router.push(`/edit/${data.packet.id}`);
     } catch (err) {
       setDuplicatingId(null);
-      alert(err instanceof Error ? err.message : "Could not duplicate this FlowGuide. Please try again.");
+      alert(err instanceof Error ? err.message : "Could not duplicate this Sendset. Please try again.");
     }
   }
 
@@ -146,7 +146,7 @@ export default function DashboardWorkspace() {
       {/* Header */}
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">My FlowGuides</h1>
+          <h1 className="text-2xl font-bold text-foreground">My Sendsets</h1>
           <p className="text-sm text-muted mt-0.5">{userEmail}</p>
         </div>
         <div className="flex items-center gap-3">
@@ -172,7 +172,7 @@ export default function DashboardWorkspace() {
               onClick={() => setShowNewMenu(!showNewMenu)}
               className="px-4 py-2 rounded-lg bg-accent hover:bg-accent-hover text-white text-sm font-medium transition-colors"
             >
-              New FlowGuide
+              New Sendset
             </button>
             {showNewMenu && (
               <div className="absolute right-0 top-full mt-2 w-56 bg-white rounded-xl border border-border shadow-lg z-10 overflow-hidden">
@@ -224,8 +224,8 @@ export default function DashboardWorkspace() {
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search your FlowGuides…"
-            aria-label="Search your FlowGuides"
+            placeholder="Search your Sendsets…"
+            aria-label="Search your Sendsets"
             className="flex-1 px-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:ring-2 focus:ring-accent"
           />
           <div className="flex items-center gap-1" role="group" aria-label="Filter by status">
@@ -262,16 +262,16 @@ export default function DashboardWorkspace() {
         <div className="text-center py-16">
           <div className="text-4xl mb-4">📦</div>
           <h2 className="text-lg font-semibold text-foreground mb-2">
-            No FlowGuides yet
+            No Sendsets yet
           </h2>
           <p className="text-sm text-muted mb-6 max-w-xs mx-auto">
-            Create your first FlowGuide to share recommendations with a client.
+            Create your first Sendset to share recommendations with a client.
           </p>
           <button
             onClick={() => router.push("/new")}
             className="px-6 py-2.5 rounded-lg bg-accent hover:bg-accent-hover text-white text-sm font-medium transition-colors"
           >
-            Create your first FlowGuide
+            Create your first Sendset
           </button>
         </div>
       ) : visiblePackets.length === 0 ? (
@@ -282,7 +282,7 @@ export default function DashboardWorkspace() {
           <p className="text-sm text-muted">
             {query.trim()
               ? <>Nothing matches “{query.trim()}”{statusFilter !== "all" ? " in this view" : ""}.</>
-              : <>You have no {statusFilter === "published" ? "published" : "draft"} FlowGuides.</>}
+              : <>You have no {statusFilter === "published" ? "published" : "draft"} Sendsets.</>}
           </p>
           <button
             onClick={() => { setQuery(""); setStatusFilter("all"); }}

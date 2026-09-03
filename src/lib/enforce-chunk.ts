@@ -397,7 +397,7 @@ export function enforceChunkResult(opts: {
         // well mark this private; what is absent is proof that it is THIS row's.
         kind: "unbound-private-note",
         text: note,
-        reason: "FlowGuide could not establish which source record this came from, "
+        reason: "Sendset could not establish which source record this came from, "
           + "so nothing proves the source meant it to be private",
       });
       next.notes = "";
@@ -462,7 +462,7 @@ export function enforceChunkResult(opts: {
         // ONE decision, everything in it, so nothing is removed and lost in the
         // same motion and the professional sees the whole item at once.
         text: held.join("\n"),
-        reason: "FlowGuide could not establish which source record this proposal came from, "
+        reason: "Sendset could not establish which source record this proposal came from, "
           + "so nothing proves these facts belong to it",
       });
     }

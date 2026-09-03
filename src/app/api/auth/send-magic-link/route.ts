@@ -51,12 +51,12 @@ export async function POST(request: Request) {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        from: process.env.RESEND_FROM_EMAIL || "FlowGuide <onboarding@resend.dev>",
+        from: process.env.RESEND_FROM_EMAIL || "Sendset <onboarding@resend.dev>",
         to: normalizedEmail,
-        subject: "Sign in to FlowGuide",
+        subject: "Sign in to Sendset",
         html: `
           <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 400px; margin: 0 auto; padding: 40px 20px;">
-            <h1 style="font-size: 24px; font-weight: 700; margin-bottom: 8px;">FlowGuide</h1>
+            <h1 style="font-size: 24px; font-weight: 700; margin-bottom: 8px;">Sendset</h1>
             <p style="color: #6b7280; margin-bottom: 24px;">Sign in to your account</p>
             <a href="${magicLinkUrl}" style="display: inline-block; background: #2563eb; color: white; padding: 12px 32px; border-radius: 8px; text-decoration: none; font-weight: 500;">
               Sign In

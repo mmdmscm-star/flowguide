@@ -34,7 +34,7 @@ export async function GET(_request: Request, context: Context) {
     // link to. Publishing first is the honest order.
     return NextResponse.json({
       error: "not_published",
-      message: "Publish this FlowGuide first — the email includes a link to the live version.",
+      message: "Publish this Sendset first — the email includes a link to the live version.",
     }, { status: 409 });
   }
   // Block-mode packets render through a different component tree entirely and
@@ -43,7 +43,7 @@ export async function GET(_request: Request, context: Context) {
   if (row.composition_mode === "blocks") {
     return NextResponse.json({
       error: "unsupported_composition",
-      message: "An email version isn't available for block-composed FlowGuides yet.",
+      message: "An email version isn't available for block-composed Sendsets yet.",
     }, { status: 409 });
   }
 

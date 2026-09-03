@@ -183,7 +183,7 @@ export function SaveBackDialog({
       )}
 
       <p className="mt-2 text-sm text-muted">
-        Any FlowGuide already using this item stays as it is.
+        Any Sendset already using this item stays as it is.
       </p>
 
       {error && <p className="mt-2 text-sm text-red-700">{error}</p>}

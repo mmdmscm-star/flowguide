@@ -124,7 +124,7 @@ export default function NewPacketWorkspace() {
       </h1>
       <p className="mt-2 max-w-xl text-base leading-relaxed text-muted">
         Paste notes, a spreadsheet, an email thread, or anything else you&rsquo;re working from.
-        FlowGuide will shape it into a packet you can review, refine, and send.
+        Sendset will shape it into a draft you can review, refine, and send.
       </p>
 
       {/* THE CREATION SURFACE.

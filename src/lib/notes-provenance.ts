@@ -220,7 +220,7 @@ export function auditNote(note: unknown, span: string | null): NoteVerdict {
 export function noteBlockMessage(title: string, v: NoteVerdict): string {
   const name = String(title ?? "").trim() || "This community";
   if (v.reason === "no_provenance")
-    return `${name}: FlowGuide couldn't match this record to its source, so it can't confirm the private note is private. Move the text into the description or clear it before saving.`;
+    return `${name}: Sendset couldn't match this record to its source, so it can't confirm the private note is private. Move the text into the description or clear it before saving.`;
   if (v.reason === "no_private_source")
     return `${name}: the private note holds information the source never marks as private, so your client would never see it. Move it into the description or details, or clear it.`;
   return `${name}: the private note mixes private source content with ordinary information (${v.unsupported.slice(0, 6).join(", ")}). Move the client-facing parts into the description or details.`;

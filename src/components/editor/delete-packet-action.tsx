@@ -44,7 +44,7 @@ export default function DeletePacketAction({
       // still looking at the FlowGuide that still exists.
       router.push("/dashboard");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not delete this FlowGuide.");
+      setError(e instanceof Error ? e.message : "Could not delete this Sendset.");
       setBusy(false);
     }
   }
@@ -58,10 +58,10 @@ export default function DeletePacketAction({
         className="text-sm font-medium text-red-600 hover:text-red-700 underline-offset-4 hover:underline
                    disabled:opacity-60 disabled:no-underline"
       >
-        {busy ? "Deleting…" : "Delete this FlowGuide"}
+        {busy ? "Deleting…" : "Delete this Sendset"}
       </button>
       <p className="mt-1 text-sm text-muted">
-        Permanently removes this FlowGuide. This cannot be undone.
+        Permanently removes this Sendset. This cannot be undone.
       </p>
       {error && (
         <p role="alert" className="mt-2 text-sm text-red-600">

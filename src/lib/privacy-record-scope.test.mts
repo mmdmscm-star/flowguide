@@ -351,18 +351,18 @@ test("the panel offers a destination, not just a dismissal", () => {
   assert.match(ui, /resolveUnit\(f\.id, "ignored"\)/, "Leave it out is gone");
 });
 
-test("the manual path says plainly that FlowGuide moves nothing", () => {
+test("the manual path says plainly that Sendset moves nothing", () => {
   const ui = bodyOf("src/components/ImportProgress.tsx");
   assert.ok(!/I've handled this/.test(ui),
     "the vague wording survives — it means only 'I put it somewhere myself'");
   assert.match(ui, /I added it elsewhere/, "the manual path is not named explicitly");
-  assert.match(ui, /FlowGuide does not move the text for you/,
+  assert.match(ui, /Sendset does not move the text for you/,
     "nothing tells the professional that the second button changes nothing");
 });
 
 test("the guidance asks a question the buttons can answer", () => {
   const reg = bodyOf("src/lib/review-units.ts");
-  assert.match(reg, /What should FlowGuide do with it\?/, "the card still instructs rather than asks");
+  assert.match(reg, /What should Sendset do with it\?/, "the card still instructs rather than asks");
   assert.ok(!/then mark it done/.test(reg), "the old acknowledge-me wording survives");
 });
 

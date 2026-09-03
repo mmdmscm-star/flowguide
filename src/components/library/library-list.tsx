@@ -221,7 +221,7 @@ export function LibraryList({
           : <div className="mt-4">
               {emptyHint ?? (
                 <p className="text-sm text-muted">
-                  Your Library is empty. Save an item from a FlowGuide to reuse it later.
+                  Your Library is empty. Save an item from a Sendset to reuse it later.
                 </p>
               )}
             </div>

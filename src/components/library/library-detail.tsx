@@ -137,7 +137,7 @@ export function LibraryDetail({
         </button>
         {typeof usedIn === "number" && usedIn > 0 && (
           <span className="text-sm text-muted">
-            In {usedIn} FlowGuide{usedIn === 1 ? "" : "s"}
+            In {usedIn} Sendset{usedIn === 1 ? "" : "s"}
           </span>
         )}
         <button onClick={onDelete} disabled={busy}
