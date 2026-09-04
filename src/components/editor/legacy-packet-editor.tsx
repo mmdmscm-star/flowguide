@@ -10,6 +10,7 @@ import { CompositionModeControl } from "@/components/editor/composition-mode-con
 import ImportProgress from "@/components/ImportProgress";
 import OwnershipDecisions from "@/components/OwnershipDecisions";
 import { LibraryPicker } from "@/components/library/library-picker";
+import { titleLabelFor } from "@/lib/picture-item";
 import { BulkPromote } from "@/components/library/bulk-promote";
 import { ItemLibraryActions } from "@/components/library/item-library-actions";
 import { CreatorNav } from "@/components/nav/creator-nav";
@@ -227,6 +228,12 @@ export function LegacyPacketEditor() {
   // Which photo row is uploading, and why the last one failed. An upload that
   // shows nothing while it works reads as a button that does nothing.
   const [photoUploading, setPhotoUploading] = useState("");
+  /** Which section is currently taking a picture, so its control can say so. */
+  const [pictureBusy, setPictureBusy] = useState("");
+  /** ITS OWN ERROR, not the item photo one. A failure here happens when there
+   *  is no item yet, and photoError is rendered inside an item's photo block —
+   *  so it would have been written somewhere nobody was looking. */
+  const [pictureError, setPictureError] = useState("");
   const [photoError, setPhotoError] = useState("");
 
   const [showAiBanner, setShowAiBanner] = useState(searchParams.get("ai") === "1");
@@ -572,6 +579,56 @@ export function LegacyPacketEditor() {
   // ============================================================
   // Item operations
   // ============================================================
+  // ADD PICTURE — an ordinary item whose content is an image.
+  //
+  // THE ORDER IS THE FEATURE. Upload first, create the item only once there is
+  // something to put in it:
+  //
+  //   cancel the file picker  -> nothing happened at all
+  //   upload refused/failed   -> an error, and still nothing created
+  //   upload succeeded        -> an item that already has its picture
+  //
+  // Creating the item first would have been the shorter code and would leave an
+  // untitled empty item behind on both of the first two, which is not merely
+  // untidy: an item with no title BLOCKS PUBLISHING, so a cancelled file picker
+  // would have quietly broken the Sendset.
+  async function addPicture(sectionId: string, file: File) {
+    setPictureBusy(sectionId);
+    setPictureError("");
+    try {
+      const body = new FormData();
+      body.append("file", file);
+      // The same ownership-checked route the per-item upload uses. Nothing new
+      // touches storage.
+      const up = await fetch(`/api/packets/${packetId}/photos`, { method: "POST", body });
+      const stored = await up.json().catch(() => ({}));
+      if (!up.ok || !stored?.url) {
+        setPictureError(stored?.message || "Could not upload that image.");
+        return;
+      }
+
+      const created = await addItem(sectionId);
+      if (!created) {
+        setPictureError("Could not add that picture. Please try again.");
+        return;
+      }
+
+      const url = stored.url as string;
+      setItems((prev) => prev.map((i) =>
+        i.id === created ? { ...i, photos: [{ id: crypto.randomUUID(), url }] } : i));
+      const res = await fetch("/api/items", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: created, photos: [{ url }] }),
+      });
+      if (!res.ok) setPictureError("The picture was uploaded but could not be saved. Try again.");
+    } catch {
+      setPictureError("Could not upload that image. Check your connection and try again.");
+    } finally {
+      setPictureBusy("");
+    }
+  }
+
   async function addItem(sectionId: string) {
     const sectionItems = items.filter((i) => i.sectionId === sectionId);
     const maxOrder = sectionItems.reduce((max, i) => Math.max(max, i.sortOrder), -1);
@@ -599,7 +656,10 @@ export function LegacyPacketEditor() {
           contacts: [],
         },
       ]);
+      // Returned so a caller that has something to put IN the new item can.
+      return data.item.id as string;
     }
+    return null;
   }
 
   function moveItemToSection(itemId: string, targetSectionId: string) {
@@ -1346,6 +1406,31 @@ export function LegacyPacketEditor() {
               >
                 + Add Item
               </button>
+              {/* A PICTURE IS A THING YOU ADD, not a field inside something you
+                  already added. Uploading has been possible for a while, but
+                  only for someone who had already made an item and gone looking
+                  inside it for Photos — so a map, a diagram or a screenshot
+                  meant inventing a thing to hang it on first. */}
+              <label
+                className={`text-sm font-medium cursor-pointer ${
+                  pictureBusy === section.id
+                    ? "text-muted pointer-events-none"
+                    : "text-accent hover:text-accent-hover"}`}
+              >
+                {pictureBusy === section.id ? "Adding picture…" : "+ Add picture"}
+                <input
+                  type="file"
+                  accept={PHOTO_ACCEPT_ATTR}
+                  className="hidden"
+                  disabled={pictureBusy === section.id}
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    // Cleared so choosing the same file twice still fires.
+                    e.target.value = "";
+                    if (f) addPicture(section.id, f);
+                  }}
+                />
+              </label>
               <button
                 onClick={() => {
                   setAppendTargetSection({ id: section.id, title: section.title });
@@ -1357,6 +1442,9 @@ export function LegacyPacketEditor() {
                 + Add items with AI
               </button>
             </div>
+            {pictureError && (
+              <p className="mt-1 text-sm text-red-600">{pictureError}</p>
+            )}
               </>
             )}
           </SortableSection>
@@ -1977,7 +2065,8 @@ function ItemEditor({
           type="text"
           value={item.title}
           onChange={(e) => onUpdateField(item.id, "title", e.target.value)}
-          placeholder="Item title"
+          placeholder={titleLabelFor(item)}
+          aria-label={titleLabelFor(item)}
           className="flex-1 font-medium text-sm text-foreground bg-transparent border-none outline-none placeholder:text-gray-300"
         />
         <div className="flex items-center gap-1 flex-shrink-0">
