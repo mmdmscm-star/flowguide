@@ -36,6 +36,13 @@ export interface LibraryRowProps {
    *  valid markup, and the row's button is what opens the item. */
   handle?: React.ReactNode;
   innerRef?: (node: HTMLElement | null) => void;
+  /** THE VISIBLE CARD, as opposed to the whole row.
+   *
+   *  The <li> also holds the grip, the star and the row's controls, which sit
+   *  OUTSIDE the card on purpose. Anything measuring the row therefore measures
+   *  wider than the thing a professional sees — so a drag preview sized from it
+   *  came out slightly too wide. This ref is the card itself. */
+  shellRef?: (node: HTMLElement | null) => void;
   style?: React.CSSProperties;
   className?: string;
   /** Already added to the FlowGuide being composed. Kept visible and quietly
@@ -46,20 +53,20 @@ export interface LibraryRowProps {
 
 export function LibraryRow({
   item, selectable, selected, onToggle, onOpen, star, location, controls,
-  handle, innerRef, style, className, muted,
+  handle, innerRef, shellRef, style, className, muted,
 }: LibraryRowProps) {
   return (
     <li ref={innerRef} style={style}
         className={`flex items-center gap-1 ${muted ? "opacity-55" : ""} ${className ?? ""}`}>
       {handle}
       {selectable ? (
-        <label className={`${ROW_SHELL} ${selected ? ROW_SELECTED : ROW_PLAIN} cursor-pointer`}>
+        <label ref={shellRef} className={`${ROW_SHELL} ${selected ? ROW_SELECTED : ROW_PLAIN} cursor-pointer`}>
           <input type="checkbox" checked={selected}
                  onChange={() => onToggle?.(item.id)} className="flex-none" />
           <LibraryRowBody item={item} location={location} />
         </label>
       ) : (
-        <button type="button" onClick={() => onOpen?.(item)} disabled={!onOpen}
+        <button type="button" ref={shellRef} onClick={() => onOpen?.(item)} disabled={!onOpen}
                 className={`${ROW_SHELL} ${selected ? ROW_SELECTED : ROW_PLAIN} ${
                   onOpen ? "cursor-pointer hover:border-accent" : ""}`}>
           <LibraryRowBody item={item} location={location} />

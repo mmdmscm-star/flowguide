@@ -564,16 +564,40 @@ const composeRow = () =>
 const overlay = () =>
   WORKSPACE.slice(WORKSPACE.indexOf("<DragOverlay"), WORKSPACE.indexOf("</DragOverlay>"));
 
-test("THE ROW IS THE DRAGGABLE NODE, not the grip", () => {
+const ROW_SRC = readFileSync(
+  new URL("../components/library/library-row.tsx", import.meta.url), "utf8");
+
+test("THE CARD SHELL IS THE DRAGGABLE NODE — not the grip, not the whole row", () => {
   const row = composeRow();
-  assert.match(row, /innerRef=\{setNodeRef\}/,
-    "the measured node is not the row, so the overlay inherits the grip's size");
+  assert.match(row, /shellRef=\{setNodeRef\}/,
+    "the measured node is not the card, so the preview is not the card's width");
+  assert.ok(!/innerRef=\{setNodeRef\}/.test(row),
+    "the <li> is measured again, which includes the grip and the row's controls");
   assert.match(row, /ref=\{setActivatorNodeRef\}/,
     "the grip is not registered as the activator");
-  // The row itself must NOT carry the listeners, or the whole card starts drags.
+  // The card itself must NOT carry the listeners, or it starts drags anywhere.
   const rowEl = row.slice(row.indexOf("<LibraryRow"), row.indexOf("handle={added"));
   assert.ok(!/\{\.\.\.listeners\}/.test(rowEl),
     "the row spreads the drag listeners, so a drag can begin anywhere on it");
+});
+
+test("THE MEASURED CARD EXCLUDES the grip and the row's controls", () => {
+  // Both card shells take the ref; the <li> does not. That is the whole
+  // difference between the preview's width and the card's width, because the
+  // grip, the star and the controls are siblings of the card, not inside it.
+  assert.equal((ROW_SRC.match(/ref=\{shellRef\}/g) ?? []).length, 2,
+    "both the selectable and the readable card must be measurable");
+  const li = ROW_SRC.slice(ROW_SRC.indexOf("<li ref="), ROW_SRC.indexOf("{selectable ?"));
+  assert.ok(!/shellRef/.test(li), "the <li> takes the card's ref");
+  // The order that makes the exclusion true.
+  const render = ROW_SRC.slice(ROW_SRC.indexOf("<li ref="));
+  for (const [outside, why] of [["{handle}", "the grip"], ["{star}", "the star"],
+                                ["{controls}", "the row controls"]] as const)
+    assert.ok(render.includes(outside), `${why} left the row`);
+  assert.ok(render.indexOf("{handle}") < render.indexOf("ref={shellRef}"),
+    "the grip moved inside the card, so it would be measured with it");
+  assert.ok(render.indexOf("{star}") > render.indexOf("ref={shellRef}"),
+    "the star moved inside the card, so it would be measured with it");
 });
 
 test("A DRAG STILL BEGINS ONLY FROM THE GRIP", () => {

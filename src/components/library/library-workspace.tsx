@@ -78,7 +78,10 @@ function ComposeRow({ props, added, onAdd }: {
   return (
     <LibraryRow
       {...props}
-      innerRef={setNodeRef}
+      // THE CARD, NOT THE ROW. The <li> also contains the grip and the Add
+      // button, so measuring it made the preview wider than the card it came
+      // from. dnd-kit measures whatever node it is given; give it the card.
+      shellRef={setNodeRef}
       className={isDragging ? "opacity-40" : ""}
       muted={added}
       controls={<AddButton item={item} added={added} onAdd={onAdd} />}
