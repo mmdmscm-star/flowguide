@@ -63,15 +63,40 @@ test("a rejected type throws before any reading happens", async () => {
 // THE ARCHITECTURE
 // ---------------------------------------------------------------------------
 
-test("NO STORAGE, NO UPLOAD, NO SECOND SOURCE", () => {
+test("NO STORAGE, NO UPLOAD, NO SECOND SOURCE — for a FILE", () => {
+  // A .csv, .txt or .md is read ENTIRELY ON THE DEVICE and never leaves it.
+  // That is a real privacy property of this surface and it is unchanged.
+  //
+  // A PICTURE IS DIFFERENT, and this test used to assert otherwise by scanning
+  // the whole component. Nothing can read an image locally, so a picture is
+  // necessarily sent to the model to be transcribed. Two paths on one screen
+  // with two different answers to "does this leave my computer" — so the file
+  // path is checked exactly, rather than the file path being checked by
+  // checking everything near it.
   const lib = codeOf("src/lib/text-file-import.ts");
   const ui = codeOf("src/components/new/new-packet-workspace.tsx");
-  for (const forbidden of [/FormData/, /storage/i, /supabase/i, /\bfetch\(.*upload/i]) {
-    assert.doesNotMatch(lib + ui, forbidden, `the file is being sent somewhere: ${forbidden}`);
+  const filePath = ui.slice(ui.indexOf("async function handleFile"), ui.indexOf("async function handleOrganize"));
+
+  for (const forbidden of [/FormData/, /storage/i, /supabase/i, /\bfetch\(/]) {
+    assert.doesNotMatch(lib, forbidden, `the reader is sending the file somewhere: ${forbidden}`);
+    assert.doesNotMatch(filePath, forbidden, `the file path is sending the file somewhere: ${forbidden}`);
   }
-  // The file's text must reach the SAME organize call a paste reaches.
+  // Every upload on this screen belongs to the picture, and there are exactly
+  // two of them for two different reasons: the bytes go once to be READ, and
+  // once — only on Continue — to be KEPT. Counting them is not the point;
+  // naming where each one goes is.
+  const picturePath = ui.slice(ui.indexOf("async function handlePicture"), ui.indexOf("async function handleFile"));
+  const organizePath = ui.slice(ui.indexOf("async function handleOrganize"));
+  assert.match(picturePath, /\/api\/ingest\/transcribe/, "the picture is not read by the transcription route");
+  assert.match(organizePath, /\/api\/ingest\/source-image/, "Continue does not keep the picture");
+  for (const endpoint of (ui.match(/fetch\("(\/api\/[^"]+)"/g) ?? []))
+    assert.match(endpoint, /ingest\/transcribe|ingest\/source-image|ingest\/organize|\/api\/packets/,
+      `an unexpected endpoint is called from this screen: ${endpoint}`);
+
+  // Both paths' text must reach the SAME organize call a paste reaches.
   assert.match(ui, /rawText: source/, "the organize contract changed");
   assert.match(ui, /setRawText\(/, "the file text does not land in the shared box");
+  assert.match(picturePath, /setRawText\(/, "the transcription does not land in the shared box");
 });
 
 test("the text is shown before it is organized", () => {

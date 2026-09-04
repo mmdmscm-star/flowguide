@@ -180,8 +180,15 @@ test("EVERY STAGED RESULT GOES THROUGH IT, on both the success and the error pat
 });
 
 test("THE WRITER'S STRICT GATE IS STILL STRICT — both finalize branches", () => {
-  // Read whichever migration defines finalize_ingestion_run last.
-  const files = execSync("grep -rl 'finalize_ingestion_run' supabase/migrations | sort")
+  // Read whichever migration DEFINES finalize_ingestion_run last.
+  //
+  // This used to grep for the NAME, which quietly means "last file that mentions
+  // it". 0045 mentions it in a comment — to record that it was deliberately NOT
+  // re-issued — and that was enough to point this test at a migration containing
+  // no writer at all, where it found zero gates and failed. A migration is
+  // allowed to talk about a function without redefining it, so the search is for
+  // the definition.
+  const files = execSync("grep -rlE 'create or replace function public\\.finalize_ingestion_run|CREATE OR REPLACE FUNCTION public\\.finalize_ingestion_run' supabase/migrations | sort")
     .toString().trim().split("\n").filter(Boolean);
   const latest = codeOf(files[files.length - 1]);
   const gates = latest.match(/like 'http%'/gi) ?? [];
