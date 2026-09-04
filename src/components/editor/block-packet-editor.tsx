@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { uploadCreatorImage } from "@/lib/image-upload-client";
 import { CreatorNav } from "@/components/nav/creator-nav";
 import DeletePacketAction from "./delete-packet-action";
 import {
@@ -494,6 +495,10 @@ export function BlockPacketEditor({
 
       {editingItem && (
         <BlockItemEditor
+          // THE STRONGER CHECK WHERE IT EXISTS. This surface knows which packet
+          // it is editing, so the upload is checked against ownership of that
+          // packet rather than merely against being signed in.
+          uploadImage={(f) => uploadCreatorImage(`/api/packets/${packetId}/photos`, f)}
           item={editingItem}
           busy={saving}
           onSave={(payload, updatedItem) => saveItemContent(editingBlockId as string, payload, updatedItem)}

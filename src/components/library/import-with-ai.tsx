@@ -1,5 +1,6 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { uploadCreatorImage } from "@/lib/image-upload-client";
 import { BlockItemEditor } from "@/components/editor/block-item-editor";
 import { snapshotToItem } from "@/lib/library-adapter";
 import type { ItemContentPayload } from "@/lib/item-content";
@@ -230,6 +231,7 @@ export function ImportWithAI({ onClose, onSaved }: { onClose: () => void; onSave
           <div>
             <p className="mb-3 text-sm font-medium text-foreground">Editing a proposed item</p>
             <BlockItemEditor
+              uploadImage={(f) => uploadCreatorImage("/api/library/images", f)}
               item={snapshotToItem({ ...editing, id: editing.id, revision: 1, updatedAt: "" })}
               busy={busy}
               onSave={async (payload: ItemContentPayload) => {

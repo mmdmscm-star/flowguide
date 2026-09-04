@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { PHOTO_ACCEPT_ATTR } from "@/lib/photo-upload";
+import type { UploadImage } from "@/lib/image-upload-client";
 import {
   DndContext,
   closestCenter,
@@ -144,6 +146,7 @@ export function BlockItemEditor({
   organization,
   vocabulary,
   locationLabel,
+  uploadImage,
 }: {
   item: Item;
   busy: boolean;
@@ -159,6 +162,20 @@ export function BlockItemEditor({
    *  selection in Select & Organize, not a text field that could disagree with
    *  it. */
   locationLabel?: string;
+  /** HOW TO UPLOAD, SUPPLIED BY WHOEVER IS USING THIS EDITOR.
+   *
+   *  This component edits a Library entry on one screen and a block-mode
+   *  Sendset item on another, and those two do not have the same answer to
+   *  "who is allowed to store this file": a Sendset item can be checked against
+   *  the packet it belongs to, a Library entry has no packet and is checked
+   *  against the session. Choosing between them HERE would mean this component
+   *  deciding an authorization question on behalf of callers that know better
+   *  than it does — and would quietly hand the weaker check to the surface that
+   *  had the stronger one available.
+   *
+   *  So it is handed the ability to upload, not the address. Absent, and the
+   *  Photos block is exactly what it was: URLs only. */
+  uploadImage?: UploadImage;
 }) {
   const [title, setTitle] = useState(item.title || "");
   const [address, setAddress] = useState(item.address || "");
@@ -173,6 +190,26 @@ export function BlockItemEditor({
     item.contacts ? item.contacts.map((c) => ({ name: c.name || "", role: c.role || "", phone: c.phone || "", email: c.email || "", website: c.website || "" })) : []
   );
   const [error, setError] = useState("");
+  /** The Photos block's own upload state. Separate from `error`, which belongs
+   *  to saving the whole entry — a refused image is not a refused save. */
+  const [imageBusy, setImageBusy] = useState(false);
+  const [imageError, setImageError] = useState("");
+
+  // APPEND ON SUCCESS, AND ONLY ON SUCCESS. A cancelled picker never reaches
+  // here, and a failure returns before setPhotos — so neither leaves a blank
+  // row behind, which is what "+ Add photo" is for when that is what you want.
+  async function pickImage(file: File) {
+    if (!uploadImage) return;
+    setImageBusy(true);
+    setImageError("");
+    try {
+      const res = await uploadImage(file);
+      if ("error" in res) { setImageError(res.error); return; }
+      setPhotos((arr) => [...arr, { url: res.url }]);
+    } finally {
+      setImageBusy(false);
+    }
+  }
   const [labels, setLabels] = useState<string[]>(organization?.labels ?? []);
   const [isFavorite, setIsFavorite] = useState(organization?.isFavorite ?? false);
   const [labelDraft, setLabelDraft] = useState("");
@@ -436,9 +473,32 @@ export function BlockItemEditor({
           {/* Photos */}
           <div>
             <div className="flex items-center justify-between mb-1">
-              <span className="text-xs font-medium text-muted">Photos (URLs)</span>
-              <button className={smallBtn} disabled={busy} onClick={() => setPhotos((p) => [...p, { url: "" }])}>+ Add photo</button>
+              <span className="text-xs font-medium text-muted">Photos</span>
+              <div className="flex items-center gap-2">
+                {/* UPLOAD FIRST, because it is what most people want and it was
+                    the one you could not see. Pasting a URL stays for someone
+                    who already keeps their images somewhere. */}
+                {uploadImage && (
+                  <label className={`${smallBtn} ${imageBusy || busy ? "opacity-60 pointer-events-none" : "cursor-pointer"}`}>
+                    {imageBusy ? "Uploading…" : "Upload"}
+                    <input
+                      type="file"
+                      accept={PHOTO_ACCEPT_ATTR}
+                      className="hidden"
+                      disabled={imageBusy || busy}
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        // Cleared so choosing the same file twice still fires.
+                        e.target.value = "";
+                        if (f) pickImage(f);
+                      }}
+                    />
+                  </label>
+                )}
+                <button className={smallBtn} disabled={busy} onClick={() => setPhotos((p) => [...p, { url: "" }])}>+ Add URL</button>
+              </div>
             </div>
+            {imageError && <p className="mb-1 text-sm text-red-600">{imageError}</p>}
             <div className="space-y-2">
               {photos.map((p, i) => (
                 <div key={i} className="flex gap-2">

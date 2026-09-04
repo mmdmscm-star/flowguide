@@ -27,6 +27,7 @@ import { snapshotToItem, type LibrarySnapshot } from "@/lib/library-adapter";
 import type { Item } from "@/lib/types";
 import type { ItemContentPayload } from "@/lib/item-content";
 import type { MutationResult } from "@/lib/serial-mutation";
+import { uploadCreatorImage } from "@/lib/image-upload-client";
 
 // The Library workspace. Find → open → edit → save.
 //
@@ -798,6 +799,7 @@ export default function LibraryWorkspace() {
           <div className="rounded-xl border border-border bg-white p-4">
             <p className="mb-3 text-base font-semibold text-foreground">Add to Library</p>
             <BlockItemEditor
+              uploadImage={(f) => uploadCreatorImage("/api/library/images", f)}
               item={BLANK}
               busy={busy}
               onSave={(payload) => create(payload)}
@@ -817,6 +819,7 @@ export default function LibraryWorkspace() {
               </button>
             </div>
             <BlockItemEditor
+              uploadImage={(f) => uploadCreatorImage("/api/library/images", f)}
               item={snapshotToItem(editing)}
               busy={busy}
               onSave={(payload, updated, organization) => save(payload, updated, organization)}

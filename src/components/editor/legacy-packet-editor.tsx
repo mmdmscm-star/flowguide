@@ -11,6 +11,7 @@ import ImportProgress from "@/components/ImportProgress";
 import OwnershipDecisions from "@/components/OwnershipDecisions";
 import { LibraryPicker } from "@/components/library/library-picker";
 import { titleLabelFor } from "@/lib/picture-item";
+import { uploadCreatorImage } from "@/lib/image-upload-client";
 import { BulkPromote } from "@/components/library/bulk-promote";
 import { ItemLibraryActions } from "@/components/library/item-library-actions";
 import { CreatorNav } from "@/components/nav/creator-nav";
@@ -234,6 +235,8 @@ export function LegacyPacketEditor() {
    *  is no item yet, and photoError is rendered inside an item's photo block —
    *  so it would have been written somewhere nobody was looking. */
   const [pictureError, setPictureError] = useState("");
+  /** Which item is taking a header-level photo upload. */
+  const [newPhotoUploading, setNewPhotoUploading] = useState("");
   const [photoError, setPhotoError] = useState("");
 
   const [showAiBanner, setShowAiBanner] = useState(searchParams.get("ai") === "1");
@@ -921,6 +924,38 @@ export function LegacyPacketEditor() {
     }
   }
 
+  // UPLOAD STRAIGHT INTO AN EXISTING ITEM.
+  //
+  // Uploading has been possible here for a while, but only for someone who
+  // first pressed "+ Add" to make a blank URL row and then noticed the small
+  // Upload beside it. So the capability existed and the affordance did not.
+  //
+  // Same order as the section-level one: the file is stored first, and the
+  // photo is appended only once there is a URL. A cancelled picker and a
+  // refused upload both leave the item's photos exactly as they were, rather
+  // than leaving an empty row behind.
+  async function uploadNewPhoto(itemId: string, file: File) {
+    const item = items.find((i) => i.id === itemId);
+    if (!item) return;
+    setNewPhotoUploading(itemId);
+    setPhotoError("");
+    try {
+      const res = await uploadCreatorImage(`/api/packets/${packetId}/photos`, file);
+      if ("error" in res) { setPhotoError(res.error); return; }
+      const updatedPhotos = [...item.photos, { id: crypto.randomUUID(), url: res.url }];
+      setItems((prev) => prev.map((i) => (i.id === itemId ? { ...i, photos: updatedPhotos } : i)));
+      debouncedSave(() =>
+        fetch("/api/items", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: itemId, photos: updatedPhotos.map((ph) => ({ url: ph.url })) }),
+        }).then((r) => { if (!r.ok) throw new Error(); })
+      );
+    } finally {
+      setNewPhotoUploading("");
+    }
+  }
+
   function removePhoto(itemId: string, photoId: string) {
     const item = items.find((i) => i.id === itemId);
     if (!item) return;
@@ -1391,6 +1426,8 @@ export function LegacyPacketEditor() {
                       onUpdatePhoto={updatePhoto}
                       onRemovePhoto={removePhoto}
                       onUploadPhoto={uploadPhoto}
+                      onUploadNewPhoto={uploadNewPhoto}
+                      newPhotoUploading={newPhotoUploading}
                       photoUploading={photoUploading}
                       photoError={photoError}
                     />
@@ -2000,6 +2037,8 @@ function ItemEditor({
   onAddPhoto,
   onUpdatePhoto,
   onUploadPhoto,
+  onUploadNewPhoto,
+  newPhotoUploading,
   photoUploading,
   photoError,
   onRemovePhoto,
@@ -2023,6 +2062,8 @@ function ItemEditor({
   onAddPhoto: (itemId: string) => void;
   onUpdatePhoto: (itemId: string, photoId: string, url: string) => void;
   onUploadPhoto: (itemId: string, photoId: string, file: File) => void;
+  onUploadNewPhoto: (itemId: string, file: File) => void;
+  newPhotoUploading: string;
   photoUploading: string;
   photoError: string;
   onRemovePhoto: (itemId: string, photoId: string) => void;
@@ -2188,9 +2229,36 @@ function ItemEditor({
           <div>
             <div className="flex items-center justify-between mb-1">
               <span className="text-xs font-medium text-muted uppercase tracking-wide">Photos</span>
-              <button onClick={() => onAddPhoto(item.id)} className="text-sm text-accent hover:text-accent-hover">
-                + Add
-              </button>
+              <div className="flex items-center gap-3">
+                {/* THE ACTION, NOT A STEP TOWARDS IT. Upload was previously
+                    reachable only by pressing "+ Add" first and then noticing a
+                    small button beside the URL field it produced — so the thing
+                    most people want was two moves behind the thing most people
+                    do not. Pasting a URL stays, one button along. */}
+                <label
+                  className={`text-sm ${
+                    newPhotoUploading === item.id
+                      ? "text-muted pointer-events-none"
+                      : "text-accent hover:text-accent-hover cursor-pointer"}`}
+                >
+                  {newPhotoUploading === item.id ? "Uploading…" : "Upload"}
+                  <input
+                    type="file"
+                    accept={PHOTO_ACCEPT_ATTR}
+                    className="hidden"
+                    disabled={newPhotoUploading === item.id}
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      // Cleared so choosing the same file twice still fires.
+                      e.target.value = "";
+                      if (f) onUploadNewPhoto(item.id, f);
+                    }}
+                  />
+                </label>
+                <button onClick={() => onAddPhoto(item.id)} className="text-sm text-accent hover:text-accent-hover">
+                  + Add URL
+                </button>
+              </div>
             </div>
             {/* Thumbnail grid for photos that have URLs */}
             {item.photos.some((p) => p.url && p.url.startsWith("http")) && (
