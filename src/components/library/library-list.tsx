@@ -1,7 +1,7 @@
 "use client";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { type LibrarySnapshot } from "@/lib/library-adapter";
-import { LibraryRow } from "@/components/library/library-row";
+import { LibraryRow, type LibraryRowProps } from "@/components/library/library-row";
 import type { LibraryVocabulary } from "@/lib/library-organization";
 import type { GroupRow, SectionRow } from "@/lib/library-structure";
 
@@ -25,7 +25,7 @@ export function LibraryList({
   onStructure,
   onToggleFavorite,
   locationOf,
-  rowSlot,
+  rowSlot, renderRow,
 }: {
   selectable?: boolean;
   selected?: string[];
@@ -70,6 +70,10 @@ export function LibraryList({
    *  unchanged by the composition experience. */
   rowSlot?: (s: LibrarySnapshot) => {
     handle?: React.ReactNode; controls?: React.ReactNode; muted?: boolean };
+  /** OWN THE ROW ELEMENT, when the caller needs to. Composing makes each row a
+   *  draggable, and dnd-kit measures the node it is handed — so that node has to
+   *  BE the row, not something injected into it. Default rendering is unchanged. */
+  renderRow?: (props: LibraryRowProps) => React.ReactNode;
 }) {
   const [innerQ, setInnerQ] = useState("");
   const q = query ?? innerQ;
@@ -228,19 +232,18 @@ export function LibraryList({
       )}
 
       <ul className="mt-3 space-y-2">
-        {items.map((s) => (
-          <LibraryRow
-            key={s.id}
-            item={s}
-            selectable={selectable}
-            selected={selected.includes(s.id)}
-            onToggle={onToggle}
-            onOpen={selectable ? undefined : onOpen}
-            location={locationOf?.(s)}
-            handle={rowSlot?.(s).handle}
-            controls={rowSlot?.(s).controls}
-            muted={rowSlot?.(s).muted}
-            star={onToggleFavorite ? (
+        {items.map((s) => {
+          const rowProps: LibraryRowProps = {
+            item: s,
+            selectable,
+            selected: selected.includes(s.id),
+            onToggle,
+            onOpen: selectable ? undefined : onOpen,
+            location: locationOf?.(s),
+            handle: rowSlot?.(s).handle,
+            controls: rowSlot?.(s).controls,
+            muted: rowSlot?.(s).muted,
+            star: onToggleFavorite ? (
               <button
                 type="button"
                 onClick={() => { const next = !isStarred(s);
@@ -253,9 +256,12 @@ export function LibraryList({
               >
                 {isStarred(s) ? "★" : "☆"}
               </button>
-            ) : null}
-          />
-        ))}
+            ) : null,
+          };
+          return renderRow
+            ? <Fragment key={s.id}>{renderRow(rowProps)}</Fragment>
+            : <LibraryRow key={s.id} {...rowProps} />;
+        })}
       </ul>
 
       {/* The end of the list, and the next page. */}

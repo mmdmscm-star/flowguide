@@ -19,10 +19,7 @@ export function LocationLine({ location }: { location: string }) {
   return <span className="truncate text-[11px] text-muted/80">{location}</span>;
 }
 
-export function LibraryRow({
-  item, selectable, selected, onToggle, onOpen, star, location, controls,
-  handle, innerRef, style, className, muted,
-}: {
+export interface LibraryRowProps {
   item: LibrarySnapshot;
   selectable: boolean;
   selected: boolean;
@@ -45,10 +42,54 @@ export function LibraryRow({
    *  stepped back rather than removed: a row that vanishes when you add it
    *  makes the Library look like it lost something. */
   muted?: boolean;
-}) {
-  const photo = heroPhoto(item);
+}
 
-  const body = (
+export function LibraryRow({
+  item, selectable, selected, onToggle, onOpen, star, location, controls,
+  handle, innerRef, style, className, muted,
+}: LibraryRowProps) {
+  return (
+    <li ref={innerRef} style={style}
+        className={`flex items-center gap-1 ${muted ? "opacity-55" : ""} ${className ?? ""}`}>
+      {handle}
+      {selectable ? (
+        <label className={`${ROW_SHELL} ${selected ? ROW_SELECTED : ROW_PLAIN} cursor-pointer`}>
+          <input type="checkbox" checked={selected}
+                 onChange={() => onToggle?.(item.id)} className="flex-none" />
+          <LibraryRowBody item={item} location={location} />
+        </label>
+      ) : (
+        <button type="button" onClick={() => onOpen?.(item)} disabled={!onOpen}
+                className={`${ROW_SHELL} ${selected ? ROW_SELECTED : ROW_PLAIN} ${
+                  onOpen ? "cursor-pointer hover:border-accent" : ""}`}>
+          <LibraryRowBody item={item} location={location} />
+        </button>
+      )}
+      {/* Outside the row's own control on purpose: a label wrapping a checkbox
+          would swallow the click and select the row, and a button inside a
+          button is not valid markup. */}
+      {star}
+      {controls}
+    </li>
+  );
+}
+
+/** The row's shell, as classes rather than an element, so a drag preview can
+ *  wear the same one without also inheriting the <li> a list item needs. */
+export const ROW_SHELL = "flex w-full items-center gap-3 rounded-lg border p-3";
+export const ROW_SELECTED = "border-accent bg-accent/5";
+export const ROW_PLAIN = "border-border bg-white";
+
+/** EVERYTHING INSIDE THE ROW: thumbnail, title, subtitle, location, labels.
+ *
+ *  Its own component because the drag preview shows the same thing. Copying
+ *  this markup into the overlay is how a preview starts looking like something
+ *  slightly other than the row it came from. */
+export function LibraryRowBody({
+  item, location,
+}: { item: LibrarySnapshot; location?: string }) {
+  const photo = heroPhoto(item);
+  return (
     <>
       {photo
         /* eslint-disable-next-line @next/next/no-img-element */
@@ -75,36 +116,5 @@ export function LibraryRow({
         )}
       </div>
     </>
-  );
-
-  const shell = `flex w-full items-center gap-3 rounded-lg border p-3 ${
-    selected ? "border-accent bg-accent/5" : "border-border bg-white"
-  }`;
-
-  // ONE BEHAVIOUR PER MODE, as two different elements rather than one element
-  // with a branch inside its handler: selecting wraps a checkbox in a label,
-  // reading is a button. Neither can fire in the other's mode.
-  return (
-    <li ref={innerRef} style={style}
-        className={`flex items-center gap-1 ${muted ? "opacity-55" : ""} ${className ?? ""}`}>
-      {handle}
-      {selectable ? (
-        <label className={`${shell} cursor-pointer`}>
-          <input type="checkbox" checked={selected}
-                 onChange={() => onToggle?.(item.id)} className="flex-none" />
-          {body}
-        </label>
-      ) : (
-        <button type="button" onClick={() => onOpen?.(item)} disabled={!onOpen}
-                className={`${shell} ${onOpen ? "cursor-pointer hover:border-accent" : ""}`}>
-          {body}
-        </button>
-      )}
-      {/* Outside the row's own control on purpose: a label wrapping a checkbox
-          would swallow the click and select the row, and a button inside a
-          button is not valid markup. */}
-      {star}
-      {controls}
-    </li>
   );
 }

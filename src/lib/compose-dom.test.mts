@@ -546,3 +546,76 @@ test("THE MEANINGS SURVIVE: pane appends, a row inserts exactly there", () => {
   assert.notDeepEqual(applyCompose(tray, onRow), ["a", "b", "c", "z"],
     "an exact insertion degraded into an append");
 });
+
+// ---------------------------------------------------------------------------
+// WHAT IS IN THE HAND
+//
+// dnd-kit sizes DragOverlay's wrapper from the DRAGGED NODE's measured rect.
+// The grip was that node — a 24px button around a 16px icon — so the preview
+// inherited 24 pixels and broke the title one word per line. The fix is the
+// mechanism dnd-kit provides for exactly this shape: the ROW is the draggable
+// node, the grip is only the activator. jsdom has no layout, so what is pinned
+// here is which node is which, and that nothing measures anything.
+// ---------------------------------------------------------------------------
+const WORKSPACE = readFileSync(
+  new URL("../components/library/library-workspace.tsx", import.meta.url), "utf8");
+const composeRow = () =>
+  WORKSPACE.slice(WORKSPACE.indexOf("function ComposeRow"), WORKSPACE.indexOf("function AddButton"));
+const overlay = () =>
+  WORKSPACE.slice(WORKSPACE.indexOf("<DragOverlay"), WORKSPACE.indexOf("</DragOverlay>"));
+
+test("THE ROW IS THE DRAGGABLE NODE, not the grip", () => {
+  const row = composeRow();
+  assert.match(row, /innerRef=\{setNodeRef\}/,
+    "the measured node is not the row, so the overlay inherits the grip's size");
+  assert.match(row, /ref=\{setActivatorNodeRef\}/,
+    "the grip is not registered as the activator");
+  // The row itself must NOT carry the listeners, or the whole card starts drags.
+  const rowEl = row.slice(row.indexOf("<LibraryRow"), row.indexOf("handle={added"));
+  assert.ok(!/\{\.\.\.listeners\}/.test(rowEl),
+    "the row spreads the drag listeners, so a drag can begin anywhere on it");
+});
+
+test("A DRAG STILL BEGINS ONLY FROM THE GRIP", () => {
+  const row = composeRow();
+  const grip = row.slice(row.indexOf("ref={setActivatorNodeRef}"), row.indexOf("</button>"));
+  assert.match(grip, /\{\.\.\.listeners\}/, "the grip does not start a drag");
+  assert.match(grip, /\{\.\.\.attributes\}/, "the grip carries no drag attributes");
+  assert.match(grip, /aria-label=\{`Drag \$\{name\} into this Sendset`\}/,
+    "the grip no longer says what it does");
+});
+
+test("NOTHING IS MEASURED, and nothing reaches up the DOM", () => {
+  // The whole point of the activator mechanism is that these become unnecessary.
+  for (const hack of ["getBoundingClientRect", "closest(", "rowWidth", "data-row-shell"])
+    assert.ok(!WORKSPACE.includes(hack), `the workspace still measures by hand: ${hack}`);
+  assert.ok(!/style=\{\{ width:/.test(overlay()),
+    "the preview is still forced to a hand-measured width");
+});
+
+test("THE PREVIEW IS THE ROW'S OWN BODY, not a lookalike", () => {
+  assert.match(WORKSPACE, /import \{ LibraryRow, LibraryRowBody/,
+    "the overlay does not use the row's own body");
+  assert.match(overlay(), /<LibraryRowBody item=\{dragging\.item\}/,
+    "the Library preview is not the row body");
+  assert.match(overlay(), /ROW_SHELL/, "the preview does not wear the row's shell");
+  assert.match(overlay(), /pointer-events-none/,
+    "the preview can intercept the pointer and break its own drop");
+});
+
+test("a TRAY ROW keeps its plain label — it never collapsed", () => {
+  // Its draggable node is the whole <li>, so it was always measured correctly.
+  assert.match(overlay(), /dragging\.item \?/, "the two previews are not distinguished");
+  assert.match(overlay(), /whitespace-nowrap/, "the plain label can still wrap per word");
+});
+
+test("the list components can hand the row over, and still render it by default", () => {
+  for (const f of ["../components/library/library-list.tsx",
+                   "../components/library/library-structure-view.tsx"]) {
+    const src = readFileSync(new URL(f, import.meta.url), "utf8");
+    assert.match(src, /renderRow\?: \(props: LibraryRowProps\) => React\.ReactNode;/,
+      `${f} cannot hand the row to its caller`);
+    assert.match(src, /: <LibraryRow key=\{s\.id\} \{\.\.\.(rowProps|common)\} \/>/,
+      `${f} lost its default row rendering`);
+  }
+});

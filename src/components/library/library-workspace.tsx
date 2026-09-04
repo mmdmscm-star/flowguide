@@ -5,6 +5,8 @@ import {
 } from "@dnd-kit/core";
 import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
 import { FlowGuideTray, type TrayEntry } from "@/components/library/flowguide-tray";
+import { LibraryRow, LibraryRowBody, ROW_SHELL, ROW_PLAIN,
+  type LibraryRowProps } from "@/components/library/library-row";
 import {
   applyCompose, libDragId, parseComposeId, planCompose,
 } from "@/lib/compose-drag";
@@ -55,32 +57,53 @@ const BLANK: Item = {
  *  NOT the Library's own move handle: that one rearranges the shelf and is
  *  absent here entirely. This one copies, and its label says so.
  */
-function ComposeGrip({ item, added }: { item: LibrarySnapshot; added: boolean }) {
+function ComposeRow({ props, added, onAdd }: {
+  props: LibraryRowProps; added: boolean; onAdd: () => void;
+}) {
+  const item = props.item;
   const name = item.title || "this item";
-  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+  // THE ROW IS THE DRAGGABLE; THE GRIP IS ONLY THE ACTIVATOR.
+  //
+  // dnd-kit measures the node handed to setNodeRef and sizes DragOverlay from
+  // it. Put that ref on the grip and the overlay inherits a 24px button, which
+  // is what broke the preview into a column one word wide. setActivatorNodeRef
+  // is the mechanism for exactly this: the row is what is being dragged, the
+  // grip is the only place a drag may begin from. No measuring, no reaching up
+  // the DOM, and the overlay geometry matches the row because it IS the row's.
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, isDragging } = useDraggable({
     id: libDragId(item.id),
     disabled: added,
-    data: { title: item.title ?? "" },
+    data: { title: item.title ?? "", item },
   });
-  // Already in the tray: the space is held so the rows do not jump sideways.
-  if (added) return <span className="w-6 flex-none" aria-hidden="true" />;
   return (
-    <button
-      ref={setNodeRef}
-      type="button"
-      aria-label={`Drag ${name} into this Sendset`}
-      {...attributes}
-      {...listeners}
-      className={`flex-none touch-none cursor-grab active:cursor-grabbing rounded p-1 text-gray-300
-                  hover:text-accent focus-visible:outline focus-visible:outline-2
-                  focus-visible:outline-accent ${isDragging ? "opacity-40" : ""}`}
-    >
-      <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-        <circle cx="7" cy="4" r="1.5" /><circle cx="13" cy="4" r="1.5" />
-        <circle cx="7" cy="10" r="1.5" /><circle cx="13" cy="10" r="1.5" />
-        <circle cx="7" cy="16" r="1.5" /><circle cx="13" cy="16" r="1.5" />
-      </svg>
-    </button>
+    <LibraryRow
+      {...props}
+      innerRef={setNodeRef}
+      className={isDragging ? "opacity-40" : ""}
+      muted={added}
+      controls={<AddButton item={item} added={added} onAdd={onAdd} />}
+      handle={added
+        // Already in the tray: the space is held so the rows do not jump sideways.
+        ? <span className="w-6 flex-none" aria-hidden="true" />
+        : (
+          <button
+            ref={setActivatorNodeRef}
+            type="button"
+            aria-label={`Drag ${name} into this Sendset`}
+            {...attributes}
+            {...listeners}
+            className="flex-none touch-none cursor-grab active:cursor-grabbing rounded p-1 text-gray-300
+                       hover:text-accent focus-visible:outline focus-visible:outline-2
+                       focus-visible:outline-accent"
+          >
+            <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+              <circle cx="7" cy="4" r="1.5" /><circle cx="13" cy="4" r="1.5" />
+              <circle cx="7" cy="10" r="1.5" /><circle cx="13" cy="10" r="1.5" />
+              <circle cx="7" cy="16" r="1.5" /><circle cx="13" cy="16" r="1.5" />
+            </svg>
+          </button>
+        )}
+    />
   );
 }
 
@@ -233,7 +256,8 @@ export default function LibraryWorkspace() {
    *  changing the filter. Captured on add rather than looked up on render,
    *  because the row it came from may no longer be loaded. */
   const [addedTitles, setAddedTitles] = useState<Record<string, string>>({});
-  const [dragging, setDragging] = useState<{ id: string; title: string } | null>(null);
+  const [dragging, setDragging] = useState<
+    { id: string; title: string; item?: LibrarySnapshot } | null>(null);
 
   // =========================================================================
   // COMPOSING A FLOWGUIDE — find, drag, place, arrange, create.
@@ -290,8 +314,9 @@ export default function LibraryWorkspace() {
   function onComposeDragStart(e: DragStartEvent) {
     const p = parseComposeId(e.active.id);
     if (!p) return;
-    const carried = (e.active.data.current as { title?: string } | undefined)?.title;
-    setDragging({ id: p.id, title: carried ?? addedTitles[p.id] ?? "Item" });
+    const d = e.active.data.current as
+      { title?: string; item?: LibrarySnapshot } | undefined;
+    setDragging({ id: p.id, title: d?.title ?? addedTitles[p.id] ?? "Item", item: d?.item });
   }
 
   const router = useRouter();
@@ -868,12 +893,10 @@ export default function LibraryWorkspace() {
                 setNotice(""); setChosen([id]); setOrganizing(true); setSelecting(true);
                 window.scrollTo({ top: 0, behavior: "smooth" });
               }}
-              rowSlot={composing ? (it) => ({
-                handle: <ComposeGrip item={it} added={chosen.includes(it.id)} />,
-                controls: <AddButton item={it} added={chosen.includes(it.id)}
-                            onAdd={() => addToTray(it)} />,
-                muted: chosen.includes(it.id),
-              }) : undefined}
+              renderRow={composing ? (rp) => (
+                <ComposeRow props={rp} added={chosen.includes(rp.item.id)}
+                  onAdd={() => addToTray(rp.item)} />
+              ) : undefined}
               // NOT WHILE COMPOSING. `reorder` carries the Library's own
               // rearranging — section and group Move up/down, and rename — and
               // this surface does not rearrange the Library. Item handles were
@@ -897,12 +920,10 @@ export default function LibraryWorkspace() {
             // The location belongs on the row exactly here — in a flat,
             // filtered result, where no heading above it says where the item
             // lives. Under the hierarchy it would be noise.
-            rowSlot={composing ? (it) => ({
-              handle: <ComposeGrip item={it} added={chosen.includes(it.id)} />,
-              controls: <AddButton item={it} added={chosen.includes(it.id)}
-                          onAdd={() => addToTray(it)} />,
-              muted: chosen.includes(it.id),
-            }) : undefined}
+            renderRow={composing ? (rp) => (
+              <ComposeRow props={rp} added={chosen.includes(rp.item.id)}
+                onAdd={() => addToTray(rp.item)} />
+            ) : undefined}
             locationOf={locationOf}
             selectable={selecting && organizing}
             selected={chosen}
@@ -939,12 +960,28 @@ export default function LibraryWorkspace() {
                 </aside>
               )}
             </div>
+            {/* WHAT IS IN THE HAND, AT THE SIZE IT WAS PICKED UP.
+                dnd-kit sizes the overlay's wrapper from the dragged node's
+                measured rect, and for a Library item that node is the grip — so
+                the preview inherited 24 pixels of width and broke the title one
+                word per line. The width measured at drag start is applied here,
+                and the body is the ROW'S OWN body component rather than a
+                lookalike, so the thing in transit cannot drift from the thing it
+                came from. A tray row being reordered already measures its whole
+                <li>, so it keeps the plain label it always had. */}
             <DragOverlay dropAnimation={null}>
               {dragging ? (
-                <div className="pointer-events-none rounded-md border border-accent bg-white px-2.5 py-1.5
-                                text-sm font-medium text-foreground shadow-lg">
-                  {dragging.title}
-                </div>
+                dragging.item ? (
+                  <div className={`pointer-events-none ${ROW_SHELL} ${ROW_PLAIN} border-accent shadow-lg`}>
+                    <LibraryRowBody item={dragging.item} />
+                  </div>
+                ) : (
+                  <div className="pointer-events-none w-max whitespace-nowrap rounded-md border
+                                  border-accent bg-white px-2.5 py-1.5 text-sm font-medium
+                                  text-foreground shadow-lg">
+                    {dragging.title}
+                  </div>
+                )
               ) : null}
             </DragOverlay>
           </DndContext>

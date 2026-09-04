@@ -8,10 +8,10 @@ import {
   DragHandle, SortableHeading, SortableRow, libraryCollision,
 } from "@/components/library/library-dnd";
 import { containerKey, dragId, parseDragId, planDrop } from "@/lib/library-drag";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import type { LibrarySnapshot } from "@/lib/library-adapter";
 import type { LibraryVocabulary } from "@/lib/library-organization";
-import { LibraryRow } from "@/components/library/library-row";
+import { LibraryRow, type LibraryRowProps } from "@/components/library/library-row";
 
 // THE LIBRARY, WITH ITS STRUCTURE SHOWING.
 //
@@ -52,7 +52,7 @@ const keyOf = (s: string | null, g: string | null) => `${s ?? ""}|${g ?? ""}`;
 
 export function LibraryStructureView({
   refreshKey = 0, selectable = false, selected = [], onToggle, onOpen,
-  onToggleFavorite, onMove, reorder = false, onVocabulary, onEmpty, rowSlot,
+  onToggleFavorite, onMove, reorder = false, onVocabulary, onEmpty, rowSlot, renderRow,
 }: {
   refreshKey?: number;
   selectable?: boolean;
@@ -72,6 +72,10 @@ export function LibraryStructureView({
    *  composing is a selection mode. */
   rowSlot?: (s: LibrarySnapshot) => {
     handle?: React.ReactNode; controls?: React.ReactNode; muted?: boolean };
+  /** OWN THE ROW ELEMENT. Only reachable when this view is NOT sortable — while
+   *  composing, `reorder` is false, so the Library's own drag is absent and the
+   *  row's node ref is free for the caller's. */
+  renderRow?: (props: LibraryRowProps) => React.ReactNode;
   /** Reports that no structure exists, so the caller can fall back to the flat
    *  list rather than rendering an empty hierarchy. */
   onEmpty?: (empty: boolean) => void;
@@ -398,7 +402,11 @@ export function LibraryStructureView({
             controls: slot?.controls ?? controls,
             handle: slot?.handle, muted: slot?.muted,
           };
-          if (!sortable) return <LibraryRow key={s.id} {...common} />;
+          if (!sortable) {
+            return renderRow
+              ? <Fragment key={s.id}>{renderRow(common)}</Fragment>
+              : <LibraryRow key={s.id} {...common} />;
+          }
           return (
             <SortableRow key={s.id} id={dragId("item", s.id)} disabled={busy}
               edge={edge?.id === s.id ? edge.side : null}>
