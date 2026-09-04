@@ -627,6 +627,18 @@ test("THE PREVIEW IS THE ROW'S OWN BODY, not a lookalike", () => {
     "the preview can intercept the pointer and break its own drop");
 });
 
+test("THE CARRIED THING IS SLIGHTLY SMALLER, and only visually", () => {
+  // A lift, not a duplicate. It scales the overlay's CONTENT — the source node
+  // is what dnd-kit measures, so the active rect and every drop target are
+  // untouched by this.
+  assert.match(overlay(), /scale-\[0\.92\]/, "the preview is not reduced");
+  assert.match(overlay(), /origin-left/,
+    "the preview shrinks toward its centre, so it drifts off the grip");
+  // The scale must not have been applied by re-measuring anything.
+  for (const hack of ["getBoundingClientRect", "closest(", "rowWidth"])
+    assert.ok(!WORKSPACE.includes(hack), `the preview is sized by hand again: ${hack}`);
+});
+
 test("a TRAY ROW keeps its plain label — it never collapsed", () => {
   // Its draggable node is the whole <li>, so it was always measured correctly.
   assert.match(overlay(), /dragging\.item \?/, "the two previews are not distinguished");

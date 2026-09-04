@@ -975,7 +975,16 @@ export default function LibraryWorkspace() {
             <DragOverlay dropAnimation={null}>
               {dragging ? (
                 dragging.item ? (
-                  <div className={`pointer-events-none ${ROW_SHELL} ${ROW_PLAIN} border-accent shadow-lg`}>
+                  // PURELY VISUAL. The carried thing reads better a little
+                  // smaller than the card it left — lifted rather than
+                  // identical. `origin-left` keeps it anchored on the side the
+                  // grip is on, so it still feels held by the handle.
+                  //
+                  // The SOURCE node is what dnd-kit measures, and this scales
+                  // the overlay's own content, so the active rect, the
+                  // collisions and every drop target are exactly as they were.
+                  <div className={`pointer-events-none origin-left scale-[0.92]
+                                   ${ROW_SHELL} ${ROW_PLAIN} border-accent shadow-lg`}>
                     <LibraryRowBody item={dragging.item} />
                   </div>
                 ) : (
