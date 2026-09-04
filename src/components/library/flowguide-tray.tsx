@@ -1,9 +1,9 @@
 "use client";
 
-import { useDroppable } from "@dnd-kit/core";
+import { useDndContext, useDroppable } from "@dnd-kit/core";
 import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { TRAY_END, trayDragId } from "@/lib/compose-drag";
+import { TRAY_END, parseComposeId, trayDragId } from "@/lib/compose-drag";
 
 // THE FLOWGUIDE BEING ASSEMBLED.
 //
@@ -83,11 +83,31 @@ export function FlowGuideTray({
   // The whole pane is the drop target, so an aim that misses every row still
   // lands somewhere sensible — the end.
   const { setNodeRef, isOver } = useDroppable({ id: TRAY_END });
+  // A LIBRARY ITEM IN THE HAND, as opposed to a tray row being reordered. Only
+  // the first needs to be shown where it may land; the second is already home.
+  const { active } = useDndContext();
+  const carrying = parseComposeId(active?.id)?.zone === "lib";
   return (
+    // A TARGET YOU AIM AT, not one you hit.
+    //
+    // This box WAS its contents: two lines of heading and however many rows
+    // existed, so with an empty or nearly-empty Sendset it was a strip a couple
+    // of hundred pixels tall, floated at the top of a tall column. dnd-kit's
+    // default collision is rectIntersection — the dragged thing's rectangle has
+    // to OVERLAP the target's — so everywhere below that strip, which is most of
+    // the right-hand side, a release resolved to nothing and silently did
+    // nothing. It read as bad aim rather than a small target.
+    //
+    // So the box is given a floor to stand on and grows to fill the column it
+    // already occupies. Nothing about the drop CHANGED — the pane has always
+    // meant "the end" — there is simply now enough of it to hit.
     <div
       ref={setNodeRef}
-      className={`rounded-xl border-2 border-dashed p-3 transition-colors ${
-        isOver ? "border-accent bg-accent/10" : "border-border bg-white/60"}`}
+      className={`flex min-h-[18rem] flex-col rounded-xl border-2 border-dashed p-4
+                  transition-colors lg:min-h-[60vh] ${
+        isOver ? "border-accent bg-accent/10"
+        : carrying ? "border-accent/60 bg-accent/5"
+        : "border-border bg-white/60"}`}
     >
       <p className="text-sm font-medium text-foreground">This Sendset</p>
       <p className="mt-0.5 text-[11px] text-muted">
@@ -99,7 +119,9 @@ export function FlowGuideTray({
       {entries.length === 0 ? (
         // THE EMPTY STATE IS THE INSTRUCTION. An empty bordered box says
         // "something goes here" and nothing about what or how.
-        <div className="mt-3 rounded-lg border border-dashed border-border px-3 py-6 text-center">
+        <div className={`mt-3 flex flex-1 flex-col items-center justify-center rounded-lg
+                         border border-dashed px-3 py-6 text-center transition-colors ${
+          carrying ? "border-accent/60 bg-accent/10" : "border-border"}`}>
           <p className="text-sm text-muted">Drag something over from your Library</p>
           <p className="mt-1 text-[11px] text-muted/80">
             or press <span className="font-medium">Add</span> on any item
@@ -115,6 +137,24 @@ export function FlowGuideTray({
             ))}
           </ol>
         </SortableContext>
+      )}
+
+      {/* THE OPEN SPACE BELOW THE ROWS, and the reason it is visible.
+          It is not a second target — it is the same droppable as the frame
+          around it, so a release here means the end, exactly as a release on
+          the frame always did. What it adds is somewhere obvious to aim that is
+          not a one-row-tall gap between two existing rows. */}
+      {entries.length > 0 && (
+        <div
+          data-tray-landing
+          className={`mt-2 flex min-h-[5rem] flex-1 items-center justify-center rounded-lg
+                      border border-dashed transition-colors ${
+            carrying ? "border-accent/60 bg-accent/10" : "border-transparent"}`}
+        >
+          {carrying && (
+            <p className="text-xs font-medium text-accent">Drop here to add to the end</p>
+          )}
+        </div>
       )}
 
       {/* WHAT THIS IS NOT. Said once, quietly, because the whole gesture looks

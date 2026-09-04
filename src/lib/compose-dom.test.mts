@@ -18,6 +18,7 @@ let act: typeof import("react").act;
 let Workspace: typeof import("../components/library/library-workspace.tsx").default;
 let AppRouterContext: React.Context<unknown>;
 let SearchParamsContext: React.Context<unknown>;
+import { applyCompose, libDragId, planCompose, trayDragId, TRAY_END } from "./compose-drag.ts";
 
 const ITEMS = [
   { id: "i-1", title: "Alpha House", address: "1 A St", labels: ["Preferred"], isFavorite: true,
@@ -476,4 +477,72 @@ test("SELECTIONS ACCUMULATE ACROSS SEARCHES, and Create submits the whole set", 
   await click(byText(host, /^Create Sendset$/)!);
   assert.deepEqual(created?.libraryItemIds, ["i-1", "i-3"],
     "Create did not submit the accumulated set in its order");
+});
+
+// ---------------------------------------------------------------------------
+// THE SIZE OF THE TARGET
+//
+// The drop always worked; there was too little of it to hit. The frame was its
+// own contents, so an empty or nearly-empty Sendset was a short strip floated
+// at the top of a tall column, and dnd-kit's default rectIntersection resolves
+// a release below that strip to nothing at all — silently. What follows is
+// about AREA, and deliberately not about semantics: the two tests at the end
+// pin the meanings that must survive being easier to hit.
+// ---------------------------------------------------------------------------
+
+/** The dashed frame — the single droppable the whole pane hangs off. */
+const trayFrame = (host: Element) =>
+  [...host.querySelectorAll("div")].find((d) =>
+    /border-dashed/.test(d.className) && /This Sendset/.test(d.textContent ?? ""));
+
+test("THE TRAY HAS A FLOOR — it is not as short as its contents", async () => {
+  const host = await mount();
+  await openCompose(host);
+  const frame = trayFrame(host);
+  assert.ok(frame, "the dashed tray frame is gone");
+  // A minimum on both breakpoints: the column is tall on a desktop, and the
+  // stacked layout still needs somewhere to aim.
+  assert.match(frame!.className, /min-h-\[18rem\]/, "the tray can still collapse to its contents");
+  assert.match(frame!.className, /lg:min-h-\[60vh\]/, "the tray does not fill its column on a desktop");
+  // It has to be a column for the open space below the rows to take the slack.
+  assert.match(frame!.className, /flex-col/, "the tray cannot distribute its own height");
+});
+
+test("WITH ROWS IN IT, there is open space below them to aim at", async () => {
+  const host = await mount();
+  await openCompose(host);
+  await click(addFor(host, "Alpha House")!);
+  const landing = host.querySelector("[data-tray-landing]");
+  assert.ok(landing, "a populated tray offers no open space to drop into");
+  assert.match((landing as Element).className, /flex-1/, "the open space does not take the slack");
+  // AND IT IS THE SAME TARGET. Not a second droppable with its own meaning —
+  // it is inside the frame, so a release there is a release on the frame.
+  assert.ok(trayFrame(host)!.contains(landing!),
+    "the landing area is outside the tray's droppable, so it means something else");
+});
+
+test("the empty state IS the landing area, not a label above one", async () => {
+  const host = await mount();
+  await openCompose(host);
+  const empty = [...host.querySelectorAll("div")].find((d) =>
+    /Drag something over from your Library/.test(d.textContent ?? "") && /flex-1/.test(d.className));
+  assert.ok(empty, "the empty state does not grow to fill the tray");
+});
+
+test("THE MEANINGS SURVIVE: pane appends, a row inserts exactly there", () => {
+  // The whole point of enlarging the frame is that MORE releases resolve to
+  // TRAY_END. That must still mean the end, and hovering a row must still beat
+  // the frame underneath it.
+  const tray = ["a", "b", "c"];
+  assert.deepEqual(planCompose(libDragId("z"), TRAY_END, tray),
+    { kind: "add", id: "z", index: 3 }, "a drop on the enlarged pane no longer appends");
+  assert.deepEqual(applyCompose(tray, planCompose(libDragId("z"), TRAY_END, tray)),
+    ["a", "b", "c", "z"]);
+  // On a row: that row's position, pushing it down — NOT the end.
+  const onRow = planCompose(libDragId("z"), trayDragId("b"), tray);
+  assert.deepEqual(onRow, { kind: "add", id: "z", index: 1 },
+    "a row drop was swallowed by the bigger pane behind it");
+  assert.deepEqual(applyCompose(tray, onRow), ["a", "z", "b", "c"]);
+  assert.notDeepEqual(applyCompose(tray, onRow), ["a", "b", "c", "z"],
+    "an exact insertion degraded into an append");
 });

@@ -923,7 +923,13 @@ export default function LibraryWorkspace() {
           )}
               </div>
               {composing && (
-                <aside className="lg:sticky lg:top-4 lg:self-start">
+                <aside
+                  // HALF THE GUTTER BELONGS TO THE TARGET. The drag always
+                  // approaches from the left, across a 20px grid gap that
+                  // belonged to neither column; the frame now starts in the
+                  // middle of it. Ten pixels, on the only edge anyone crosses.
+                  className="lg:sticky lg:top-4 lg:-ml-2.5 lg:self-start"
+                >
                   <FlowGuideTray
                     entries={trayEntries} busy={busy}
                     onUp={(id) => nudge(id, -1)}
