@@ -155,6 +155,24 @@ export function ItemCard({ item, audience = "recipient" }: { item: Item; audienc
               const atomic = isAtomicValue(detail.value);
               const divider = i !== item.details!.length - 1 ? "border-b border-border" : "";
 
+              // A DETAIL WITH NO LABEL IS A STATEMENT, NOT A KEY AND A VALUE.
+              //
+              // Every layout below is a two-column one, and the value column is
+              // right-aligned so a run of short values reads as a column. Hand
+              // that an empty label and a whole sentence is shoved against the
+              // right edge with nothing beside it — which is exactly what a line
+              // accepted from "Add these to the item" is: source prose with no
+              // label, because the source gave it none and nothing here invents
+              // one. So it gets its own row: full width, left aligned, read as
+              // the sentence it is.
+              if (!String(detail.label ?? "").trim()) {
+                return (
+                  <div key={i} className={`px-3.5 py-2.5 text-base text-foreground ${divider}`}>
+                    <span className="[overflow-wrap:anywhere]">{detail.value}</span>
+                  </div>
+                );
+              }
+
               // ATOMIC ROW — never wraps or stacks, at any width. The value is
               // flex-shrink-0, so it always keeps its full natural width and the
               // label absorbs every bit of the pressure by wrapping. items-start

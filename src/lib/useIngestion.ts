@@ -216,10 +216,11 @@ export function useIngestion(packetId: string, opts?: {
 
     // THE PACKET CHANGED, SO SAY SO.
     //
-    // Only `kept_private` writes item content. The card vanished the moment the
-    // run was re-read, but the editor below holds its own copy of the packet
-    // and had no reason to know a note had appeared in it — so the new private
-    // note stayed invisible until the browser was reloaded.
+    // `kept_private` and `included` write item content — a private note in the
+    // first case, recipient-facing details in the second. The card vanished the
+    // moment the run was re-read, but the editor below holds its own copy of
+    // the packet and had no reason to know anything had appeared in it — so the
+    // new content stayed invisible until the browser was reloaded.
     //
     // The host re-reads the packet rather than being handed a note to splice
     // in. The server already decided what `notes` now says — it appends to
@@ -232,7 +233,7 @@ export function useIngestion(packetId: string, opts?: {
     //
     // The finalized branch above returns early and calls onComplete, whose host
     // already reloads — so the last unit does not fetch the packet twice.
-    if (status === "kept_private") opts?.onItemsChanged?.();
+    if (status === "kept_private" || status === "included") opts?.onItemsChanged?.();
   }, [opts]);
 
   const cancel = useCallback(() => { cancelled.current = true; }, []);

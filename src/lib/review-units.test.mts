@@ -146,11 +146,14 @@ test("NO CONTROL SENDS CONTENT — a disposition is all the client may say", () 
   // arbitrary prose into somebody's private notes. The browser says which
   // decision was made and nothing else.
   const calls = [...c.matchAll(/resolveUnit\(([^)]*)\)/g)].map((m) => m[1]);
-  assert.ok(calls.length >= 3, "the three dispositions are not all offered");
+  assert.ok(calls.length >= 4, "the four dispositions are not all offered");
   for (const c2 of calls) {
-    assert.match(c2, /^f\.id,\s*"(kept_private|resolved|ignored)"$/,
+    assert.match(c2, /^f\.id,\s*"(kept_private|resolved|ignored|included)"$/,
       `resolveUnit carries content: ${c2}`);
   }
+  // `included` writes recipient-facing details from the STORED unit, so the
+  // browser must not be able to say WHAT is added — only that it was accepted.
+  assert.ok(!/resolveUnit\([^)]*text/.test(c), "the client sends the omitted text back");
 });
 
 test("the RPC reads the text from the STORED unit, never from a parameter", () => {

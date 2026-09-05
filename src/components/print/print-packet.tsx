@@ -91,8 +91,13 @@ function ItemBlock({ item }: { item: Item }) {
       {details.length > 0 && (
         <div className="pg-details">
           {details.map((d, i) => (
-            <div key={i} className="pg-detail-row">
-              <span className="pg-detail-label">{d.label}</span>
+            // A LABEL-LESS DETAIL IS A SENTENCE. The row below is a
+            // space-between pair with a right-aligned value, which reads a
+            // whole sentence against the right margin when there is no label
+            // to balance it. Full width and left aligned instead — the same
+            // decision the web card makes, for the same content.
+            <div key={i} className={String(d?.label ?? "").trim() ? "pg-detail-row" : "pg-detail-row pg-detail-row--bare"}>
+              {String(d?.label ?? "").trim() && <span className="pg-detail-label">{d.label}</span>}
               <span className="pg-detail-value">{d.value}</span>
             </div>
           ))}

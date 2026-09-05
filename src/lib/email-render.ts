@@ -143,6 +143,15 @@ function detailsTable(item: Item): string {
   if (!rows.length) return "";
   const body = rows.map((d, i) => {
     const border = i ? `border-top:1px solid ${LINE};` : "";
+    // A DETAIL WITH NO LABEL IS A SENTENCE. Left as a pair it takes the 55%
+    // column beside an empty 45% gutter, which in a mail client reads as a
+    // broken table rather than as the source line it is. One full-width cell —
+    // colspan, because that is the one thing every mail client agrees on.
+    if (!String(d?.label ?? "").trim()) {
+      return `<tr>
+      <td colspan="2" style="${border}padding:8px 0;font-family:${FONT};font-size:15px;line-height:1.45;color:${INK};vertical-align:top">${esc(d.value)}</td>
+    </tr>`;
+    }
     return `<tr>
       <td style="${border}padding:8px 12px 8px 0;font-family:${FONT};font-size:15px;line-height:1.45;color:${MUTED};vertical-align:top;width:45%">${esc(d.label)}</td>
       <td style="${border}padding:8px 0;font-family:${FONT};font-size:15px;line-height:1.45;color:${INK};vertical-align:top">${esc(d.value)}</td>
@@ -397,7 +406,13 @@ export function renderPacketEmailText(packet: Packet, opts: EmailRenderOptions):
       // recipient whose client strips HTML loses a note written for them.
       if (String(item.highlight ?? "").trim()) out.push(String(item.highlight).trim());
       for (const d of item.details ?? []) {
-        if (String(d?.value ?? "").trim()) out.push(`  ${d.label}: ${d.value}`);
+        // A DETAIL WITH NO LABEL IS A SENTENCE HERE TOO. "`  ${label}: ${value}`"
+        // renders a label-less line as "  : **The Community Fee is refundable
+        // ..." — a stray colon in front of the professional's own source
+        // wording. Same content, same decision as the other three renderers:
+        // stand it on its own, at the same indent as every other item line.
+        if (!String(d?.value ?? "").trim()) continue;
+        out.push(String(d?.label ?? "").trim() ? `  ${d.label}: ${d.value}` : `  ${d.value}`);
       }
       const { links } = resolveCardLinks(item.links, (item.contacts ?? []).map((c) => c.website));
       for (const { link, label } of links) if (safeUrl(link.url)) out.push(`  ${label}: ${link.url}`);

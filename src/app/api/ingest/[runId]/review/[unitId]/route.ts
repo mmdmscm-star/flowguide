@@ -1,16 +1,20 @@
 import { NextResponse } from "next/server";
-import { dispositionsFor, type ReviewFailure } from "@/lib/review-units";
+import { dispositionsFor, namesOneItem, type ReviewDisposition, type ReviewFailure }
+  from "@/lib/review-units";
 import { getSession } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase";
 
 type Context = { params: Promise<{ runId: string; unitId: string }> };
 
 // POST /api/ingest/:runId/review/:unitId
-//   { status: "kept_private" | "resolved" | "ignored" }
+//   { status: "kept_private" | "resolved" | "ignored" | "included" }
 //
-// `kept_private` is the disposition that DOES something: the RPC writes the
-// excerpt into that item's creator-only notes and only then settles the unit.
-// The professional chose the destination — FlowGuide still cannot.
+// TWO dispositions DO something. `kept_private` writes the excerpt into that
+// item's creator-only notes; `included` writes it as ordinary recipient-facing
+// details, one label-less row per source line. Both take their text from the
+// STORED unit inside the RPC, so the browser never sends content back — it says
+// which decision was made and nothing else. The professional chose the
+// destination; Sendset still cannot.
 //
 // THE OWNER IS THE SESSION. It is read from getSession() and from nowhere else.
 // A body-supplied owner id would reduce "resolve someone else's review" to
@@ -37,9 +41,11 @@ export async function POST(request: Request, context: Context) {
   }
   // Checked here as well as in the RPC. The database refusal is the guarantee;
   // this one exists so a typo comes back as a sentence instead of a 500.
-  if (status !== "resolved" && status !== "ignored" && status !== "kept_private") {
+  const KNOWN: ReviewDisposition[] = ["resolved", "ignored", "kept_private", "included"];
+  if (!KNOWN.includes(status as ReviewDisposition)) {
     return NextResponse.json(
-      { error: "bad_status", message: "A unit can be kept as a private note, marked handled, or left out." },
+      { error: "bad_status",
+        message: "A unit can be added to the item, kept as a private note, marked handled, or left out." },
       { status: 400 },
     );
   }
@@ -47,16 +53,22 @@ export async function POST(request: Request, context: Context) {
   const supabase = createServerClient();
 
   // NOT EVERY KIND OFFERS EVERY DECISION, and the panel is not the guarantee.
-  // A tab opened before this shipped still renders "Keep as private note" on a
-  // card holding recipient-facing material, and pressing it would write a
-  // venue's description, address, pricing and contact names into a creator-only
-  // note. The registry decides which dispositions a kind can honestly take, so
-  // it decides here too.
+  // A tab opened before a kind changed still renders whatever it rendered then,
+  // and pressing a button it should no longer show would write real content.
+  //
+  // ASKED FROM THE REGISTRY, NOT FROM A LIST HERE. The earlier version tested
+  // one disposition by name, so every future one arrived unguarded by default —
+  // the wrong direction for a check whose whole job is to refuse. Now the
+  // registry decides, and a disposition a kind does not offer is refused
+  // whatever it is called.
+  //
+  // 0047 refuses the same things in the database, which is the guarantee. This
+  // exists so the professional gets a sentence rather than a raw SQL message.
   //
   // Owner-scoped by the same query that reads the run, so this cannot be used to
-  // probe another person's runs: an unreadable run yields no kind and the RPC's
+  // probe another person's runs: an unreadable run yields no unit and the RPC's
   // own ownership check refuses whatever follows.
-  if (status === "kept_private") {
+  {
     const { data: run } = await supabase
       .from("ingestion_runs")
       .select("review")
@@ -65,10 +77,22 @@ export async function POST(request: Request, context: Context) {
       .maybeSingle();
     const failures = ((run?.review as { failures?: ReviewFailure[] } | null)?.failures ?? []);
     const unit = failures.find((f) => f?.id === unitId);
-    if (unit && !dispositionsFor(unit).includes("kept_private")) {
+    if (unit && !dispositionsFor(unit).includes(status as ReviewDisposition)) {
       return NextResponse.json(
         { error: "bad_status",
-          message: "This one is not a private note — it holds information written for your client." },
+          message: status === "kept_private"
+            ? "This one is not a private note — it holds information written for your client."
+            : "That is not one of the answers this item offers." },
+        { status: 400 },
+      );
+    }
+    // A WRITING DISPOSITION NEEDS SOMEWHERE TO WRITE. The RPC refuses a unit
+    // that names no item or more than one; saying so here turns a database
+    // exception into a sentence, and the panel hides the button anyway.
+    if (unit && (status === "included" || status === "kept_private") && !namesOneItem(unit)) {
+      return NextResponse.json(
+        { error: "bad_status",
+          message: "Sendset can't tell which item this belongs to, so it can't add it for you." },
         { status: 400 },
       );
     }

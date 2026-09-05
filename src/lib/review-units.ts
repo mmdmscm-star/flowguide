@@ -41,7 +41,7 @@ export interface ExceptionKind {
   /** Wording for the two settle buttons, where this kind's material is plural
    *  or otherwise reads wrong under the default sentence. Registry-driven for
    *  the same reason the guidance is: the panel should not know the difference. */
-  actions?: Partial<Record<"resolved" | "ignored", string>>;
+  actions?: Partial<Record<ReviewDisposition, string>>;
   /** WHICH DECISIONS THIS KIND CAN HONESTLY OFFER.
    *
    *  The panel used to render all three for every kind, which was fine while
@@ -57,11 +57,17 @@ export interface ExceptionKind {
 
 /** What a professional can decide about one unit.
  *
- *  `kept_private` is the only one that CHANGES anything: it writes the excerpt
- *  into that item's creator-only notes. The other two settle the question —
- *  one asserting the professional placed the material themselves, one
- *  discarding it deliberately. */
-export type ReviewDisposition = "kept_private" | "resolved" | "ignored";
+ *  TWO of them CHANGE something. `kept_private` writes the excerpt into that
+ *  item's creator-only notes; `included` writes it as ordinary recipient-facing
+ *  details, one label-less row per source line. The other two settle the
+ *  question — one asserting the professional placed the material themselves,
+ *  one discarding it deliberately.
+ *
+ *  Both writing dispositions are carried out by resolve_review_unit from the
+ *  STORED unit, in the same transaction that settles it, and 0047 binds each to
+ *  the kinds that may honestly take it. This registry and that function have to
+ *  agree; the function is the one that is authoritative. */
+export type ReviewDisposition = "kept_private" | "resolved" | "ignored" | "included";
 
 // WHICH KINDS MAY OFFER "KEEP AS PRIVATE NOTE", AND WHY.
 //
@@ -208,8 +214,18 @@ export const REVIEW_REQUIRED: Record<string, ExceptionKind> = {
     guidance:
       "These lines are in your source but Sendset couldn't place them in this item, " +
       "so your client won't see them. Sendset won't guess where they belong.",
-    dispositions: ["resolved", "ignored"],
-    actions: { resolved: "I added these elsewhere", ignored: "Leave them out" },
+    // AND SENDSET CAN NOW CARRY THE DECISION OUT. `included` writes each line
+    // as its own label-less detail, verbatim but for a leading list bullet,
+    // which 0047 strips and only 0047 strips. Nothing is rewritten, nothing is
+    // labelled, and nothing reaches `description`.
+    //
+    // STILL NOT A PRIVATE-NOTE DECISION. 0047 refuses kept_private for this
+    // kind in the database, for the reason the registry has always given: the
+    // lines are source material written for the client, and filing them
+    // privately would hide them from the person they were written for.
+    dispositions: ["included", "resolved", "ignored"],
+    actions: { included: "Add these to the item",
+               resolved: "I added these elsewhere", ignored: "Leave them out" },
   },
   "cross-cell-detail": {
     code: "cross_cell_detail",
@@ -302,6 +318,18 @@ export function attachItems(
   });
 }
 
+/** Does this unit name exactly ONE item to write to?
+ *
+ *  0047 (and 0043 before it) refuse to write when a unit carries no itemIds or
+ *  more than one — finalize attaches them only when the title resolves to a
+ *  single item, so an ambiguous name arrives as none rather than as a guess.
+ *  The panel asks this before offering a writing action, so a professional is
+ *  not handed a button whose only outcome is a refusal. The other dispositions
+ *  stay available: they settle the question without writing anything. */
+export function namesOneItem(f: ReviewFailure): boolean {
+  return Array.isArray(f?.itemIds) && f.itemIds.length === 1;
+}
+
 /** A failure the professional can actually decide. Everything else - a missing
  *  photo, a run that produced nothing - has its own remediation and keeps its
  *  existing exit. */
@@ -312,6 +340,9 @@ export function isResolvable(f: ReviewFailure): boolean {
 /** The decisions a kind can honestly offer. Registry-driven for the same reason
  *  the guidance is: a future kind arrives with its own answer set, and the panel
  *  does not have to know the difference. */
+// The default answer set for a kind that does not name its own. `included` is
+// NOT in it: writing recipient-facing details is offered only where the
+// registry says so, and 0047 refuses it everywhere else regardless.
 const ALL_DISPOSITIONS: ReviewDisposition[] = ["kept_private", "resolved", "ignored"];
 export function dispositionsFor(f: ReviewFailure): ReviewDisposition[] {
   return REVIEW_REQUIRED[f?.kind ?? ""]?.dispositions ?? ALL_DISPOSITIONS;
@@ -323,7 +354,7 @@ export function headlineFor(f: ReviewFailure): string | null {
 }
 
 /** What a settle button should say for this kind. */
-export function actionLabel(f: ReviewFailure, d: "resolved" | "ignored", fallback: string): string {
+export function actionLabel(f: ReviewFailure, d: ReviewDisposition, fallback: string): string {
   return REVIEW_REQUIRED[f?.kind ?? ""]?.actions?.[d] ?? fallback;
 }
 

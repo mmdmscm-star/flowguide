@@ -1032,15 +1032,24 @@ test("the panel renders actions from the registry, not a hardcoded three", () =>
     "the non-private card does not warn that both buttons clear the held copy");
 });
 
-test("the server refuses kept_private for a kind that does not offer it", () => {
-  // The panel is not the guarantee: a tab opened before this shipped still
-  // shows the button.
-  assert.ok(/if \(status === "kept_private"\)/.test(routeSource),
-    "the route accepts any disposition for any kind");
-  assert.ok(/dispositionsFor\(unit\)\.includes\("kept_private"\)/.test(routeSource),
-    "the route does not consult the registry");
+test("the server refuses ANY disposition a kind does not offer", () => {
+  // The panel is not the guarantee: a tab opened before a kind changed still
+  // shows whatever it showed then.
+  //
+  // THE CHECK IS NO LONGER PER-DISPOSITION. It used to name kept_private, so
+  // every disposition added afterwards arrived unguarded by default — the wrong
+  // direction for a rule whose whole job is to refuse. It now asks the registry
+  // about whatever was sent.
+  assert.ok(/dispositionsFor\(unit\)\.includes\(status as ReviewDisposition\)/.test(routeSource),
+    "the route does not ask the registry about the disposition it was actually sent");
+  assert.ok(!/if \(status === "kept_private"\) \{/.test(routeSource),
+    "the route still gates on one named disposition, so a new one would slip past");
   assert.ok(/\.eq\("user_id", session\.userId\)/.test(routeSource),
     "the route's lookup is not owner-scoped");
+  // A disposition that WRITES needs somewhere to write, and the RPC refuses a
+  // unit naming no item or two. The route says so in a sentence first.
+  assert.ok(/namesOneItem\(unit\)/.test(routeSource),
+    "the route offers a writing disposition on a unit with no resolved item");
 });
 
 test("ACKNOWLEDGEMENT WRITES NOTHING, and discard is the only other option", () => {
@@ -1094,9 +1103,12 @@ test("A STALE CLIENT'S kept_private IS REJECTED, for every restricted kind", () 
   for (const kind of ["cross-cell-detail", "unbound-recipient-content"])
     assert.equal(dispositionsFor(unit(kind)).includes("kept_private"), false, kind);
 
+  // source-details-omitted joins them, and 0047 refuses it in the database too.
+  assert.equal(dispositionsFor(unit("source-details-omitted")).includes("kept_private"), false);
+
   // And the route asks the registry rather than naming kinds, which is what
   // makes the line above true of cross_cell_detail without touching the route.
-  assert.ok(/dispositionsFor\(unit\)\.includes\("kept_private"\)/.test(routeSource),
+  assert.ok(/dispositionsFor\(unit\)\.includes\(status as ReviewDisposition\)/.test(routeSource),
     "the route does not consult the registry");
   for (const code of ["cross_cell_detail", "unbound_recipient_content", "privacy_rejected"])
     assert.ok(!routeSource.includes(code),

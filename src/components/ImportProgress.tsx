@@ -2,7 +2,7 @@
 import { useEffect, useRef } from "react";
 import { useIngestion } from "@/lib/useIngestion";
 import { isResolvable, hasUnresolvableBlocker, guidanceFor, dispositionsFor,
-         headlineFor, actionLabel } from "@/lib/review-units";
+         headlineFor, actionLabel, namesOneItem } from "@/lib/review-units";
 
 // Drives (resumes) a persisted ingestion run and shows real progress. Rendered
 // whenever a packet has an active run — from a fresh Organize, an Add-with-AI, or
@@ -166,6 +166,22 @@ export default function ImportProgress({
                   the whole item from the person it was written for, behind a
                   button that reads like the cautious choice. */}
               <div className="mt-2 flex flex-wrap items-center gap-2">
+                {/* THE BUTTON THAT ADDS THE MATERIAL, when the kind offers it
+                    AND the unit names exactly one item to add it to.
+                    resolve_review_unit refuses a unit that names none or two —
+                    finalize attaches itemIds only when the title resolves to a
+                    single item — so offering it there would hand the
+                    professional a button whose only outcome is a refusal. The
+                    other two answers stay: they settle without writing. */}
+                {dispositionsFor(f).includes("included") && namesOneItem(f) && (
+                  <button
+                    disabled={resolving === f.id}
+                    onClick={() => resolveUnit(f.id, "included")}
+                    className="px-2.5 py-1 rounded-md bg-amber-700 text-white text-xs font-medium hover:bg-amber-800 disabled:opacity-60"
+                  >
+                    {resolving === f.id ? "Adding\u2026" : actionLabel(f, "included", "Add these to the item")}
+                  </button>
+                )}
                 {dispositionsFor(f).includes("kept_private") && (
                   <button
                     disabled={resolving === f.id}
@@ -197,9 +213,11 @@ export default function ImportProgress({
                   paths clear FlowGuide\u2019s copy of this text, which the
                   professional should know before pressing one. */}
               <p className="mt-1.5 text-[11px] text-muted/80">
-                {dispositionsFor(f).includes("kept_private")
-                  ? "Only you would see a private note. \u201cI added it elsewhere\u201d just closes this \u2014 Sendset does not move the text for you."
-                  : "Sendset does not move this for you. Copy anything you still need before closing this \u2014 either button clears Sendset\u2019s copy."}
+                {dispositionsFor(f).includes("included")
+                  ? "Adding puts each line into this item using your source wording. The other two just close this \u2014 and they clear Sendset\u2019s copy, so save anything you still need first."
+                  : dispositionsFor(f).includes("kept_private")
+                    ? "Only you would see a private note. \u201cI added it elsewhere\u201d just closes this \u2014 Sendset does not move the text for you."
+                    : "Sendset does not move this for you. Copy anything you still need before closing this \u2014 either button clears Sendset\u2019s copy."}
               </p>
             </li>
           ))}

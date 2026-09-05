@@ -189,9 +189,9 @@ test("KEEP_TOGETHER ONLY — auto is not touched", () => {
   assert.deepEqual(a.reviewUnits.filter((u) => u.kind === "source-details-omitted"), []);
 });
 
-test("THE CARD OFFERS ONLY THE TWO HONEST ANSWERS", () => {
+test("THE CARD OFFERS ONLY THE THREE HONEST ANSWERS", () => {
   const f = { id: "u", code: "source_details_omitted", kind: "source-details-omitted" } as ReviewFailure;
-  assert.deepEqual(dispositionsFor(f), ["resolved", "ignored"],
+  assert.deepEqual(dispositionsFor(f), ["included", "resolved", "ignored"],
     "the omission card offers a disposition it cannot honestly take");
   assert.ok(!dispositionsFor(f).includes("kept_private"),
     "it offers to file the client's own source material privately");

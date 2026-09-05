@@ -177,6 +177,11 @@
 .pg-detail-row + .pg-detail-row { border-top: 1px solid #e3e6ea; }
 .pg-detail-label { color: #5b6570; font-weight: 500; min-width: 0; }
 .pg-detail-value { text-align: right; overflow-wrap: anywhere; }
+/* A DETAIL WITH NO LABEL IS A SENTENCE, not the right-hand half of a pair.
+   Source lines accepted from a review card carry no label, because the source
+   gave them none. Printed against the right margin they read as an error. */
+.pg-detail-row--bare { display: block; }
+.pg-detail-row--bare .pg-detail-value { text-align: left; }
 
 /* ---- links and contacts ---------------------------------------------------
  * A hyperlink is useless on paper, so every destination is printed as its URL.
