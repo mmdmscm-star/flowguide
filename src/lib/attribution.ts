@@ -60,6 +60,25 @@ export function recordEnvelopes(source: string, delimiterHint?: string): Envelop
   });
 }
 
+/** HOW THE SOURCE IS PUNCTUATED — one answer, for everyone who asks.
+ *
+ *  The declared hint where the professional supplied one, and otherwise a guess
+ *  read off the first record the tiling produced: whichever candidate splits
+ *  that heading into the most columns. Exported because enforcement and the
+ *  omission check both have to read the source the same way — a second copy of
+ *  this inference is a second opinion, and the two would disagree exactly when
+ *  a claim was parsed one way and audited the other. */
+export function inferDelimiter(source: string, delimiterHint?: string | null): string | null {
+  if (delimiterHint) return delimiterHint;
+  const env = recordEnvelopes(String(source ?? ""), undefined);
+  if (!env || !env.length) return null;
+  const headerRow = String(source ?? "").slice(env[0].start, env[0].end);
+  return [",", "\t", ";", "|"]
+    .map((d) => ({ d, n: headerRow.split(d).length }))
+    .sort((a, b) => b.n - a.n)
+    .filter((x) => x.n >= 3)[0]?.d ?? null;
+}
+
 export type Attributed<T> = { item: T; record: number | null };
 
 /** Attach each claim/fragment to the envelope whose span contains it.

@@ -1,4 +1,4 @@
-import { collapseToOneItem, type CollapsibleItem } from "./collapse-item.ts";
+import { collapseToOneItem, type CollapsibleItem, type CollapsedItem } from "./collapse-item.ts";
 import { keepsTogether, type Grouping } from "./grouping.ts";
 
 // KEEP_TOGETHER IS A FACT ABOUT THE RUN, NOT ABOUT A CHUNK.
@@ -49,12 +49,21 @@ export interface ChunkRow {
   status: string;
   source_start: number;
   result: unknown;
+  /** The segment the model was actually given. Carried out with the fold so the
+   *  omission check can parse exactly what enforcement parsed, rather than
+   *  re-reading the whole source and getting a different answer. */
+  segment_text?: string | null;
 }
 
 export type CollapseOutcome =
   /** Not a keep_together run, or nothing to fold. Nothing was written. */
   | { kind: "skipped"; reason: string }
-  | { kind: "collapsed"; chunksFolded: number; itemsFolded: number }
+  | { kind: "collapsed"; chunksFolded: number; itemsFolded: number;
+      /** The one item this run would publish, and the run's segments in source
+       *  order. Returned rather than re-read: this is the last point where the
+       *  assembled item exists in memory, and the omission check must ask its
+       *  question about THIS object. */
+      item: CollapsedItem; segments: { ordinal: number; segmentText: string }[] }
   | { kind: "error"; message: string };
 
 const sectionsOf = (result: unknown): { title?: unknown; description?: unknown; items?: unknown }[] => {
@@ -78,7 +87,7 @@ export async function collapseRunToOneItem(
 
   const { data, error } = await db
     .from("ingestion_chunks")
-    .select("ordinal, status, source_start, result")
+    .select("ordinal, status, source_start, result, segment_text")
     .eq("run_id", runId)
     .order("source_start", { ascending: true });
   if (error) return { kind: "error", message: error.message };
@@ -137,5 +146,9 @@ export async function collapseRunToOneItem(
     if (e) return { kind: "error", message: e.message };
   }
 
-  return { kind: "collapsed", chunksFolded: leaves.length, itemsFolded: items.length };
+  return {
+    kind: "collapsed", chunksFolded: leaves.length, itemsFolded: items.length,
+    item: collapsed,
+    segments: leaves.map((l) => ({ ordinal: l.ordinal, segmentText: String(l.segment_text ?? "") })),
+  };
 }

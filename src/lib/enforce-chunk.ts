@@ -11,8 +11,10 @@
 import { parseClaims } from "./claim-parser.ts";
 import { keepsTogether, type Grouping } from "./grouping.ts";
 import { recordEnvelopes, attributeAll, bindByProvenance, sourceCells, spansCells,
-  type SourceCells } from "./attribution.ts";
+  inferDelimiter, type SourceCells } from "./attribution.ts";
 import { reconcile } from "./reconcile.ts";
+import { declaredEnvelopes, partitionAcrossItems, emptyGroup, DECLARED_RECORD }
+  from "./declared-record.ts";
 import { enforceItem, audienceSourceOf, contractEnforcementEnabled } from "./enforce.ts";
 import { locate } from "./placement.ts";
 import { specializedValueKind, type Claim } from "./claim-parser.ts";
@@ -198,31 +200,42 @@ export function enforceChunkResult(opts: {
   // pricing table carries no email, URL or phone, and anchorsOf recognises
   // nothing else, so every proposal fails and every row becomes a card.
   //
-  // THIS IS NOT A SUPPRESSED GUARD. The unbound rule's own precondition is that
-  // the source produced records and a proposal could not be matched to one; with
-  // one declared record there is no other record to have been matched to
-  // instead. Nothing is disabled, no branch skips a check, and every other
-  // guard — price, completeness, source-support, privacy, cross-cell — runs
-  // exactly as it does under auto. What changes is the declared record count.
-  const env = keepsTogether(grouping)
-    ? null
-    : recordEnvelopes(sourceText, delimiterHint ?? undefined);
+  // THIS IS NOT A SUPPRESSED GUARD, AND IT IS NOT AN ABSENCE OF ONE EITHER.
+  // The declaration REPLACES anchor matching as the record association; it does
+  // not remove the association. Every proposal for the declared record is bound
+  // to it and governed exactly as a bound proposal is under auto. The first
+  // version of this returned null here, which meant no records, no binding and
+  // no governance at all — production ran six chunks with itemsGoverned: 0.
+  const declared = keepsTogether(grouping);
+  // AUTOMATIC TILING IS STILL COMPUTED UNDER keep_together — for PUNCTUATION,
+  // never for the record count. How a source is delimited is a fact about the
+  // document; how many records it holds is the question the creator answered.
+  // Conflating them cost a price: suppressing the tiling suppressed the
+  // delimiter, the claim parser then mis-split a four-column row, and
+  // enforcement overwrote "490 sq ft, $6,396" with half of itself.
+  const autoEnv = recordEnvelopes(sourceText, delimiterHint ?? undefined);
+  const env = declared
+    ? declaredEnvelopes(sourceText, String(grouping?.title ?? ""))
+    : autoEnv;
   const envByIndex = new Map((env ?? []).map((e) => [e.index, e]));
   // The heading row is the first record the tiling produced. The delimiter is
   // the declared one where the file supplied it, and is otherwise inferred from
   // the heading itself — whichever candidate splits it into the most columns.
-  const headerRow = env && env.length ? sourceText.slice(env[0].start, env[0].end) : null;
-  const delimiter = delimiterHint
-    || (headerRow ? [",", "\t", ";", "|"]
-        .map((d) => ({ d, n: headerRow.split(d).length }))
-        .sort((a, b) => b.n - a.n)
-        .filter((x) => x.n >= 3)[0]?.d ?? null
-      : null);
+  const headerRow = autoEnv && autoEnv.length ? sourceText.slice(autoEnv[0].start, autoEnv[0].end) : null;
+  // ONE DEFINITION, shared with the omission check, so a line cannot be parsed
+  // as a claim here and audited as prose there.
+  const delimiter = inferDelimiter(sourceText, delimiterHint);
   // THE PARSER GETS THE DELIMITER TOO. Reading the source's structure in one
   // place and not the other is how a quoted multiline cell came to be parsed as
   // a bare line and ran on through three columns.
   const parsed = parseClaims(segmentText, chunkOrdinal, { delimiter });
   const a = attributeAll(parsed.claims, parsed.ambiguous, parsed.fragments, env, sourceStart);
+  // A CHUNK WITH NO PARSEABLE SOURCE UNITS STILL HAS PROPOSALS. Two of the six
+  // Spring Lake chunks parsed zero claims — they are prose — and a governance
+  // loop driven by byRecord would have skipped their items entirely. The
+  // declared record exists because the creator said so, not because a claim
+  // landed in it, so it is present whether or not anything parsed.
+  if (declared && !a.byRecord.has(DECLARED_RECORD)) a.byRecord.set(DECLARED_RECORD, emptyGroup());
   const t: EnforcementTelemetry = { ...empty(), scope };
   const unresolved: UnresolvedUnit[] = [];
   t.attributionUnresolved = a.unattributedClaims.length + a.unattributedAmbiguous.length;
@@ -239,7 +252,15 @@ export function enforceChunkResult(opts: {
   // Nothing is truncated and nothing is repaired: the value goes out whole, to
   // a question. Only `details` are examined, because that is the recipient-
   // facing destination whose values are supposed to BE single source cells.
-  const cells = delimiter ? sourceCells(sourceText, delimiter) : null;
+  //
+  // AND IT CANNOT SPEAK WHEN THERE IS ONE RECORD. Its whole subject is a value
+  // that ran from one record into the next; with a single creator-declared
+  // record there is no next one to run into, and the instruction the model was
+  // given asks for exactly this aggregation — "everything the source says
+  // belongs to that one item, as its details". Enforcing it here would strip
+  // "490 sq ft, $6,396" as a spill when it is the requested output. Same
+  // reasoning as the unbound rule, whose precondition also fails here.
+  const cells = delimiter && !declared ? sourceCells(sourceText, delimiter) : null;
   // Collected from every pass and surfaced ONCE, at the end. The model and the
   // claim parser mis-split the same field in the same way, so the same excerpt
   // arrives from two directions; one excerpt is one decision.
@@ -260,7 +281,15 @@ export function enforceChunkResult(opts: {
   // `scanned` is what everything downstream sees. Keeping the original array
   // around to fall back on would be exactly the silent second source of truth
   // this contract exists to prevent.
-  const bound = env ? bindByProvenance(env, sourceText, scanned).bound : new Map<number, Record<string, unknown>>();
+  // WHO OWNS WHICH PROPOSAL. Anchor matching under auto, the creator's own
+  // declaration under keep_together — and a record may hold SEVERAL proposals,
+  // because the model is asked for one item and does not always return one.
+  // bindByProvenance is neither called nor changed on the declared path.
+  const boundItems: Map<number, Record<string, unknown>[]> = declared
+    ? new Map([[DECLARED_RECORD, scanned]])
+    : new Map([...(env ? bindByProvenance(env, sourceText, scanned).bound
+                        : new Map<number, Record<string, unknown>>())]
+        .map(([rec, it]) => [rec, [it]]));
   // THE CHUNK IS NOT THE RECORD — AND THE RECORD IS NOT THE FIELD.
   //
   // Authority used to be read from the whole chunk and handed to every record
@@ -280,85 +309,110 @@ export function enforceChunkResult(opts: {
   // start/end are that tiling. When a record has no envelope there is no proof
   // of what it owns, so nothing is authorised and the note is surfaced for a
   // decision — fail closed, exactly as before.
+  // THIS RECORD'S OWN TEXT. The whole source for a creator-declared record,
+  // the envelope's span otherwise — the same slice the audience reading uses,
+  // and the only thing that can tell a displaced source fact from a model
+  // flourish when a detail is canonicalized.
+  const recordTextFor = (rec: number): string => {
+    if (declared) return sourceText;
+    const e = envByIndex.get(rec);
+    return e ? sourceText.slice(e.start, e.end) : "";
+  };
   const EMPTY_AUDIENCE = { private: "", undecided: "" };
   const audienceFor = (rec: number): { private: string; undecided: string } => {
     const e = envByIndex.get(rec);
     if (!e) return EMPTY_AUDIENCE;
+    // THE DECLARED RECORD IS THE WHOLE SOURCE, AND IT IS NOT A ROW. Reading its
+    // audience cell by cell would split the entire document on a delimiter and
+    // ask which column each fragment came from, which is meaningless; the
+    // line-wise reading is the honest one, and it is the same one every
+    // undelimited source already gets.
+    if (declared) return audienceSourceOf(sourceText, { headerRow: null, delimiter: null });
     // The heading is not a record with content of its own; it names columns.
     if (env && env.length && e.index === env[0].index) return EMPTY_AUDIENCE;
     return audienceSourceOf(sourceText.slice(e.start, e.end), { headerRow, delimiter });
   };
   const replaced = new Map<Record<string, unknown>, Record<string, unknown>>();
 
-  for (const [rec, g] of a.byRecord) {
-    const item = bound.get(rec);
-    if (!item) { t.attributionUnresolved += g.claims.length + g.ambiguous.length; continue; }
-    // A CLAIM THAT SPANS CELLS IS NOT A CLAIM ABOUT THIS FIELD.
-    //
-    // Dropped BEFORE reconciliation rather than after, because a materialized
-    // spanning claim does not merely add a bad detail — it can REPLACE a good
-    // one. The Foundry Hall proposed its cleaning fee correctly as "$800" and
-    // enforcement overwrote it with the next three columns, on the authority of
-    // a claim the parser had mis-split. Refusing the claim leaves "$800" alone.
-    //
-    // CLAIMS ONLY. An ambiguous unit never reaches `details` — it resolves to
-    // SOURCE_UNRESOLVED, which is recorded and shown to nobody — so filtering it
-    // here would remove nothing from the recipient and would only make the
-    // ledger less complete.
-    const gc = cells ? partitionSpanning(g.claims, cells, (c) => c.value)
-                     : { kept: g.claims, rejected: [] as Claim[] };
-    for (const c of gc.rejected)
-      crossCell.push({ record: rec, title: String(item.title ?? ""),
-                       label: c.label ?? "", value: c.value });
-    const res = reconcile({ claims: gc.kept, ambiguous: g.ambiguous, fragments: g.fragments }, item);
-    const audience = audienceFor(rec);
-    const e = enforceItem(item, res.resolutions, gc.kept,
-      { privateSource: audience.private, undecidedSource: audience.undecided });
-    t.accepted += res.counts.accepted; t.repaired += res.counts.repaired;
-    t.sourceUnresolved += res.counts.sourceUnresolved;
-    t.stripped += e.stripped.length;
-    t.itemsGoverned++;
+  for (const [rec, group] of a.byRecord) {
+    const recItems = boundItems.get(rec) ?? [];
+    if (!recItems.length) { t.attributionUnresolved += group.claims.length + group.ambiguous.length; continue; }
+    // EVERY PROPOSAL FOR THIS RECORD IS GOVERNED, not just the first. Each
+    // source unit is assigned to exactly one of them first, so a fact the
+    // model placed in the second proposal is ACCEPTED there rather than being
+    // restored into all of them. See declared-record.ts for why.
+    const groups = partitionAcrossItems(group, recItems);
+    for (let pi = 0; pi < recItems.length; pi++) {
+      const item = recItems[pi];
+      const g = groups[pi];
+      // A CLAIM THAT SPANS CELLS IS NOT A CLAIM ABOUT THIS FIELD.
+      //
+      // Dropped BEFORE reconciliation rather than after, because a materialized
+      // spanning claim does not merely add a bad detail — it can REPLACE a good
+      // one. The Foundry Hall proposed its cleaning fee correctly as "$800" and
+      // enforcement overwrote it with the next three columns, on the authority of
+      // a claim the parser had mis-split. Refusing the claim leaves "$800" alone.
+      //
+      // CLAIMS ONLY. An ambiguous unit never reaches `details` — it resolves to
+      // SOURCE_UNRESOLVED, which is recorded and shown to nobody — so filtering it
+      // here would remove nothing from the recipient and would only make the
+      // ledger less complete.
+      const gc = cells ? partitionSpanning(g.claims, cells, (c) => c.value)
+                       : { kept: g.claims, rejected: [] as Claim[] };
+      for (const c of gc.rejected)
+        crossCell.push({ record: rec, title: String(item.title ?? ""),
+                         label: c.label ?? "", value: c.value });
+      const res = reconcile({ claims: gc.kept, ambiguous: g.ambiguous, fragments: g.fragments }, item);
+      const audience = audienceFor(rec);
+      const e = enforceItem(item, res.resolutions, gc.kept,
+        { privateSource: audience.private, undecidedSource: audience.undecided,
+          recordSource: recordTextFor(rec) });
+      t.accepted += res.counts.accepted; t.repaired += res.counts.repaired;
+      t.sourceUnresolved += res.counts.sourceUnresolved;
+      t.stripped += e.stripped.length;
+      t.itemsGoverned++;
 
-    // RECIPIENT-INTENDED PROSE THAT LOST ITS PRIVATE FIELD BECOMES AN EXPLICIT
-    // UNRESOLVED UNIT — attached to its record, never placed automatically.
-    //
-    // An earlier version appended it to `description`, which would have turned
-    // description into exactly the narrative overflow field we decided not to
-    // create. Choosing a destination on the professional's behalf is the same
-    // class of error as the model choosing `notes`: it looks tidy and it hides
-    // a decision nobody made.
-    for (const un of e.unresolvedNotes) {
-      t.privacyRejected++;
-      unresolved.push({ record: rec, title: String(item.title ?? "") || null,
-        kind: "privacy-rejected", text: un.text, reason: un.reason });
+      // RECIPIENT-INTENDED PROSE THAT LOST ITS PRIVATE FIELD BECOMES AN EXPLICIT
+      // UNRESOLVED UNIT — attached to its record, never placed automatically.
+      //
+      // An earlier version appended it to `description`, which would have turned
+      // description into exactly the narrative overflow field we decided not to
+      // create. Choosing a destination on the professional's behalf is the same
+      // class of error as the model choosing `notes`: it looks tidy and it hides
+      // a decision nobody made.
+      for (const un of e.unresolvedNotes) {
+        t.privacyRejected++;
+        unresolved.push({ record: rec, title: String(item.title ?? "") || null,
+          kind: "privacy-rejected", text: un.text, reason: un.reason });
+      }
+      // WHAT THE AUDIENCE SWEEP TOOK OUT. A removal whose content is already held
+      // privately is a duplicate and asks nothing; everything else becomes a
+      // question, so nothing is removed and lost in the same motion.
+      //
+      // ONE DECISION PER ITEM PER AUDIENCE STATE. The Foundry Annex had two
+      // planner sentences folded into its description; they are one question
+      // about one column, not two, and splitting them would make the review queue
+      // a function of the model's sentence breaks.
+      t.audienceRemoved += e.audienceRemoved.length;
+      for (const state of ["undecided", "private"] as const) {
+        const parts = e.audienceRemoved.filter((a) => a.state === state && !a.kept);
+        if (!parts.length) continue;
+        const where = [...new Set(parts.map((a) => a.where))].join(", ");
+        unresolved.push({
+          record: rec, title: String(item.title ?? "") || null,
+          kind: state === "undecided" ? "audience-undecided" : "private-shown",
+          text: parts.map((a) => a.text).join(" "),
+          reason: state === "undecided"
+            ? `the source column this came from declares its audience undecided; it was proposed in ${where}`
+            : `the source marks this private and it was proposed in ${where}, with no private copy kept`,
+        });
+      }
+      for (const r of res.resolutions.filter((x) => x.outcome === "SOURCE_UNRESOLVED")) {
+        unresolved.push({ record: rec, title: String(item.title ?? "") || null,
+          kind: "source-unresolved", text: r.value, reason: r.why });
+      }
+      replaced.set(item, e.item);
     }
-    // WHAT THE AUDIENCE SWEEP TOOK OUT. A removal whose content is already held
-    // privately is a duplicate and asks nothing; everything else becomes a
-    // question, so nothing is removed and lost in the same motion.
-    //
-    // ONE DECISION PER ITEM PER AUDIENCE STATE. The Foundry Annex had two
-    // planner sentences folded into its description; they are one question
-    // about one column, not two, and splitting them would make the review queue
-    // a function of the model's sentence breaks.
-    t.audienceRemoved += e.audienceRemoved.length;
-    for (const state of ["undecided", "private"] as const) {
-      const parts = e.audienceRemoved.filter((a) => a.state === state && !a.kept);
-      if (!parts.length) continue;
-      const where = [...new Set(parts.map((a) => a.where))].join(", ");
-      unresolved.push({
-        record: rec, title: String(item.title ?? "") || null,
-        kind: state === "undecided" ? "audience-undecided" : "private-shown",
-        text: parts.map((a) => a.text).join(" "),
-        reason: state === "undecided"
-          ? `the source column this came from declares its audience undecided; it was proposed in ${where}`
-          : `the source marks this private and it was proposed in ${where}, with no private copy kept`,
-      });
-    }
-    for (const r of res.resolutions.filter((x) => x.outcome === "SOURCE_UNRESOLVED")) {
-      unresolved.push({ record: rec, title: String(item.title ?? "") || null,
-        kind: "source-unresolved", text: r.value, reason: r.why });
-    }
-    replaced.set(item, e.item);
   }
   // =========================================================================
   // WHOLE-SOURCE FALLBACK — an unowned fact is still a fact.
@@ -401,7 +455,10 @@ export function enforceChunkResult(opts: {
   // Only `notes` is governed here, because that is the field whose meaning is
   // "the client will never see this". A proposal FlowGuide could not attribute
   // is left otherwise untouched.
-  const governed = new Set(bound.values());
+  // Bound is bound, however the association was established: by anchor under
+  // auto, by the creator's declaration under keep_together. An item in here
+  // has been governed, so the unbound rule has nothing to say about it.
+  const governed = new Set([...boundItems.values()].flat());
   for (const it of scanned) {
     if (governed.has(it)) continue;
     const note = String(it.notes ?? "");
@@ -534,7 +591,8 @@ export function enforceChunkResult(opts: {
   }
 
   const ungoverned: Claim[] = [...a.unattributedClaims];
-  for (const [rec, g] of a.byRecord) if (!bound.get(rec)) ungoverned.push(...g.claims);
+  for (const [rec, g] of a.byRecord)
+    if (!(boundItems.get(rec) ?? []).length) ungoverned.push(...g.claims);
 
   const seen = new Set<string>();
   for (const c of ungoverned) {

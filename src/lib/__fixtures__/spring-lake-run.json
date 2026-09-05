@@ -1,0 +1,648 @@
+{
+  "note": "Spring Lake Village — the real production transcription of three photographed brochure pages, plus the per-chunk results of the run that structured it under `auto` (these are the STAGED results, i.e. already past that run's own enforcement) and the single item the `keep_together` run published.",
+  "sourceText": "Residential Living\nMonthly Fee Agreement\n2026 - 2027\n\nA Month-to-Month Agreement gives you the ability to simply pay a one time Community Fee and\nan ongoing monthly fee. We are offering a select grouping of studio and one-bedroom apartments.\n\nSelect Apartments\tMONTHLY FEE*\n\nLittle River\t$6,396\nStudio Apartment, 490 sq ft\n\nTimber Cove\t$6,493\nAlcove Apartment, 530 sq ft\n\nForestville\t$6,545\n1 Bedroom, 1 Bathroom, 580 sq ft\n\nFulton\t$7,077\n1 Bedroom, 1 Bathroom, 650 sq ft\n\nGlen Ellen\t$8,879\n1 Bedroom, 1 Bathroom, 690 sq ft\n\nLakeville\t$9,665\n1 Bedroom, 1 Bathroom, 730 sq ft\n\n2nd person\t+$1,085\n\nCommunity Fee**\t$6,500\nNon-refundable Application Fee\t$500\n\n*Your monthly fee is subject to annual increases and additional charges will apply for personal assistance services.\n**The Community Fee is refundable according to the terms of the admission agreement.\n\nFees listed are as of April 1, 2026 and are subject to change.\n\nGreat life, beautiful setting.\n\nSurrounded by rolling hills, vineyards and Santa Rosa Creek, Spring Lake Village is a naturally beautiful place to live. Add to that the good people who call this community home and you have a recipe for a great lifestyle. This is a place where life is enjoyed. Whether you're sipping wine by the firepit, playing in a bocce tournament, enjoying one of the topnotch eateries, taking a class or listening to an impromptu concert in the Great Hall, you have plenty of options. Our residents share a love for easy living with the comforts of home.\n\nSpring Lake Village offers an opportunity to join the community under a monthly agreement with no entrance fee.\n\nEVERYTHING YOU NEED\n- Lots of ways to lead a meaningful life\n- Dining options to suit any taste\n- Gardens, courtyards, classes and activities\n- Lake walks, hiking trails and bocce\n- Bustling, down-to-earth community\n- Participative and wellness-focused culture\n- 24-hour security\n- Independent living, assisted living, skilled nursing and memory care available\n\nAll the ingredients for\nan engaging life.\n\nStay engaged, be involved and get creative with all kinds of opportunities and amenities.\nTake advantage of our award-winning wellness programs, offering everything from water\naerobics and line dancing to yoga and Tai Chi. Keep your calendar full with activities,\nincluding lectures, bocce tournaments and book clubs.\n\nCOMMUNITY AMENITIES\n\n- Flexible dining plan offering dining points\n  equal to one meal daily for our lively Bistro,\n  elegant Sonoma Room or take out service\n\n- Wide variety of resident-initiated and\n  organized social, cultural, educational and\n  recreational programs and events\n\n- Personalized programs and resources for\n  body, mind and spirit\n\n- Scheduled transportation\n\n- Lush landscaping with courtyards, walking\n  paths and beautiful resident-tended gardens\n\n- Studios for art, media, cultural\n  programs and wood shop\n\n- Spacious auditorium, beautiful Great Hall,\n  theater, lounge, conference space and\n  meeting rooms for social gathering\n\n- Library, media room, billiards room, chapel,\n  contemplative labyrinth and boutique gift\n  shop\n\n- Fitness center with heated indoor swimming\n  pool and spa and cardio and weight\n  equipment designed for older people\n\n- Floor- and water-based exercise classes with\n  options for personal training\n\n- Massage, skin, hair and nail care salon\n  services for an additional fee\n\n- Parking for an additional fee and electric\n  charging port\n\n- Pets welcome\n\n- Dog run\n\n- On-site bank\n\nHOUSEHOLD AMENITIES\n\n- Inviting kitchen with upscale appliances\n\n- Washer and dryer and ample closets\n\n- Interior and exterior maintenance\n\n- Housekeeping and flat linen service, bi-monthly\n\n- Electricity, gas, heat, air conditioning, water,\n  sewer, trash removal, Wi-Fi\n\n- 24-hour security\n\n- Emergency response system\n\nADDITIONAL MONTHLY FEES:\n\nBasic Cable: $27\nTelephone Land Line: $5\nParking: Covered $50; Uncovered $28\nPersonal Internet\n\nspringlakevillage-sr.org\n\nWe're an equal opportunity housing provider.\nLicense #301016556 / COA #357",
+  "sourceLen": 4015,
+  "delimiterHint": null,
+  "chunks": [
+    {
+      "ordinal": 0,
+      "status": "completed",
+      "sourceStart": 0,
+      "sourceEnd": 473,
+      "segmentText": "Residential Living\nMonthly Fee Agreement\n2026 - 2027\n\nA Month-to-Month Agreement gives you the ability to simply pay a one time Community Fee and\nan ongoing monthly fee. We are offering a select grouping of studio and one-bedroom apartments.\n\nSelect Apartments\tMONTHLY FEE*\n\nLittle River\t$6,396\nStudio Apartment, 490 sq ft\n\nTimber Cove\t$6,493\nAlcove Apartment, 530 sq ft\n\nForestville\t$6,545\n1 Bedroom, 1 Bathroom, 580 sq ft\n\nFulton\t$7,077\n1 Bedroom, 1 Bathroom, 650 sq ft\n\n",
+      "result": {
+        "sections": [
+          {
+            "items": [
+              {
+                "links": [],
+                "notes": null,
+                "title": "Little River Studio Apartment",
+                "photos": [],
+                "address": null,
+                "details": [],
+                "contacts": [],
+                "description": ""
+              },
+              {
+                "links": [],
+                "notes": null,
+                "title": "Timber Cove Alcove Apartment",
+                "photos": [],
+                "address": null,
+                "details": [],
+                "contacts": [],
+                "description": ""
+              },
+              {
+                "links": [],
+                "notes": null,
+                "title": "Forestville 1 Bedroom Apartment",
+                "photos": [],
+                "address": null,
+                "details": [],
+                "contacts": [],
+                "description": ""
+              },
+              {
+                "links": [],
+                "notes": null,
+                "title": "Fulton 1 Bedroom Apartment",
+                "photos": [],
+                "address": null,
+                "details": [],
+                "contacts": [],
+                "description": ""
+              }
+            ],
+            "title": "Month-to-Month Apartment Options",
+            "description": "A Month-to-Month Agreement gives you the ability to simply pay a one time Community Fee and an ongoing monthly fee. We are offering a select grouping of studio and one-bedroom apartments."
+          }
+        ]
+      }
+    },
+    {
+      "ordinal": 1,
+      "status": "completed",
+      "sourceStart": 473,
+      "sourceEnd": 955,
+      "segmentText": "Glen Ellen\t$8,879\n1 Bedroom, 1 Bathroom, 690 sq ft\n\nLakeville\t$9,665\n1 Bedroom, 1 Bathroom, 730 sq ft\n\n2nd person\t+$1,085\n\nCommunity Fee**\t$6,500\nNon-refundable Application Fee\t$500\n\n*Your monthly fee is subject to annual increases and additional charges will apply for personal assistance services.\n**The Community Fee is refundable according to the terms of the admission agreement.\n\nFees listed are as of April 1, 2026 and are subject to change.\n\nGreat life, beautiful setting.\n\n",
+      "result": {
+        "sections": [
+          {
+            "items": [
+              {
+                "links": [],
+                "notes": null,
+                "title": "Glen Ellen Floor Plan",
+                "photos": [],
+                "address": null,
+                "details": [],
+                "contacts": [],
+                "description": null
+              },
+              {
+                "links": [],
+                "notes": null,
+                "title": "Lakeville Floor Plan",
+                "photos": [],
+                "address": null,
+                "details": [],
+                "contacts": [],
+                "description": null
+              },
+              {
+                "links": [],
+                "notes": null,
+                "title": "Additional Fees",
+                "photos": [],
+                "address": null,
+                "details": [],
+                "contacts": [],
+                "description": ""
+              }
+            ],
+            "title": "Pricing Information",
+            "description": "Great life, beautiful setting."
+          }
+        ]
+      }
+    },
+    {
+      "ordinal": 2,
+      "status": "completed",
+      "sourceStart": 955,
+      "sourceEnd": 2497,
+      "segmentText": "Surrounded by rolling hills, vineyards and Santa Rosa Creek, Spring Lake Village is a naturally beautiful place to live. Add to that the good people who call this community home and you have a recipe for a great lifestyle. This is a place where life is enjoyed. Whether you're sipping wine by the firepit, playing in a bocce tournament, enjoying one of the topnotch eateries, taking a class or listening to an impromptu concert in the Great Hall, you have plenty of options. Our residents share a love for easy living with the comforts of home.\n\nSpring Lake Village offers an opportunity to join the community under a monthly agreement with no entrance fee.\n\nEVERYTHING YOU NEED\n- Lots of ways to lead a meaningful life\n- Dining options to suit any taste\n- Gardens, courtyards, classes and activities\n- Lake walks, hiking trails and bocce\n- Bustling, down-to-earth community\n- Participative and wellness-focused culture\n- 24-hour security\n- Independent living, assisted living, skilled nursing and memory care available\n\nAll the ingredients for\nan engaging life.\n\nStay engaged, be involved and get creative with all kinds of opportunities and amenities.\nTake advantage of our award-winning wellness programs, offering everything from water\naerobics and line dancing to yoga and Tai Chi. Keep your calendar full with activities,\nincluding lectures, bocce tournaments and book clubs.\n\nCOMMUNITY AMENITIES\n\n- Flexible dining plan offering dining points\n  equal to one meal daily for our lively Bistro,\n  elegant Sonoma Room or take out service\n\n",
+      "result": {
+        "sections": [
+          {
+            "items": [
+              {
+                "links": [],
+                "notes": null,
+                "title": "Spring Lake Village Community",
+                "photos": [],
+                "address": null,
+                "details": [],
+                "contacts": [],
+                "description": ""
+              }
+            ],
+            "title": "Spring Lake Village",
+            "description": "Surrounded by rolling hills, vineyards and Santa Rosa Creek, Spring Lake Village is a naturally beautiful place to live. This is a place where life is enjoyed, whether you're sipping wine by the firepit, playing in a bocce tournament, enjoying one of the topnotch eateries, taking a class or listening to an impromptu concert in the Great Hall. Our residents share a love for easy living with the comforts of home. Spring Lake Village offers an opportunity to join the community under a monthly agreement with no entrance fee."
+          }
+        ]
+      }
+    },
+    {
+      "ordinal": 3,
+      "status": "completed",
+      "sourceStart": 2497,
+      "sourceEnd": 3089,
+      "segmentText": "- Wide variety of resident-initiated and\n  organized social, cultural, educational and\n  recreational programs and events\n\n- Personalized programs and resources for\n  body, mind and spirit\n\n- Scheduled transportation\n\n- Lush landscaping with courtyards, walking\n  paths and beautiful resident-tended gardens\n\n- Studios for art, media, cultural\n  programs and wood shop\n\n- Spacious auditorium, beautiful Great Hall,\n  theater, lounge, conference space and\n  meeting rooms for social gathering\n\n- Library, media room, billiards room, chapel,\n  contemplative labyrinth and boutique gift\n  shop\n\n",
+      "result": {
+        "sections": [
+          {
+            "items": [
+              {
+                "links": [],
+                "notes": null,
+                "title": "Social and Recreational Programs",
+                "photos": [],
+                "address": null,
+                "details": [],
+                "contacts": [],
+                "description": ""
+              },
+              {
+                "links": [],
+                "notes": null,
+                "title": "Transportation Services",
+                "photos": [],
+                "address": null,
+                "details": [],
+                "contacts": [],
+                "description": ""
+              },
+              {
+                "links": [],
+                "notes": null,
+                "title": "Outdoor Spaces and Gardens",
+                "photos": [],
+                "address": null,
+                "details": [],
+                "contacts": [],
+                "description": ""
+              },
+              {
+                "links": [],
+                "notes": null,
+                "title": "Creative and Workshop Spaces",
+                "photos": [],
+                "address": null,
+                "details": [],
+                "contacts": [],
+                "description": ""
+              },
+              {
+                "links": [],
+                "notes": null,
+                "title": "Event and Meeting Spaces",
+                "photos": [],
+                "address": null,
+                "details": [],
+                "contacts": [],
+                "description": ""
+              },
+              {
+                "links": [],
+                "notes": null,
+                "title": "Recreation and Spiritual Amenities",
+                "photos": [],
+                "address": null,
+                "details": [],
+                "contacts": [],
+                "description": ""
+              }
+            ],
+            "title": "Community Features and Amenities",
+            "description": null
+          }
+        ]
+      }
+    },
+    {
+      "ordinal": 4,
+      "status": "completed",
+      "sourceStart": 3089,
+      "sourceEnd": 3819,
+      "segmentText": "- Fitness center with heated indoor swimming\n  pool and spa and cardio and weight\n  equipment designed for older people\n\n- Floor- and water-based exercise classes with\n  options for personal training\n\n- Massage, skin, hair and nail care salon\n  services for an additional fee\n\n- Parking for an additional fee and electric\n  charging port\n\n- Pets welcome\n\n- Dog run\n\n- On-site bank\n\nHOUSEHOLD AMENITIES\n\n- Inviting kitchen with upscale appliances\n\n- Washer and dryer and ample closets\n\n- Interior and exterior maintenance\n\n- Housekeeping and flat linen service, bi-monthly\n\n- Electricity, gas, heat, air conditioning, water,\n  sewer, trash removal, Wi-Fi\n\n- 24-hour security\n\n- Emergency response system\n\nADDITIONAL MONTHLY FEES:\n\n",
+      "result": {
+        "sections": [
+          {
+            "items": [
+              {
+                "links": [],
+                "notes": null,
+                "title": "Fitness Center with Pool and Spa",
+                "photos": [],
+                "address": null,
+                "details": [],
+                "contacts": [],
+                "description": ""
+              },
+              {
+                "links": [],
+                "notes": null,
+                "title": "Exercise Classes and Personal Training",
+                "photos": [],
+                "address": null,
+                "details": [],
+                "contacts": [],
+                "description": ""
+              },
+              {
+                "links": [],
+                "notes": null,
+                "title": "Salon Services",
+                "photos": [],
+                "address": null,
+                "details": [],
+                "contacts": [],
+                "description": ""
+              },
+              {
+                "links": [],
+                "notes": null,
+                "title": "Parking and Electric Charging",
+                "photos": [],
+                "address": null,
+                "details": [],
+                "contacts": [],
+                "description": ""
+              },
+              {
+                "links": [],
+                "notes": null,
+                "title": "Pet-Friendly Community",
+                "photos": [],
+                "address": null,
+                "details": [],
+                "contacts": [],
+                "description": ""
+              },
+              {
+                "links": [],
+                "notes": null,
+                "title": "On-Site Bank",
+                "photos": [],
+                "address": null,
+                "details": [],
+                "contacts": [],
+                "description": ""
+              }
+            ],
+            "title": "Community Amenities",
+            "description": null
+          },
+          {
+            "items": [
+              {
+                "links": [],
+                "notes": null,
+                "title": "Kitchen Features",
+                "photos": [],
+                "address": null,
+                "details": [],
+                "contacts": [],
+                "description": ""
+              },
+              {
+                "links": [],
+                "notes": null,
+                "title": "Laundry and Storage",
+                "photos": [],
+                "address": null,
+                "details": [],
+                "contacts": [],
+                "description": ""
+              },
+              {
+                "links": [],
+                "notes": null,
+                "title": "Maintenance Services",
+                "photos": [],
+                "address": null,
+                "details": [],
+                "contacts": [],
+                "description": ""
+              },
+              {
+                "links": [],
+                "notes": null,
+                "title": "Housekeeping Services",
+                "photos": [],
+                "address": null,
+                "details": [],
+                "contacts": [],
+                "description": ""
+              },
+              {
+                "links": [],
+                "notes": null,
+                "title": "Utilities Included",
+                "photos": [],
+                "address": null,
+                "details": [],
+                "contacts": [],
+                "description": ""
+              },
+              {
+                "links": [],
+                "notes": null,
+                "title": "Security and Emergency Response",
+                "photos": [],
+                "address": null,
+                "details": [],
+                "contacts": [],
+                "description": ""
+              }
+            ],
+            "title": "Household Amenities",
+            "description": null
+          }
+        ]
+      }
+    },
+    {
+      "ordinal": 5,
+      "status": "completed",
+      "sourceStart": 3819,
+      "sourceEnd": 4015,
+      "segmentText": "Basic Cable: $27\nTelephone Land Line: $5\nParking: Covered $50; Uncovered $28\nPersonal Internet\n\nspringlakevillage-sr.org\n\nWe're an equal opportunity housing provider.\nLicense #301016556 / COA #357",
+      "result": {
+        "sections": [
+          {
+            "items": [
+              {
+                "links": [
+                  {
+                    "url": "https://springlakevillage-sr.org/",
+                    "label": "Website"
+                  }
+                ],
+                "notes": null,
+                "title": "Additional Services",
+                "photos": [],
+                "address": null,
+                "details": [
+                  {
+                    "label": "Basic Cable",
+                    "value": "$27"
+                  },
+                  {
+                    "label": "Telephone Land Line",
+                    "value": "$5"
+                  },
+                  {
+                    "label": "Covered Parking",
+                    "value": "$50"
+                  },
+                  {
+                    "label": "Uncovered Parking",
+                    "value": "$28"
+                  },
+                  {
+                    "label": "License",
+                    "value": "#301016556"
+                  },
+                  {
+                    "label": "COA",
+                    "value": "#357"
+                  },
+                  {
+                    "label": "Parking",
+                    "value": "Covered $50; Uncovered $28"
+                  }
+                ],
+                "contacts": [],
+                "description": "Various optional services and amenities available to residents."
+              }
+            ],
+            "title": "Services & Amenities",
+            "description": null
+          }
+        ]
+      }
+    }
+  ],
+  "shippedItem": {
+    "note": "What the keep_together run ACTUALLY published, with itemsGoverned:0 on every chunk — the run-level collapse of all six chunks' proposals, read back from the packet. Replaying this through enforcement answers what the guards would have said about content that shipped ungoverned.",
+    "item": {
+      "title": "Spring Lake Village",
+      "address": "",
+      "description": "Surrounded by rolling hills, vineyards and Santa Rosa Creek, Spring Lake Village is a naturally beautiful place to live. This community offers a great lifestyle with amenities like wine by the firepit, bocce tournaments, topnotch eateries, classes, and impromptu concerts in the Great Hall. Residents share a love for easy living with the comforts of home. The community offers an opportunity to join under a monthly agreement with no entrance fee.",
+      "notes": "",
+      "highlight": "",
+      "details": [
+        {
+          "label": "Agreement Type",
+          "value": "Monthly Fee Agreement - Month-to-Month"
+        },
+        {
+          "label": "Community Fee",
+          "value": "One time Community Fee"
+        },
+        {
+          "label": "Ongoing Cost",
+          "value": "Monthly fee"
+        },
+        {
+          "label": "Available Units",
+          "value": "Select grouping of studio and one-bedroom apartments"
+        },
+        {
+          "label": "Pricing Period",
+          "value": "2026 - 2027"
+        },
+        {
+          "label": "Security",
+          "value": "24-hour security"
+        },
+        {
+          "label": "Care Levels",
+          "value": "Independent living, assisted living, skilled nursing and memory care available"
+        },
+        {
+          "label": "Little River Monthly Fee",
+          "value": "$6,396"
+        },
+        {
+          "label": "Little River Type",
+          "value": "Studio Apartment, 490 sq ft"
+        },
+        {
+          "label": "Timber Cove Monthly Fee",
+          "value": "$6,493"
+        },
+        {
+          "label": "Timber Cove Type",
+          "value": "Alcove Apartment, 530 sq ft"
+        },
+        {
+          "label": "Forestville Monthly Fee",
+          "value": "$6,545"
+        },
+        {
+          "label": "Forestville Type",
+          "value": "1 Bedroom, 1 Bathroom, 580 sq ft"
+        },
+        {
+          "label": "Fulton Monthly Fee",
+          "value": "$7,077"
+        },
+        {
+          "label": "Fulton Type",
+          "value": "1 Bedroom, 1 Bathroom, 650 sq ft"
+        },
+        {
+          "label": "Glen Ellen Monthly Fee",
+          "value": "$8,879"
+        },
+        {
+          "label": "Glen Ellen Type",
+          "value": "1 Bedroom, 1 Bathroom, 690 sq ft"
+        },
+        {
+          "label": "Lakeville Monthly Fee",
+          "value": "$9,665"
+        },
+        {
+          "label": "Lakeville Type",
+          "value": "1 Bedroom, 1 Bathroom, 730 sq ft"
+        },
+        {
+          "label": "Description",
+          "value": "Stay engaged, be involved and get creative with all kinds of opportunities and amenities. Take advantage of our award-winning wellness programs, offering everything from water aerobics and line dancing to yoga and Tai Chi. Keep your calendar full with activities, including lectures, bocce tournaments and book clubs."
+        },
+        {
+          "label": "2nd person",
+          "value": "+$1,085"
+        },
+        {
+          "label": "Community Fee",
+          "value": "$6,500"
+        },
+        {
+          "label": "Non-refundable Application Fee",
+          "value": "$500"
+        },
+        {
+          "label": "Flexible dining plan",
+          "value": "offering dining points equal to one meal daily for our lively Bistro, elegant Sonoma Room or take out service"
+        },
+        {
+          "label": "Description",
+          "value": "Senior living community offering comprehensive amenities and programs for residents including social, cultural, educational and recreational activities, personalized wellness programs, and extensive facilities for various interests and needs."
+        },
+        {
+          "label": "Social Programs",
+          "value": "Wide variety of resident-initiated and organized social, cultural, educational and recreational programs and events"
+        },
+        {
+          "label": "Wellness Programs",
+          "value": "Personalized programs and resources for body, mind and spirit"
+        },
+        {
+          "label": "Transportation",
+          "value": "Scheduled transportation"
+        },
+        {
+          "label": "Landscaping",
+          "value": "Lush landscaping with courtyards, walking paths and beautiful resident-tended gardens"
+        },
+        {
+          "label": "Creative Spaces",
+          "value": "Studios for art, media, cultural programs and wood shop"
+        },
+        {
+          "label": "Event Spaces",
+          "value": "Spacious auditorium, beautiful Great Hall, theater, lounge, conference space and meeting rooms for social gathering"
+        },
+        {
+          "label": "Additional Amenities",
+          "value": "Library, media room, billiards room, chapel, contemplative labyrinth and boutique gift shop"
+        },
+        {
+          "label": "Fitness Center",
+          "value": "Heated indoor swimming pool and spa and cardio and weight equipment designed for older people"
+        },
+        {
+          "label": "Exercise Classes",
+          "value": "Floor- and water-based exercise classes with options for personal training"
+        },
+        {
+          "label": "Salon Services",
+          "value": "Massage, skin, hair and nail care salon services for an additional fee"
+        },
+        {
+          "label": "Parking",
+          "value": "Available for an additional fee and electric charging port"
+        },
+        {
+          "label": "Pet Policy",
+          "value": "Pets welcome"
+        },
+        {
+          "label": "Dog Run",
+          "value": "Available on-site"
+        },
+        {
+          "label": "Banking",
+          "value": "On-site bank"
+        },
+        {
+          "label": "Kitchen",
+          "value": "Inviting kitchen with upscale appliances"
+        },
+        {
+          "label": "Laundry & Storage",
+          "value": "Washer and dryer and ample closets"
+        },
+        {
+          "label": "Maintenance",
+          "value": "Interior and exterior maintenance"
+        },
+        {
+          "label": "Housekeeping",
+          "value": "Housekeeping and flat linen service, bi-monthly"
+        },
+        {
+          "label": "Utilities Included",
+          "value": "Electricity, gas, heat, air conditioning, water, sewer, trash removal, Wi-Fi"
+        },
+        {
+          "label": "Emergency Response",
+          "value": "Emergency response system"
+        },
+        {
+          "label": "Description",
+          "value": "We're an equal opportunity housing provider."
+        },
+        {
+          "label": "Basic Cable",
+          "value": "$27"
+        },
+        {
+          "label": "Telephone Land Line",
+          "value": "$5"
+        },
+        {
+          "label": "Parking - Covered",
+          "value": "$50"
+        },
+        {
+          "label": "Parking - Uncovered",
+          "value": "$28"
+        },
+        {
+          "label": "License",
+          "value": "#301016556"
+        },
+        {
+          "label": "COA",
+          "value": "#357"
+        }
+      ],
+      "links": [
+        {
+          "url": "https://springlakevillage-sr.org",
+          "label": "Website"
+        }
+      ],
+      "photos": [],
+      "contacts": []
+    }
+  }
+}

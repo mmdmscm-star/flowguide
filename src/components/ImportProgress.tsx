@@ -1,7 +1,8 @@
 "use client";
 import { useEffect, useRef } from "react";
 import { useIngestion } from "@/lib/useIngestion";
-import { isResolvable, hasUnresolvableBlocker, guidanceFor, dispositionsFor } from "@/lib/review-units";
+import { isResolvable, hasUnresolvableBlocker, guidanceFor, dispositionsFor,
+         headlineFor, actionLabel } from "@/lib/review-units";
 
 // Drives (resumes) a persisted ingestion run and shows real progress. Rendered
 // whenever a packet has an active run — from a fresh Organize, an Add-with-AI, or
@@ -140,6 +141,14 @@ export default function ImportProgress({
         <ul className="mt-3 space-y-2">
           {open.map((f) => (
             <li key={f.id} className="rounded-lg border border-amber-200 bg-white/70 p-3">
+              {/* A KIND THAT HOLDS A WHOLE RUN'S MATERIAL NAMES ITSELF.
+                  Most cards are one excerpt from one titled item and the title
+                  says enough; this one is a list of lines from across a source,
+                  and "Spring Lake Village" alone would not say what happened.
+                  From the registry, never hardcoded here. */}
+              {headlineFor(f) && (
+                <p className="text-sm font-semibold text-amber-900">{headlineFor(f)}</p>
+              )}
               {f.title && <p className="text-xs font-medium text-amber-900">{f.title}</p>}
               <p className="mt-1 text-sm text-foreground whitespace-pre-wrap">{f.text}</p>
               {/* From the exception registry, not hardcoded here, so a future
@@ -171,16 +180,16 @@ export default function ImportProgress({
                   onClick={() => resolveUnit(f.id, "resolved")}
                   className="px-2.5 py-1 rounded-md border border-border text-xs font-medium text-foreground hover:border-accent hover:text-accent disabled:opacity-60"
                 >
-                  {dispositionsFor(f).includes("kept_private")
+                  {actionLabel(f, "resolved", dispositionsFor(f).includes("kept_private")
                     ? "I added it elsewhere"
-                    : "I added it where it belongs"}
+                    : "I added it where it belongs")}
                 </button>
                 <button
                   disabled={resolving === f.id}
                   onClick={() => resolveUnit(f.id, "ignored")}
                   className="px-2.5 py-1 rounded-md border border-border text-xs font-medium text-muted hover:text-foreground disabled:opacity-60"
                 >
-                  Leave it out
+                  {actionLabel(f, "ignored", "Leave it out")}
                 </button>
               </div>
               {/* Said once per card, quietly, because the difference between the

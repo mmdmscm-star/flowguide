@@ -7,6 +7,9 @@
 import { parseClaims } from "./claim-parser.ts";
 import { recordEnvelopes, attributeAll, bindByProvenance } from "./attribution.ts";
 import { reconcile } from "./reconcile.ts";
+import { keepsTogether, type Grouping } from "./grouping.ts";
+import { declaredEnvelopes, partitionAcrossItems, emptyGroup, DECLARED_RECORD }
+  from "./declared-record.ts";
 
 export interface ChunkAccounting {
   v: 1;
@@ -31,19 +34,34 @@ export function buildChunkAccounting(opts: {
    *  contract did, so it has to read the source the same way — otherwise it
    *  reports claims enforcement never saw, which is worse than reporting none. */
   delimiterHint?: string | null;
+  /** AND THE SAME RECORD COUNT, for exactly that reason. This was missing while
+   *  enforcement already had it, so a keep_together run was tiled into thirty
+   *  bullet records here and treated as one there: the ledger described a run
+   *  that never happened. */
+  grouping?: Grouping | null;
 }): ChunkAccounting {
-  const { segmentText, chunkOrdinal, sourceStart, sourceText, result, delimiterHint } = opts;
+  const { segmentText, chunkOrdinal, sourceStart, sourceText, result, delimiterHint, grouping } = opts;
   const r = (result ?? {}) as { items?: unknown; sections?: { items?: unknown }[] };
   const items = [
     ...(Array.isArray(r.items) ? r.items : []),
     ...(Array.isArray(r.sections) ? r.sections.flatMap((s) => (Array.isArray(s?.items) ? s.items : [])) : []),
   ].filter((x): x is Record<string, unknown> => Boolean(x) && typeof x === "object");
 
+  const declared = keepsTogether(grouping);
   const parsed = parseClaims(segmentText, chunkOrdinal, { delimiter: delimiterHint ?? null });
-  const env = sourceText ? recordEnvelopes(sourceText, delimiterHint ?? undefined) : null;
+  const env = !sourceText ? null
+    : declared ? declaredEnvelopes(sourceText, String(grouping?.title ?? ""))
+    : recordEnvelopes(sourceText, delimiterHint ?? undefined);
   const a = attributeAll(parsed.claims, parsed.ambiguous, parsed.fragments, env, sourceStart);
+  if (declared && env && !a.byRecord.has(DECLARED_RECORD)) a.byRecord.set(DECLARED_RECORD, emptyGroup());
 
-  const bound = env && sourceText ? bindByProvenance(env, sourceText, items).bound : null;
+  // The same association enforcement used: anchors under auto, the creator's
+  // declaration under keep_together — and a record may hold several proposals.
+  const boundItems: Map<number, Record<string, unknown>[]> = declared && env
+    ? new Map([[DECLARED_RECORD, items]])
+    : new Map([...(env && sourceText ? bindByProvenance(env, sourceText, items).bound
+                                     : new Map<number, Record<string, unknown>>())]
+        .map(([rec, it]) => [rec, [it as Record<string, unknown>]]));
   const records: ChunkAccounting["records"] = [];
   let accepted = 0, repaired = 0, contentUnresolved = 0, sourceUnresolved = 0, attributed = 0;
 
@@ -51,14 +69,24 @@ export function buildChunkAccounting(opts: {
     attributed += group.claims.length + group.ambiguous.length;
     const name = env?.[rec]?.name ?? "";
     // Anchor binding, never the model-authored title.
-    const item = (bound?.get(rec) as Record<string, unknown> | undefined) ?? null;
-    const res = reconcile({ claims: group.claims, ambiguous: group.ambiguous, fragments: group.fragments }, item);
-    accepted += res.counts.accepted; repaired += res.counts.repaired;
-    contentUnresolved += res.counts.unresolved; sourceUnresolved += res.counts.sourceUnresolved;
-    records.push({ record: rec, name, title: item ? String(item.title ?? "") : null,
-      accepted: res.counts.accepted, repaired: res.counts.repaired,
-      contentUnresolved: res.counts.unresolved, sourceUnresolved: res.counts.sourceUnresolved,
-      orphaned: res.counts.orphaned });
+    const recItems = boundItems.get(rec) ?? [];
+    const groups = partitionAcrossItems(group, recItems);
+    // ONE ROW PER RECORD, as before. Several proposals for one declared record
+    // are several readings of the SAME record, so their outcomes sum into it
+    // rather than inventing records the source does not have.
+    const row = { record: rec, name, title: null as string | null,
+      accepted: 0, repaired: 0, contentUnresolved: 0, sourceUnresolved: 0, orphaned: 0 };
+    for (const [pi, item] of (recItems.length ? recItems : [null]).entries()) {
+      const res = reconcile(groups[pi] ?? group, item);
+      if (item && row.title === null) row.title = String(item.title ?? "");
+      row.accepted += res.counts.accepted; row.repaired += res.counts.repaired;
+      row.contentUnresolved += res.counts.unresolved;
+      row.sourceUnresolved += res.counts.sourceUnresolved;
+      row.orphaned += res.counts.orphaned;
+    }
+    accepted += row.accepted; repaired += row.repaired;
+    contentUnresolved += row.contentUnresolved; sourceUnresolved += row.sourceUnresolved;
+    records.push(row);
   }
 
   // Unattributed units are NOT dropped — they are the ATTRIBUTION_UNRESOLVED

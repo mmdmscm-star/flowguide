@@ -1305,3 +1305,43 @@ output tokens 1.02x. `itemsOnlyPrompt` (Library, section_append) untouched.
 Recorded, NOT pursued: six "shared blind spots" - bare unlabelled values alone
 on a line - invisible to every strategy tried. That is a prompt gap, not a
 chunking one, and nothing here addressed it.
+
+## Omitted source details — Phase 2, BANKED 2026-09-05 (not started)
+
+Phase 1 shipped the question: one `source-details-omitted` review unit per
+`keep_together` run, holding the source lines that reached none of the assembled
+item. Its two answers settle the question and move nothing — "I added these
+elsewhere" and "Leave them out".
+
+Phase 2 adds the third answer, `included`, which carries the decision out.
+Decided in advance so the implementation is not also a design session:
+
+- **One label-less detail per omitted source line.** Not one merged row: two
+  lines are two facts, and `collapse-item.ts` already refuses to merge them
+  elsewhere.
+- **No invented labels.** These lines have no label in the source, and writing
+  one per line would be this code authoring recipient-facing prose.
+- **Mechanically strip only a leading list or footnote marker** when inserting —
+  the `LIST_MARKER` syntax already used by the claim parser, and nothing else.
+  The remaining words are the professional's, untouched.
+- **A small renderer branch for label-less details.** `item-card.tsx` lays a
+  detail out as label/value with `justify-between`, so an empty label pushes a
+  whole sentence to the right edge. The branch renders a label-less row full
+  width. This is the one UI change Phase 2 needs.
+- **Never appended to `description`.** That is the narrative overflow field
+  `enforce-chunk.ts` refuses to create.
+
+Shape of the work: `create or replace resolve_review_unit` on the SAME signature
+(0043's lesson — a new signature is a new function whose EXECUTE defaults to
+PUBLIC), writing `item_details` rows before the unit settles, in one
+transaction, owner- and packet-scoped, idempotent against a value already
+present. Plus `ReviewDisposition`, the route's status validation, the panel
+button and the registry entry's `dispositions`.
+
+**No migration number assigned.** Deliberately: numbering it would put it in the
+queue, and Phase 1 alone satisfies "must not disappear silently".
+
+Also open, and separate: `auto` has the same latent gap. Phase 1 is scoped to
+`keep_together` because that is where the loss was measured and because under
+`auto` most proposals are ungoverned and the unbound rule already holds them.
+What enabling it would do to the existing corpus has not been measured.

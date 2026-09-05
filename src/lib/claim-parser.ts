@@ -383,6 +383,9 @@ export function parseClaims(
     const t = b.text.trim();
     if (t && t.length <= 48 && !/:/.test(t)) standalone.set(t.toLowerCase(), (standalone.get(t.toLowerCase()) ?? 0) + 1);
   }
+  // A LEADING LIST MARKER. Syntax only — a hyphen, bullet or asterisk followed
+  // by a space. "-500" is a number, not a bullet, so the space is required.
+  const LIST_MARKER = /^\s*[-–—•*]\s+/;
   const consumedAsValue = new Set<number>();
   for (let bi = 0; bi < blocks.length; bi++) {
     const { text, line, offset } = blocks[bi];
@@ -408,7 +411,28 @@ export function parseClaims(
         || blocks[bi].cell === blocks[bi + 1].cell;
       const nextIsLabelLine = /:/.test(nextText) || (looksLikeLabel(nextText) && (standalone.get(nextText.toLowerCase()) ?? 0) > 1);
       const recurs = (standalone.get(text.toLowerCase()) ?? 0) > 1;
-      if (sameCell && nextText && !nextIsLabelLine && (recurs || valueIsIdentity(nextText))) {
+      // TWO BULLETS ARE TWO ITEMS, NOT A FIELD AND ITS VALUE.
+      //
+      // A brochure lists "- 24-hour security" under both EVERYTHING YOU NEED
+      // and HOUSEHOLD AMENITIES, so it recurs — and the recurrence test is what
+      // promotes a line to a field name. The bullet under it then became its
+      // "value", and the packet asserted
+      //
+      //   24-hour security: - Independent living, assisted living, skilled
+      //   nursing and memory care available
+      //
+      // which the source nowhere says. Both lines carry a list marker; that is
+      // syntax, not vocabulary, and it says they are siblings.
+      //
+      // NARROW ON PURPOSE. Only the recurrence route is refused. A bullet
+      // followed by a phone, an email or a URL is still a pair, because the
+      // VALUE identifies itself rather than being inferred from repetition —
+      // and nothing here touches a delimited row, a same-cell pair, or an
+      // explicit "Label: value", none of which wear a list marker.
+      const siblingBullets = LIST_MARKER.test(text) && LIST_MARKER.test(blocks[bi + 1].text)
+        && !valueIsIdentity(nextText);
+      if (sameCell && nextText && !nextIsLabelLine && !siblingBullets
+          && (recurs || valueIsIdentity(nextText))) {
         const label = text.trim();
         const kind = looksLikeHostname(nextText) ? "url" : "labelled";
         claims.push(kind === "url"

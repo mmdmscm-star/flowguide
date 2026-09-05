@@ -34,6 +34,14 @@ export interface ExceptionKind {
   code: string;
   /** What the professional is being asked, in their language. */
   guidance: string;
+  /** A short line ABOVE the excerpt, naming what happened. Optional: most kinds
+   *  are one excerpt from one named item and the item's title says enough. A
+   *  kind holding a whole run's material has no such title to lean on. */
+  headline?: string;
+  /** Wording for the two settle buttons, where this kind's material is plural
+   *  or otherwise reads wrong under the default sentence. Registry-driven for
+   *  the same reason the guidance is: the panel should not know the difference. */
+  actions?: Partial<Record<"resolved" | "ignored", string>>;
   /** WHICH DECISIONS THIS KIND CAN HONESTLY OFFER.
    *
    *  The panel used to render all three for every kind, which was fine while
@@ -177,6 +185,32 @@ export const REVIEW_REQUIRED: Record<string, ExceptionKind> = {
       "Sendset could not tell which row of your file this note came from, so it " +
       "could not confirm your source meant to keep it private. What should happen to it?",
   },
+  // SOURCE CONTENT THAT REACHED NOTHING.
+  //
+  // Not a placement problem and not a privacy one: these lines are in the
+  // professional's source and in none of the item that is about to publish.
+  // reconcile has counted them since it existed and nobody read the count, so
+  // four material pricing qualifiers left one real Sendset in silence.
+  //
+  // ONE CARD FOR THE WHOLE RUN. The chunk-local version of this question
+  // produces 58 answers on that same run and most of them are artefacts of
+  // chunking rather than losses. One structural mistake must not become dozens
+  // of decisions — that is how people learn to click through warnings.
+  //
+  // NOT A PRIVATE-NOTE DECISION. This is the professional's own source material,
+  // most of it written for the client; offering to file it privately would
+  // propose hiding it from the person it was written for. And Sendset does not
+  // offer to ADD it either — not yet. Choosing where a line belongs is the
+  // decision this whole contract refuses to make on someone's behalf.
+  "source-details-omitted": {
+    code: "source_details_omitted",
+    headline: "Some source details weren't included",
+    guidance:
+      "These lines are in your source but Sendset couldn't place them in this item, " +
+      "so your client won't see them. Sendset won't guess where they belong.",
+    dispositions: ["resolved", "ignored"],
+    actions: { resolved: "I added these elsewhere", ignored: "Leave them out" },
+  },
   "cross-cell-detail": {
     code: "cross_cell_detail",
     guidance:
@@ -281,6 +315,16 @@ export function isResolvable(f: ReviewFailure): boolean {
 const ALL_DISPOSITIONS: ReviewDisposition[] = ["kept_private", "resolved", "ignored"];
 export function dispositionsFor(f: ReviewFailure): ReviewDisposition[] {
   return REVIEW_REQUIRED[f?.kind ?? ""]?.dispositions ?? ALL_DISPOSITIONS;
+}
+
+/** The line above the excerpt, where a kind supplies one. */
+export function headlineFor(f: ReviewFailure): string | null {
+  return REVIEW_REQUIRED[f?.kind ?? ""]?.headline ?? null;
+}
+
+/** What a settle button should say for this kind. */
+export function actionLabel(f: ReviewFailure, d: "resolved" | "ignored", fallback: string): string {
+  return REVIEW_REQUIRED[f?.kind ?? ""]?.actions?.[d] ?? fallback;
 }
 
 /** The sentence shown with a held unit, from the registry rather than the panel,

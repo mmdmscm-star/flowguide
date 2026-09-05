@@ -7,7 +7,8 @@ import { createServerClient } from "@/lib/supabase";
 import { buildMediaLedger, describeMediaFailures, type StoredMedia } from "@/lib/media-ledger";
 import { describeReviewExit, discardWouldDeletePacket } from "@/lib/review-exit";
 import { checkRunOutcome } from "@/lib/run-guards";
-import { attachItems, type ReviewFailure } from "@/lib/review-units";
+import { attachItems, unitId, type ReviewFailure } from "@/lib/review-units";
+import { buildOmission } from "@/lib/omitted-source";
 
 export const maxDuration = 60;
 type Context = { params: Promise<{ runId: string }> };
@@ -93,17 +94,68 @@ export async function POST(_request: Request, context: Context) {
   // undone afterwards without them deleting items by hand.
   const { data: groupingRow } = await supabase
     .from("ingestion_runs")
-    .select("grouping_intent, grouping_title")
+    .select("grouping_intent, grouping_title, source_text, delimiter_hint")
     .eq("id", runId).eq("user_id", session.userId).maybeSingle();
+  const grouping = groupingOf(groupingRow as { grouping_intent?: unknown; grouping_title?: unknown } | null);
   const collapse = await collapseRunToOneItem(
-    supabase as unknown as CollapseDb, runId,
-    groupingOf(groupingRow as { grouping_intent?: unknown; grouping_title?: unknown } | null));
+    supabase as unknown as CollapseDb, runId, grouping);
   if (collapse.kind === "error") {
     console.error("[finalize] keep-together collapse failed", { runId, message: collapse.message });
     return NextResponse.json({
       error: "collapse_failed",
       message: "Could not combine this into one item, so nothing was applied. Please try again.",
     }, { status: 500 });
+  }
+
+  // WHAT THE SOURCE SAYS AND THIS ITEM DOES NOT — asked ONCE, here, about the
+  // item the collapse just assembled.
+  //
+  // This is the only moment it can be asked honestly. Per chunk it is the wrong
+  // question: on the run this was built for, the chunk-local test finds 58
+  // orphans and most are artefacts — a bullet absent from its own chunk and
+  // present in the packet two chunks later, a transcription line-wrap with no
+  // independent existence. Asked once against the assembled item, the same run
+  // yields 11, and they are the material qualifiers that were disappearing.
+  //
+  // ONE UNIT FOR THE RUN. Not one per line and not one per chunk: a single
+  // structural mistake must not become dozens of decisions.
+  //
+  // keep_together ONLY, for now. Under `auto` there is no single assembled item
+  // to ask about, the unbound rule already holds ungoverned proposals, and what
+  // enabling it would do to existing imports has not been measured. It reads
+  // the run's PERSISTED intent, the same value the fold above used.
+  //
+  // AND IT FAILS CLOSED. It was best-effort in its first version, which was
+  // wrong: this check is the only thing standing between a pricing qualifier
+  // and silent loss, so swallowing its failure publishes the Sendset while
+  // reporting that everything passed. A detector failure is not an omission and
+  // not an absence of one — it is an unanswered question, and it must not be
+  // turned into either. Nothing has been applied at this line, and the fold is
+  // idempotent, so the run is left exactly as retryable as it was.
+  let omissionUnit: ReviewFailure | null = null;
+  if (collapse.kind === "collapsed") {
+    const gr = groupingRow as { source_text?: string | null; delimiter_hint?: string | null } | null;
+    const omission = buildOmission(collapse.segments, collapse.item as unknown as Record<string, unknown>,
+      { sourceText: gr?.source_text ?? "", delimiterHint: gr?.delimiter_hint ?? null });
+    if (!omission.ok) {
+      console.error("[finalize] omission check failed", { runId, message: omission.message });
+      return NextResponse.json({
+        error: "omission_check_failed",
+        message: "Could not check that every detail from your source made it in, so nothing was applied. Please try again.",
+      }, { status: 500 });
+    }
+    if (omission.text) {
+      // Content-derived id, so a replayed finalize recomputes the same unit
+      // rather than adding a second copy of the same question. chunk -1
+      // records that this is the run's, not any one chunk's.
+      omissionUnit = {
+        id: unitId(runId, { chunk: -1, record: 0, kind: "source-details-omitted", text: omission.text }),
+        code: "source_details_omitted", kind: "source-details-omitted",
+        record: 0, chunk: -1, title: grouping.title, text: omission.text,
+        reason: "present in the source and in nothing the client would see",
+        status: "unresolved",
+      };
+    }
   }
 
   const { data, error } = await supabase.rpc("finalize_ingestion_run", {
@@ -213,6 +265,9 @@ export async function POST(_request: Request, context: Context) {
       for (const c of (chunkRows ?? []) as Array<{ review_units?: ReviewFailure[] | null }>) {
         for (const u of c.review_units ?? []) if (u?.id && !byId.has(u.id)) byId.set(u.id, u);
       }
+      // The run-level omission joins the per-chunk units here, so it is
+      // aggregated, titled and settled by exactly the same machinery.
+      if (omissionUnit && !byId.has(omissionUnit.id)) byId.set(omissionUnit.id, omissionUnit);
       // Title to item id, only where the title names exactly ONE item. A title
       // shared by two items must not point the professional at whichever one
       // happened to sort first.

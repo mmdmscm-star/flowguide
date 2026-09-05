@@ -85,7 +85,7 @@ test("KEEP TOGETHER produces one item and keeps every supported fact", () => {
   for (const p of PRICES) assert.ok(k.json.includes(p), `the source price ${p} was lost`);
 });
 
-test("MISUSE: several apparent entities aggregate VISIBLY, and nothing is lost", () => {
+test("MISUSE: several apparent entities aggregate VISIBLY, and every price survives", () => {
   // keep_together on a source that plainly holds three communities. The failure
   // mode must be over-aggregation under a name the creator typed — not silent
   // loss, and not reassignment, because there is nowhere to reassign to.
@@ -106,9 +106,17 @@ test("MISUSE: several apparent entities aggregate VISIBLY, and nothing is lost",
     .sections?.[0]?.items ?? [];
   assert.equal(survived.length, 1, "there is more than one item, so a fact could be under the wrong one");
   assert.equal(survived[0].title, "Spring Lake Village", "the aggregation is not visibly named");
-  assert.equal((survived[0].details as unknown[]).length, 3, "a fact was dropped by aggregating");
+  assert.equal(out.telemetry.itemsGoverned, 1, "the declared record's proposal was not governed");
   for (const p of ["$6,396", "$5,100", "$7,400"])
     assert.ok(JSON.stringify(survived).includes(p), `${p} was lost`);
+
+  // AND CANONICALIZATION TAKES NOTHING WITH IT. Governance renders the claim
+  // "490 sq ft: $6,396" over the model's aggregated detail; the unit's name and
+  // type are source-backed, so they are kept beside it rather than replaced
+  // away. This was a real deletion until the residue rule landed.
+  for (const w of ["Little River", "Studio", "Sunrise", "Willow",
+                   "490 sq ft", "600 sq ft", "880 sq ft"])
+    assert.ok(JSON.stringify(survived).includes(w), `${w} was deleted by canonicalization`);
 });
 
 // ---------------------------------------------------------------------------

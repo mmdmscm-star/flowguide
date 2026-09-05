@@ -282,10 +282,51 @@ export interface Enforcement {
   audienceRemoved: { text: string; state: "private" | "undecided"; where: string; kept: boolean }[];
 }
 
+const escapeRe = (x: string) => x.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/** What a proposed detail said that its canonical rendering does not — kept
+ *  only when the record's own source text bears it out.
+ *
+ *  Subtraction, never composition: the label and the value are the
+ *  professional's, with the claim's own words removed and the punctuation that
+ *  joined them trimmed. Support is the SAME fact-token test the privacy rule
+ *  uses, so a residue must be made entirely of words the source itself
+ *  contains. Returns null when there is nothing left, when nothing proves it,
+ *  or when no record text was supplied to prove it against. */
+function supportedResidue(
+  proposed: { label?: string; value?: string } | undefined,
+  rendered: { label: string; value: string },
+  recordSource: string | undefined,
+): { label: string; value: string } | null {
+  const src = String(recordSource ?? "");
+  if (!src.trim()) return null;
+  const trim = (x: string) =>
+    x.replace(/\s{2,}/g, " ").replace(/^[\s,;:.\u2013\u2014-]+|[\s,;:.\u2013\u2014-]+$/g, "").trim();
+  const minus = (text: string, remove: string) => {
+    const t = String(text ?? "");
+    if (!remove.trim()) return trim(t);
+    return trim(t.replace(new RegExp(escapeRe(remove), "gi"), " "));
+  };
+  const label = minus(proposed?.label ?? "", rendered.label);
+  const value = minus(proposed?.value ?? "", rendered.value);
+  if (!factTokens(`${label} ${value}`).length) return null;
+  if (!noteSupportedBy(`${label} ${value}`, src)) return null;
+  // A residue that is only the claim written differently is not another fact.
+  if (!label && !value) return null;
+  return { label: label || rendered.label, value };
+}
+
 /** Apply the contract to ONE item, given that item's resolutions. */
 export function enforceItem(
   item: Item, resolutions: Resolution[], claims: Claim[],
-  opts: { privateSource: string; undecidedSource?: string },
+  opts: {
+    privateSource: string;
+    undecidedSource?: string;
+    /** THIS RECORD'S OWN SOURCE TEXT, and the only thing that can tell a source
+     *  fact from a model flourish when a detail is canonicalized. Absent, no
+     *  residue is preserved: unable to prove support, this declines to guess. */
+    recordSource?: string;
+  },
 ): Enforcement {
   const next: Item = { ...item };
   const applied: { claimId: string; action: string }[] = [];
@@ -299,6 +340,10 @@ export function enforceItem(
   // own row. Without this the second claim overwrites the first's slot and one
   // of two genuinely different facts disappears.
   const usedDetail = new Set<number>();
+  /** Source-backed remainders displaced by canonicalization, spliced back in
+   *  beside the row that displaced them once every resolution has been applied
+   *  — inserting mid-loop would shift the indices usedDetail is holding. */
+  const keepAlongside: { at: number; row: { label: string; value: string } }[] = [];
   const kindOf = (v: string): ValueKind => {
     const k = probe(v).kind;
     return k === "url" || k === "email" || k === "phone" ? k : "text";
@@ -328,10 +373,32 @@ export function enforceItem(
         (locate({ details: [d] } as Record<string, unknown>, c.value).length > 0 ||
          canonicalLabel(String(d?.label ?? "")).toLowerCase() === label.toLowerCase()));
       const rendered = { label, value: safe };
+      // CANONICALIZING ONE FACT MUST NOT DELETE ANOTHER.
+      //
+      // The rendering replaces the model's detail whole. That was invisible
+      // while every governed item was a single source row — one detail, one
+      // claim — and stopped being invisible the moment an item could aggregate
+      // rows: the model's "Little River — Studio: 490 sq ft, $6,396" carries
+      // the claim "490 sq ft: $6,396" AND the unit's name and type, and
+      // replacing it took both away.
+      //
+      // So what the rendering does not carry is subtracted out and kept — but
+      // ONLY IF THE SOURCE SAYS IT. That is the whole distinction: "Little
+      // River" and "Studio" are in the source row and survive; "approximately"
+      // in "approximately $2,400" is not, and does not. The model's paraphrase
+      // still never becomes canonical.
+      //
+      // NOTHING IS WRITTEN, ONLY SUBTRACTED. The preserved row is the
+      // professional's own label and the untouched remainder of their value.
       if (at >= 0) {
         usedDetail.add(at);
         const before = JSON.stringify(details[at]);
+        const carry = supportedResidue(details[at], rendered, opts.recordSource);
         details[at] = rendered;
+        if (carry) {
+          keepAlongside.push({ at, row: carry });
+          applied.push({ claimId: c.id, action: `details: kept source-backed residue beside ${label}` });
+        }
         if (before !== JSON.stringify(rendered)) applied.push({ claimId: c.id, action: `details canonicalized: ${label}` });
       } else {
         usedDetail.add(details.length);
@@ -372,6 +439,20 @@ export function enforceItem(
       next.address = canonicalValue(c.value);
       applied.push({ claimId: c.id, action: "address set" });
     }
+  }
+
+  // The displaced remainders, back beside what displaced them. Descending, so
+  // each splice leaves the earlier indices alone.
+  if (keepAlongside.length) {
+    const details = arr(next.details) as { label?: string; value?: string }[];
+    for (const { at, row } of [...keepAlongside].sort((x, y) => y.at - x.at)) {
+      if (at < 0 || at >= details.length) continue;
+      const same = (d: { label?: string; value?: string }) =>
+        String(d?.label ?? "") === row.label && String(d?.value ?? "") === row.value;
+      if (details.some(same)) continue;
+      details.splice(at + 1, 0, row);
+    }
+    next.details = details;
   }
 
   // SPECIALIZED DESTINATIONS ARE EXCLUSIVE.

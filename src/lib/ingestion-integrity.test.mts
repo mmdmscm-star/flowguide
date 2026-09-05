@@ -1107,7 +1107,13 @@ test("REGISTRY AUDIT: only private-note decisions keep the private-note action",
   // Pinned as a list so adding a kind is a decision someone makes on purpose.
   const privateNoteDecisions = ["privacy-rejected", "unbound-private-note",
                                 "audience-undecided", "private-shown"];
-  const placementDecisions = ["cross-cell-detail", "unbound-recipient-content"];
+  // Placement and content-integrity decisions. Never a private-note action:
+  // each holds material written for the client, and filing it privately would
+  // hide it from the person it was written for, behind the careful-looking
+  // button. `source-details-omitted` is the professional's own source text, so
+  // it belongs here and not above.
+  const placementDecisions = ["cross-cell-detail", "unbound-recipient-content",
+                              "source-details-omitted"];
   assert.deepEqual(
     Object.keys(REVIEW_REQUIRED).sort(),
     [...privateNoteDecisions, ...placementDecisions].sort(),

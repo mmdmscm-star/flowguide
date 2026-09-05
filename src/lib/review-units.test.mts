@@ -165,9 +165,25 @@ test("finalize aggregates the dedicated channel, and does not re-derive units", 
   const f = read("src/app/api/ingest/[runId]/finalize/route.ts");
   assert.match(f, /from\("ingestion_chunks"\)\s*\.select\("review_units"\)/);
   assert.match(f, /attachItems\(\[\.\.\.byId\.values\(\)\], byTitle\)/);
-  // Ids are assigned where units are PRODUCED. Recomputing them here would make
-  // the id depend on finalize's view of the world rather than the chunk's.
-  assert.doesNotMatch(f, /unitId\(/, "finalize re-derives unit ids");
+  // IDS ARE ASSIGNED WHERE UNITS ARE PRODUCED, and finalize does not recompute
+  // a CHUNK's id: doing so would make it depend on finalize's view of the world
+  // rather than the chunk's, and a stale client would clear the wrong card.
+  //
+  // The one unit finalize MINTS is the one no chunk could have produced. "Which
+  // source lines reached none of the assembled item?" cannot be answered before
+  // the run-level fold, because no chunk can see another chunk's output — asked
+  // per chunk on the Spring Lake run it gives 58 answers, of which most are
+  // artefacts. So it is produced here, once, and its id is derived from its
+  // content exactly as a chunk's is, which keeps a replay stable.
+  const mints = f.match(/unitId\(/g) ?? [];
+  assert.equal(mints.length, 1, "finalize mints more than the one run-level unit");
+  const at = f.indexOf("unitId(");
+  const near = f.slice(Math.max(0, at - 600), at + 200);
+  assert.match(near, /source-details-omitted/,
+    "finalize mints an id for something other than the run-level omission unit");
+  assert.match(near, /chunk: -1/, "the minted unit claims to belong to a chunk");
+  // And no chunk-produced unit is re-derived: the aggregation still copies.
+  assert.match(f, /for \(const u of c\.review_units \?\? \[\]\) if \(u\?\.id && !byId\.has\(u\.id\)\)/);
 });
 
 test("a replayed finalize cannot resurrect decisions already made", () => {
