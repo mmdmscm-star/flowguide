@@ -3,6 +3,7 @@
 // pipeline for all three entry points; a small source is simply a one-chunk run.
 import { segment, splitRange, segmentHash, isContinuation, DEFAULT_BUDGET, SEGMENTER_VERSION } from "./segmentation";
 import { callStructuringModel } from "./ai-structure";
+import { groupingPromptRule, type Grouping } from "./grouping.ts";
 import { organizeLeadPrompt, sectionsPrompt, itemsOnlyPrompt } from "./ai-prompts";
 import { validateEntryPointResult } from "./ingest-validate";
 
@@ -84,13 +85,19 @@ export async function processSegment(opts: {
   isLead: boolean;
   segmentText: string;
   apiKey: string;
+  /** What the creator said this source IS, read off the run. Absent or `auto`
+   *  and the prompt below is byte-identical to the one this function has always
+   *  sent — the rule is APPENDED, never woven in, so the default path is a true
+   *  no-op rather than a change nobody measured. */
+  grouping?: Grouping | null;
 }): Promise<ProcessOutcome> {
-  const { entryPoint, packetType, isLead, segmentText, apiKey } = opts;
+  const { entryPoint, packetType, isLead, segmentText, apiKey, grouping } = opts;
 
   let systemPrompt: string;
   if (entryPoint === "section_append" || entryPoint === "library_import") systemPrompt = itemsOnlyPrompt();
   else if (entryPoint === "organize" && isLead) systemPrompt = organizeLeadPrompt(packetType);
   else systemPrompt = sectionsPrompt(packetType);
+  systemPrompt += groupingPromptRule(grouping);
 
   // The model sees the chunk's own text and nothing else (see the note above).
   const userText = segmentText;

@@ -9,6 +9,7 @@
 // inferred — those stay SOURCE_UNRESOLVED — and no vertical vocabulary is
 // consulted anywhere in the chain.
 import { parseClaims } from "./claim-parser.ts";
+import { keepsTogether, type Grouping } from "./grouping.ts";
 import { recordEnvelopes, attributeAll, bindByProvenance, sourceCells, spansCells,
   type SourceCells } from "./attribution.ts";
 import { reconcile } from "./reconcile.ts";
@@ -166,8 +167,11 @@ export function enforceChunkResult(opts: {
   destination: string | null | undefined;
   /** Delimiter declared by the source file, or null for a pasted source. */
   delimiterHint?: string | null;
+  /** What the creator said this source IS. Same persisted value the prompt is
+   *  built from, so the two cannot disagree about how many records exist. */
+  grouping?: Grouping | null;
 }): ChunkEnforcement {
-  const { segmentText, chunkOrdinal, sourceStart, sourceText, result, runId, destination, delimiterHint } = opts;
+  const { segmentText, chunkOrdinal, sourceStart, sourceText, result, runId, destination, delimiterHint, grouping } = opts;
   if (!contractEnforcementEnabled()) return { result, telemetry: empty(), unresolved: [], reviewUnits: [] };
 
   // SCOPE BEFORE EVERYTHING ELSE, including the fail-closed test hook: a run
@@ -186,7 +190,23 @@ export function enforceChunkResult(opts: {
   ].filter((x): x is Record<string, unknown> => Boolean(x) && typeof x === "object");
   if (!items.length || !sourceText) return { result, telemetry: { ...empty(), scope }, unresolved: [], reviewUnits: [] };
 
-  const env = recordEnvelopes(sourceText, delimiterHint ?? undefined);
+  // ONE CREATOR-DECLARED RECORD, or automatic detection.
+  //
+  // Under keep_together the professional has said the whole source describes one
+  // thing. Automatic tiling is then not a better answer than theirs — it is a
+  // different question, and asking it produces records nothing can bind to: a
+  // pricing table carries no email, URL or phone, and anchorsOf recognises
+  // nothing else, so every proposal fails and every row becomes a card.
+  //
+  // THIS IS NOT A SUPPRESSED GUARD. The unbound rule's own precondition is that
+  // the source produced records and a proposal could not be matched to one; with
+  // one declared record there is no other record to have been matched to
+  // instead. Nothing is disabled, no branch skips a check, and every other
+  // guard — price, completeness, source-support, privacy, cross-cell — runs
+  // exactly as it does under auto. What changes is the declared record count.
+  const env = keepsTogether(grouping)
+    ? null
+    : recordEnvelopes(sourceText, delimiterHint ?? undefined);
   const envByIndex = new Map((env ?? []).map((e) => [e.index, e]));
   // The heading row is the first record the tiling produced. The delimiter is
   // the declared one where the file supplied it, and is otherwise inferred from

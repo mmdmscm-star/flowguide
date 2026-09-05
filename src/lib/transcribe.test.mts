@@ -223,10 +223,15 @@ test("THE STRUCTURING CONTRACT IS UNTOUCHED", () => {
 });
 
 test("PROVENANCE IS STAMPED IN ONE UPDATE, or 0045 refuses it", () => {
-  const u = ORGANIZE.slice(ORGANIZE.indexOf("if (sourceImageUrl)"));
-  assert.match(u, /source_origin: "image", source_image_url: sourceImageUrl/,
+  // 0046 added a second coherent pair to the same statement, so the stamp is
+  // now built as an object. What must remain true is unchanged: the image
+  // origin and its URL are written TOGETHER, in ONE update, because 0045's
+  // coherence CHECK refuses a row where they disagree.
+  const u = ORGANIZE.slice(ORGANIZE.indexOf("const stamp"), ORGANIZE.indexOf(".update(stamp)"));
+  assert.match(u, /stamp\.source_origin = "image"; stamp\.source_image_url = sourceImageUrl;/,
     "the two columns are set separately, which the coherence CHECK rejects");
-  assert.match(u, /\.eq\("user_id", session\.userId\)/, "the stamp is not owner-scoped");
+  assert.match(ORGANIZE, /\.update\(stamp\)/, "the columns are not sent in one update");
+  assert.match(ORGANIZE, /\.eq\("user_id", session\.userId\)/, "the stamp is not owner-scoped");
   assert.match(ORGANIZE, /sourceImageUrl.*\? body\.sourceImageUrl\.trim\(\) : null/s,
     "the field is not optional, so text runs would be mislabelled");
 });

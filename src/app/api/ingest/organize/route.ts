@@ -31,6 +31,22 @@ export async function POST(request: Request) {
   // is what keeps every existing caller a text-origin run by default.
   const sourceImageUrl = typeof body.sourceImageUrl === "string" && body.sourceImageUrl.trim()
     ? body.sourceImageUrl.trim() : null;
+  // WHAT THE CREATOR SAID THIS SOURCE IS. Absent for every existing caller and
+  // for anyone who simply pastes and organizes, which is the point: the default
+  // is that nobody was asked, and that is the behaviour the product has always
+  // had. `split` is accepted and persisted but is not offered on screen while
+  // it behaves identically to auto.
+  const rawIntent = typeof body.groupingIntent === "string" ? body.groupingIntent : "auto";
+  const groupingIntent = rawIntent === "keep_together" || rawIntent === "split" ? rawIntent : "auto";
+  const groupingTitle = typeof body.groupingTitle === "string" ? body.groupingTitle.trim() : "";
+  // The database requires a name for keep_together, so refuse here with a
+  // sentence rather than letting a CHECK produce a constraint error.
+  if (groupingIntent === "keep_together" && !groupingTitle) {
+    return NextResponse.json({
+      error: "grouping_title_required",
+      message: "Name the item before organizing, or turn off keeping it together.",
+    }, { status: 400 });
+  }
 
   if (rawText.length < 10) return NextResponse.json({ error: "Paste more text first." }, { status: 400 });
   if (rawText.length > INGEST_MAX_CHARS) {
@@ -80,17 +96,27 @@ export async function POST(request: Request) {
   // THE DRAFT IS NOT LOST. create_organize_run is idempotent on
   // (owner, request_key), so pressing Organize again returns the same run and
   // re-attempts the stamp rather than creating a second draft.
-  if (sourceImageUrl) {
+  // ONE UPDATE FOR BOTH PAIRS. Each pair has its own coherence CHECK — image
+  // origin with its URL (0045), grouping intent with its title (0046) — and
+  // each must move together or Postgres refuses the row. Setting them in one
+  // statement satisfies both, and a failure of either stops the request.
+  const stamp: Record<string, unknown> = {};
+  if (sourceImageUrl) { stamp.source_origin = "image"; stamp.source_image_url = sourceImageUrl; }
+  if (groupingIntent !== "auto") {
+    stamp.grouping_intent = groupingIntent;
+    stamp.grouping_title = groupingIntent === "keep_together" ? groupingTitle : null;
+  }
+  if (Object.keys(stamp).length) {
     const { error: markError } = await supabase
       .from("ingestion_runs")
-      .update({ source_origin: "image", source_image_url: sourceImageUrl })
+      .update(stamp)
       .eq("id", res.run_id)
       .eq("user_id", session.userId);
     if (markError) {
-      console.error("[organize] provenance stamp failed; refusing to proceed", { runId: res.run_id, markError });
+      console.error("[organize] run stamp failed; refusing to proceed", { runId: res.run_id, markError });
       return NextResponse.json({
         error: "provenance_not_recorded",
-        message: "Could not record that this came from a picture, so it was not organized. Please try again.",
+        message: "Could not record how this source should be organized, so it was not organized. Please try again.",
       }, { status: 500 });
     }
   }

@@ -16,6 +16,12 @@ export default function NewPacketWorkspace() {
   const [rawText, setRawText] = useState("");
   const [fileName, setFileName] = useState("");
   const [readingImage, setReadingImage] = useState(false);
+  /** OPTIONAL, AND OFF. Ambiguous grouping happens with pasted text, a CSV and
+   *  a photograph alike, so this lives at the organize layer rather than beside
+   *  any one input. Nobody is asked to classify anything to use the product;
+   *  bulk messy input organized automatically is still the whole point. */
+  const [keepTogether, setKeepTogether] = useState(false);
+  const [groupingTitle, setGroupingTitle] = useState("");
   /** THE PICTURE, STILL ON THIS DEVICE. Held as the File itself with a local
    *  object URL for the preview — nothing has been uploaded. It is sent to be
    *  KEPT only when the professional presses Organize, so abandoning this page
@@ -105,6 +111,10 @@ export default function NewPacketWorkspace() {
       setError("Paste some text first.");
       return;
     }
+    if (keepTogether && !groupingTitle.trim()) {
+      setError("Name the item, or turn off keeping it together.");
+      return;
+    }
     setError("");
     setProcessing(true);
 
@@ -143,6 +153,11 @@ export default function NewPacketWorkspace() {
           ...(delimiterHint ? { delimiterHint } : {}),
           // Present only for a picture, so every other path stays a text run.
           ...(sourceImageUrl ? { sourceImageUrl } : {}),
+          // Present only when the creator asked for it, so every other path
+          // stays on automatic detection.
+          ...(keepTogether
+            ? { groupingIntent: "keep_together", groupingTitle: groupingTitle.trim() }
+            : {}),
         }),
       });
       if (ing.status === 401) { router.push("/login"); return; }
@@ -326,6 +341,56 @@ export default function NewPacketWorkspace() {
           {error}
         </div>
       )}
+
+      {/* THE OVERRIDE, AND IT IS AN OVERRIDE. Off by default and never in the
+          way: the ordinary path is still paste-and-organize with nobody asked
+          anything. It sits at the organize layer rather than beside the picture
+          control because a pasted rate sheet and a photographed one have the
+          same problem — and a CSV of one venue's rooms does too. */}
+      <div className="mt-5 rounded-lg border border-border bg-card/60 p-3">
+        <label className="flex items-start gap-2.5 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={keepTogether}
+            disabled={processing || readingImage}
+            onChange={(e) => {
+              setKeepTogether(e.target.checked);
+              if (!e.target.checked) setGroupingTitle("");
+            }}
+            className="mt-0.5 flex-none"
+          />
+          <span className="min-w-0">
+            <span className="block text-sm font-medium text-foreground">
+              Keep this together as one item
+            </span>
+            <span className="block text-xs text-muted">
+              Everything in this source will be organized under one item, with the
+              rest kept as its details. Leave this off and Sendset works out the
+              structure itself.
+            </span>
+          </span>
+        </label>
+        {keepTogether && (
+          <div className="mt-3 pl-7">
+            <label htmlFor="grouping-title" className="block text-xs font-medium text-foreground">
+              Name this item
+            </label>
+            <input
+              id="grouping-title"
+              type="text"
+              value={groupingTitle}
+              onChange={(e) => setGroupingTitle(e.target.value)}
+              placeholder="e.g. Spring Lake Village"
+              disabled={processing || readingImage}
+              className="mt-1 w-full max-w-sm rounded-lg border border-border bg-white px-3 py-2 text-sm
+                         text-foreground outline-none focus:ring-2 focus:ring-accent disabled:opacity-60"
+            />
+            <p className="mt-1 text-xs text-muted/80">
+              Your words, not the model&rsquo;s — this is what your client will see.
+            </p>
+          </div>
+        )}
+      </div>
 
       <div className="mt-6 flex flex-wrap items-center gap-x-5 gap-y-3">
         <button

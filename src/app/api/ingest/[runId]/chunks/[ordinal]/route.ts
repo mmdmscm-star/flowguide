@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { groupingOf } from "@/lib/grouping";
 import { getSession } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase";
 import { processSegment, buildSplitChildren, shouldPresplit, EntryPoint } from "@/lib/ingestion";
@@ -67,11 +68,17 @@ export async function POST(_request: Request, context: Context) {
   const supabase = createServerClient();
   const { data: run } = await supabase
     .from("ingestion_runs")
-    .select("id, user_id, packet_id, destination, entry_point, status, source_text, delimiter_hint")
+    .select("id, user_id, packet_id, destination, entry_point, status, source_text, delimiter_hint, grouping_intent, grouping_title")
     .eq("id", runId)
     .maybeSingle();
   if (!run || run.user_id !== session.userId) return NextResponse.json({ error: "Not found" }, { status: 404 });
   if (run.status !== "active") return NextResponse.json({ error: "run_not_active", status: run.status }, { status: 409 });
+
+  // WHAT THE CREATOR SAID THIS SOURCE IS — read ONCE, off the run, and handed
+  // to both the prompt and the enforcement below. Two reads could disagree; one
+  // cannot. That is what makes "model told to produce one item while the
+  // deterministic side still tiles" unreachable rather than merely unlikely.
+  const grouping = groupingOf(run as { grouping_intent?: unknown; grouping_title?: unknown });
 
   const entryPoint = run.entry_point as EntryPoint;
 
@@ -189,6 +196,9 @@ export async function POST(_request: Request, context: Context) {
       isLead,
       segmentText,
       apiKey,
+      // The SAME value the enforcement below is given. Both sides of the
+      // granularity question answer from one persisted fact.
+      grouping,
     });
   }
 
@@ -257,6 +267,7 @@ export async function POST(_request: Request, context: Context) {
         // re-deriving it here would be a second opinion about a fact the run
         // already holds, and a later verification must reach the same answer.
         delimiterHint: (run.delimiter_hint as string | null) ?? null,
+        grouping,
       });
       staged = normalizeStagedLinks(e.result);
       enforcement = e.telemetry;

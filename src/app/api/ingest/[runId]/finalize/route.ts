@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { collapseRunToOneItem, type CollapseDb } from "@/lib/collapse-run";
+import { groupingOf } from "@/lib/grouping";
 import { assessRecovery, recoveryMessage, type RecoveryVerdict } from "@/lib/ingest-recovery";
 import { getSession } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase";
@@ -69,6 +71,39 @@ export async function POST(_request: Request, context: Context) {
           : "Could not re-check this Sendset. Try again.",
       }, { status: 409 });
     }
+  }
+
+  // KEEP_TOGETHER IS A RUN-LEVEL FACT, AND THIS IS WHERE IT IS HONOURED.
+  //
+  // Each chunk was told to return one item, but chunking is an implementation
+  // detail the professional never agreed to: a 26-row sheet is 1,077 characters
+  // and still becomes five chunks on the segmenter's six-item budget. Five
+  // obedient chunks would become five identically-named items, because
+  // finalize_ingestion_run inserts every item of every chunk and recombines
+  // only at section level, "never by title".
+  //
+  // So the run's proposals are folded once, here — the last moment every
+  // chunk's result is visible together and nothing has reached the packet. It
+  // reads the PERSISTED intent, so a resumed or retried finalize behaves the
+  // same as the first one, and it is idempotent: folding one already-folded
+  // item reproduces it.
+  //
+  // A FAILURE HERE STOPS THE FINALIZE. Applying a keep_together run as several
+  // items is the exact outcome the creator asked us to avoid, and it cannot be
+  // undone afterwards without them deleting items by hand.
+  const { data: groupingRow } = await supabase
+    .from("ingestion_runs")
+    .select("grouping_intent, grouping_title")
+    .eq("id", runId).eq("user_id", session.userId).maybeSingle();
+  const collapse = await collapseRunToOneItem(
+    supabase as unknown as CollapseDb, runId,
+    groupingOf(groupingRow as { grouping_intent?: unknown; grouping_title?: unknown } | null));
+  if (collapse.kind === "error") {
+    console.error("[finalize] keep-together collapse failed", { runId, message: collapse.message });
+    return NextResponse.json({
+      error: "collapse_failed",
+      message: "Could not combine this into one item, so nothing was applied. Please try again.",
+    }, { status: 500 });
   }
 
   const { data, error } = await supabase.rpc("finalize_ingestion_run", {
