@@ -26,8 +26,12 @@ test("OFF is opt-in: every unset path still renders the index", () => {
   // Both read paths use `!== false`, so null / undefined / missing column read
   // as ON. `=== true` would make a missing value hide the index.
   const q = codeOf(QUERIES);
+  // THREE now, not two: the editor path grew a block-composition branch so
+  // Preview renders the same body the recipient page does, and that branch
+  // carries the same preference read as the section path beside it.
   const reads = q.match(/showQuickNav: packet\.show_quick_nav !== false/g) ?? [];
-  assert.equal(reads.length, 2, "expected the published path and the preview path to read it the same way");
+  assert.equal(reads.length, 3,
+    "expected the published path and both preview compositions to read it the same way");
   assert.doesNotMatch(q, /show_quick_nav === true/, "a missing value would hide the index");
 });
 

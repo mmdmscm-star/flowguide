@@ -8,6 +8,7 @@ import PrintToolbar from "@/components/print/print-toolbar";
 import type { Packet } from "@/lib/types";
 import "./print.css";
 import { recipientMetadata } from "@/lib/recipient-metadata";
+import { treatmentFor, printVars } from "@/lib/style/treatment";
 
 // /p/[slug]/print — the same published packet, rendered for paper.
 //
@@ -56,8 +57,17 @@ export default async function PrintPage({ params }: Props) {
   const host = h.get("x-forwarded-host") ?? h.get("host") ?? "";
   const proto = h.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
 
+  // THE TREATMENT, AS THE VARIABLES print.css READS. The stylesheet is a static
+  // file and cannot import; injecting the values here is what makes the
+  // treatment layer — rather than the stylesheet — the place ink, rule and
+  // hierarchy are decided. Page geometry, break rules and the screen-preview
+  // ground stay in the stylesheet: they are how paper works, not how a Sendset
+  // looks.
+  const treatment = treatmentFor(packet);
+
   return (
     <>
+      <style dangerouslySetInnerHTML={{ __html: printVars(treatment) }} />
       <PrintToolbar />
       <PrintPacket packet={packet} liveUrl={host ? `${proto}://${host}/p/${slug}` : `/p/${slug}`} />
     </>

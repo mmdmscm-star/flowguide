@@ -11,6 +11,7 @@ import type { Packet } from "@/lib/types";
 import { ownedPacketId } from "@/lib/packet-owner";
 import { OwnerBar } from "@/components/nav/owner-bar";
 import { recipientMetadata } from "@/lib/recipient-metadata";
+import { treatmentFor, webVars } from "@/lib/style/treatment";
 
 // Render on every request — never serve a cached copy. This is what makes
 // unpublish/delete take effect immediately: there is no stored HTML that could
@@ -73,7 +74,15 @@ export default async function PacketPage({ params }: Props) {
   return (
     <>
       {ownedId && <OwnerBar packetId={ownedId} />}
-      <main className="w-full max-w-lg mx-auto pb-12 overflow-x-hidden break-words">
+      {/* THE TREATMENT, ON THE ELEMENT THAT WRAPS THE SENDSET. Every packet
+          component below reads ink, rule, hierarchy and rhythm through these
+          rather than holding its own literal, so the same intent reaches the
+          screen, the page and the inbox from one place. Scoped here rather than
+          to :root so the creator's own surfaces are untouched by it. */}
+      <main
+        style={webVars(treatmentFor(packet)) as React.CSSProperties}
+        className="w-full max-w-lg mx-auto pb-12 overflow-x-hidden break-words"
+      >
         <PacketHeader
           title={packet.clientTitle}
           clientName={packet.clientName}

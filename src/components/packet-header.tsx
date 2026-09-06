@@ -23,7 +23,7 @@ export function PacketHeader({
 }) {
   const heading = String(title ?? "").trim();
   return (
-    <header className="px-5 pt-8 pb-6">
+    <header className="px-[var(--sg-page-gutter)] pt-8 pb-6">
       {professional.logoUrl && (
         <img
           src={professional.logoUrl}
@@ -32,17 +32,17 @@ export function PacketHeader({
         />
       )}
       {professional.businessName && (
-        <p className={`text-xs font-medium uppercase tracking-widest text-muted ${heading ? "mb-1" : ""}`}>
+        <p className={`text-xs font-medium uppercase tracking-widest text-[color:var(--sg-muted)] ${heading ? "mb-1" : ""}`}>
           {professional.businessName}
         </p>
       )}
       {heading && (
-        <h1 className="text-2xl font-bold leading-tight text-foreground whitespace-pre-line">
+        <h1 className="text-[length:var(--sg-page-title)] font-bold leading-tight text-[color:var(--sg-ink)] whitespace-pre-line">
           {heading}
         </h1>
       )}
       {clientName && (
-        <p className={`${heading ? "mt-2" : "mt-1"} text-sm text-muted`}>
+        <p className={`${heading ? "mt-2" : "mt-1"} text-[length:var(--sg-small)] text-[color:var(--sg-muted)]`}>
           Prepared for {clientName}
         </p>
       )}

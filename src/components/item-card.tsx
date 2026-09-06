@@ -49,7 +49,7 @@ function linkStyles(type: LinkType): string {
     case "map":
       return "text-green-700 bg-green-50 border-green-100 hover:bg-green-100";
     default:
-      return "text-accent bg-blue-50 border-blue-100 hover:bg-blue-100";
+      return "text-[color:var(--sg-accent)] bg-blue-50 border-blue-100 hover:bg-blue-100";
   }
 }
 
@@ -112,14 +112,14 @@ export function ItemCard({ item, audience = "recipient" }: { item: Item; audienc
   );
 
   return (
-    <div className="bg-card border border-border rounded-xl overflow-hidden">
+    <div className="bg-card border border-[color:var(--sg-line)] rounded-xl overflow-hidden">
       {/* Photos at the top */}
       {item.photos && item.photos.length > 0 && (
         <PhotoGallery photos={item.photos} />
       )}
 
       <div className="p-5 min-w-0">
-        <h3 className="text-lg font-semibold text-foreground mb-1">
+        <h3 className="text-[length:var(--sg-item-title)] font-semibold text-[color:var(--sg-ink)] mb-1">
           {item.title}
         </h3>
 
@@ -129,7 +129,7 @@ export function ItemCard({ item, audience = "recipient" }: { item: Item; audienc
             href={mapsUrl(item.address)}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-start gap-1.5 text-base text-accent hover:text-accent-hover mb-3 group"
+            className="flex items-start gap-1.5 text-base text-[color:var(--sg-accent)] hover:text-accent-hover mb-3 group"
           >
             <svg className="w-4 h-4 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
@@ -144,16 +144,16 @@ export function ItemCard({ item, audience = "recipient" }: { item: Item; audienc
             paragraphs arrive as one block. `pre-line` (not `pre-wrap`) also
             collapses runs of spaces, which is what prose wants. */}
         {item.description && (
-          <p className="text-base leading-relaxed text-foreground/80 mb-4 whitespace-pre-line">
+          <p className="text-[length:var(--sg-body)] leading-relaxed text-foreground/80 mb-4 whitespace-pre-line">
             {item.description}
           </p>
         )}
 
         {item.details && item.details.length > 0 && (
-          <div className="mb-4 rounded-lg bg-surface border border-border overflow-hidden">
+          <div className="mb-4 rounded-lg bg-[color:var(--sg-surface)] border border-[color:var(--sg-line)] overflow-hidden">
             {item.details.map((detail, i) => {
               const atomic = isAtomicValue(detail.value);
-              const divider = i !== item.details!.length - 1 ? "border-b border-border" : "";
+              const divider = i !== item.details!.length - 1 ? "border-b border-[color:var(--sg-line)]" : "";
 
               // A DETAIL WITH NO LABEL IS A STATEMENT, NOT A KEY AND A VALUE.
               //
@@ -167,7 +167,7 @@ export function ItemCard({ item, audience = "recipient" }: { item: Item; audienc
               // the sentence it is.
               if (!String(detail.label ?? "").trim()) {
                 return (
-                  <div key={i} className={`px-3.5 py-2.5 text-base text-foreground ${divider}`}>
+                  <div key={i} className={`px-3.5 py-2.5 text-base text-[color:var(--sg-ink)] ${divider}`}>
                     <span className="[overflow-wrap:anywhere]">{detail.value}</span>
                   </div>
                 );
@@ -189,7 +189,7 @@ export function ItemCard({ item, audience = "recipient" }: { item: Item; audienc
                     <span className="flex-1 min-w-0 text-gray-600 font-medium [overflow-wrap:anywhere]">
                       {detail.label}
                     </span>
-                    <span className="flex-shrink-0 whitespace-nowrap text-right text-foreground">
+                    <span className="flex-shrink-0 whitespace-nowrap text-right text-[color:var(--sg-ink)]">
                       {detail.value}
                     </span>
                   </div>
@@ -223,7 +223,7 @@ export function ItemCard({ item, audience = "recipient" }: { item: Item; audienc
                       — a long URL — can shrink instead of overflowing the card. It
                       lowers min-content only, leaving the max-content width that
                       drives the stack decision untouched. */}
-                  <span className="min-w-0 text-foreground [overflow-wrap:anywhere]">{detail.value}</span>
+                  <span className="min-w-0 text-[color:var(--sg-ink)] [overflow-wrap:anywhere]">{detail.value}</span>
                 </div>
               );
             })}
@@ -236,8 +236,8 @@ export function ItemCard({ item, audience = "recipient" }: { item: Item; audienc
             whitespace-only value produces no callout at all rather than an
             empty amber box. React escapes the text; it is never HTML. */}
         {item.highlight?.trim() && (
-          <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3.5 py-3">
-            <p className="text-sm text-amber-900 leading-relaxed whitespace-pre-line">{item.highlight}</p>
+          <div className="mb-4 rounded-lg border border-[color:var(--sg-highlight-rule)] bg-[color:var(--sg-highlight-ground)] px-3.5 py-3">
+            <p className="text-[length:var(--sg-small)] text-[color:var(--sg-highlight-ink)] leading-relaxed whitespace-pre-line">{item.highlight}</p>
           </div>
         )}
 
@@ -247,9 +247,9 @@ export function ItemCard({ item, audience = "recipient" }: { item: Item; audienc
             never receives this field — queries.ts drops it before the data
             reaches the page — so this guard is defence in depth, not the fix. */}
         {audience === "professional" && item.notes?.trim() && (
-          <div className="mb-4 rounded-lg border border-border bg-surface px-3.5 py-3">
-            <p className="text-xs font-medium text-muted">Private note · only you see this</p>
-            <p className="mt-1 text-sm text-foreground leading-relaxed whitespace-pre-wrap">{item.notes}</p>
+          <div className="mb-4 rounded-lg border border-[color:var(--sg-line)] bg-[color:var(--sg-surface)] px-3.5 py-3">
+            <p className="text-xs font-medium text-[color:var(--sg-muted)]">Private note · only you see this</p>
+            <p className="mt-1 text-sm text-[color:var(--sg-ink)] leading-relaxed whitespace-pre-wrap">{item.notes}</p>
           </div>
         )}
 
@@ -312,14 +312,14 @@ export function ItemCard({ item, audience = "recipient" }: { item: Item; audienc
         })()}
 
         {item.contacts && item.contacts.length > 0 && (
-          <div className="border-t border-border pt-3 mt-1 space-y-3">
+          <div className="border-t border-[color:var(--sg-line)] pt-3 mt-1 space-y-3">
             {item.contacts.map((contact, ci) => (
               <div key={ci}>
                 {(contact.name || contact.role) && (
-                  <p className="text-base font-medium text-foreground mb-1.5">
+                  <p className="text-base font-medium text-[color:var(--sg-ink)] mb-1.5">
                     {contact.name}
                     {contact.role && (
-                      <span className="text-muted font-normal">{contact.name ? " — " : ""}{contact.role}</span>
+                      <span className="text-[color:var(--sg-muted)] font-normal">{contact.name ? " — " : ""}{contact.role}</span>
                     )}
                   </p>
                 )}
@@ -327,7 +327,7 @@ export function ItemCard({ item, audience = "recipient" }: { item: Item; audienc
                   {contact.phone && (
                     <a
                       href={`tel:${contact.phone}`}
-                      className="inline-flex items-center gap-1.5 text-base text-accent font-medium px-3 py-1.5 rounded-lg bg-blue-50 border border-blue-100"
+                      className="inline-flex items-center gap-1.5 text-base text-[color:var(--sg-accent)] font-medium px-3 py-1.5 rounded-lg bg-blue-50 border border-blue-100"
                     >
                       <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
@@ -338,7 +338,7 @@ export function ItemCard({ item, audience = "recipient" }: { item: Item; audienc
                   {contact.email && (
                     <a
                       href={`mailto:${contact.email}`}
-                      className="inline-flex items-center gap-1.5 text-base text-accent font-medium px-3 py-1.5 rounded-lg bg-blue-50 border border-blue-100"
+                      className="inline-flex items-center gap-1.5 text-base text-[color:var(--sg-accent)] font-medium px-3 py-1.5 rounded-lg bg-blue-50 border border-blue-100"
                     >
                       <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
@@ -355,7 +355,7 @@ export function ItemCard({ item, audience = "recipient" }: { item: Item; audienc
                       href={contact.website.startsWith("http") ? contact.website : `https://${contact.website}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1.5 text-base text-accent font-medium px-3 py-1.5 rounded-lg bg-blue-50 border border-blue-100"
+                      className="inline-flex items-center gap-1.5 text-base text-[color:var(--sg-accent)] font-medium px-3 py-1.5 rounded-lg bg-blue-50 border border-blue-100"
                     >
                       <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9" />

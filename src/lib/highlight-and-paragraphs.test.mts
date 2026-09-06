@@ -146,11 +146,14 @@ test("an ItemCard with NO audience prop defaults to the safe answer", () => {
 });
 
 test("AN EMPTY HIGHLIGHT RENDERS NO CALLOUT BOX on the card", () => {
+  // The callout's ground now comes from the treatment's highlight role rather
+  // than a literal amber class — same rendered colour, decided in one place.
+  const CALLOUT = "bg-[color:var(--sg-highlight-ground)]";
   for (const empty of ["", "   ", "\n\n", undefined, null]) {
     const html = card({ highlight: empty, description: "d" });
-    assert.ok(!html.includes("bg-amber-50"), `an empty callout rendered for ${JSON.stringify(empty)}`);
+    assert.ok(!html.includes(CALLOUT), `an empty callout rendered for ${JSON.stringify(empty)}`);
   }
-  assert.ok(card({ highlight: HIGHLIGHT }).includes("bg-amber-50"), "the callout never renders at all");
+  assert.ok(card({ highlight: HIGHLIGHT }).includes(CALLOUT), "the callout never renders at all");
 });
 
 test("an empty private note renders no empty box either", () => {

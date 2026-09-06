@@ -406,6 +406,21 @@ export async function getPacketForEditor(
     .eq("user_id", userId)
     .single();
 
+  // THE SAME COMPOSITION THE RECIPIENT PAGE READS.
+  //
+  // This path returned sections unconditionally, so a block-composed packet
+  // reached Preview with no `blocks` and no `compositionMode` — and Preview
+  // rendered its (empty) sections. The professional was approving something
+  // their client would never see. buildBlockPacket is the recipient path's own
+  // assembly, reused rather than reimplemented; the only difference is where
+  // the identity comes from, which is the editor's live profile rather than a
+  // publish-time snapshot, exactly as it is for the section path below.
+  if (packet.composition_mode === "blocks") {
+    const built = await buildBlockPacket(supabase, packet, profile);
+    return { ...built, id: packet.id, status: packet.status,
+             showQuickNav: packet.show_quick_nav !== false };
+  }
+
   const { data: sections } = await supabase
     .from("sections")
     .select("*")

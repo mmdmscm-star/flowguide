@@ -17,11 +17,11 @@ export function SectionGroup({
   audience?: "recipient" | "professional";
 }) {
   return (
-    <section className="mb-8">
+    <section className="mb-[var(--sg-section-gap)]">
       {(section.title || section.description) && (
-        <div className="px-5 mb-4">
+        <div className="px-[var(--sg-page-gutter)] mb-4">
           {section.title && (
-            <h2 className="text-xl font-bold text-foreground">{section.title}</h2>
+            <h2 className="text-[length:var(--sg-section-title)] font-bold text-[color:var(--sg-ink)]">{section.title}</h2>
           )}
           {section.description && (
             <p className="mt-1 text-base text-gray-600 leading-relaxed whitespace-pre-line">
@@ -38,7 +38,7 @@ export function SectionGroup({
           explain both. */}
       {showQuickNav && <SectionContents items={section.items} sectionTitle={section.title} />}
 
-      <div className="px-5 space-y-4">
+      <div className="px-[var(--sg-page-gutter)] space-y-[var(--sg-item-gap)]">
         {section.items.map((item) => (
           // The anchor lives on a wrapper so ItemCard itself is untouched.
           // scroll-mt keeps the card's top edge off the very top of the

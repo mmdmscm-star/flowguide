@@ -19,7 +19,7 @@
 }
 
 .pg-doc {
-  color: #1f2328;
+  color: var(--pg-ink);
   font: 10.5pt/1.5 -apple-system, "Segoe UI", Roboto, Arial, Helvetica, sans-serif;
   max-width: 7.4in;
   margin: 0 auto;
@@ -88,16 +88,16 @@
 
 /* ---- header ------------------------------------------------------------- */
 .pg-logo { display: block; height: 0.42in; width: auto; max-width: 2.2in; margin-bottom: 10px; }
-.pg-business { font-size: 8.5pt; letter-spacing: .09em; text-transform: uppercase; color: #5b6570; margin: 0 0 4px; }
-.pg-title { font-size: 19pt; line-height: 1.2; font-weight: 700; margin: 0; white-space: pre-line; }
-.pg-for { font-size: 10pt; color: #5b6570; margin: 6px 0 0; }
-.pg-live { font-size: 9.5pt; color: #5b6570; margin: 8px 0 0; }
-.pg-live b { color: #1f2328; font-weight: 600; }
+.pg-business { font-size: 8.5pt; letter-spacing: .09em; text-transform: uppercase; color: var(--pg-muted); margin: 0 0 4px; }
+.pg-title { font-size: var(--pg-page-title); line-height: 1.2; font-weight: 700; margin: 0; white-space: pre-line; }
+.pg-for { font-size: var(--pg-small); color: var(--pg-muted); margin: 6px 0 0; }
+.pg-live { font-size: 9.5pt; color: var(--pg-muted); margin: 8px 0 0; }
+.pg-live b { color: var(--pg-ink); font-weight: 600; }
 .pg-rule { border: 0; border-top: 1px solid #d8dce1; margin: 14px 0 18px; }
 
 .pg-note {
   background: #f4f5f7;
-  border: 1px solid #e3e6ea;
+  border: 1px solid var(--pg-line);
   border-radius: 6px;
   padding: 12px 14px;
   margin: 0 0 20px;
@@ -106,17 +106,17 @@
 
 /* ---- sections and items -------------------------------------------------- */
 .pg-section { margin: 0 0 6px; }
-.pg-section-title { font-size: 14pt; font-weight: 700; margin: 18px 0 2px; }
-.pg-section-desc { color: #5b6570; margin: 0 0 10px; white-space: pre-line; }
+.pg-section-title { font-size: var(--pg-section-title); font-weight: 700; margin: 18px 0 2px; }
+.pg-section-desc { color: var(--pg-muted); margin: 0 0 10px; white-space: pre-line; }
 
 .pg-item {
-  border: 1px solid #e3e6ea;
+  border: 1px solid var(--pg-line);
   border-radius: 6px;
   padding: 12px 14px;
   margin: 0 0 14px;
 }
-.pg-item-title { font-size: 12.5pt; font-weight: 700; margin: 0 0 2px; }
-.pg-address { font-size: 10pt; color: #3a4450; margin: 0 0 6px; }
+.pg-item-title { font-size: var(--pg-item-title); font-weight: 700; margin: 0 0 2px; }
+.pg-address { font-size: var(--pg-small); color: #3a4450; margin: 0 0 6px; }
 .pg-desc { margin: 0 0 10px; white-space: pre-line; }
 
 /* HIGHLIGHT FOR CLIENT. Amber survives a mono laser printer as a light grey
@@ -124,9 +124,9 @@
 .pg-highlight {
   margin: 0 0 12px;
   padding: 9px 12px;
-  border: 1px solid #e8d9a8;
-  border-left: 3px solid #c8a951;
-  background: #fdf8ec;
+  border: 1px solid var(--pg-highlight-rule);
+  border-left: 3px solid var(--pg-highlight-rule);
+  background: var(--pg-highlight-ground);
   border-radius: 4px;
   white-space: pre-line;
   break-inside: avoid;
@@ -141,7 +141,7 @@
   width: 100%;
   height: 2.6in;
   object-fit: cover;
-  border: 1px solid #e3e6ea;
+  border: 1px solid var(--pg-line);
   border-radius: 4px;
   margin: 0 0 6px;
 }
@@ -154,14 +154,14 @@
   aspect-ratio: 1 / 1;
   object-fit: cover;
   margin: 0 2% 2% 0;
-  border: 1px solid #e3e6ea;
+  border: 1px solid var(--pg-line);
   border-radius: 3px;
 }
 .pg-photo:nth-child(4n) { margin-right: 0; }
 
 /* ---- details -------------------------------------------------------------- */
 .pg-details {
-  border: 1px solid #e3e6ea;
+  border: 1px solid var(--pg-line);
   border-radius: 4px;
   margin: 0 0 10px;
   overflow: hidden;
@@ -172,10 +172,10 @@
   justify-content: space-between;
   gap: 0 24px;
   padding: 6px 12px;
-  font-size: 10pt;
+  font-size: var(--pg-small);
 }
-.pg-detail-row + .pg-detail-row { border-top: 1px solid #e3e6ea; }
-.pg-detail-label { color: #5b6570; font-weight: 500; min-width: 0; }
+.pg-detail-row + .pg-detail-row { border-top: 1px solid var(--pg-line); }
+.pg-detail-label { color: var(--pg-muted); font-weight: 500; min-width: 0; }
 .pg-detail-value { text-align: right; overflow-wrap: anywhere; }
 /* A DETAIL WITH NO LABEL IS A SENTENCE, not the right-hand half of a pair.
    Source lines accepted from a review card carry no label, because the source
@@ -190,14 +190,14 @@
 .pg-links { font-size: 9.5pt; margin: 0 0 10px; }
 .pg-link { margin: 0 0 2px; }
 .pg-link b { font-weight: 600; }
-.pg-url { color: #5b6570; overflow-wrap: anywhere; }
+.pg-url { color: var(--pg-muted); overflow-wrap: anywhere; }
 
 .pg-contact {
-  border: 1px solid #e3e6ea;
+  border: 1px solid var(--pg-line);
   border-radius: 4px;
   padding: 8px 12px;
   margin: 0 0 8px;
-  font-size: 10pt;
+  font-size: var(--pg-small);
 }
 .pg-contact-name { font-weight: 600; margin: 0 0 1px; }
 .pg-contact-line { color: #3a4450; margin: 0; overflow-wrap: anywhere; }
@@ -208,16 +208,16 @@
  * page and pushes content around unpredictably. The professional's details
  * belong once, where a reader looks for them. */
 .pg-footer {
-  border: 1px solid #e3e6ea;
+  border: 1px solid var(--pg-line);
   background: #f4f5f7;
   border-radius: 6px;
   padding: 14px 16px;
   margin: 18px 0 0;
 }
-.pg-footer-label { font-size: 8.5pt; letter-spacing: .09em; text-transform: uppercase; color: #5b6570; margin: 0 0 8px; }
+.pg-footer-label { font-size: 8.5pt; letter-spacing: .09em; text-transform: uppercase; color: var(--pg-muted); margin: 0 0 8px; }
 .pg-ident { display: flex; align-items: flex-start; gap: 12px; }
-.pg-headshot { height: 0.62in; width: auto; border-radius: 5px; border: 1px solid #e3e6ea; }
+.pg-headshot { height: 0.62in; width: auto; border-radius: 5px; border: 1px solid var(--pg-line); }
 .pg-pro-name { font-size: 11.5pt; font-weight: 600; margin: 0; }
-.pg-pro-biz { color: #5b6570; font-size: 10pt; margin: 1px 0 0; }
-.pg-pro-line { margin: 2px 0 0; font-size: 10pt; overflow-wrap: anywhere; }
+.pg-pro-biz { color: var(--pg-muted); font-size: var(--pg-small); margin: 1px 0 0; }
+.pg-pro-line { margin: 2px 0 0; font-size: var(--pg-small); overflow-wrap: anywhere; }
 .pg-tail { text-align: center; color: #8b949e; font-size: 8.5pt; margin: 14px 0 0; }

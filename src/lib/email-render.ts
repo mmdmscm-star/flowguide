@@ -1,6 +1,7 @@
 import type { Packet, Item, Section } from "./types.ts";
 import { resolveCardLinks } from "./item-links.ts";
 import { thumbnailUrl, squareThumbnailUrl } from "./image-source.ts";
+import { treatmentFor } from "./style/treatment.ts";
 
 // AN EMAIL-READY RENDERING OF THE SAME PACKET.
 //
@@ -53,12 +54,35 @@ const href = (v: unknown): string | null => {
   return `https://${s}`;
 };
 
+// THE PALETTE AND THE SCALE COME FROM THE TREATMENT LAYER, not from this file.
+// They were four hex literals and a set of pixel sizes chosen here, and they had
+// drifted from the web page's — #1f2328 against #1a1a1a, #5b6570 against
+// #6b7280 — with nothing recording that they were meant to be one decision.
+//
+// Read once, at module scope, because there is exactly one treatment today and
+// every packet wears it. When a second exists these become a per-render lookup
+// on `treatmentFor(packet)`; the values move, the shape does not.
+//
+// THE FONT STACK STAYS LOCAL. It is not a treatment decision — it is what
+// Outlook and Gmail will actually render, and a webfont here does not degrade,
+// it disappears.
+const T = treatmentFor();
 const FONT = "-apple-system, 'Segoe UI', Roboto, Arial, Helvetica, sans-serif";
-const INK = "#1f2328";
-const MUTED = "#5b6570";
-const LINE = "#e3e6ea";
-const LINK = "#1a56db";
-const PAGE = "#f4f5f7";
+const INK = T.colors.ink.email;
+const MUTED = T.colors.muted.email;
+const LINE = T.colors.line.email;
+const LINK = T.colors.accent.email;
+const PAGE = T.colors.surface.email;
+const HL_INK = T.colors.highlightInk.email;
+const HL_GROUND = T.colors.highlightGround.email;
+const HL_RULE = T.colors.highlightRule.email;
+const SIZE = {
+  pageTitle: T.type.pageTitle.email,
+  sectionTitle: T.type.sectionTitle.email,
+  itemTitle: T.type.itemTitle.email,
+  body: T.type.body.email,
+  small: T.type.small.email,
+};
 const W = 600;
 
 /** Escaped text with authored newlines turned into <br />.
@@ -70,7 +94,7 @@ const W = 600;
 const escLines = (v: unknown) => esc(v).replace(/\r\n?|\n/g, "<br />");
 
 const p = (text: string, style = "") =>
-  `<p style="margin:0 0 12px;font-family:${FONT};font-size:16px;line-height:1.5;color:${INK};${style}">${text}</p>`;
+  `<p style="margin:0 0 12px;font-family:${FONT};font-size:${SIZE.body};line-height:1.5;color:${INK};${style}">${text}</p>`;
 
 const CONTENT = W - 48;   // 552px, inside the card's padding
 const COLS = 4;           // three columns makes an eight-photo item ~530px taller
@@ -149,12 +173,12 @@ function detailsTable(item: Item): string {
     // colspan, because that is the one thing every mail client agrees on.
     if (!String(d?.label ?? "").trim()) {
       return `<tr>
-      <td colspan="2" style="${border}padding:8px 0;font-family:${FONT};font-size:15px;line-height:1.45;color:${INK};vertical-align:top">${esc(d.value)}</td>
+      <td colspan="2" style="${border}padding:8px 0;font-family:${FONT};font-size:${SIZE.small};line-height:1.45;color:${INK};vertical-align:top">${esc(d.value)}</td>
     </tr>`;
     }
     return `<tr>
-      <td style="${border}padding:8px 12px 8px 0;font-family:${FONT};font-size:15px;line-height:1.45;color:${MUTED};vertical-align:top;width:45%">${esc(d.label)}</td>
-      <td style="${border}padding:8px 0;font-family:${FONT};font-size:15px;line-height:1.45;color:${INK};vertical-align:top">${esc(d.value)}</td>
+      <td style="${border}padding:8px 12px 8px 0;font-family:${FONT};font-size:${SIZE.small};line-height:1.45;color:${MUTED};vertical-align:top;width:45%">${esc(d.label)}</td>
+      <td style="${border}padding:8px 0;font-family:${FONT};font-size:${SIZE.small};line-height:1.45;color:${INK};vertical-align:top">${esc(d.value)}</td>
     </tr>`;
   }).join("");
   return `<tr><td style="padding:0 0 14px">
@@ -178,7 +202,7 @@ function linksBlock(item: Item): string {
     return `<a href="${esc(url)}" style="color:${LINK};text-decoration:underline">${esc(label)}</a>`;
   }).filter(Boolean);
   if (!shown.length) return "";
-  return `<tr><td style="padding:0 0 14px">${p(shown.join(" &nbsp;·&nbsp; "), `font-size:15px;margin:0`)}</td></tr>`;
+  return `<tr><td style="padding:0 0 14px">${p(shown.join(" &nbsp;·&nbsp; "), `font-size:${SIZE.small};margin:0`)}</td></tr>`;
 }
 
 function contactsBlock(item: Item): string {
@@ -199,7 +223,7 @@ function contactsBlock(item: Item): string {
     if (email) ways.push(`<a href="mailto:${esc(email)}" style="color:${LINK};text-decoration:underline">${esc(email)}</a>`);
     const site = showSite ? safeUrl(c.website) : null;
     if (site) ways.push(`<a href="${esc(site)}" style="color:${LINK};text-decoration:underline">${esc(site.replace(/^https?:\/\/(www\.)?/i, "").replace(/\/+$/, ""))}</a>`);
-    return `${head ? p(head, "font-size:15px;font-weight:600;margin:0 0 2px") : ""}${ways.length ? p(ways.join(" &nbsp;·&nbsp; "), "font-size:15px;margin:0") : ""}`;
+    return `${head ? p(head, "font-size:${SIZE.small};font-weight:600;margin:0 0 2px") : ""}${ways.length ? p(ways.join(" &nbsp;·&nbsp; "), "font-size:${SIZE.small};margin:0") : ""}`;
   }).join(`<div style="height:10px;line-height:10px">&nbsp;</div>`);
   return `<tr><td style="padding:0 0 14px">
     <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse:collapse;border:1px solid ${LINE};border-radius:4px">
@@ -217,18 +241,18 @@ function itemBlock(item: Item, liveUrl: string | null): string {
       <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse:collapse">
         ${photoBlock(item, liveUrl)}
         <tr><td style="padding:0 0 6px">
-          <h3 style="margin:0;font-family:${FONT};font-size:19px;line-height:1.3;color:${INK};font-weight:700">${esc(item.title)}</h3>
+          <h3 style="margin:0;font-family:${FONT};font-size:${SIZE.itemTitle};line-height:1.3;color:${INK};font-weight:700">${esc(item.title)}</h3>
         </td></tr>
         ${address ? `<tr><td style="padding:0 0 10px">${p(
           mapHref ? `<a href="${esc(mapHref)}" style="color:${LINK};text-decoration:underline">${esc(address)}</a>` : esc(address),
-          "font-size:15px;margin:0")}</td></tr>` : ""}
+          "font-size:${SIZE.small};margin:0")}</td></tr>` : ""}
         ${String(item.description ?? "").trim()
           ? `<tr><td style="padding:0 0 14px">${p(escLines(item.description), "margin:0")}</td></tr>` : ""}
         ${String(item.highlight ?? "").trim()
           ? `<tr><td style="padding:0 0 14px">
               <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse:collapse">
-                <tr><td style="background:#fdf8ec;border:1px solid #e8d9a8;border-left:3px solid #c8a951;border-radius:4px;padding:10px 13px">
-                  ${p(escLines(item.highlight), `color:#6b5518;margin:0`)}
+                <tr><td style="background:${HL_GROUND};border:1px solid ${HL_RULE};border-left:3px solid ${HL_RULE};border-radius:4px;padding:10px 13px">
+                  ${p(escLines(item.highlight), `color:${HL_INK};margin:0`)}
                 </td></tr>
               </table>
             </td></tr>` : ""}
@@ -243,7 +267,7 @@ function itemBlock(item: Item, liveUrl: string | null): string {
 function sectionBlock(section: Section, liveUrl: string | null): string {
   const head = [
     String(section.title ?? "").trim()
-      ? `<h2 style="margin:0 0 4px;font-family:${FONT};font-size:22px;line-height:1.25;color:${INK};font-weight:700">${esc(section.title)}</h2>` : "",
+      ? `<h2 style="margin:0 0 4px;font-family:${FONT};font-size:${SIZE.sectionTitle};line-height:1.25;color:${INK};font-weight:700">${esc(section.title)}</h2>` : "",
     String(section.description ?? "").trim() ? p(escLines(section.description), `color:${MUTED};margin:0 0 14px`) : "",
   ].join("");
   return `${head ? `<tr><td style="padding:8px 0 10px">${head}</td></tr>` : ""}
@@ -274,9 +298,9 @@ export function renderPacketEmail(packet: Packet, opts: EmailRenderOptions): str
     ${logo ? `<img src="${esc(logo)}" alt="${esc(business || "Logo")}" height="40"
          style="display:block;height:40px;width:auto;max-width:180px;margin:0 0 14px" />` : ""}
     ${business ? p(esc(business).toUpperCase(), `font-size:12px;letter-spacing:1px;color:${MUTED};margin:0 0 6px`) : ""}
-    ${heading ? `<h1 style="margin:0;font-family:${FONT};font-size:26px;line-height:1.2;color:${INK};font-weight:700">${esc(heading)}</h1>` : ""}
+    ${heading ? `<h1 style="margin:0;font-family:${FONT};font-size:${SIZE.pageTitle};line-height:1.2;color:${INK};font-weight:700">${esc(heading)}</h1>` : ""}
     ${client ? p(`Prepared for ${esc(client)}`, `color:${MUTED};margin:6px 0 0`) : ""}
-    ${live ? p(`<a href="${esc(live)}" style="color:${LINK};text-decoration:underline">Open the interactive version</a>`, "font-size:15px;margin:10px 0 0") : ""}
+    ${live ? p(`<a href="${esc(live)}" style="color:${LINK};text-decoration:underline">Open the interactive version</a>`, "font-size:${SIZE.small};margin:10px 0 0") : ""}
   </td></tr>`;
 
   const note = String(packet.personalNote ?? "").trim()
@@ -315,7 +339,7 @@ export function renderPacketEmail(packet: Packet, opts: EmailRenderOptions): str
   const btn = (target: string, label: string, primary: boolean) =>
     `<td style="padding:0 8px 8px 0"><table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse:separate">
       <tr><td style="background:${primary ? LINK : "#eef2ff"};border:1px solid ${primary ? LINK : "#dbe3ff"};border-radius:6px">
-        <a href="${esc(target)}" style="display:inline-block;padding:9px 16px;font-family:${FONT};font-size:15px;font-weight:600;line-height:1;color:${primary ? "#ffffff" : LINK};text-decoration:none">${esc(label)}</a>
+        <a href="${esc(target)}" style="display:inline-block;padding:9px 16px;font-family:${FONT};font-size:${SIZE.small};font-weight:600;line-height:1;color:${primary ? "#ffffff" : LINK};text-decoration:none">${esc(label)}</a>
       </td></tr></table></td>`;
 
   const buttons: string[] = [];

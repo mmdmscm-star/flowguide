@@ -5,7 +5,9 @@ import { PacketHeader } from "@/components/packet-header";
 import { PersonalNote } from "@/components/personal-note";
 import { SectionGroup } from "@/components/section-group";
 import { ProfessionalFooter } from "@/components/professional-footer";
+import { PacketBlockBody } from "@/components/packet-block-body";
 import { PreviewActions } from "@/components/preview-actions";
+import { treatmentFor, webVars } from "@/lib/style/treatment";
 
 type Props = {
   params: Promise<{ id: string }>;
@@ -33,7 +35,10 @@ export default async function PreviewPage({ params }: Props) {
   }
 
   return (
-    <main className="w-full max-w-lg mx-auto pb-12 overflow-x-hidden break-words">
+    <main
+      style={webVars(treatmentFor(packet)) as React.CSSProperties}
+      className="w-full max-w-lg mx-auto pb-12 overflow-x-hidden break-words"
+    >
       {/* Preview banner */}
       <PreviewActions
         packetId={id}
@@ -58,7 +63,7 @@ export default async function PreviewPage({ params }: Props) {
             href={packet.mapUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center justify-center gap-2 w-full py-3 rounded-xl bg-accent hover:bg-accent-hover text-white text-sm font-medium transition-colors"
+            className="flex items-center justify-center gap-2 w-full py-3 rounded-xl bg-accent hover:bg-accent-hover text-white text-base font-medium transition-colors"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
@@ -68,13 +73,23 @@ export default async function PreviewPage({ params }: Props) {
         </div>
       )}
 
-      {packet.sections.map((section) => (
-        // PROFESSIONAL SURFACE. This is the owner looking at their own draft,
-        // so it declares itself and shows the private note alongside the client
-        // highlight. Every recipient surface leaves this prop off and gets the
-        // safe default.
-        <SectionGroup key={section.id} section={section} showQuickNav={packet.showQuickNav !== false} audience="professional" />
-      ))}
+      {/* THE SAME COMPOSITION THE RECIPIENT PAGE RENDERS. Preview mapped
+          `sections` unconditionally, so a block-composed packet previewed as
+          its sections — or as nothing — and the professional was approving
+          something their client would never see. The branch is the recipient
+          page's, verbatim.
+
+          PROFESSIONAL SURFACE, still. The section path declares itself and
+          shows the private note alongside the client highlight; every recipient
+          surface leaves that prop off and gets the safe default. The block body
+          has no such distinction to make. */}
+      {packet.compositionMode === "blocks" ? (
+        <PacketBlockBody blocks={packet.blocks ?? []} />
+      ) : (
+        packet.sections.map((section) => (
+          <SectionGroup key={section.id} section={section} showQuickNav={packet.showQuickNav !== false} audience="professional" />
+        ))
+      )}
 
       {packet.professional.name && (
         <ProfessionalFooter professional={packet.professional} />
