@@ -1,10 +1,45 @@
 import type { Metadata } from "next";
-import { Geist } from "next/font/google";
+import { Geist, Newsreader, Source_Sans_3, Source_Serif_4 } from "next/font/google";
 import "./globals.css";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
+});
+
+// THE FACES A TREATMENT MAY ASK FOR.
+//
+// Declared here because next/font is a build-time loader: it self-hosts the
+// files, emits one @font-face per family and hands back a class that sets a CSS
+// variable. A treatment names the VARIABLE, never the family, so the treatment
+// layer stays free of loader mechanics and this file stays the only place a
+// font is fetched.
+//
+// preload:false ON EVERYTHING BUT GEIST, deliberately. Geist is what every
+// Sendset wears today, so it earns the <link rel=preload>. The other three are
+// worn only by a treatment nobody has selected yet, and preloading a face no
+// page uses spends a recipient's bandwidth on a look they were not sent.
+// display:"swap" so a face that has not arrived shows the fallback stack in the
+// treatment rather than invisible text.
+const newsreader = Newsreader({
+  variable: "--font-newsreader",
+  subsets: ["latin"],
+  display: "swap",
+  preload: false,
+});
+
+const sourceSans = Source_Sans_3({
+  variable: "--font-source-sans",
+  subsets: ["latin"],
+  display: "swap",
+  preload: false,
+});
+
+const sourceSerif = Source_Serif_4({
+  variable: "--font-source-serif",
+  subsets: ["latin"],
+  display: "swap",
+  preload: false,
 });
 
 // The description is what a professional reads in a link preview when the URL
@@ -48,7 +83,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${geistSans.variable} h-full antialiased`}>
+    <html
+      lang="en"
+      className={`${geistSans.variable} ${newsreader.variable} ${sourceSans.variable} ${sourceSerif.variable} h-full antialiased`}
+    >
       <body className="min-h-full flex flex-col">{children}</body>
     </html>
   );

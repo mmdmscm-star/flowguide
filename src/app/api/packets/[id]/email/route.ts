@@ -55,7 +55,11 @@ export async function GET(_request: Request, context: Context) {
 
   return NextResponse.json({
     ok: true,
+    // The treatment comes from the packet, exactly as it does on the recipient
+    // page and on paper. There is nothing to pass and nothing to override.
     html: renderPacketEmail(packet, { liveUrl }),
+    // PLAIN TEXT IS STYLING-FREE, and stays that way. It has no typography to
+    // decide, so a treatment has nothing to say about it.
     text: renderPacketEmailText(packet, { liveUrl }),
   });
 }

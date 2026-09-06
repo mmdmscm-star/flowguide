@@ -236,6 +236,10 @@ function buildPacket(
     // cached row must all read as ON, so the failure mode is "behaves as it
     // does today" rather than "the index silently vanished".
     showQuickNav: packet.show_quick_nav !== false,
+    // Absent, null or unrecognised all resolve to the default treatment; see
+    // treatmentFor(). Migration 0049 makes the column NOT NULL, so in practice
+    // this is always one of the registry's names.
+    styleTreatment: packet.style_treatment ?? undefined,
     sections,
     professional: professionalFromProfileRow(profile),
   };
@@ -288,6 +292,14 @@ async function buildBlockPacket(
     personalNote: packet.personal_note || undefined,
     mapUrl: packet.map_url || undefined,
     compositionMode: "blocks",
+    // PRESENTATION PREFERENCES BELONG TO THE SHARED ASSEMBLY, not to each
+    // caller. The published block branch used to attach neither, while the
+    // editor branch attached showQuickNav after the fact — an omission that was
+    // inert only because a block body renders no index. A treatment is NOT
+    // inert: block packets render through the same treatment-aware components,
+    // so a branch that forgot it would show a client the wrong look.
+    showQuickNav: packet.show_quick_nav !== false,
+    styleTreatment: packet.style_treatment ?? undefined,
     sections: [],
     blocks,
     professional: professionalFromProfileRow(profile),
@@ -417,8 +429,7 @@ export async function getPacketForEditor(
   // publish-time snapshot, exactly as it is for the section path below.
   if (packet.composition_mode === "blocks") {
     const built = await buildBlockPacket(supabase, packet, profile);
-    return { ...built, id: packet.id, status: packet.status,
-             showQuickNav: packet.show_quick_nav !== false };
+    return { ...built, id: packet.id, status: packet.status };
   }
 
   const { data: sections } = await supabase
@@ -498,8 +509,9 @@ function buildPacketWithId(packet: any, profile: any, sections: Section[]): Pack
     mapUrl: packet.map_url || undefined,
     status: packet.status,
     // The creator's preview must be recipient-truthful, so it reads the same
-    // preference the live page does.
+    // preferences the live page does.
     showQuickNav: packet.show_quick_nav !== false,
+    styleTreatment: packet.style_treatment ?? undefined,
     sections,
     professional: resolveProfessional(packet, profile),
   };

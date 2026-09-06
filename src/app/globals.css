@@ -18,3 +18,111 @@ body {
   font-family: var(--font-sans), system-ui, -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;
 }
+
+/* ===========================================================================
+ * THE SENDSET PRESENTATION LAYER.
+ *
+ * The treatment reaches a component as --sg-* custom properties (see
+ * src/lib/style/treatment.ts). Almost all of it is applied inline, at the
+ * element. These rules exist for the handful of things an inline style cannot
+ * express — a :hover, and a rule that must fall BETWEEN two siblings — so that
+ * a treatment can still decide them.
+ *
+ * Every selector is scoped to an sg- class, so a creator surface that never
+ * wears a treatment is untouched by any of it.
+ * ======================================================================== */
+
+/* A destination, drawn either as a filled chip or as a full-width ruled row.
+ * ONE markup path: which of the two it is has already been decided by the
+ * treatment's `contacts` mode and arrives here as values. */
+.sg-chip {
+  display: var(--sg-chip-display, inline-flex);
+  width: var(--sg-chip-width, auto);
+  min-height: var(--sg-chip-min-h, 0px);
+  padding: var(--sg-chip-pad, 0.375rem 0.75rem);
+  line-height: var(--sg-body-lh);
+  border-radius: var(--sg-chip-radius, 0.5rem);
+  border-style: solid;
+  border-width: var(--sg-chip-border-width, 1px);
+  border-color: var(--sg-chip-rule);
+  background-color: var(--sg-chip-ground);
+  color: var(--sg-chip-ink);
+  box-shadow: var(--sg-chip-row-rule, none);
+  justify-content: var(--sg-chip-justify, center);
+  transition: background-color 150ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+.sg-chip:hover { background-color: var(--sg-chip-hover); }
+/* The last row in a group does not rule itself: the group already has a
+ * boundary, and two hairlines a few pixels apart read as a mistake. Inert for a
+ * chip treatment, which has no row rule to begin with. */
+.sg-chip:last-child { box-shadow: none; }
+
+/* An inline text link inside packet content. */
+.sg-link { color: var(--sg-accent); }
+.sg-link:hover { color: var(--sg-accent-hover); }
+
+/* A row of the quick-navigation index. */
+.sg-nav-row:hover { color: var(--sg-accent); }
+
+/* BETWEEN two items, never after the last one. A treatment that removes the
+ * card has to put the boundary somewhere, and the adjacent-sibling selector is
+ * the one place it can go without a component counting its own position. */
+.sg-item + .sg-item {
+  border-top-width: var(--sg-item-rule-width, 0);
+  border-top-color: var(--sg-item-rule-color, transparent);
+  padding-top: var(--sg-item-rule-pad, 0);
+}
+
+/* The professional's contact buttons in the footer. */
+/* THE ONE PRIMARY ACTION.
+ *
+ * It has never carried a border — the affordance is the ground — so it turns
+ * the chip's border off rather than tinting it. Everything else is resolved by
+ * the treatment: a chip treatment fills it with the accent, a row treatment
+ * leaves it transparent and carries the emphasis on a heavier rule, a taller
+ * row and a semibold label. There is no branch here and no treatment named. */
+.sg-btn-primary {
+  border-width: 0;
+  background-color: var(--sg-btn-ground);
+  color: var(--sg-btn-ink);
+  box-shadow: var(--sg-btn-rule, none);
+  min-height: var(--sg-btn-min-h, auto);
+  font-weight: var(--sg-btn-weight, 500);
+}
+.sg-btn-primary:hover { background-color: var(--sg-btn-hover); }
+
+/* The element that wraps a rendered Sendset. Everything inside it inherits the
+ * treatment's body face and ink; nothing outside it is affected. */
+.sg-packet {
+  font-family: var(--sg-font-body);
+  color: var(--sg-ink);
+}
+
+/* The quick-navigation index: a rule between rows, never before the first. */
+.sg-nav > li:not(:last-child) { border-bottom-width: 1px; border-color: var(--sg-line); }
+
+/* THE HIGHLIGHT MARK — one icon, for a meaning the packet already carries.
+ *
+ * `item.highlight` means "the professional wrote this for the person reading",
+ * and today only an amber ground says so. A treatment that removes the ground
+ * has to say it another way. Drawn as a masked SVG so it takes the highlight's
+ * own ink, and switched by `content` so a treatment that does not want it
+ * generates no box at all — Default renders exactly what it rendered before.
+ *
+ * It is decoration of an existing field. It never reads the text, never infers
+ * a type from a label, and is not an emoji. */
+.sg-highlight::before {
+  content: var(--sg-highlight-mark, none);
+  display: block;
+  float: left;
+  width: 0.95em;
+  height: 0.95em;
+  margin: 0.15em 0.45em 0 0;
+  background-color: currentColor;
+  -webkit-mask: var(--sg-mark-star) center / contain no-repeat;
+  mask: var(--sg-mark-star) center / contain no-repeat;
+}
+
+:root {
+  --sg-mark-star: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 2.2l2.95 6.32 6.85.72-5.1 4.63 1.42 6.76L12 17.2l-6.12 3.43 1.42-6.76-5.1-4.63 6.85-.72z'/%3E%3C/svg%3E");
+}

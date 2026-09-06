@@ -84,6 +84,11 @@ export interface Packet {
    *  Defaults to true, so an absent value behaves exactly as before. Not
    *  content — see migration 0030 and ingest_bump_packet_self(). */
   showQuickNav?: boolean;
+  /** Recipient PRESENTATION only: which visual treatment this Sendset wears
+   *  (`packets.style_treatment`, migration 0049). Absent or unrecognised
+   *  resolves to the default treatment — see treatmentFor(). Not content, and
+   *  deliberately outside ingest_bump_packet_self(). */
+  styleTreatment?: string;
   sections: Section[];
   blocks?: PacketBlock[];
   professional: ProfessionalContact;

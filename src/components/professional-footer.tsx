@@ -6,9 +6,25 @@ export function ProfessionalFooter({
   professional: ProfessionalContact;
 }) {
   return (
-    <footer className="mx-5 mb-8 mt-4 rounded-xl bg-surface border border-border p-5">
+    <footer
+      className="mx-[var(--sg-page-gutter)] mb-8 mt-4 p-5"
+      style={{
+        background: "var(--sg-surface)",
+        borderStyle: "solid",
+        borderWidth: "var(--sg-details-border-width)",
+        borderColor: "var(--sg-line)",
+        borderRadius: "var(--sg-card-radius)",
+      }}
+    >
       {professional.footerLabel && (
-        <p className="text-xs font-medium uppercase tracking-widest text-muted mb-2">
+        <p
+          className="text-xs uppercase mb-2"
+          style={{
+            color: "var(--sg-muted)",
+            fontWeight: "var(--sg-eyebrow-weight)",
+            letterSpacing: "var(--sg-eyebrow-tracking)",
+          }}
+        >
           {professional.footerLabel}
         </p>
       )}
@@ -18,25 +34,26 @@ export function ProfessionalFooter({
             src={professional.headshotUrl}
             alt={professional.name}
             loading="lazy"
-            className="w-14 h-14 rounded-full object-cover flex-shrink-0 border border-border"
+            className="w-14 h-14 rounded-full object-cover flex-shrink-0 border border-[color:var(--sg-line)]"
           />
         )}
         <div className="min-w-0">
-          <p className="text-base font-semibold text-foreground">
+          <p className="font-semibold" style={{ fontSize: "var(--sg-body)", lineHeight: "var(--sg-body-lh)", color: "var(--sg-ink)" }}>
             {professional.name}
           </p>
           {professional.businessName && (
-            <p className="text-sm text-muted mt-0.5">
+            <p className="mt-0.5" style={{ fontSize: "var(--sg-small)", lineHeight: "var(--sg-small-lh)", color: "var(--sg-muted)" }}>
               {professional.businessName}
             </p>
           )}
         </div>
       </div>
-      <div className="flex flex-wrap gap-2 mt-3">
+      <div className="flex flex-wrap gap-[var(--sg-chip-gap)] mt-3">
         {professional.phone && (
           <a
             href={`tel:${professional.phone}`}
-            className="inline-flex items-center gap-1.5 text-base font-medium text-white bg-accent hover:bg-accent-hover px-4 py-2 rounded-lg transition-colors"
+            className="sg-chip sg-btn-primary items-center gap-1.5 font-medium"
+            style={{ fontSize: "var(--sg-body)", padding: "var(--sg-btn-pad)" }}
           >
             <svg
               className="w-4 h-4"
@@ -57,7 +74,8 @@ export function ProfessionalFooter({
         {professional.phone && (
           <a
             href={`sms:${professional.phone}`}
-            className="inline-flex items-center gap-1.5 text-base font-medium text-accent bg-blue-50 hover:bg-blue-100 border border-blue-100 px-4 py-2 rounded-lg transition-colors"
+            className="sg-chip items-center gap-1.5 font-medium"
+            style={{ fontSize: "var(--sg-body)", padding: "var(--sg-btn-pad)" }}
           >
             <svg
               className="w-4 h-4"
@@ -78,7 +96,8 @@ export function ProfessionalFooter({
         {professional.email && (
           <a
             href={`mailto:${professional.email}`}
-            className="inline-flex items-center gap-1.5 text-base font-medium text-accent bg-blue-50 hover:bg-blue-100 border border-blue-100 px-4 py-2 rounded-lg transition-colors"
+            className="sg-chip items-center gap-1.5 font-medium"
+            style={{ fontSize: "var(--sg-body)", padding: "var(--sg-btn-pad)" }}
           >
             <svg
               className="w-4 h-4"
@@ -101,7 +120,8 @@ export function ProfessionalFooter({
             href={professional.websiteUrl.startsWith("http") ? professional.websiteUrl : `https://${professional.websiteUrl}`}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 text-base font-medium text-accent bg-blue-50 hover:bg-blue-100 border border-blue-100 px-4 py-2 rounded-lg transition-colors"
+            className="sg-chip items-center gap-1.5 font-medium"
+            style={{ fontSize: "var(--sg-body)", padding: "var(--sg-btn-pad)" }}
           >
             <svg
               className="w-4 h-4"
@@ -127,7 +147,8 @@ export function ProfessionalFooter({
               href={link.url.startsWith("http") ? link.url : `https://${link.url}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 text-base font-medium text-accent bg-blue-50 hover:bg-blue-100 border border-blue-100 px-4 py-2 rounded-lg transition-colors"
+              className="sg-chip items-center gap-1.5 font-medium"
+            style={{ fontSize: "var(--sg-body)", padding: "var(--sg-btn-pad)" }}
             >
               <svg
                 className="w-4 h-4"

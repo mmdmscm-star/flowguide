@@ -19,12 +19,35 @@ export function SectionGroup({
   return (
     <section className="mb-[var(--sg-section-gap)]">
       {(section.title || section.description) && (
-        <div className="px-[var(--sg-page-gutter)] mb-4">
+        // THE SECTION RULE is the treatment's, not this component's. A
+        // treatment that announces a section with a hairline sets the border
+        // and the space it needs; every other treatment resolves both to
+        // nothing and the header sits exactly where it always did.
+        <div
+          className="px-[var(--sg-page-gutter)] mb-4"
+          style={{
+            borderTopWidth: "var(--sg-section-rule-width)",
+            borderTopColor: "var(--sg-section-rule-color)",
+            paddingTop: "var(--sg-section-rule-pad)",
+          }}
+        >
           {section.title && (
-            <h2 className="text-[length:var(--sg-section-title)] font-bold text-[color:var(--sg-ink)]">{section.title}</h2>
+            <h2
+              className="text-[length:var(--sg-section-title)] text-[color:var(--sg-ink)]"
+              style={{
+                fontFamily: "var(--sg-font-display)",
+                fontWeight: "var(--sg-title-weight)",
+                letterSpacing: "var(--sg-title-tracking)",
+              }}
+            >
+              {section.title}
+            </h2>
           )}
           {section.description && (
-            <p className="mt-1 text-base text-gray-600 leading-relaxed whitespace-pre-line">
+            <p
+              className="mt-1 leading-relaxed whitespace-pre-line"
+              style={{ fontSize: "var(--sg-body)", color: "var(--sg-label)" }}
+            >
               {section.description}
             </p>
           )}
@@ -43,7 +66,7 @@ export function SectionGroup({
           // The anchor lives on a wrapper so ItemCard itself is untouched.
           // scroll-mt keeps the card's top edge off the very top of the
           // viewport after a jump.
-          <div key={item.id} id={`item-${item.id}`} className="scroll-mt-4">
+          <div key={item.id} id={`item-${item.id}`} className="sg-item scroll-mt-4">
             <ItemCard item={item} audience={audience} />
           </div>
         ))}

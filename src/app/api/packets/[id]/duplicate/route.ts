@@ -44,6 +44,13 @@ export async function POST(_request: Request, context: Context) {
       // copied — a duplicate is a fresh draft that re-snapshots at publish.
       identity_mode: original.identity_mode || "default",
       custom_identity: original.custom_identity ?? null,
+      // AND ITS PRESENTATION CHOICES. This route enumerates columns rather than
+      // copying the row, so a preference that is not named here is silently
+      // reset — which is exactly what had been happening to show_quick_nav since
+      // 0030. A duplicate takes the CURRENT VALUES, not a reference: changing
+      // the original's look later must not reach the copy.
+      show_quick_nav: original.show_quick_nav !== false,
+      style_treatment: original.style_treatment || "default",
     })
     .select()
     .single();

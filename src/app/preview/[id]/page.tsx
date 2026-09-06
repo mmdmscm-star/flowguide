@@ -7,7 +7,7 @@ import { SectionGroup } from "@/components/section-group";
 import { ProfessionalFooter } from "@/components/professional-footer";
 import { PacketBlockBody } from "@/components/packet-block-body";
 import { PreviewActions } from "@/components/preview-actions";
-import { treatmentFor, webVars } from "@/lib/style/treatment";
+import { PreviewSurface } from "@/components/preview-surface";
 
 type Props = {
   params: Promise<{ id: string }>;
@@ -34,21 +34,25 @@ export default async function PreviewPage({ params }: Props) {
     );
   }
 
+  // THE SURFACE IS A CLIENT COMPONENT so a style click can re-publish the
+  // treatment variables without a round trip. The Sendset below is still
+  // server-rendered and passes through as children — nothing about the packet
+  // crosses into the browser because of this.
   return (
-    <main
-      style={webVars(treatmentFor(packet)) as React.CSSProperties}
-      className="w-full max-w-lg mx-auto pb-12 overflow-x-hidden break-words"
+    <PreviewSurface
+      packetId={id}
+      persisted={packet.styleTreatment}
+      banner={
+        <PreviewActions
+          packetId={id}
+          slug={packet.slug}
+          initialStatus={packet.status}
+          title={packet.clientTitle}
+          clientName={packet.clientName}
+          professionalName={packet.professional?.name}
+        />
+      }
     >
-      {/* Preview banner */}
-      <PreviewActions
-        packetId={id}
-        slug={packet.slug}
-        initialStatus={packet.status}
-        title={packet.clientTitle}
-        clientName={packet.clientName}
-        professionalName={packet.professional?.name}
-      />
-
       <PacketHeader
         title={packet.clientTitle}
         clientName={packet.clientName}
@@ -58,12 +62,13 @@ export default async function PreviewPage({ params }: Props) {
       {packet.personalNote && <PersonalNote note={packet.personalNote} />}
 
       {packet.mapUrl && (
-        <div className="mx-5 mb-8">
+        <div className="mx-[var(--sg-page-gutter)] mb-8">
           <a
             href={packet.mapUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center justify-center gap-2 w-full py-3 rounded-xl bg-accent hover:bg-accent-hover text-white text-base font-medium transition-colors"
+            className="sg-btn-primary flex items-center justify-center gap-2 w-full py-3 font-medium transition-colors"
+            style={{ borderRadius: "var(--sg-card-radius)", fontSize: "var(--sg-body)", lineHeight: "var(--sg-body-lh)" }}
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
@@ -95,9 +100,9 @@ export default async function PreviewPage({ params }: Props) {
         <ProfessionalFooter professional={packet.professional} />
       )}
 
-      <p className="text-center text-xs text-muted/40 mt-4">
+      <p className="text-center text-xs mt-4" style={{ color: "var(--sg-faint)" }}>
         Powered by Sendset
       </p>
-    </main>
+    </PreviewSurface>
   );
 }

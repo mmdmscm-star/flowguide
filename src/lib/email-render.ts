@@ -1,7 +1,7 @@
 import type { Packet, Item, Section } from "./types.ts";
 import { resolveCardLinks } from "./item-links.ts";
 import { thumbnailUrl, squareThumbnailUrl } from "./image-source.ts";
-import { treatmentFor } from "./style/treatment.ts";
+import { treatmentFor, emailStyle, type EmailStyle } from "./style/treatment.ts";
 
 // AN EMAIL-READY RENDERING OF THE SAME PACKET.
 //
@@ -54,35 +54,23 @@ const href = (v: unknown): string | null => {
   return `https://${s}`;
 };
 
-// THE PALETTE AND THE SCALE COME FROM THE TREATMENT LAYER, not from this file.
-// They were four hex literals and a set of pixel sizes chosen here, and they had
+// THE PALETTE, THE SCALE AND THE STRUCTURE COME FROM THE TREATMENT LAYER.
+//
+// They were hex literals and pixel sizes chosen in this file, and they had
 // drifted from the web page's — #1f2328 against #1a1a1a, #5b6570 against
 // #6b7280 — with nothing recording that they were meant to be one decision.
 //
-// Read once, at module scope, because there is exactly one treatment today and
-// every packet wears it. When a second exists these become a per-render lookup
-// on `treatmentFor(packet)`; the values move, the shape does not.
+// RESOLVED PER RENDER, not at module scope. A treatment is a per-packet choice,
+// so every helper below takes the resolved style as its first argument and
+// destructures the names it uses. Email gets an object rather than custom
+// properties because it has no cascade to read them through: Gmail strips
+// <style>, Outlook renders through Word, and every value has to be written into
+// an inline attribute at the point it is used.
 //
-// THE FONT STACK STAYS LOCAL. It is not a treatment decision — it is what
-// Outlook and Gmail will actually render, and a webfont here does not degrade,
-// it disappears.
-const T = treatmentFor();
-const FONT = "-apple-system, 'Segoe UI', Roboto, Arial, Helvetica, sans-serif";
-const INK = T.colors.ink.email;
-const MUTED = T.colors.muted.email;
-const LINE = T.colors.line.email;
-const LINK = T.colors.accent.email;
-const PAGE = T.colors.surface.email;
-const HL_INK = T.colors.highlightInk.email;
-const HL_GROUND = T.colors.highlightGround.email;
-const HL_RULE = T.colors.highlightRule.email;
-const SIZE = {
-  pageTitle: T.type.pageTitle.email,
-  sectionTitle: T.type.sectionTitle.email,
-  itemTitle: T.type.itemTitle.email,
-  body: T.type.body.email,
-  small: T.type.small.email,
-};
+// THE FONT IS A TREATMENT ROLE, resolved to a WEB-SAFE STACK. Georgia and the
+// system sans are the two faces genuinely present across Windows, macOS, iOS,
+// Android and Outlook-through-Word; a webfont here does not degrade, it
+// disappears, so the treatment names a stack rather than a face.
 const W = 600;
 
 /** Escaped text with authored newlines turned into <br />.
@@ -93,8 +81,8 @@ const W = 600;
  *  worth trusting across clients, so the break has to be a real tag. */
 const escLines = (v: unknown) => esc(v).replace(/\r\n?|\n/g, "<br />");
 
-const p = (text: string, style = "") =>
-  `<p style="margin:0 0 12px;font-family:${FONT};font-size:${SIZE.body};line-height:1.5;color:${INK};${style}">${text}</p>`;
+const p = (s: EmailStyle, text: string, style = "") =>
+  `<p style="margin:0 0 12px;font-family:${s.FONT};font-size:${s.SIZE.body};line-height:1.5;color:${s.INK};${style}">${text}</p>`;
 
 const CONTENT = W - 48;   // 552px, inside the card's padding
 const COLS = 4;           // three columns makes an eight-photo item ~530px taller
@@ -116,7 +104,8 @@ const THUMB = Math.floor((CONTENT - GAP * (COLS - 1)) / COLS);   // 132px
 // worse: measured on this packet it would add ~14,500px of phone scrolling,
 // roughly eighteen extra screens, and bury the prices and phone numbers under
 // the pictures.
-function photoBlock(item: Item, liveUrl: string | null): string {
+function photoBlock(s: EmailStyle, item: Item, liveUrl: string | null): string {
+  const { LINE, LINK, IMAGE_RADIUS, IMAGE_BORDER, THUMB_RADIUS } = s;
   const photos = (item.photos ?? []).map(safeUrl).filter((u): u is string => Boolean(u));
   if (!photos.length) return "";
 
@@ -128,7 +117,7 @@ function photoBlock(item: Item, liveUrl: string | null): string {
   // recipient could see, at a quarter of the bytes of the stored original.
   const heroRow = `<tr><td style="padding:0 0 ${rest.length ? 8 : 14}px">
     <img src="${esc(thumbnailUrl(hero, CONTENT * 2))}" alt="${esc(item.title)}" width="${CONTENT}"
-         style="display:block;width:100%;max-width:${CONTENT}px;height:auto;border:1px solid ${LINE};border-radius:4px" />
+         style="display:block;width:100%;max-width:${CONTENT}px;height:auto;border:${IMAGE_BORDER === "0 none" ? "0" : `1px solid ${LINE}`};border-radius:${IMAGE_RADIUS}" />
   </td></tr>`;
 
   if (!rest.length) return heroRow;
@@ -143,7 +132,7 @@ function photoBlock(item: Item, liveUrl: string | null): string {
     // affordance. One stated link below leads better than forty-two hidden ones.
     const cells = slice.map((url, k) => `<td width="${THUMB}" style="padding:0 ${
       k === COLS - 1 ? 0 : GAP}px ${GAP}px 0"><img src="${esc(squareThumbnailUrl(url, THUMB * 2))}" alt="" width="${THUMB}" height="${THUMB}"
-      style="display:block;border:1px solid ${LINE};border-radius:3px" /></td>`);
+      style="display:block;border:${IMAGE_BORDER === "0 none" ? "0" : `1px solid ${LINE}`};border-radius:${THUMB_RADIUS}" /></td>`);
     // Pad the short row so its tiles keep their width instead of stretching.
     while (cells.length < COLS) cells.push(`<td width="${THUMB}">&nbsp;</td>`);
     rows.push(`<tr>${cells.join("")}</tr>`);
@@ -151,7 +140,7 @@ function photoBlock(item: Item, liveUrl: string | null): string {
 
   const anchor = liveUrl ? `${liveUrl}#item-${item.id}` : null;
   const more = anchor
-    ? `<tr><td colspan="${COLS}" style="padding:2px 0 0">${p(
+    ? `<tr><td colspan="${COLS}" style="padding:2px 0 0">${p(s,
         `<a href="${esc(anchor)}" style="color:${LINK};text-decoration:underline">View all ${photos.length} photos</a>`,
         "font-size:14px;margin:0")}</td></tr>`
     : "";
@@ -162,7 +151,8 @@ function photoBlock(item: Item, liveUrl: string | null): string {
   </td></tr>`;
 }
 
-function detailsTable(item: Item): string {
+function detailsTable(s: EmailStyle, item: Item): string {
+  const { LINE, INK, MUTED, FONT, SIZE, DETAILS_GROUND, DETAILS_BOXED, DETAILS_RADIUS } = s;
   const rows = (item.details ?? []).filter((d) => String(d?.value ?? "").trim());
   if (!rows.length) return "";
   const body = rows.map((d, i) => {
@@ -183,13 +173,17 @@ function detailsTable(item: Item): string {
   }).join("");
   return `<tr><td style="padding:0 0 14px">
     <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%"
-           style="border-collapse:collapse;border:1px solid ${LINE};border-radius:4px">
-      <tr><td style="padding:0 12px"><table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse:collapse">${body}</table></td></tr>
+           style="border-collapse:collapse;${DETAILS_GROUND === "transparent" ? "" : `background:${DETAILS_GROUND};`}${
+             DETAILS_BOXED
+               ? `border:1px solid ${LINE};border-radius:${DETAILS_RADIUS}`
+               : `border-top:1px solid ${LINE};border-bottom:1px solid ${LINE}`}">
+      <tr><td style="padding:${DETAILS_BOXED ? "0 12px" : "0"}"><table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse:collapse">${body}</table></td></tr>
     </table>
   </td></tr>`;
 }
 
-function linksBlock(item: Item): string {
+function linksBlock(s: EmailStyle, item: Item): string {
+  const { LINK, SIZE } = s;
   // The SAME dedupe AND the same labelling the web card uses, so the two
   // renderers never disagree about which links exist or what they read.
   // resolveCardLinks returns {link, label} pairs - the resolved label already
@@ -202,10 +196,11 @@ function linksBlock(item: Item): string {
     return `<a href="${esc(url)}" style="color:${LINK};text-decoration:underline">${esc(label)}</a>`;
   }).filter(Boolean);
   if (!shown.length) return "";
-  return `<tr><td style="padding:0 0 14px">${p(shown.join(" &nbsp;·&nbsp; "), `font-size:${SIZE.small};margin:0`)}</td></tr>`;
+  return `<tr><td style="padding:0 0 14px">${p(s, shown.join(" &nbsp;·&nbsp; "), `font-size:${SIZE.small};margin:0`)}</td></tr>`;
 }
 
-function contactsBlock(item: Item): string {
+function contactsBlock(s: EmailStyle, item: Item): string {
+  const { LINE, LINK, SIZE, DETAILS_BOXED, DETAILS_RADIUS } = s;
   const all = item.contacts ?? [];
   // Which contact websites the web card shows - the same call, so a site that
   // is a duplicate of an item link is hidden in both places.
@@ -223,55 +218,70 @@ function contactsBlock(item: Item): string {
     if (email) ways.push(`<a href="mailto:${esc(email)}" style="color:${LINK};text-decoration:underline">${esc(email)}</a>`);
     const site = showSite ? safeUrl(c.website) : null;
     if (site) ways.push(`<a href="${esc(site)}" style="color:${LINK};text-decoration:underline">${esc(site.replace(/^https?:\/\/(www\.)?/i, "").replace(/\/+$/, ""))}</a>`);
-    return `${head ? p(head, "font-size:${SIZE.small};font-weight:600;margin:0 0 2px") : ""}${ways.length ? p(ways.join(" &nbsp;·&nbsp; "), "font-size:${SIZE.small};margin:0") : ""}`;
+    return `${head ? p(s, head, `font-size:${SIZE.small};font-weight:600;margin:0 0 2px`) : ""}${ways.length ? p(s, ways.join(" &nbsp;·&nbsp; "), `font-size:${SIZE.small};margin:0`) : ""}`;
   }).join(`<div style="height:10px;line-height:10px">&nbsp;</div>`);
   return `<tr><td style="padding:0 0 14px">
-    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse:collapse;border:1px solid ${LINE};border-radius:4px">
-      <tr><td style="padding:12px">${rows}</td></tr>
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse:collapse;${
+      DETAILS_BOXED
+        ? `border:1px solid ${LINE};border-radius:${DETAILS_RADIUS}`
+        : `border-top:1px solid ${LINE};border-bottom:1px solid ${LINE}`}">
+      <tr><td style="padding:${DETAILS_BOXED ? "12px" : "12px 0"}">${rows}</td></tr>
     </table>
   </td></tr>`;
 }
 
-function itemBlock(item: Item, liveUrl: string | null): string {
+function itemBlock(s: EmailStyle, item: Item, liveUrl: string | null, first: boolean): string {
+  const { LINE, INK, LINK, FONT_DISPLAY, SIZE, ITEM_TITLE_WEIGHT, PROSE,
+          CARD_BORDER, CARD_RADIUS, CARD_GROUND, CARD_PAD, ITEM_RULE,
+          HL_GROUND, HL_RULE, HL_INK, HL_BORDER_WIDTH, HL_RADIUS } = s;
   const address = String(item.address ?? "").trim();
   const mapHref = address ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}` : null;
+  // A treatment that removes the box separates items with a rule instead — and
+  // never before the first one, which is why `first` is passed rather than
+  // guessed from the markup.
+  const boxed = CARD_BORDER !== "0 none";
+  const shell = boxed
+    ? `border:1px solid ${LINE};border-radius:${CARD_RADIUS};${CARD_GROUND === "transparent" ? "" : `background:${CARD_GROUND};`}margin:0 0 16px`
+    : `border:0;margin:0;${first || ITEM_RULE === "0 none" ? "" : `border-top:1px solid ${LINE};padding-top:18px;`}`;
   return `<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%"
-     style="border-collapse:collapse;border:1px solid ${LINE};border-radius:6px;margin:0 0 16px">
-    <tr><td style="padding:20px 24px">
+     style="border-collapse:collapse;${shell}">
+    <tr><td style="padding:${CARD_PAD}">
       <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse:collapse">
-        ${photoBlock(item, liveUrl)}
+        ${photoBlock(s, item, liveUrl)}
         <tr><td style="padding:0 0 6px">
-          <h3 style="margin:0;font-family:${FONT};font-size:${SIZE.itemTitle};line-height:1.3;color:${INK};font-weight:700">${esc(item.title)}</h3>
+          <h3 style="margin:0;font-family:${FONT_DISPLAY};font-size:${SIZE.itemTitle};line-height:1.3;color:${INK};font-weight:${ITEM_TITLE_WEIGHT}">${esc(item.title)}</h3>
         </td></tr>
-        ${address ? `<tr><td style="padding:0 0 10px">${p(
+        ${address ? `<tr><td style="padding:0 0 10px">${p(s,
           mapHref ? `<a href="${esc(mapHref)}" style="color:${LINK};text-decoration:underline">${esc(address)}</a>` : esc(address),
-          "font-size:${SIZE.small};margin:0")}</td></tr>` : ""}
+          `font-size:${SIZE.small};margin:0`)}</td></tr>` : ""}
         ${String(item.description ?? "").trim()
-          ? `<tr><td style="padding:0 0 14px">${p(escLines(item.description), "margin:0")}</td></tr>` : ""}
+          ? `<tr><td style="padding:0 0 14px">${p(s, escLines(item.description), PROSE === INK ? "margin:0" : `color:${PROSE};margin:0`)}</td></tr>` : ""}
         ${String(item.highlight ?? "").trim()
           ? `<tr><td style="padding:0 0 14px">
               <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse:collapse">
-                <tr><td style="background:${HL_GROUND};border:1px solid ${HL_RULE};border-left:3px solid ${HL_RULE};border-radius:4px;padding:10px 13px">
-                  ${p(escLines(item.highlight), `color:${HL_INK};margin:0`)}
+                <tr><td style="background:${HL_GROUND};border-style:solid;border-width:${HL_BORDER_WIDTH};border-color:${HL_RULE};border-radius:${HL_RADIUS};padding:${HL_BORDER_WIDTH === "0 0 0 3px" ? "2px 0 2px 13px" : "10px 13px"}">
+                  ${p(s, escLines(item.highlight), `color:${HL_INK};margin:0`)}
                 </td></tr>
               </table>
             </td></tr>` : ""}
-        ${detailsTable(item)}
-        ${linksBlock(item)}
-        ${contactsBlock(item)}
+        ${detailsTable(s, item)}
+        ${linksBlock(s, item)}
+        ${contactsBlock(s, item)}
       </table>
     </td></tr>
   </table>`;
 }
 
-function sectionBlock(section: Section, liveUrl: string | null): string {
+function sectionBlock(s: EmailStyle, section: Section, liveUrl: string | null): string {
+  const { INK, LABEL, FONT_DISPLAY, SIZE, TITLE_WEIGHT, SECTION_RULE, SECTION_RULE_PAD } = s;
+  const rule = SECTION_RULE === "0 none" ? "" : `border-top:${SECTION_RULE};padding-top:${SECTION_RULE_PAD};`;
   const head = [
     String(section.title ?? "").trim()
-      ? `<h2 style="margin:0 0 4px;font-family:${FONT};font-size:${SIZE.sectionTitle};line-height:1.25;color:${INK};font-weight:700">${esc(section.title)}</h2>` : "",
-    String(section.description ?? "").trim() ? p(escLines(section.description), `color:${MUTED};margin:0 0 14px`) : "",
+      ? `<h2 style="margin:0 0 4px;font-family:${FONT_DISPLAY};font-size:${SIZE.sectionTitle};line-height:1.25;color:${INK};font-weight:${TITLE_WEIGHT}">${esc(section.title)}</h2>` : "",
+    String(section.description ?? "").trim() ? p(s, escLines(section.description), `color:${LABEL};margin:0 0 14px`) : "",
   ].join("");
-  return `${head ? `<tr><td style="padding:8px 0 10px">${head}</td></tr>` : ""}
-    <tr><td>${section.items.map((it) => itemBlock(it, liveUrl)).join("")}</td></tr>`;
+  return `${head ? `<tr><td style="${rule}padding:8px 0 10px">${head}</td></tr>` : ""}
+    <tr><td>${section.items.map((it, i) => itemBlock(s, it, liveUrl, i === 0)).join("")}</td></tr>`;
 }
 
 export interface EmailRenderOptions {
@@ -279,8 +289,16 @@ export interface EmailRenderOptions {
   liveUrl: string;
 }
 
-/** The email-ready HTML. Self-contained, inline-styled, single column. */
+/** The email-ready HTML. Self-contained, inline-styled, single column.
+ *
+ *  The treatment is the PACKET'S — `packets.style_treatment`, resolved through
+ *  the same registry the recipient page and the print route use. There is no
+ *  override: one packet, one stored look, four renderers. */
 export function renderPacketEmail(packet: Packet, opts: EmailRenderOptions): string {
+  const s = emailStyle(treatmentFor(packet));
+  const { FONT, FONT_DISPLAY, INK, MUTED, LINE, LINK, PAGE, SIZE, TITLE_WEIGHT,
+          ON_ACCENT, CHIP_GROUND, CHIP_RULE, CHIP_INK, RADIUS_CARD, RADIUS_CHIP,
+          RADIUS_SHELL, NOTE_RULE, BUTTONS_AS_LINKS, EYEBROW_TRACKING } = s;
   const pro = packet.professional ?? ({} as Packet["professional"]);
   const live = safeUrl(opts.liveUrl);
   const business = String(pro.businessName ?? "").trim();
@@ -297,22 +315,22 @@ export function renderPacketEmail(packet: Packet, opts: EmailRenderOptions): str
   const header = `<tr><td style="padding:28px 24px 8px">
     ${logo ? `<img src="${esc(logo)}" alt="${esc(business || "Logo")}" height="40"
          style="display:block;height:40px;width:auto;max-width:180px;margin:0 0 14px" />` : ""}
-    ${business ? p(esc(business).toUpperCase(), `font-size:12px;letter-spacing:1px;color:${MUTED};margin:0 0 6px`) : ""}
-    ${heading ? `<h1 style="margin:0;font-family:${FONT};font-size:${SIZE.pageTitle};line-height:1.2;color:${INK};font-weight:700">${esc(heading)}</h1>` : ""}
-    ${client ? p(`Prepared for ${esc(client)}`, `color:${MUTED};margin:6px 0 0`) : ""}
-    ${live ? p(`<a href="${esc(live)}" style="color:${LINK};text-decoration:underline">Open the interactive version</a>`, "font-size:${SIZE.small};margin:10px 0 0") : ""}
+    ${business ? p(s, esc(business).toUpperCase(), `font-size:12px;letter-spacing:${EYEBROW_TRACKING};color:${MUTED};margin:0 0 6px`) : ""}
+    ${heading ? `<h1 style="margin:0;font-family:${FONT_DISPLAY};font-size:${SIZE.pageTitle};line-height:1.2;color:${INK};font-weight:${TITLE_WEIGHT}">${esc(heading)}</h1>` : ""}
+    ${client ? p(s, `Prepared for ${esc(client)}`, `color:${MUTED};margin:6px 0 0`) : ""}
+    ${live ? p(s, `<a href="${esc(live)}" style="color:${LINK};text-decoration:underline">Open the interactive version</a>`, `font-size:${SIZE.small};margin:10px 0 0`) : ""}
   </td></tr>`;
 
   const note = String(packet.personalNote ?? "").trim()
     ? `<tr><td style="padding:14px 24px 0">
-        <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse:collapse;background:${PAGE};border-radius:6px">
-          <tr><td style="padding:14px 16px">${p(esc(packet.personalNote).replace(/\n/g, "<br />"), "margin:0")}</td></tr>
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse:collapse;background:${PAGE};${NOTE_RULE}border-radius:${RADIUS_CARD}">
+          <tr><td style="padding:14px 16px">${p(s, esc(packet.personalNote).replace(/\n/g, "<br />"), "margin:0")}</td></tr>
         </table>
       </td></tr>` : "";
 
   const body = `<tr><td style="padding:18px 24px 0">
       <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse:collapse">
-        ${packet.sections.map((s) => sectionBlock(s, live)).join("")}
+        ${packet.sections.map((sec) => sectionBlock(s, sec, live)).join("")}
       </table>
     </td></tr>`;
 
@@ -336,10 +354,17 @@ export function renderPacketEmail(packet: Packet, opts: EmailRenderOptions): str
 
   // A table cell IS the button: no border-radius in Outlook, which squares the
   // corners and changes nothing else.
+  //
+  // A "rows" TREATMENT STATES ITS DESTINATIONS AS LINKS instead — which is both
+  // what that treatment does everywhere else and the safest thing email HTML
+  // can do. Same destinations, same labels, same order; only the drawing
+  // changes.
   const btn = (target: string, label: string, primary: boolean) =>
-    `<td style="padding:0 8px 8px 0"><table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse:separate">
-      <tr><td style="background:${primary ? LINK : "#eef2ff"};border:1px solid ${primary ? LINK : "#dbe3ff"};border-radius:6px">
-        <a href="${esc(target)}" style="display:inline-block;padding:9px 16px;font-family:${FONT};font-size:${SIZE.small};font-weight:600;line-height:1;color:${primary ? "#ffffff" : LINK};text-decoration:none">${esc(label)}</a>
+    BUTTONS_AS_LINKS
+      ? `<td style="padding:0 18px 8px 0"><a href="${esc(target)}" style="font-family:${FONT};font-size:${SIZE.small};font-weight:600;color:${LINK};text-decoration:underline">${esc(label)}</a></td>`
+      : `<td style="padding:0 8px 8px 0"><table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse:separate">
+      <tr><td style="background:${primary ? LINK : CHIP_GROUND};border:1px solid ${primary ? LINK : CHIP_RULE};border-radius:${RADIUS_CHIP}">
+        <a href="${esc(target)}" style="display:inline-block;padding:9px 16px;font-family:${FONT};font-size:${SIZE.small};font-weight:600;line-height:1;color:${primary ? ON_ACCENT : CHIP_INK};text-decoration:none">${esc(label)}</a>
       </td></tr></table></td>`;
 
   const buttons: string[] = [];
@@ -375,31 +400,31 @@ export function renderPacketEmail(packet: Packet, opts: EmailRenderOptions): str
       <tr>
         ${headshot ? `<td style="padding:0 14px 0 0;vertical-align:top">
           <img src="${esc(thumbnailUrl(headshot, 168))}" alt="${esc(proName)}" height="56"
-               style="display:block;height:56px;width:auto;border-radius:6px;border:1px solid ${LINE}" />
+               style="display:block;height:56px;width:auto;border-radius:${RADIUS_CHIP};border:1px solid ${LINE}" />
         </td>` : ""}
         <td style="vertical-align:top">
-          ${proName ? p(esc(proName), "font-size:16px;font-weight:600;margin:0") : ""}
-          ${business ? p(esc(business), `font-size:14px;color:${MUTED};margin:2px 0 0`) : ""}
+          ${proName ? p(s, esc(proName), "font-size:16px;font-weight:600;margin:0") : ""}
+          ${business ? p(s, esc(business), `font-size:14px;color:${MUTED};margin:2px 0 0`) : ""}
         </td>
       </tr>
     </table>`;
 
   const footer = `<tr><td style="padding:8px 24px 28px">
     <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%"
-           style="border-collapse:collapse;background:${PAGE};border:1px solid ${LINE};border-radius:8px">
+           style="border-collapse:collapse;background:${PAGE};border:1px solid ${LINE};border-radius:${RADIUS_SHELL}">
       <tr><td style="padding:16px 18px">
-        ${String(pro.footerLabel ?? "").trim() ? p(esc(pro.footerLabel).toUpperCase(), `font-size:12px;letter-spacing:1px;color:${MUTED};margin:0 0 10px`) : ""}
+        ${String(pro.footerLabel ?? "").trim() ? p(s, esc(pro.footerLabel).toUpperCase(), `font-size:12px;letter-spacing:${EYEBROW_TRACKING};color:${MUTED};margin:0 0 10px`) : ""}
         ${identity}
         ${buttonRows ? `<div style="height:14px;line-height:14px">&nbsp;</div>${buttonRows}` : ""}
       </td></tr>
     </table>
-    ${live ? p(`<a href="${esc(live)}" style="color:${LINK};text-decoration:underline">View this Sendset online</a>`, `font-size:14px;color:${MUTED};margin:12px 0 0`) : ""}
+    ${live ? p(s, `<a href="${esc(live)}" style="color:${LINK};text-decoration:underline">View this Sendset online</a>`, `font-size:14px;color:${MUTED};margin:12px 0 0`) : ""}
   </td></tr>`;
 
   return `<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse:collapse;background:${PAGE}">
   <tr><td align="center" style="padding:20px 10px">
     <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="${W}"
-           style="border-collapse:collapse;width:100%;max-width:${W}px;background:#ffffff;border:1px solid ${LINE};border-radius:8px">
+           style="border-collapse:collapse;width:100%;max-width:${W}px;background:#ffffff;border:1px solid ${LINE};border-radius:${RADIUS_SHELL}">
       ${header}${note}${body}${footer}
     </table>
   </td></tr>

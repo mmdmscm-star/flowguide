@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { TREATMENT_NAMES } from "@/lib/style/treatment";
 import { getSession } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase";
 
@@ -88,6 +89,9 @@ export async function PATCH(request: Request, context: Context) {
     identityMode: "identity_mode",
     // Presentation only (0030). Deliberately not part of the content_rev list.
     showQuickNav: "show_quick_nav",
+    // Presentation only (0049), same contract: live after publish, no republish,
+    // outside content_rev, never frozen into professional_snapshot.
+    styleTreatment: "style_treatment",
   };
 
   const updates: Record<string, unknown> = {};
@@ -108,6 +112,21 @@ export async function PATCH(request: Request, context: Context) {
   // with a message no professional could act on.
   if ("showQuickNav" in body && typeof body.showQuickNav !== "boolean") {
     return NextResponse.json({ error: "Invalid show_quick_nav" }, { status: 400 });
+  }
+
+  // THE ALLOWED VALUES COME FROM THE TREATMENT REGISTRY, not from a list typed
+  // out again here. A list written twice is a list that will disagree, and the
+  // database's CHECK constraint (0049) is the third copy this must never drift
+  // from. Rejected here rather than at the constraint, so the message says
+  // something a professional could act on instead of a Postgres error code.
+  if ("styleTreatment" in body) {
+    if (typeof body.styleTreatment !== "string"
+        || !TREATMENT_NAMES.includes(body.styleTreatment)) {
+      return NextResponse.json({
+        error: "invalid_style_treatment",
+        message: `Unknown treatment. Choose one of: ${TREATMENT_NAMES.join(", ")}.`,
+      }, { status: 400 });
+    }
   }
 
   if (Object.keys(updates).length === 0) {

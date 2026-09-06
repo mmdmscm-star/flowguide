@@ -293,7 +293,8 @@ function PhotoIndex({ photos, index, onPick, onClose }: {
             onClick={() => onPick(i)}
             aria-label={`Show photo ${i + 1} of ${photos.length}`}
             aria-current={i === index}
-            className={`relative aspect-square overflow-hidden rounded-xl bg-white/5 transition duration-200 ${
+            style={{ borderRadius: "var(--sg-thumb-radius)" }}
+            className={`relative aspect-square overflow-hidden bg-white/5 transition duration-200 ${
               i === index ? "ring-2 ring-inset ring-white" : "opacity-80 hover:opacity-100"
             }`}
           >
@@ -435,7 +436,13 @@ export function PhotoGallery({ photos }: { photos: string[] }) {
 
   return (
     <>
-      <div className="relative aspect-[5/4] w-full overflow-hidden bg-gray-100 sm:aspect-auto sm:h-[460px]">
+      {/* THE FRAME IS THE TREATMENT'S; the photograph is the packet's. Aspect
+          and backdrop are how a picture is presented, so they come from the
+          treatment — nothing here crops, reorders or drops a photograph. */}
+      <div
+        className="relative w-full overflow-hidden sm:aspect-auto sm:h-[460px]"
+        style={{ aspectRatio: "var(--sg-image-aspect)", background: "var(--sg-image-ground)" }}
+      >
         <PhotoTrack
           photos={photos}
           index={index}

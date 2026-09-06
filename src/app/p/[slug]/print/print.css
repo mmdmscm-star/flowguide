@@ -20,9 +20,15 @@
 
 .pg-doc {
   color: var(--pg-ink);
-  font: 10.5pt/1.5 -apple-system, "Segoe UI", Roboto, Arial, Helvetica, sans-serif;
+  /* Size, leading and face are one decision, and it is the treatment's. */
+  font: var(--pg-doc-font);
   max-width: 7.4in;
   margin: 0 auto;
+}
+
+/* Titles take the display face; everything else inherits the body face. */
+.pg-title, .pg-section-title, .pg-item-title, .pg-contact-name, .pg-pro-name {
+  font-family: var(--pg-font-display);
 }
 
 /* On screen the route should already look like paper, so what a professional
@@ -88,17 +94,19 @@
 
 /* ---- header ------------------------------------------------------------- */
 .pg-logo { display: block; height: 0.42in; width: auto; max-width: 2.2in; margin-bottom: 10px; }
-.pg-business { font-size: 8.5pt; letter-spacing: .09em; text-transform: uppercase; color: var(--pg-muted); margin: 0 0 4px; }
-.pg-title { font-size: var(--pg-page-title); line-height: 1.2; font-weight: 700; margin: 0; white-space: pre-line; }
+.pg-business { font-size: 8.5pt; letter-spacing: var(--pg-eyebrow-tracking); text-transform: uppercase; color: var(--pg-muted); margin: 0 0 4px; }
+.pg-title { font-size: var(--pg-page-title); line-height: 1.2; font-weight: var(--pg-title-weight); letter-spacing: var(--pg-title-tracking); margin: 0; white-space: pre-line; }
 .pg-for { font-size: var(--pg-small); color: var(--pg-muted); margin: 6px 0 0; }
 .pg-live { font-size: 9.5pt; color: var(--pg-muted); margin: 8px 0 0; }
 .pg-live b { color: var(--pg-ink); font-weight: 600; }
-.pg-rule { border: 0; border-top: 1px solid #d8dce1; margin: 14px 0 18px; }
+.pg-rule { border: 0; border-top: 1px solid var(--pg-rule); margin: 14px 0 18px; }
 
 .pg-note {
-  background: #f4f5f7;
-  border: 1px solid var(--pg-line);
-  border-radius: 6px;
+  background: var(--pg-surface);
+  border-style: solid;
+  border-width: var(--pg-details-border-width);
+  border-color: var(--pg-line);
+  border-radius: var(--pg-card-radius);
   padding: 12px 14px;
   margin: 0 0 20px;
   white-space: pre-wrap;
@@ -106,17 +114,31 @@
 
 /* ---- sections and items -------------------------------------------------- */
 .pg-section { margin: 0 0 6px; }
-.pg-section-title { font-size: var(--pg-section-title); font-weight: 700; margin: 18px 0 2px; }
-.pg-section-desc { color: var(--pg-muted); margin: 0 0 10px; white-space: pre-line; }
+.pg-section-title {
+  font-size: var(--pg-section-title);
+  font-weight: var(--pg-title-weight);
+  letter-spacing: var(--pg-title-tracking);
+  margin: var(--pg-section-gap) 0 2px;
+  /* A treatment that announces a section with a hairline sets both; every
+     other treatment resolves both to nothing. */
+  border-top-width: var(--pg-section-rule-width);
+  border-top-style: solid;
+  border-top-color: var(--pg-section-rule-color);
+  padding-top: var(--pg-section-rule-pad);
+}
+.pg-section-desc { color: var(--pg-label); margin: 0 0 10px; white-space: pre-line; }
 
 .pg-item {
-  border: 1px solid var(--pg-line);
-  border-radius: 6px;
-  padding: 12px 14px;
-  margin: 0 0 14px;
+  border: var(--pg-card-border);
+  border-radius: var(--pg-card-radius);
+  padding: var(--pg-card-pad);
+  margin: 0 0 var(--pg-item-gap);
 }
-.pg-item-title { font-size: var(--pg-item-title); font-weight: 700; margin: 0 0 2px; }
-.pg-address { font-size: var(--pg-small); color: #3a4450; margin: 0 0 6px; }
+/* A treatment that removes the box puts the boundary between items instead —
+   never after the last one. */
+.pg-item + .pg-item { border-top-width: var(--pg-item-rule-width); border-top-style: solid; border-top-color: var(--pg-item-rule-color); padding-top: var(--pg-item-rule-pad); }
+.pg-item-title { font-size: var(--pg-item-title); font-weight: var(--pg-item-title-weight); letter-spacing: var(--pg-title-tracking); margin: 0 0 2px; }
+.pg-address { font-size: var(--pg-small); color: var(--pg-prose); margin: 0 0 6px; }
 .pg-desc { margin: 0 0 10px; white-space: pre-line; }
 
 /* HIGHLIGHT FOR CLIENT. Amber survives a mono laser printer as a light grey
@@ -124,10 +146,12 @@
 .pg-highlight {
   margin: 0 0 12px;
   padding: 9px 12px;
-  border: 1px solid var(--pg-highlight-rule);
-  border-left: 3px solid var(--pg-highlight-rule);
+  border-style: solid;
+  border-width: var(--pg-highlight-border-width);
+  border-color: var(--pg-highlight-rule);
   background: var(--pg-highlight-ground);
-  border-radius: 4px;
+  border-radius: var(--pg-highlight-radius);
+  color: var(--pg-highlight-ink);
   white-space: pre-line;
   break-inside: avoid;
   page-break-inside: avoid;
@@ -139,11 +163,30 @@
 .pg-hero {
   display: block;
   width: 100%;
-  height: 2.6in;
+  height: var(--pg-hero-height);
   object-fit: cover;
-  border: 1px solid var(--pg-line);
-  border-radius: 4px;
+  border: var(--pg-image-border);
+  border-radius: var(--pg-image-radius);
   margin: 0 0 6px;
+}
+
+/* THE HIGHLIGHT MARK, on paper. Same reasoning as the screen: it presents a
+   meaning item.highlight already carries, for a treatment whose highlight has
+   no ground left to carry it. `content: none` generates no box at all, so a
+   treatment that does not want it prints exactly what it printed before. */
+.pg-highlight::before {
+  content: var(--pg-highlight-mark, none);
+  display: block;
+  float: left;
+  width: 0.95em;
+  height: 0.95em;
+  margin: 0.15em 0.45em 0 0;
+  background-color: currentColor;
+  -webkit-mask: var(--pg-mark-star) center / contain no-repeat;
+  mask: var(--pg-mark-star) center / contain no-repeat;
+}
+.pg-doc {
+  --pg-mark-star: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 2.2l2.95 6.32 6.85.72-5.1 4.63 1.42 6.76L12 17.2l-6.12 3.43 1.42-6.76-5.1-4.63 6.85-.72z'/%3E%3C/svg%3E");
 }
 .pg-photos { font-size: 0; margin: 0 0 10px; }
 .pg-photo {
@@ -154,15 +197,18 @@
   aspect-ratio: 1 / 1;
   object-fit: cover;
   margin: 0 2% 2% 0;
-  border: 1px solid var(--pg-line);
-  border-radius: 3px;
+  border: var(--pg-image-border);
+  border-radius: var(--pg-thumb-radius);
 }
 .pg-photo:nth-child(4n) { margin-right: 0; }
 
 /* ---- details -------------------------------------------------------------- */
 .pg-details {
-  border: 1px solid var(--pg-line);
-  border-radius: 4px;
+  background: var(--pg-details-ground);
+  border-style: solid;
+  border-width: var(--pg-details-border-width);
+  border-color: var(--pg-line);
+  border-radius: var(--pg-details-radius);
   margin: 0 0 10px;
   overflow: hidden;
 }
@@ -171,11 +217,11 @@
   align-items: baseline;
   justify-content: space-between;
   gap: 0 24px;
-  padding: 6px 12px;
+  padding: var(--pg-details-row-pad);
   font-size: var(--pg-small);
 }
 .pg-detail-row + .pg-detail-row { border-top: 1px solid var(--pg-line); }
-.pg-detail-label { color: var(--pg-muted); font-weight: 500; min-width: 0; }
+.pg-detail-label { color: var(--pg-label); font-weight: 500; min-width: 0; }
 .pg-detail-value { text-align: right; overflow-wrap: anywhere; }
 /* A DETAIL WITH NO LABEL IS A SENTENCE, not the right-hand half of a pair.
    Source lines accepted from a review card carry no label, because the source
@@ -193,14 +239,16 @@
 .pg-url { color: var(--pg-muted); overflow-wrap: anywhere; }
 
 .pg-contact {
-  border: 1px solid var(--pg-line);
-  border-radius: 4px;
+  border-style: solid;
+  border-width: var(--pg-details-border-width);
+  border-color: var(--pg-line);
+  border-radius: var(--pg-details-radius);
   padding: 8px 12px;
   margin: 0 0 8px;
   font-size: var(--pg-small);
 }
 .pg-contact-name { font-weight: 600; margin: 0 0 1px; }
-.pg-contact-line { color: #3a4450; margin: 0; overflow-wrap: anywhere; }
+.pg-contact-line { color: var(--pg-prose); margin: 0; overflow-wrap: anywhere; }
 
 /* ---- footer ---------------------------------------------------------------
  * One block at the end of the document, not a running footer on every page:
@@ -208,16 +256,18 @@
  * page and pushes content around unpredictably. The professional's details
  * belong once, where a reader looks for them. */
 .pg-footer {
-  border: 1px solid var(--pg-line);
-  background: #f4f5f7;
-  border-radius: 6px;
+  border-style: solid;
+  border-width: var(--pg-details-border-width);
+  border-color: var(--pg-line);
+  background: var(--pg-surface);
+  border-radius: var(--pg-card-radius);
   padding: 14px 16px;
   margin: 18px 0 0;
 }
-.pg-footer-label { font-size: 8.5pt; letter-spacing: .09em; text-transform: uppercase; color: var(--pg-muted); margin: 0 0 8px; }
+.pg-footer-label { font-size: 8.5pt; letter-spacing: var(--pg-eyebrow-tracking); text-transform: uppercase; color: var(--pg-muted); margin: 0 0 8px; }
 .pg-ident { display: flex; align-items: flex-start; gap: 12px; }
 .pg-headshot { height: 0.62in; width: auto; border-radius: 5px; border: 1px solid var(--pg-line); }
 .pg-pro-name { font-size: 11.5pt; font-weight: 600; margin: 0; }
 .pg-pro-biz { color: var(--pg-muted); font-size: var(--pg-small); margin: 1px 0 0; }
 .pg-pro-line { margin: 2px 0 0; font-size: var(--pg-small); overflow-wrap: anywhere; }
-.pg-tail { text-align: center; color: #8b949e; font-size: 8.5pt; margin: 14px 0 0; }
+.pg-tail { text-align: center; color: var(--pg-faint); font-size: 8.5pt; margin: 14px 0 0; }

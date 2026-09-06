@@ -63,6 +63,8 @@ export default async function PrintPage({ params }: Props) {
   // hierarchy are decided. Page geometry, break rules and the screen-preview
   // ground stay in the stylesheet: they are how paper works, not how a Sendset
   // looks.
+  // Paper wears the packet's own treatment — the same resolution the recipient
+  // page and the email version use, from the same stored name.
   const treatment = treatmentFor(packet);
 
   return (

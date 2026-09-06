@@ -32,12 +32,25 @@ export function PacketHeader({
         />
       )}
       {professional.businessName && (
-        <p className={`text-xs font-medium uppercase tracking-widest text-[color:var(--sg-muted)] ${heading ? "mb-1" : ""}`}>
+        <p
+          className={`text-xs uppercase text-[color:var(--sg-muted)] ${heading ? "mb-1" : ""}`}
+          style={{
+            fontWeight: "var(--sg-eyebrow-weight)",
+            letterSpacing: "var(--sg-eyebrow-tracking)",
+          }}
+        >
           {professional.businessName}
         </p>
       )}
       {heading && (
-        <h1 className="text-[length:var(--sg-page-title)] font-bold leading-tight text-[color:var(--sg-ink)] whitespace-pre-line">
+        <h1
+          className="text-[length:var(--sg-page-title)] leading-tight text-[color:var(--sg-ink)] whitespace-pre-line"
+          style={{
+            fontFamily: "var(--sg-font-display)",
+            fontWeight: "var(--sg-title-weight)",
+            letterSpacing: "var(--sg-title-tracking)",
+          }}
+        >
           {heading}
         </h1>
       )}

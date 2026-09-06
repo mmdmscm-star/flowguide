@@ -146,9 +146,12 @@ test("an ItemCard with NO audience prop defaults to the safe answer", () => {
 });
 
 test("AN EMPTY HIGHLIGHT RENDERS NO CALLOUT BOX on the card", () => {
-  // The callout's ground now comes from the treatment's highlight role rather
-  // than a literal amber class — same rendered colour, decided in one place.
-  const CALLOUT = "bg-[color:var(--sg-highlight-ground)]";
+  // The callout's ground, border, radius and padding now all come from the
+  // treatment's highlight role — a `filled` treatment boxes it, a `rule` one
+  // keeps only its left edge — so the landmark is the class the block carries
+  // rather than any one of the values. The GUARD is unchanged: a blank or
+  // whitespace-only highlight still produces no box at all.
+  const CALLOUT = "sg-highlight";
   for (const empty of ["", "   ", "\n\n", undefined, null]) {
     const html = card({ highlight: empty, description: "d" });
     assert.ok(!html.includes(CALLOUT), `an empty callout rendered for ${JSON.stringify(empty)}`);

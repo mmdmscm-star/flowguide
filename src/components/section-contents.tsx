@@ -28,9 +28,15 @@ export function SectionContents({
   return (
     <nav
       aria-label={sectionTitle ? `Contents of ${sectionTitle}` : "Contents"}
-      className="px-5 mb-4"
+      className="px-[var(--sg-page-gutter)] mb-4"
     >
-      <ol className="border-y border-border divide-y divide-border">
+      {/* The rule BETWEEN rows is in one CSS rule (.sg-nav > li + li) rather
+          than on every row, so the list never draws a line before the first
+          item — and the treatment owns its colour. */}
+      <ol
+        className="sg-nav"
+        style={{ borderTopWidth: "1px", borderBottomWidth: "1px", borderColor: "var(--sg-line)" }}
+      >
         {items.map((item, i) => (
           <li key={item.id}>
             <a
@@ -49,10 +55,15 @@ export function SectionContents({
               // Not tighter than that: this is a tap target on a phone, often
               // for an older reader, and shrinking it further to win pixels
               // would trade one usability problem for another.
-              className="flex items-baseline gap-3 py-2 leading-snug text-base text-foreground
-                         hover:text-accent focus:outline-none focus:ring-2 focus:ring-accent rounded-sm"
+              className="sg-nav-row flex items-baseline gap-3 py-2 leading-snug
+                         focus:outline-none focus:ring-2 focus:ring-[var(--sg-accent)] rounded-sm"
+              style={{ fontSize: "var(--sg-body)", color: "var(--sg-ink)" }}
             >
-              <span aria-hidden className="w-5 shrink-0 text-sm text-muted tabular-nums">
+              <span
+                aria-hidden
+                className="w-5 shrink-0 tabular-nums"
+                style={{ fontSize: "var(--sg-small)", lineHeight: "var(--sg-small-lh)", color: "var(--sg-muted)" }}
+              >
                 {i + 1}
               </span>
               <span className="truncate">{item.title}</span>
