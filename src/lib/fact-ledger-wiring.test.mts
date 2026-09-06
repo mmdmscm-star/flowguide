@@ -214,13 +214,15 @@ test("0025 changes nothing about what the re-issued functions DO", () => {
     // 0028 landed and nothing failed, because the loop exited on the first
     // entry. Corrected to what is actually live.
     // 0045 re-issued the two that actually CLEAR source_text, so they could
-    // clear source_image_url in the same statement. finalize and discard were
-    // deliberately left alone: since 0026 they stamp evidence_purge_after and
-    // clear nothing, so there was nothing in them to change.
+    // clear source_image_url in the same statement; 0048 re-issued those same
+    // two again, to reset the ordered source_image_urls array in that same
+    // statement. finalize and discard were deliberately left alone both times:
+    // since 0026 they stamp evidence_purge_after and clear nothing, so there
+    // was nothing in them to change.
     const expectFile =
       name === "finalize_ingestion_run" ? "0034_structural_rev.sql"
       : name === "discard_ingestion_run" ? "0026_packet_evidence_retention.sql"
-      : "0045_ingestion_run_source_origin.sql";
+      : "0048_ingestion_run_source_images_expand.sql";
     assert.equal(now!.file, expectFile, `${name} last re-issued by ${now!.file}`);
     // `continue`, NOT `return`. This was a `return`, which exited the whole
     // test on the first entry — finalize — so the byte-identical comparison

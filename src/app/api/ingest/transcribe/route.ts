@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { MAX_PHOTO_BYTES, sniffImageType } from "@/lib/photo-upload";
+import { MAX_UPLOAD_BYTES, OVERSIZED_IMAGE_MESSAGE, sniffImageType } from "@/lib/photo-upload";
 import { callTranscriptionModel } from "@/lib/transcribe";
 import { MAX_OUTPUT_TOKENS, STRUCTURE_MODEL } from "@/lib/ai-structure";
 
@@ -53,10 +53,14 @@ export async function POST(request: Request) {
   // OUR limit, and it is ours: the bucket's own file_size_limit from 0029. It
   // is not a claim about what the model provider will accept — that ceiling has
   // not been measured, so a provider refusal is reported separately below.
-  if (file.size > MAX_PHOTO_BYTES) {
+  // THE TRANSPORT BUDGET, not the bucket's limit. A larger body never
+  // reaches this line — Vercel refuses it upstream with a plain-text 413 —
+  // so this exists to give a caller that DOES reach us the same sentence the
+  // browser already showed, rather than a different one. See MAX_UPLOAD_BYTES.
+  if (file.size > MAX_UPLOAD_BYTES) {
     return NextResponse.json({
       error: "too_large", source: "ours",
-      message: `That image is larger than ${Math.floor(MAX_PHOTO_BYTES / 1048576)}MB. Try a smaller one.`,
+      message: OVERSIZED_IMAGE_MESSAGE,
     }, { status: 413 });
   }
 

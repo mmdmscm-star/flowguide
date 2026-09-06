@@ -31,6 +31,15 @@ export async function POST(request: Request) {
   // is what keeps every existing caller a text-origin run by default.
   const sourceImageUrl = typeof body.sourceImageUrl === "string" && body.sourceImageUrl.trim()
     ? body.sourceImageUrl.trim() : null;
+  // EVERY PAGE, IN THE ORDER THE PROFESSIONAL GAVE THEM. 0048 requires the
+  // array's first entry to be the singular column, so the two are derived from
+  // one list rather than sent independently — and a client that disagrees with
+  // itself is refused by the database rather than half-recorded.
+  const sourceImageUrls: string[] = Array.isArray(body.sourceImageUrls)
+    ? (body.sourceImageUrls as unknown[])
+        .filter((u): u is string => typeof u === "string" && Boolean(u.trim()))
+        .map((u) => u.trim())
+    : [];
   // WHAT THE CREATOR SAID THIS SOURCE IS. Absent for every existing caller and
   // for anyone who simply pastes and organizes, which is the point: the default
   // is that nobody was asked, and that is the behaviour the product has always
@@ -101,7 +110,17 @@ export async function POST(request: Request) {
   // each must move together or Postgres refuses the row. Setting them in one
   // statement satisfies both, and a failure of either stops the request.
   const stamp: Record<string, unknown> = {};
-  if (sourceImageUrl) { stamp.source_origin = "image"; stamp.source_image_url = sourceImageUrl; }
+  if (sourceImageUrl) {
+    stamp.source_origin = "image";
+    stamp.source_image_url = sourceImageUrl;
+    // THE ARRAY, ALWAYS, and always led by the singular URL. One picture is a
+    // one-element array — there is no branch for it, because a special case
+    // here would be the second source of truth 0048 exists to prevent. A client
+    // that sent no array at all still gets a coherent row.
+    stamp.source_image_urls = sourceImageUrls.length && sourceImageUrls[0] === sourceImageUrl
+      ? sourceImageUrls
+      : [sourceImageUrl];
+  }
   if (groupingIntent !== "auto") {
     stamp.grouping_intent = groupingIntent;
     stamp.grouping_title = groupingIntent === "keep_together" ? groupingTitle : null;

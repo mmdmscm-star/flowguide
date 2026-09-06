@@ -157,16 +157,22 @@ test("ABANDONING AFTER TRANSCRIPTION CANNOT STORE ANYTHING", () => {
   // SENT TO BE READ IS NOT KEPT. The bytes necessarily go to the transcription
   // route — nothing can read an image locally — so what matters is that they go
   // ONLY there, and that reading returns no stored URL to hold on to.
-  const pic = NEW.slice(NEW.indexOf("async function handlePicture"), NEW.indexOf("async function handleFile"));
+  const pic = NEW.slice(NEW.indexOf("async function transcribeOne"), NEW.indexOf("async function readOneTextFile"));
   assert.match(pic, /\/api\/ingest\/transcribe/, "the picture is not read at all");
   assert.ok(!/\/api\/ingest\/source-image/.test(pic),
     "reading a picture also persists it, so abandoning leaves a stored document");
   assert.ok(!/data\.url/.test(pic), "reading still takes a stored URL from the response");
-  assert.match(pic, /URL\.createObjectURL/, "the preview is not local");
-  assert.match(NEW, /sourceImage.*\{ file: File; preview: string \}/s,
-    "the component holds a URL rather than the File it has not sent");
-  // Removing it revokes the local URL rather than deleting anything remote.
+  assert.match(NEW, /URL\.createObjectURL/, "the preview is not local");
+  // The component holds the Files it has not sent, one per page, in order.
+  assert.match(NEW, /interface SourceImage \{[\s\S]*?file: File;[\s\S]*?preview: string;/,
+    "the component holds URLs rather than the Files it has not sent");
+  assert.match(NEW, /sourceImages, setSourceImages\] = useState<SourceImage\[\]>/,
+    "the pictures are not held as an ordered list");
+  // Removing one revokes its local URL rather than deleting anything remote,
+  // and unmounting revokes every one of them.
   assert.match(NEW, /URL\.revokeObjectURL/, "the local preview leaks");
+  assert.match(NEW, /useEffect\(\(\) => \(\) => \{[\s\S]*?URL\.revokeObjectURL/,
+    "the previews are not revoked on unmount");
 });
 
 test("EXPLICIT CONTINUE IS WHAT PERSISTS THE SOURCE IMAGE", () => {
@@ -191,7 +197,13 @@ test("OUR VALIDATION AND THEIRS ARE SEPARATE", () => {
   assert.match(ROUTE, /source: read\.source/, "the provider's refusal is relabelled as ours");
   // Type is proved by the bytes, never by the uploader's Content-Type.
   assert.match(ROUTE, /sniffImageType\(bytes\)/, "the route trusts the declared type");
-  assert.match(ROUTE, /MAX_PHOTO_BYTES/, "our own size gate is gone");
+  // THE TRANSPORT BUDGET, not the bucket's limit. A body over roughly 4.5MB
+  // never reaches this route — the platform refuses it first — so the gate here
+  // is the one a caller that DOES reach us should meet, and it must be the same
+  // number the browser refused on.
+  assert.match(ROUTE, /MAX_UPLOAD_BYTES/, "our own size gate is gone");
+  assert.ok(!/MAX_PHOTO_BYTES/.test(ROUTE),
+    "the route still gates on the bucket's 10MB limit, which no request can reach");
 });
 
 test("the route stores bytes and cannot start a run", () => {
@@ -205,8 +217,10 @@ test("the route stores bytes and cannot start a run", () => {
 // ---------------------------------------------------------------------------
 
 test("THE TRANSCRIPTION LANDS IN THE EDITABLE BOX, not in a run", () => {
-  const fn = NEW.slice(NEW.indexOf("async function handlePicture"), NEW.indexOf("async function handleFile"));
-  assert.match(fn, /setRawText\(/, "the transcription does not reach the editable text");
+  const fn = NEW.slice(NEW.indexOf("async function transcribeOne"), NEW.indexOf("async function readOneTextFile"));
+  assert.match(fn, /append\(data\.text\)/, "the transcription does not reach the editable text");
+  assert.match(NEW, /const append = \(text: string\)[\s\S]*?setRawText\(/,
+    "the shared appender no longer writes the editable box");
   assert.ok(!/ingest\/organize/.test(fn), "reading a picture starts organizing by itself");
   // Organize stays the professional's own act, on the text they can see.
   assert.match(NEW, /const source = rawText\.trim\(\);/,
@@ -228,8 +242,13 @@ test("PROVENANCE IS STAMPED IN ONE UPDATE, or 0045 refuses it", () => {
   // origin and its URL are written TOGETHER, in ONE update, because 0045's
   // coherence CHECK refuses a row where they disagree.
   const u = ORGANIZE.slice(ORGANIZE.indexOf("const stamp"), ORGANIZE.indexOf(".update(stamp)"));
-  assert.match(u, /stamp\.source_origin = "image"; stamp\.source_image_url = sourceImageUrl;/,
+  // 0048 added a THIRD column to the same statement: the ordered array, whose
+  // first entry 0048's rule ties to the singular URL. All three move together
+  // or the row is refused.
+  assert.match(u, /stamp\.source_origin = "image";[\s\S]{0,80}stamp\.source_image_url = sourceImageUrl;/,
     "the two columns are set separately, which the coherence CHECK rejects");
+  assert.match(u, /stamp\.source_image_urls =/,
+    "the ordered array is not stamped with the origin and the singular URL");
   assert.match(ORGANIZE, /\.update\(stamp\)/, "the columns are not sent in one update");
   assert.match(ORGANIZE, /\.eq\("user_id", session\.userId\)/, "the stamp is not owner-scoped");
   assert.match(ORGANIZE, /sourceImageUrl.*\? body\.sourceImageUrl\.trim\(\) : null/s,

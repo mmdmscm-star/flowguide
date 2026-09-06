@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase";
-import { MAX_PHOTO_BYTES, storeCreatorImage } from "@/lib/photo-upload";
+import { MAX_UPLOAD_BYTES, OVERSIZED_IMAGE_MESSAGE, storeCreatorImage } from "@/lib/photo-upload";
 
 export const maxDuration = 30;
 type Context = { params: Promise<{ id: string }> };
@@ -39,10 +39,14 @@ export async function POST(request: Request, context: Context) {
   if (file.size === 0) {
     return NextResponse.json({ error: "empty_file", message: "That file is empty." }, { status: 400 });
   }
-  if (file.size > MAX_PHOTO_BYTES) {
+  // THE TRANSPORT BUDGET, not the bucket's limit. A larger body never
+  // reaches this line — Vercel refuses it upstream with a plain-text 413 —
+  // so this exists to give a caller that DOES reach us the same sentence the
+  // browser already showed, rather than a different one. See MAX_UPLOAD_BYTES.
+  if (file.size > MAX_UPLOAD_BYTES) {
     return NextResponse.json({
       error: "too_large",
-      message: `That image is larger than ${Math.floor(MAX_PHOTO_BYTES / 1048576)}MB. Try a smaller one.`,
+      message: OVERSIZED_IMAGE_MESSAGE,
     }, { status: 413 });
   }
 

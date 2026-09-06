@@ -14,7 +14,41 @@ export const PHOTO_BUCKET = "packet-photos";
 /** Matches the bucket's own file_size_limit in migration 0029. Two places, one
  *  number: the bucket refuses oversized objects even if this route is bypassed,
  *  and this route gives a sentence instead of a storage error. */
+// TWO DIFFERENT LIMITS, AND CONFLATING THEM WAS A LIE IN PRODUCTION.
+//
+// MAX_PHOTO_BYTES is what the STORAGE LAYER accepts: the packet-photos bucket's
+// own file_size_limit from 0029. It is a real capability and it has not changed.
+//
+// MAX_UPLOAD_BYTES is what can actually REACH a route on this deployment, and
+// it is smaller. Vercel refuses a function request body over roughly 4.5MB
+// before any of our code runs, so a 5MB photograph never met the 10MB gate
+// below — it died upstream as a plain-text FUNCTION_PAYLOAD_TOO_LARGE, which
+// the browser then reported as "That picture could not be read." Three layers
+// agreed on a number the platform overrode.
+//
+// MEASURED, against the deployed route, by posting bodies of increasing size to
+// an endpoint that answers 401 when it is reached at all:
+//
+//   4000 KB  ->  401   reached the function
+//   4300 KB  ->  401   reached the function
+//   4400 KB  ->  413   FUNCTION_PAYLOAD_TOO_LARGE, upstream
+//   4500 KB  ->  413
+//
+// So 4 MiB, which leaves roughly 200 KB of measured headroom for multipart
+// framing and the rest of the request. It is NOT a provider limit and NOT a
+// storage limit — it is this application's transport budget, derived from that
+// measurement, and it should be re-measured rather than reasoned about if the
+// platform changes.
+export const MAX_UPLOAD_BYTES = 4 * 1024 * 1024;
+
+/** What the bucket accepts. Larger than what a request can carry today; the
+ *  storage capability does not have to shrink because the transport did. */
 export const MAX_PHOTO_BYTES = 10 * 1024 * 1024;
+
+/** The sentence a professional can act on. Sizes in MB because that is what a
+ *  phone's photo library shows them. */
+export const OVERSIZED_IMAGE_MESSAGE =
+  `This picture is larger than Sendset can upload right now. Choose one under ${MAX_UPLOAD_BYTES / 1048576} MB.`;
 
 export interface AcceptedType { mime: string; ext: string }
 

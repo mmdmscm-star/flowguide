@@ -85,7 +85,9 @@ test("NO STORAGE, NO UPLOAD, NO SECOND SOURCE — for a FILE", () => {
   // two of them for two different reasons: the bytes go once to be READ, and
   // once — only on Continue — to be KEPT. Counting them is not the point;
   // naming where each one goes is.
-  const picturePath = ui.slice(ui.indexOf("async function handlePicture"), ui.indexOf("async function handleFile"));
+  // ONE INGEST PATH NOW, for browsing and dropping alike, so the picture's
+  // reading call is inside it rather than in a handler of its own.
+  const picturePath = ui.slice(ui.indexOf("async function transcribeOne"), ui.indexOf("async function readOneTextFile"));
   const organizePath = ui.slice(ui.indexOf("async function handleOrganize"));
   assert.match(picturePath, /\/api\/ingest\/transcribe/, "the picture is not read by the transcription route");
   assert.match(organizePath, /\/api\/ingest\/source-image/, "Continue does not keep the picture");
@@ -96,16 +98,27 @@ test("NO STORAGE, NO UPLOAD, NO SECOND SOURCE — for a FILE", () => {
   // Both paths' text must reach the SAME organize call a paste reaches.
   assert.match(ui, /rawText: source/, "the organize contract changed");
   assert.match(ui, /setRawText\(/, "the file text does not land in the shared box");
-  assert.match(picturePath, /setRawText\(/, "the transcription does not land in the shared box");
+  // Both contributions go through ONE appender, which is what keeps a picture
+  // and a spreadsheet landing in the same box, blank-line separated, with no
+  // page marker either of them could be mistaken for.
+  assert.match(picturePath, /append\(data\.text\)/, "the transcription does not land in the shared box");
+  assert.match(ui, /const append = \(text: string\)[\s\S]*?setRawText\(/,
+    "there is no shared appender, so the two paths can drift");
 });
 
 test("the text is shown before it is organized", () => {
   const ui = codeOf("src/components/new/new-packet-workspace.tsx");
   // handleFile must not organize. A professional sees what was read first —
   // a mangled encoding is visible rather than baked into a draft.
-  const fn = /async function handleFile[\s\S]*?\n  \}/.exec(ui)?.[0] ?? "";
-  assert.ok(fn, "handleFile is gone");
+  // readOneTextFile must not organize. A professional sees what was read
+  // first — a mangled encoding is visible rather than baked into a draft.
+  const fn = /async function readOneTextFile[\s\S]*?\n  \}/.exec(ui)?.[0] ?? "";
+  assert.ok(fn, "readOneTextFile is gone");
   assert.doesNotMatch(fn, /ingest\/organize|handleOrganize\(/, "the file is submitted without being shown");
+  // Nor does the shared entry point that calls it.
+  const ingest = /async function ingestFiles[\s\S]*?\n  \}/.exec(ui)?.[0] ?? "";
+  assert.ok(ingest, "the shared ingest path is gone");
+  assert.doesNotMatch(ingest, /ingest\/organize|handleOrganize\(/, "adding a file starts organizing by itself");
 });
 
 test("adding a file APPENDS rather than destroying what is already typed", async () => {
