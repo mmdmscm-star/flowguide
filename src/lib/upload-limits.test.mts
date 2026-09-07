@@ -90,11 +90,22 @@ test("THE BROWSER REFUSES BEFORE THE REQUEST EXISTS", () => {
   // It is holding the File, and the platform's own refusal is plain text that
   // `res.json()` turns into nothing — so the useful sentence has to come from
   // here or not at all.
+  //
+  // AND IT REFUSES THE RIGHT FILE. This used to gate on the file the
+  // professional CHOSE, which meant an ordinary 12-megapixel phone photograph —
+  // over 4 MiB, and the common case — was refused outright and they were told
+  // to go and shrink it themselves. The gate now measures what will actually be
+  // sent, which is the bounded copy.
   const client = codeOf("src/lib/image-upload-client.ts");
-  assert.match(client, /if \(file\.size > MAX_UPLOAD_BYTES\) return \{ error: OVERSIZED_IMAGE_MESSAGE \}/,
+  assert.match(client, /if \(upload\.size > MAX_UPLOAD_BYTES\) return \{ error: OVERSIZED_IMAGE_MESSAGE \}/,
     "the uploader starts a request it knows will be refused");
+  assert.ok(!/file\.size > MAX_UPLOAD_BYTES/.test(client),
+    "the transport gate measures the chosen file again, so a phone photograph is refused unresized");
   assert.ok(client.indexOf("MAX_UPLOAD_BYTES") < client.indexOf("fetch("),
     "the size check runs after the request has begun");
+  // The gate must come AFTER bounding, or it is measuring the wrong thing.
+  assert.ok(client.indexOf("boundDisplayImage") < client.indexOf("upload.size > MAX_UPLOAD_BYTES"),
+    "the transport gate runs before the file is bounded");
 });
 
 // ---------------------------------------------------------------------------
