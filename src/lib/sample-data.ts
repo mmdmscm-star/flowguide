@@ -49,7 +49,7 @@ export const samplePacket: Packet = {
             "https://images.unsplash.com/photo-1497366754035-f200968a6e72?w=800&q=80",
             "https://images.unsplash.com/photo-1524758631624-e2822e304c36?w=800&q=80",
             "https://images.unsplash.com/photo-1517457373958-b7bdd4587205?w=800&q=80",
-            "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=800&q=80",
+            "https://images.unsplash.com/photo-1776090188437-e368bbb75d93?w=800&q=80",
           ],
           details: [
             { label: "Capacity", value: "120 seated · 180 standing" },
@@ -76,7 +76,7 @@ export const samplePacket: Packet = {
           description:
             "Top-floor space with water on three sides. The view does a lot of the work, and it films well if you're recording any of the day. Honestly a little tight at 120 seated — comfortable at 90.",
           photos: [
-            "https://images.unsplash.com/photo-1519167758481-83f550bb49b3?w=800&q=80",
+            "https://images.unsplash.com/photo-1576723664541-23f84c3f93fb?w=800&q=80",
             "https://images.unsplash.com/photo-1505373877841-8d25f7d46678?w=800&q=80",
             "https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=800&q=80",
             "https://images.unsplash.com/photo-1511578314322-379afb476865?w=800&q=80",
@@ -107,8 +107,8 @@ export const samplePacket: Packet = {
             "The most straightforward of the three. Purpose-built for corporate days, so nothing needs solving — but it has less character than the other two. Best food by some distance.",
           photos: [
             "https://images.unsplash.com/photo-1431540015161-0bf868a2d407?w=800&q=80",
-            "https://images.unsplash.com/photo-1478147427282-58a87a120781?w=800&q=80",
-            "https://images.unsplash.com/photo-1533090161767-e6ffed986c88?w=800&q=80",
+            "https://images.unsplash.com/photo-1771154136777-44bc715a3bba?w=800&q=80",
+            "https://images.unsplash.com/photo-1647440079505-0db15be6307a?w=800&q=80",
             "https://images.unsplash.com/photo-1521737604893-d14cc237f11d?w=800&q=80",
             "https://images.unsplash.com/photo-1552664730-d307ca884978?w=800&q=80",
           ],
@@ -144,8 +144,8 @@ export const samplePacket: Packet = {
           description:
             "Large and noticeably cheaper, but the main room is one open box with no breakout space and a ceiling that makes it loud. Worth keeping in mind if the group grows past 150.",
           photos: [
-            "https://images.unsplash.com/photo-1416339306562-f3d12fefd36f?w=800&q=80",
-            "https://images.unsplash.com/photo-1487958449943-2429e8be8625?w=800&q=80",
+            "https://images.unsplash.com/photo-1766021736631-d2f15082aa59?w=800&q=80",
+            "https://images.unsplash.com/photo-1519452575417-564c1401ecc0?w=800&q=80",
           ],
           details: [
             { label: "Capacity", value: "220 seated" },
@@ -161,8 +161,8 @@ export const samplePacket: Packet = {
           description:
             "Genuinely lovely, and genuinely too small — 60 seated at most. I've left it in because I think it's right for the leadership offsite in the autumn.",
           photos: [
-            "https://images.unsplash.com/photo-1502920917128-1aa500764cbd?w=800&q=80",
-            "https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?w=800&q=80",
+            "https://images.unsplash.com/photo-1599343871655-6b107ce7a4a5?w=800&q=80",
+            "https://images.unsplash.com/photo-1644847408240-84c9cc231fbf?w=800&q=80",
           ],
           details: [
             { label: "Capacity", value: "60 seated" },
