@@ -128,6 +128,69 @@
 }
 .pg-section-desc { color: var(--pg-label); margin: 0 0 10px; white-space: pre-line; }
 
+/* ---- block composition ----------------------------------------------------
+ * A block body is a FLAT ordered sequence: headings, subheadings and labels are
+ * siblings of the items they introduce, not containers wrapping them. That is
+ * easier to fragment, not harder — there is no nested box to break — but it
+ * moves two responsibilities onto the text blocks themselves: the gap a
+ * section container used to provide, and the rule that a heading must not be
+ * the last thing on a page.
+ *
+ * Item blocks are untouched: .pg-item already carries its own gap and break
+ * behaviour, and a block item IS a .pg-item.
+ */
+
+/* A heading must not be orphaned at a page foot, and neither may it be
+ * separated from its own subtext. The legacy .pg-section-head rule says the
+ * same thing about the same content; this is its flat-sequence twin. */
+.pg-block-head,
+.pg-block-sub {
+  break-after: avoid;
+  break-inside: avoid;
+}
+/* A label introduces whatever follows it, so it may not end a page either. */
+.pg-block-label { break-after: avoid; }
+
+/* THE FIRST HEADING OPENS THE BODY, so it does not RULE itself off from what
+ * is above it — there is nothing above it but the document's own <hr>, so a
+ * treatment that gives a section a hairline would draw two lines a few
+ * millimetres apart.
+ *
+ * THE GAP STAYS. A first draft removed the margin too, and a side-by-side
+ * against the legacy document showed why that was wrong: legacy gives its
+ * first section title the full section gap, so a converted packet printed
+ * tighter at the top than the packet it was converted from. The rule is the
+ * duplicate; the space is not. */
+.pg-block-head--first .pg-section-title {
+  border-top-width: 0;
+  padding-top: 0;
+}
+
+/* A SUBHEADING IS SMALLER THAN A HEADING AND LOUDER THAN BODY TEXT. It takes
+ * the display face at body size, matching what the screen does, so a converted
+ * packet reads the same on both. */
+.pg-block-sub { margin: 12px 0 6px; }
+.pg-block-sub-title {
+  font-family: var(--pg-font-display);
+  font-size: var(--pg-body);
+  font-weight: 600;
+  margin: 0;
+}
+.pg-block-sub-desc { font-size: var(--pg-small); color: var(--pg-subtle); margin: 2px 0 0; }
+
+/* THE EYEBROW PAPER ALREADY HAD — the same size, case and tracking as
+ * .pg-business and .pg-footer-label, so a label is recognisably the same kind
+ * of mark wherever it appears in the document. The weight is the treatment's
+ * own, which is why it is a variable rather than a number. */
+.pg-block-label {
+  font-size: 8.5pt;
+  font-weight: var(--pg-eyebrow-weight);
+  letter-spacing: var(--pg-eyebrow-tracking);
+  text-transform: uppercase;
+  color: var(--pg-muted);
+  margin: 14px 0 6px;
+}
+
 .pg-item {
   border: var(--pg-card-border);
   border-radius: var(--pg-card-radius);

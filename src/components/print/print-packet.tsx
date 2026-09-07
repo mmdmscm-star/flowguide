@@ -1,4 +1,4 @@
-import type { Packet, Item, Section } from "@/lib/types";
+import type { Packet, Item, Section, PacketBlock } from "@/lib/types";
 import { resolveCardLinks } from "@/lib/item-links";
 import { packetMapUrl } from "@/lib/maps-url";
 import { thumbnailUrl, squareThumbnailUrl } from "@/lib/image-source";
@@ -145,6 +145,69 @@ function SectionBlock({ section }: { section: Section }) {
   );
 }
 
+// A BLOCK-COMPOSED BODY, ON PAPER.
+//
+// The flat ordered sequence the recipient page renders, printed. Four kinds
+// exist and the database says so — `block_type in ('heading','subheading',
+// 'label','item')` — so this switch is exhaustive by constraint, not by hope.
+//
+// IT RENDERS NO ITEM ITSELF. An `item` block delegates to the same ItemBlock a
+// legacy section uses, which is the whole reason block support is small: photos,
+// address, highlight, details, links and contacts already print correctly, and
+// a second item renderer would be a second place for them to drift. A test
+// fails if any item markup appears in this function.
+//
+// `first` exists for one reason — see .pg-block-heading--first in print.css.
+function PrintBlockBody({ blocks }: { blocks: PacketBlock[] }) {
+  return (
+    <>
+      {blocks.map((b, i) => {
+        if (b.kind === "item") return <ItemBlock key={b.id} item={b.item} />;
+
+        if (b.kind === "label") {
+          // Paper already had this idiom before blocks existed: the business
+          // eyebrow above the title and the footer label both set it. Reusing
+          // it rather than inventing a third uppercase style is what keeps a
+          // label recognisable as the same thing wherever it appears.
+          return has(b.text)
+            ? <p key={b.id} className="pg-block-label">{txt(b.text)}</p>
+            : null;
+        }
+
+        if (b.kind === "subheading") {
+          return (
+            <div key={b.id} className="pg-block-sub">
+              {has(b.text) && <h3 className="pg-block-sub-title">{txt(b.text)}</h3>}
+              {has(b.subtext) && <p className="pg-block-sub-desc">{txt(b.subtext)}</p>}
+            </div>
+          );
+        }
+
+        // heading — the section semantics paper already has. A converted packet
+        // therefore prints the way its legacy form did, which is the point of
+        // the conversion being lossless.
+        //
+        // THE FIRST HEADING IS DIFFERENT, and deliberately. .pg-section-title
+        // carries a top rule and a section gap so a heading separates itself
+        // from the block above it. The first block in the body has nothing
+        // above it but the document's own <hr>, so the unmodified rule would draw two
+        // rules a few millimetres apart and open the body with a gap. The
+        // modifier removes both. Legacy has never hit this because a section's
+        // rule follows the same <hr> only when the packet has exactly one
+        // section — which is why this is a block-body rule, not a change to
+        // .pg-section-title.
+        const first = i === 0;
+        return (
+          <div key={b.id} className={`pg-block-head${first ? " pg-block-head--first" : ""}`}>
+            {has(b.text) && <h2 className="pg-section-title">{txt(b.text)}</h2>}
+            {has(b.subtext) && <p className="pg-section-desc">{txt(b.subtext)}</p>}
+          </div>
+        );
+      })}
+    </>
+  );
+}
+
 export function PrintPacket({ packet, liveUrl }: { packet: Packet; liveUrl: string }) {
   const pro = packet.professional ?? ({} as Packet["professional"]);
   const logo = safeUrl(pro.logoUrl);
@@ -189,7 +252,13 @@ export function PrintPacket({ packet, liveUrl }: { packet: Packet; liveUrl: stri
         <p className="pg-live">Map: <b>{readable(packetMap)}</b></p>
       )}
 
-      {packet.sections.map((section) => <SectionBlock key={section.id} section={section} />)}
+      {/* THE SAME BRANCH THE RECIPIENT PAGE MAKES, on the same field. Paper
+          used to 404 for block packets rather than choose here, which meant a
+          professional who converted their Sendset lost the printed copy and
+          was told the page did not exist. */}
+      {packet.compositionMode === "blocks"
+        ? <PrintBlockBody blocks={packet.blocks ?? []} />
+        : packet.sections.map((section) => <SectionBlock key={section.id} section={section} />)}
 
       {has(pro.name) && (
         <div className="pg-footer">

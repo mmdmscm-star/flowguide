@@ -20,6 +20,12 @@ import { treatmentFor, printVars } from "@/lib/style/treatment";
 // force-dynamic for the same reason the live page is: unpublishing must take
 // effect on the next request, and a cached print page would keep serving a
 // packet its owner had withdrawn.
+//
+// BOTH COMPOSITION MODES PRINT. This route used to 404 for block-composed
+// packets, which meant converting a Sendset silently cost its printed copy and
+// said the page did not exist. PrintPacket now branches on compositionMode the
+// same way the recipient page does; a 404 here means the packet is missing or
+// unpublished, and nothing else.
 export const dynamic = "force-dynamic";
 
 type Props = { params: Promise<{ slug: string }> };
@@ -41,11 +47,6 @@ export default async function PrintPage({ params }: Props) {
   const { slug } = await params;
   const packet = await resolvePacket(slug);
   if (!packet) notFound();
-
-  // Block-composed packets render through a different component tree and are
-  // not covered here. One prototype packet uses that mode; printing something
-  // half-right would be worse than saying no.
-  if (packet.compositionMode === "blocks") notFound();
 
   // Deliberately NOT marking the packet viewed. `viewed` means "the client has
   // seen this", and it is the professional who opens the print route.

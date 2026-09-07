@@ -921,6 +921,12 @@ export function printVars(t: TreatmentDefinition): string {
     ["--pg-item-title-weight", t.weight.itemTitle.print],
     ["--pg-title-tracking", t.tracking.title.print],
     ["--pg-eyebrow-tracking", t.tracking.eyebrow.print],
+    // Block-composed paper needs the two roles the section/item body never
+    // asked for: a subheading's supporting line, and the weight of a label.
+    // Both were already defined per-medium on every treatment — only the
+    // emission was missing, so no role was added to make block print work.
+    ["--pg-subtle", c.subtle.print],
+    ["--pg-eyebrow-weight", t.weight.eyebrow.print],
 
     ["--pg-section-gap", t.rhythm.sectionGap.print],
     ["--pg-item-gap", t.rhythm.itemGap.print],
