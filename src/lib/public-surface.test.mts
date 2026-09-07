@@ -184,7 +184,9 @@ test("metadata is written for a stranger, and carries one static card", () => {
   const layout = codeOf("src/app/layout.tsx");
   assert.doesNotMatch(layout, /Living client packets/, "the old internal description survives");
   assert.match(layout, /openGraph/, "no link preview is defined");
-  assert.match(layout, /\/og\.png/, "the static card is not referenced");
+  // A JPEG since the card became a photograph of the product rather than a
+  // page of type — a PNG of that material is ~450KB for no visible gain.
+  assert.match(layout, /\/og\.jpg/, "the static card is not referenced");
   // One static asset, not a generator.
   assert.doesNotMatch(layout, /ImageResponse|opengraph-image/,
     "an OG generation system was introduced");

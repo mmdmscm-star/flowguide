@@ -63,3 +63,6 @@ cross-vertical-paste.txt
 # Supabase CLI local state — never committed
 supabase/.temp/
 supabase/.branches/
+
+# Marketing capture intermediates — the committed assets live in public/
+scripts/marketing/.work/

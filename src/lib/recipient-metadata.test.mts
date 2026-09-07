@@ -12,6 +12,7 @@ const MARKETING = [
   "Turn the notes you already have",
   "your client can actually use",
   "/og.png",
+  "/og.jpg",
 ];
 
 // ---------------------------------------------------------------------------
@@ -49,8 +50,9 @@ test("OPENGRAPH AND TWITTER ARE DECLARED IN FULL — the actual bug was their ab
 test("the preview image is the NEUTRAL one, never the marketing card", () => {
   const s = JSON.stringify(recipientMetadata);
   assert.match(s, /og-recipient\.png/, "the recipient image is not used");
-  // "/og.png" must not appear — note og-recipient.png does not contain it.
-  assert.ok(!/"[^"]*\/og\.png"/.test(s), "the marketing card is still referenced");
+  // Neither marketing card may appear. og-recipient.png does not contain the
+  // string "/og.png", so the anchored pattern is safe.
+  assert.ok(!/"[^"]*\/og\.(png|jpg)"/.test(s), "the marketing card is still referenced");
 });
 
 test("og:url is NOT inherited from the marketing homepage", () => {
@@ -129,5 +131,5 @@ test("metadataBase IS THE CANONICAL DOMAIN, not a deploy alias", () => {
 test("the public homepage KEEPS its marketing metadata", () => {
   const layout = codeOf("src/app/layout.tsx");
   assert.match(layout, /Turn the notes you already have/, "the marketing description was removed");
-  assert.match(layout, /\/og\.png/, "the marketing card was removed");
+  assert.match(layout, /\/og\.jpg/, "the marketing card was removed");
 });

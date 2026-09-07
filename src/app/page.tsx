@@ -12,6 +12,14 @@ import Link from "next/link";
 // whole argument is that a well-made thing respects its reader, and a busy
 // page would contradict that on sight.
 //
+// THE TWO IMAGES ARE PHOTOGRAPHS OF THE PRODUCT, and nothing else is. Both are
+// captured from the demo Sendset by scripts/marketing/capture.mjs — the same
+// recipient page, print route and email renderer a professional would get —
+// so the page shows evidence rather than making an assertion. A screenshot can
+// go stale, which is why regenerating it is one command rather than a design
+// file. They replace prose: the four-format section used to describe in four
+// paragraphs what one picture shows.
+//
 // The primary action is the DEMO, not signup. For a professional weighing a
 // peer's product, opening a finished FlowGuide explains more in ten seconds
 // than the page can in five hundred words — and it is the one path with no
@@ -25,30 +33,61 @@ export default function Home() {
     <main className="mx-auto max-w-3xl px-6 pb-24">
       {/* ---- 1. What it is ------------------------------------------------ */}
       <header className="pt-20 pb-16 sm:pt-28">
-        <p className="text-sm font-semibold tracking-[0.14em] uppercase text-muted">
-          Sendset
-        </p>
-        <h1 className="mt-5 text-[2.1rem] leading-[1.12] sm:text-[2.85rem] font-bold tracking-tight text-foreground text-balance">
-          Everything you found, in one thing your client can actually use.
-        </h1>
-        <p className="mt-6 text-lg leading-relaxed text-muted max-w-2xl">
-          You&rsquo;ve already done the work. Sendset turns your notes into a clear,
-          client-ready guide &mdash; then lets you share it by link, email, message,
-          print, or PDF without rebuilding it for every format.
-        </p>
-        <div className="mt-9 flex flex-wrap items-center gap-x-6 gap-y-3">
-          <Link
-            href="/p/demo"
-            className="inline-flex items-center rounded-lg bg-accent px-6 py-3 text-base font-medium text-white transition-colors hover:bg-accent-hover focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2"
-          >
-            See a real Sendset
-          </Link>
-          <Link
-            href="/login"
-            className="text-base font-medium text-accent underline-offset-4 hover:underline"
-          >
-            Start your first Sendset
-          </Link>
+        {/* ONE COLUMN ON A PHONE, so the two actions are still the first thing
+            under the sentence that earns them; the artifact follows. On a wider
+            screen the same two things sit beside each other and the first
+            screen carries the claim, the actions and the product at once. */}
+        <div className="sm:grid sm:grid-cols-[1fr_17rem] sm:gap-10 sm:items-start">
+          <div>
+            <p className="text-sm font-semibold tracking-[0.14em] uppercase text-muted">
+              Sendset
+            </p>
+            <h1 className="mt-5 text-[2.1rem] leading-[1.12] sm:text-[2.6rem] font-bold tracking-tight text-foreground text-balance">
+              Everything you found, in one thing your client can actually use.
+            </h1>
+            <p className="mt-6 text-lg leading-relaxed text-muted max-w-2xl">
+              You&rsquo;ve already done the work. Sendset turns your notes into a clear,
+              client-ready guide &mdash; then lets you share it by link, email, message,
+              print, or PDF without rebuilding it for every format.
+            </p>
+            <div className="mt-9 flex flex-wrap items-center gap-x-6 gap-y-3">
+              <Link
+                href="/p/demo"
+                className="inline-flex items-center rounded-lg bg-accent px-6 py-3 text-base font-medium text-white transition-colors hover:bg-accent-hover focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2"
+              >
+                See a real Sendset
+              </Link>
+              <Link
+                href="/login"
+                className="text-base font-medium text-accent underline-offset-4 hover:underline"
+              >
+                Start your first Sendset
+              </Link>
+            </div>
+          </div>
+
+          {/* One option out of a real guide, exactly as a client receives it.
+              Height-capped from the top on wide screens so the hero does not
+              become a column of screenshot; the crop is the same artifact. */}
+          <div className="mt-10 sm:mt-1 mx-auto w-full max-w-[19rem] sm:max-w-none
+                          overflow-hidden rounded-xl border border-border
+                          sm:h-[27rem]">
+            {/* A fixed, pre-sized static marketing asset: two hand-exported
+                WebP files served straight from public/ with srcSet and sizes,
+                deliberately NOT run through Vercel image optimization — there
+                is nothing to size or re-encode at request time, and the
+                optimizer would add per-image cost for the same bytes. */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/marketing/hero.webp"
+              srcSet="/marketing/hero@1x.webp 350w, /marketing/hero.webp 700w"
+              sizes="(min-width: 640px) 272px, 304px"
+              width={700}
+              height={1508}
+              alt="A Sendset on a phone: a photograph of a venue, its name and address, a short description, and a table showing capacity, day rate and catering."
+              className="block w-full h-auto sm:h-full sm:object-cover sm:object-top"
+            />
+          </div>
         </div>
       </header>
 
@@ -84,8 +123,8 @@ export default function Home() {
             refine.
           </Panel>
           <Panel label="Out">
-            A structured guide. Organised into sections, with photos, details, links
-            and contacts, laid out to be read on a phone.
+            A structured guide, laid out to be read on a phone &mdash; like the one
+            above.
           </Panel>
         </div>
         <P className="mt-6">
@@ -117,25 +156,31 @@ export default function Home() {
 
       {/* ---- 5. The four formats ------------------------------------------ */}
       <Section title="One guide. Four ways to hand it over.">
-        <div className="divide-y divide-border border-y border-border">
-          <Format name="The link">
-            The interactive version, and the best one. Opens on a phone, photos you can
-            swipe through, details laid out, tap to call. This is what you&rsquo;re
-            sharing when you send a link.
-          </Format>
-          <Format name="A short message">
-            A few sentences wrapping that link, ready to paste into a text or an email.
-            Edit it however you like.
-          </Format>
-          <Format name="An email version">
-            The full content inside the body of the email, for a client who&rsquo;d
-            rather just read it there.
-          </Format>
-          <Format name="Print or PDF">
-            The same guide on paper, for a client who wants to hold it or pass it
-            around.
-          </Format>
-        </div>
+        {/* THE SAME SENDSET, FOUR TIMES. This used to be four paragraphs saying
+            what each format looks like; the picture says it, and says the part
+            prose could not — that they are one object, not four documents.
+            Two layouts because one composition cannot be legible at both 342px
+            and 768px, and the aspect ratio is pinned at each width so nothing
+            moves while the image loads. */}
+        <picture>
+          <source
+            media="(min-width: 640px)"
+            srcSet="/marketing/formats-wide@1x.webp 768w, /marketing/formats-wide.webp 1536w"
+            sizes="768px"
+            width={768}
+            height={660}
+          />
+          <img
+            src="/marketing/formats-narrow.webp"
+            srcSet="/marketing/formats-narrow@1x.webp 342w, /marketing/formats-narrow.webp 684w"
+            sizes="(min-width: 640px) 768px, 100vw"
+            width={342}
+            height={470}
+            alt="The same guide handed over four ways: the interactive link on a phone, a short message with the link ready to paste, the guide inside the body of an email, and the same guide printed on paper."
+            className="block w-full h-auto rounded-xl border border-border
+                       aspect-[342/470] sm:aspect-[768/660] object-cover object-top"
+          />
+        </picture>
         <P className="mt-6">
           You build it once. Which format goes out is a decision you make when you send
           it, not when you build it.
@@ -244,14 +289,5 @@ function Step({ n, heading, children }: { n: number; heading: string; children: 
         <p className="mt-1 text-lg leading-relaxed text-muted">{children}</p>
       </div>
     </li>
-  );
-}
-
-function Format({ name, children }: { name: string; children: React.ReactNode }) {
-  return (
-    <div className="grid gap-1 py-5 sm:grid-cols-[11rem_1fr] sm:gap-6">
-      <p className="text-base font-semibold text-foreground">{name}</p>
-      <p className="text-lg leading-relaxed text-muted">{children}</p>
-    </div>
   );
 }

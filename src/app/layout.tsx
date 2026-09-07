@@ -66,14 +66,15 @@ export const metadata: Metadata = {
     url: "/",
     siteName: "Sendset",
     type: "website",
-    images: [{ url: "/og.png", width: 1200, height: 630, alt: "Sendset" }],
+    images: [{ url: "/og.jpg", width: 1200, height: 630,
+               alt: "Sendset — one guide your client can actually use" }],
   },
   twitter: {
     card: "summary_large_image",
     title: "Sendset",
     description:
       "Turn the notes you already have into one clear guide your client can use — and send it by link, email, message, or print.",
-    images: ["/og.png"],
+    images: ["/og.jpg"],
   },
 };
 
