@@ -2,6 +2,7 @@
 
 import { Item } from "@/lib/types";
 import { detectLinkType, resolveCardLinks, type LinkType } from "@/lib/item-links";
+import { addressMapUrl } from "@/lib/maps-url";
 import { PhotoGallery } from "./photo-gallery";
 
 // URL type detection, labelling, and link identity live in @/lib/item-links so
@@ -67,10 +68,6 @@ function extractYouTubeId(url: string): string | null {
   return null;
 }
 
-function mapsUrl(address: string): string {
-  return `https://www.google.com/maps/search/${encodeURIComponent(address)}`;
-}
-
 // ============================================================
 // Detail row treatment
 //
@@ -114,6 +111,10 @@ export function ItemCard({ item, audience = "recipient" }: { item: Item; audienc
     (item.contacts ?? []).map((contact) => contact.website),
   );
 
+  // Null when there is no address, so the address block has one guard rather
+  // than a truthiness check and a separate URL build.
+  const addressLink = addressMapUrl(item.address);
+
   return (
     <div
       className="overflow-hidden"
@@ -140,10 +141,11 @@ export function ItemCard({ item, audience = "recipient" }: { item: Item; audienc
           {item.title}
         </h3>
 
-        {/* Address with Google Maps link */}
-        {item.address && (
+        {/* Address with a map link. The URL comes from the shared helper so
+            this and the email flavour cannot drift — see @/lib/maps-url. */}
+        {addressLink && (
           <a
-            href={mapsUrl(item.address)}
+            href={addressLink}
             target="_blank"
             rel="noopener noreferrer"
             className="sg-link flex items-start gap-1.5 mb-3 group"

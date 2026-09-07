@@ -5,6 +5,7 @@ import ImageUploadField from "./image-upload-field";
 import ProfessionalProfileFields from "./professional-profile-fields";
 import DeletePacketAction from "./delete-packet-action";
 import { PHOTO_ACCEPT_ATTR } from "@/lib/photo-upload";
+import { packetMapUrl } from "@/lib/maps-url";
 import { useRouter, useParams, useSearchParams } from "next/navigation";
 import { CompositionModeControl } from "@/components/editor/composition-mode-control";
 import ImportProgress from "@/components/ImportProgress";
@@ -414,6 +415,27 @@ export function LegacyPacketEditor() {
   // ============================================================
   // Packet field updates
   // ============================================================
+  // THE MAP LINK SAVES UNDER THE SHARED RULE. Same reasoning as the block
+  // editor: this box debounce-saves 500ms after a keystroke, so a half-typed
+  // URL would otherwise be answered with a save failure. Blank always saves,
+  // because clearing the field is a legitimate edit. The API enforces the same
+  // rule regardless of what this does.
+  const [mapUnsaved, setMapUnsaved] = useState(false);
+
+  function updateMapUrl(value: string) {
+    setPacket((prev) => prev ? { ...prev, mapUrl: value } : prev);
+    const sendable = value.trim() === "" || Boolean(packetMapUrl(value));
+    setMapUnsaved(!sendable);
+    if (!sendable) return;
+    debouncedSave(() =>
+      fetch(`/api/packets/${packetId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mapUrl: value }),
+      }).then((r) => { if (!r.ok) throw new Error(); })
+    );
+  }
+
   function updatePacketField(field: string, value: string) {
     setPacket((prev) => prev ? { ...prev, [field]: value } : prev);
     debouncedSave(() =>
@@ -1291,10 +1313,15 @@ export function LegacyPacketEditor() {
         <input
           type="url"
           value={packet.mapUrl}
-          onChange={(e) => updatePacketField("mapUrl", e.target.value)}
+          onChange={(e) => updateMapUrl(e.target.value)}
           placeholder="Paste a Google My Maps or any map link"
           className="w-full px-3.5 py-2.5 rounded-lg border border-border bg-white text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent placeholder:text-gray-300"
         />
+        {mapUnsaved && (
+          <p className="mt-1.5 text-xs text-amber-700">
+            Not saved — a map link needs to start with http:// or https://.
+          </p>
+        )}
       </div>
 
       {/* PRESENTATION, not content — placed here because it governs how the

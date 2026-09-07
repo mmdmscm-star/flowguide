@@ -1,5 +1,6 @@
 import type { Packet, Item, Section } from "@/lib/types";
 import { resolveCardLinks } from "@/lib/item-links";
+import { packetMapUrl } from "@/lib/maps-url";
 import { thumbnailUrl, squareThumbnailUrl } from "@/lib/image-source";
 
 // THE PACKET, RENDERED FOR PAPER.
@@ -150,6 +151,9 @@ export function PrintPacket({ packet, liveUrl }: { packet: Packet; liveUrl: stri
   const headshot = safeUrl(pro.headshotUrl);
   const site = safeUrl(pro.websiteUrl)
     ?? (has(pro.websiteUrl) ? `https://${txt(pro.websiteUrl)}` : null);
+  // Canonical packet content that paper used to drop silently. The shared rule,
+  // not this file's local safeUrl — see @/lib/maps-url.
+  const packetMap = packetMapUrl(packet.mapUrl);
 
   return (
     <div className="pg-doc">
@@ -166,6 +170,24 @@ export function PrintPacket({ packet, liveUrl }: { packet: Packet; liveUrl: stri
       <hr className="pg-rule" />
 
       {has(packet.personalNote) && <div className="pg-note">{txt(packet.personalNote)}</div>}
+
+      {/* THE PACKET'S MAP LINK, in the same place the web page puts it: after
+          the note, before the body. Paper cannot open a link, so it gets the
+          treatment paper already uses for the live URL above — a label and the
+          address itself, readable and typeable, rather than a button that does
+          nothing or a bare URL with no clue where it leads.
+
+          Deliberately NOT a QR code in this slice, and deliberately not an
+          embedded map image: both would need decisions this package has not
+          made. The map stays a link the reader can follow on their own.
+
+          "Map:" and nothing more. The professional pasted a link; what is on
+          the other side of it is theirs, not ours to summarise. "Map of these
+          locations" would be this renderer asserting something about content
+          it has never seen. */}
+      {packetMap && (
+        <p className="pg-live">Map: <b>{readable(packetMap)}</b></p>
+      )}
 
       {packet.sections.map((section) => <SectionBlock key={section.id} section={section} />)}
 

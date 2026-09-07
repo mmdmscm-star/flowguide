@@ -32,6 +32,7 @@ export default async function EditPacketPage({ params, searchParams }: Props) {
         packetId={id}
         title={data.title}
         clientTitle={data.clientTitle}
+        mapUrl={data.mapUrl}
         status={data.status}
         clientName={data.clientName}
         createdAt={data.createdAt}

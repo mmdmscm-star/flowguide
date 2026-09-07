@@ -22,6 +22,7 @@ import { CSS } from "@dnd-kit/utilities";
 import type { Item, PacketBlock } from "@/lib/types";
 import type { ItemContentPayload } from "@/lib/item-content";
 import { ItemCard } from "@/components/item-card";
+import { packetMapUrl } from "@/lib/maps-url";
 import { BlockItemEditor } from "@/components/editor/block-item-editor";
 import { CompositionModeControl } from "@/components/editor/composition-mode-control";
 import OwnershipDecisions from "@/components/OwnershipDecisions";
@@ -202,7 +203,7 @@ async function errorFrom(res: Response): Promise<string> {
 }
 
 export function BlockPacketEditor({
-  packetId, title, clientTitle: initialClientTitle, status, clientName, createdAt, initialBlocks, justConverted,
+  packetId, title, clientTitle: initialClientTitle, mapUrl: initialMapUrl, status, clientName, createdAt, initialBlocks, justConverted,
 }: {
   packetId: string;
   /** The professional's own name for this FlowGuide. Backstage: shown here so
@@ -210,6 +211,7 @@ export function BlockPacketEditor({
   title: string;
   /** The optional heading a recipient sees. Blank omits it entirely. */
   clientTitle: string;
+  mapUrl: string;
   status: string;
   /** Identify the packet in the delete confirmation; nothing else reads these. */
   clientName?: string;
@@ -249,6 +251,53 @@ export function BlockPacketEditor({
       });
       if (res.ok) setTitleSaved(true);
       else setErrorMsg("Could not save the client title.");
+    }, 500);
+  }
+
+  // THE MAP LINK, REACHABLE AT LAST.
+  //
+  // `map_url` has always been packet content and has always rendered on the
+  // recipient's page, but the only field for it lived in the legacy editor. A
+  // block packet that arrived here by conversion or duplication carried its
+  // map link and gave its owner no way to change or remove it. This is the
+  // same field, same PATCH, same column — not a second one.
+  //
+  // Not gated on readOnly, for the reason stated above about the client title:
+  // the read-only rule governs block STRUCTURE, and this is packet content that
+  // has always been editable after publishing.
+  const [mapUrl, setMapUrl] = useState(initialMapUrl);
+  const [mapSaved, setMapSaved] = useState(false);
+  const [mapUnsaved, setMapUnsaved] = useState(false);
+  const mapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function updateMapUrl(next: string) {
+    setMapUrl(next);
+    setMapSaved(false);
+    if (mapTimer.current) clearTimeout(mapTimer.current);
+
+    // THE SAME RULE THE RENDERERS AND THE API USE, applied here as guidance
+    // rather than as enforcement — the API still refuses the value if this is
+    // ever bypassed. Held rather than sent, because this box saves 500ms after
+    // a keystroke: "htt" is not a mistake a professional made, it is a URL they
+    // are halfway through typing, and answering it with a red failure would be
+    // the editor shouting at someone for typing.
+    //
+    // Blank always saves. Clearing the field is an edit, not an invalid value.
+    const sendable = next.trim() === "" || Boolean(packetMapUrl(next));
+    setMapUnsaved(!sendable);
+    if (!sendable) return;
+
+    mapTimer.current = setTimeout(async () => {
+      // Sent verbatim. The professional's link is the fact; nothing here
+      // normalises, prefixes or rewrites it, and an empty string genuinely
+      // clears the field rather than being dropped as falsy on the way.
+      const res = await fetch(`/api/packets/${packetId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mapUrl: next }),
+      });
+      if (res.ok) setMapSaved(true);
+      else setErrorMsg("Could not save the map link.");
     }, 500);
   }
   const [blocks, setBlocks] = useState<EditorBlock[]>(() => toEditorBlocks(initialBlocks));
@@ -425,6 +474,30 @@ export function BlockPacketEditor({
           <p className="text-xs text-muted">
             Leave blank and your client sees no title at all.{titleSaved ? " Saved." : ""}
           </p>
+
+          <label htmlFor="map-url" className="mt-4 block text-xs font-medium uppercase tracking-wide text-muted mb-1">
+            Map link <span className="normal-case font-normal">(optional)</span>
+          </label>
+          <input
+            id="map-url"
+            type="url"
+            value={mapUrl}
+            onChange={(e) => updateMapUrl(e.target.value)}
+            placeholder="Paste a Google My Maps or any map link"
+            className="w-full text-sm text-foreground bg-transparent border-none outline-none placeholder:text-gray-300"
+          />
+          {mapUnsaved ? (
+            // Says what is true: the box holds something, and it is not saved.
+            // It does not claim the stored value was lost — it was not.
+            <p className="text-xs text-amber-700">
+              Not saved — a map link needs to start with http:// or https://.
+            </p>
+          ) : (
+            <p className="text-xs text-muted">
+              Shown to your client on the web, in email and on the printed copy.
+              {mapSaved ? " Saved." : ""}
+            </p>
+          )}
 
           <p className="mt-2 text-xs text-muted">
             {headingCount} heading{headingCount === 1 ? "" : "s"} · {itemCount} item{itemCount === 1 ? "" : "s"} · headings are visual only and do not own the items after them

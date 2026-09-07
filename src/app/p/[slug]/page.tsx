@@ -12,6 +12,7 @@ import { ownedPacketId } from "@/lib/packet-owner";
 import { OwnerBar } from "@/components/nav/owner-bar";
 import { recipientMetadata } from "@/lib/recipient-metadata";
 import { treatmentFor, webVars } from "@/lib/style/treatment";
+import { packetMapUrl } from "@/lib/maps-url";
 
 // Render on every request — never serve a cached copy. This is what makes
 // unpublish/delete take effect immediately: there is no stored HTML that could
@@ -60,6 +61,11 @@ export default async function PacketPage({ params }: Props) {
   // identically either way — the only difference is one bar ABOVE the packet.
   const ownedId = isSupabaseConfigured && slug !== "demo" ? await ownedPacketId(slug) : null;
 
+  // The SHARED rule for whether a stored map link is one a recipient can
+  // follow. This page used to put the raw column value in an href, which made
+  // it the most permissive of the five renderers for a field nothing validates.
+  const packetMap = packetMapUrl(packet.mapUrl);
+
   // Track that this packet was opened (fire and forget).
   //
   // NOT WHEN THE OWNER OPENS IT. `viewed` means "the client has seen this", and
@@ -92,10 +98,10 @@ export default async function PacketPage({ params }: Props) {
         {packet.personalNote && <PersonalNote note={packet.personalNote} />}
 
         {/* Map button */}
-        {packet.mapUrl && (
+        {packetMap && (
           <div className="mx-[var(--sg-page-gutter)] mb-8">
             <a
-              href={packet.mapUrl}
+              href={packetMap}
               target="_blank"
               rel="noopener noreferrer"
               className="sg-btn-primary flex items-center justify-center gap-2 w-full py-3 font-medium transition-colors"

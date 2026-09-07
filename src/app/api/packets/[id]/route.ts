@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { TREATMENT_NAMES } from "@/lib/style/treatment";
+import { packetMapUrl } from "@/lib/maps-url";
 import { getSession } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase";
 
@@ -106,6 +107,30 @@ export async function PATCH(request: Request, context: Context) {
 
   if ("identityMode" in body && !["default", "none", "custom"].includes(body.identityMode)) {
     return NextResponse.json({ error: "Invalid identity_mode" }, { status: 400 });
+  }
+
+  // THE SAME RULE THE RENDERERS APPLY, so a link that saves is a link that
+  // shows. Before this, any string was stored and the professional found out
+  // it was not a usable link only by looking at five renderers disagreeing
+  // about it — or, on paper, by not looking at all.
+  //
+  // "" is allowed and CLEARS the field: removing a map link is a legitimate
+  // edit, and both editors send the empty box verbatim to do it.
+  //
+  // NOT provider validation. Any absolute http(s) URL is accepted whatever the
+  // host; this only refuses values a recipient's browser could not follow.
+  //
+  // Existing rows are untouched. This governs writes from today onward — a row
+  // already holding something odd keeps it, and simply renders nothing.
+  if ("mapUrl" in body) {
+    const raw = body.mapUrl;
+    const blank = typeof raw === "string" && raw.trim() === "";
+    if (!blank && (typeof raw !== "string" || !packetMapUrl(raw))) {
+      return NextResponse.json({
+        error: "invalid_map_url",
+        message: "A map link must be a full web address starting with http:// or https:// — or empty to remove it.",
+      }, { status: 400 });
+    }
   }
 
   // The column is NOT NULL, so a non-boolean here would fail at the database

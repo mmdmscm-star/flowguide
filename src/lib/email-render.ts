@@ -1,5 +1,6 @@
 import type { Packet, Item, Section } from "./types.ts";
 import { resolveCardLinks } from "./item-links.ts";
+import { addressMapUrl, packetMapUrl } from "./maps-url.ts";
 import { thumbnailUrl, squareThumbnailUrl } from "./image-source.ts";
 import { treatmentFor, emailStyle, type EmailStyle } from "./style/treatment.ts";
 
@@ -235,7 +236,8 @@ function itemBlock(s: EmailStyle, item: Item, liveUrl: string | null, first: boo
           CARD_BORDER, CARD_RADIUS, CARD_GROUND, CARD_PAD, ITEM_RULE,
           HL_GROUND, HL_RULE, HL_INK, HL_BORDER_WIDTH, HL_RADIUS } = s;
   const address = String(item.address ?? "").trim();
-  const mapHref = address ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}` : null;
+  // THE SAME HELPER THE WEB CARD USES. These two were the divergent pair.
+  const mapHref = addressMapUrl(address);
   // A treatment that removes the box separates items with a rule instead — and
   // never before the first one, which is why `first` is passed rather than
   // guessed from the markup.
@@ -327,6 +329,28 @@ export function renderPacketEmail(packet: Packet, opts: EmailRenderOptions): str
           <tr><td style="padding:14px 16px">${p(s, esc(packet.personalNote).replace(/\n/g, "<br />"), "margin:0")}</td></tr>
         </table>
       </td></tr>` : "";
+
+  // THE PACKET'S OWN MAP LINK, which this renderer used to drop entirely.
+  //
+  // It is canonical packet content — a professional who pastes a My Maps link
+  // is saying something about where these places are, and paper and email were
+  // throwing that away while the web page showed a full-width button.
+  //
+  // A LINK, NOT A BUTTON, and deliberately so. Email's job in this product is
+  // to lead back to the interactive version; a second full-width button beside
+  // "Open the interactive version" makes the reader choose between two
+  // destinations at the top of the message. The map is present, findable and
+  // subordinate — which is what it is.
+  //
+  // packetMapUrl, not this file's local safeUrl: the rule for what counts as a
+  // renderable map link is shared with the other four renderers, so they cannot
+  // disagree about the same stored value.
+  const packetMap = packetMapUrl(packet.mapUrl);
+  const mapRow = packetMap
+    ? `<tr><td style="padding:14px 24px 0">${p(s,
+        `<a href="${esc(packetMap)}" style="color:${LINK};text-decoration:underline">View the map</a>`,
+        `font-size:${SIZE.small};margin:0`)}</td></tr>`
+    : "";
 
   const body = `<tr><td style="padding:18px 24px 0">
       <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse:collapse">
@@ -425,7 +449,7 @@ export function renderPacketEmail(packet: Packet, opts: EmailRenderOptions): str
   <tr><td align="center" style="padding:20px 10px">
     <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="${W}"
            style="border-collapse:collapse;width:100%;max-width:${W}px;background:#ffffff;border:1px solid ${LINE};border-radius:${RADIUS_SHELL}">
-      ${header}${note}${body}${footer}
+      ${header}${note}${mapRow}${body}${footer}
     </table>
   </td></tr>
 </table>`;
@@ -443,6 +467,12 @@ export function renderPacketEmailText(packet: Packet, opts: EmailRenderOptions):
   if (String(packet.clientName ?? "").trim()) out.push(`Prepared for ${packet.clientName}`);
   if (opts.liveUrl) out.push("", opts.liveUrl);
   if (String(packet.personalNote ?? "").trim()) out.push("", String(packet.personalNote).trim());
+  // Same fact as the HTML flavour. A reader whose client strips HTML loses the
+  // map otherwise — which is exactly the silent per-renderer omission this
+  // slice exists to close. Labelled, because a bare URL on its own line tells
+  // the reader nothing about where it goes.
+  const textMap = packetMapUrl(packet.mapUrl);
+  if (textMap) out.push("", `Map: ${textMap}`);
   for (const section of packet.sections) {
     out.push("", "");
     if (String(section.title ?? "").trim()) out.push(String(section.title).toUpperCase());

@@ -17,6 +17,10 @@ export type BlockEditorLoad =
       /** The optional heading a recipient sees. Blank means no heading at all —
        *  distinct from `title`, which stays the professional's own name for it. */
       clientTitle: string;
+      /** packets.map_url. Blank means no map link. Reachable ONLY through the
+       *  legacy editor until now, which is why a block packet could carry one
+       *  it could not remove. */
+      mapUrl: string;
       clientName: string; createdAt: string; blocks: PacketBlock[] };
 
 export async function getBlockEditorData(packetId: string, userId: string): Promise<BlockEditorLoad> {
@@ -26,7 +30,7 @@ export async function getBlockEditorData(packetId: string, userId: string): Prom
     .from("packets")
     // client_name and created_at identify the packet in the delete
     // confirmation; nothing else reads them here.
-    .select("id, title, client_title, status, composition_mode, client_name, created_at")
+    .select("id, title, client_title, status, composition_mode, client_name, created_at, map_url")
     .eq("id", packetId)
     .eq("user_id", userId)
     .single();
@@ -65,6 +69,7 @@ export async function getBlockEditorData(packetId: string, userId: string): Prom
   return {
     found: true, mode: "blocks", status: packet.status, title: packet.title,
     clientTitle: (packet as { client_title?: string }).client_title || "",
+    mapUrl: (packet as { map_url?: string }).map_url || "",
     clientName: (packet as { client_name?: string }).client_name || "",
     createdAt: (packet as { created_at?: string }).created_at || "",
     blocks,

@@ -8,6 +8,7 @@ import { ProfessionalFooter } from "@/components/professional-footer";
 import { PacketBlockBody } from "@/components/packet-block-body";
 import { PreviewActions } from "@/components/preview-actions";
 import { PreviewSurface } from "@/components/preview-surface";
+import { packetMapUrl } from "@/lib/maps-url";
 
 type Props = {
   params: Promise<{ id: string }>;
@@ -19,6 +20,11 @@ export default async function PreviewPage({ params }: Props) {
 
   const { id } = await params;
   const packet = await getPacketForEditor(id, session.userId);
+
+  // Preview must be recipient-truthful, so it applies the same rule the live
+  // page does — a link the recipient could not follow must not appear here as
+  // one the professional thinks works.
+  const packetMap = packetMapUrl(packet?.mapUrl);
 
   if (!packet) {
     return (
@@ -61,10 +67,10 @@ export default async function PreviewPage({ params }: Props) {
 
       {packet.personalNote && <PersonalNote note={packet.personalNote} />}
 
-      {packet.mapUrl && (
+      {packetMap && (
         <div className="mx-[var(--sg-page-gutter)] mb-8">
           <a
-            href={packet.mapUrl}
+            href={packetMap}
             target="_blank"
             rel="noopener noreferrer"
             className="sg-btn-primary flex items-center justify-center gap-2 w-full py-3 font-medium transition-colors"
