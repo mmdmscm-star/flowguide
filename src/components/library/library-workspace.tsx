@@ -193,9 +193,13 @@ export default function LibraryWorkspace() {
       if (data.structure) setStructure(data.structure);
       setRefreshKey((k) => k + 1);
       setNotice(`Organized ${data.updated} item${data.updated === 1 ? "" : "s"}.`);
+      // Returned so a caller that knows MORE about what it just did can say
+      // something better than "Organized 3 items" — see createGroup.
+      return data as { structure?: { sections: SectionRow[]; groups: GroupRow[] }; updated?: number };
     } catch {
       setNotice("Could not organize those items.");
     } finally { setBusy(false); }
+    return null;
   }
 
   /** Put the selection somewhere. One call: the destination and the position
@@ -278,12 +282,56 @@ export default function LibraryWorkspace() {
   // same thing without a pointer.
   // =========================================================================
   const composing = selecting && !organizing;
-  /** The section "Add group…" aimed at, while nothing is ticked yet. Its NAME,
-   *  because the prompt says it out loud; null whenever the panel was opened
-   *  any other way. */
-  const pendingGroupSection = destGroup === "__new" && destSection && destSection !== "__new"
-    ? structure.sections.find((x) => x.id === destSection)?.name ?? null
+
+  /* ---------------------------------------------------------------------------
+   * MAKING A GROUP IS ITS OWN STATE, NOT A HINT.
+   *
+   * The first correction made a group reachable while a section was being
+   * created, and put "Add group…" in the section's overflow menu. Real use
+   * found neither: the menu is a `…` a professional has no reason to open, and
+   * pressing it only pre-set two hidden `select` values — the panel still said
+   * "Tick anything below to begin", so the screen moved slightly and then
+   * offered no visible path to actually making the group.
+   *
+   * So it becomes a mode with a name, a field and a count. `groupFor` holds the
+   * section it is aimed at; while it is set the panel stops being a general
+   * filing form and becomes one question with one answer.
+   * ------------------------------------------------------------------------- */
+  const [groupFor, setGroupFor] = useState<string | null>(null);
+  /** Headings to force open after a write, so a new group is VISIBLE the moment
+   *  it exists rather than collapsed behind a chevron. */
+  const [reveal, setReveal] = useState<string[]>([]);
+  const groupForSection = groupFor
+    ? structure.sections.find((x) => x.id === groupFor)?.name ?? null
     : null;
+
+  function startAddGroup(sectionId: string) {
+    setNotice(""); setChosen([]); setNewGroup("");
+    setDestSection(""); setNewSection(""); setDestGroup("");
+    setGroupFor(sectionId);
+    setOrganizing(true); setSelecting(true);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function cancelAddGroup() {
+    // NOTHING WAS WRITTEN, so nothing has to be undone — the group only ever
+    // comes into existence inside placeItems, holding the chosen items.
+    setGroupFor(null); setNewGroup(""); setChosen([]); setNotice("");
+  }
+
+  async function createGroup() {
+    const name = newGroup.trim();
+    if (!groupFor || !name || !chosen.length) return;
+    const section = groupForSection;
+    const count = chosen.length;
+    const data = await organize({ place: { sectionId: groupFor, newGroupName: name } });
+    if (!data) return;                       // organize() already said why
+    const made = data.structure?.groups.find(
+      (g) => g.sectionId === groupFor && g.name.toLowerCase() === name.toLowerCase());
+    setReveal(made ? [groupFor, made.id] : [groupFor]);
+    setNotice(`Added ${name} to ${section} with ${count} item${count === 1 ? "" : "s"}.`);
+    setGroupFor(null); setNewGroup(""); setChosen([]);
+  }
   const composeSensors = useSensors(
     // Desktop pointer and keyboard. `distance` is what lets one control be both
     // a button and a drag handle: a press that never moves stays a click.
@@ -594,15 +642,60 @@ export default function LibraryWorkspace() {
                 disabled, so the professional typed a name, pressed the button,
                 and watched nothing happen. A control that accepts input it cannot
                 use is worse than one that is absent. */}
-            {chosen.length === 0 ? (
-              /* AIMED IN ADVANCE, SO SAY SO. Arriving here from "Add group…"
-                 the destination is already chosen, and the generic prompt would
-                 have hidden that — the professional would tick things without
-                 knowing where they were about to land. */
+            {groupFor ? (
+              /* ONE QUESTION, WITH ITS ANSWER IN VIEW.
+                 The panel stops being a general filing form here. A heading
+                 that names the target, the field that makes the group, and a
+                 live count — so at every moment it is obvious what this is and
+                 what is still missing. Rendered at ZERO selection too, which is
+                 the whole point: the previous version showed nothing until
+                 something was ticked, so the state change was invisible. */
+              <div className="mt-3 space-y-3 border-t border-accent/30 pt-3">
+                <div>
+                  <p className="text-sm font-medium text-foreground">
+                    Add a group inside {groupForSection}
+                  </p>
+                  <label htmlFor="new-group-name"
+                    className="mt-2 block text-xs font-medium text-foreground">
+                    Group name
+                  </label>
+                  <input
+                    id="new-group-name"
+                    autoFocus
+                    value={newGroup}
+                    disabled={busy}
+                    onChange={(e) => setNewGroup(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && newGroup.trim() && chosen.length) {
+                        e.preventDefault(); createGroup();
+                      }
+                      if (e.key === "Escape") { e.preventDefault(); cancelAddGroup(); }
+                    }}
+                    placeholder="A town, a specialty…"
+                    className="mt-1 w-full rounded border border-border px-2.5 py-1.5 text-sm
+                               focus:outline-none focus:ring-2 focus:ring-accent placeholder:text-gray-300"
+                  />
+                  {/* WHAT IS STILL MISSING, SAID PLAINLY. A disabled button with
+                      no reason beside it is the thing that sent someone looking
+                      for a path that was already in front of them. */}
+                  <p className="mt-1.5 text-xs text-muted">
+                    Select the Library items below that belong in this group.
+                  </p>
+                  <p aria-live="polite" className="mt-0.5 text-xs font-medium text-foreground">
+                    {chosen.length} item{chosen.length === 1 ? "" : "s"} selected
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <SmallAction
+                    disabled={busy || !newGroup.trim() || chosen.length === 0}
+                    onClick={createGroup}
+                  >Create group</SmallAction>
+                  <SmallAction disabled={busy} onClick={cancelAddGroup}>Cancel</SmallAction>
+                </div>
+              </div>
+            ) : chosen.length === 0 ? (
               <p className="mt-3 border-t border-accent/30 pt-3 text-xs text-muted">
-                {pendingGroupSection
-                  ? `Tick what belongs in the new group inside ${pendingGroupSection}, then name it.`
-                  : "Tick anything below to begin — or tap a row."}
+                Tick anything below to begin — or tap a row.
               </p>
             ) : (
               <div className="mt-3 space-y-3 border-t border-accent/30 pt-3">
@@ -934,16 +1027,8 @@ export default function LibraryWorkspace() {
                 setNotice(""); setChosen([id]); setOrganizing(true); setSelecting(true);
                 window.scrollTo({ top: 0, behavior: "smooth" });
               }}
-              onAddGroup={(sectionId) => {
-                // THE SAME MECHANISM AS Move…, AIMED IN ADVANCE. Nothing is
-                // created here: the panel opens with this section already
-                // chosen and the group name waiting, and the group is born in
-                // `placeItems` holding whatever the professional then ticks.
-                setNotice(""); setChosen([]);
-                setDestSection(sectionId); setDestGroup("__new"); setNewGroup("");
-                setOrganizing(true); setSelecting(true);
-                window.scrollTo({ top: 0, behavior: "smooth" });
-              }}
+              onAddGroup={startAddGroup}
+              revealIds={reveal}
               renderRow={composing ? (rp) => (
                 <ComposeRow props={rp} added={chosen.includes(rp.item.id)}
                   onAdd={() => addToTray(rp.item)} />

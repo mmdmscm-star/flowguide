@@ -23,6 +23,11 @@ import { readFileSync } from "node:fs";
 import { execSync } from "node:child_process";
 
 const codeOf = (p: string) => readFileSync(p, "utf8");
+/** Source with comments stripped. A rule must be asserted against the CODE:
+ *  these comments quote the old copy they replaced ("Tick anything below to
+ *  begin"), so a raw search finds the explanation rather than the JSX. */
+const bodyOf = (p: string) =>
+  codeOf(p).replace(/\{\/\*[\s\S]*?\*\/\}|\/\*[\s\S]*?\*\/|\/\/[^\n]*/g, "");
 const WORKSPACE = "src/components/library/library-workspace.tsx";
 const VIEW = "src/components/library/library-structure-view.tsx";
 const SERVICE = "src/lib/library-service.ts";
@@ -170,6 +175,37 @@ test("IT IS ABSENT WHERE THE STRUCTURE IS NOT THE PROFESSIONAL'S TO CHANGE", asy
   assert.equal(byText(host2, /^Rename$/).length, 1, "Rename was lost when Add group was absent");
 });
 
+test("WHILE SELECTING, AN OPEN SECTION WEARS Add group IN THE OPEN", async () => {
+  // THE HEADLINE OF THIS CORRECTION, and the one a mutation caught me missing.
+  // Real use found the `…` shortcut unfindable: sections can contain groups and
+  // nothing on screen said so. Reachable WITHOUT opening any menu.
+  const seen: string[] = [];
+  const host = await mount({ reorder: true, selectable: true, onAddGroup: (id: string) => seen.push(id) });
+  await click(byText(host, /Expand all/)[0]);
+
+  const inline = byText(host, /^\+ Add group$/);
+  assert.equal(inline.length, 1, "an open section does not show an inline Add group");
+  // NOT inside the overflow popover — that is the affordance this replaces.
+  assert.equal(inline[0].closest('[role="menu"]'), null,
+    "the inline action is inside the overflow menu, so it is still hidden");
+  // And no menu had to be opened to get here.
+  assert.equal(host.querySelectorAll('[role="menu"]').length, 0, "a menu was open already");
+
+  await click(inline[0]);
+  assert.deepEqual(seen, [SECTION], "the inline action did not target this section");
+});
+
+test("THE CALM LIBRARY STAYS CALM — no inline action unless organizing", async () => {
+  const host = await mount({ reorder: true, selectable: false, onAddGroup: () => {} });
+  await click(byText(host, /Expand all/)[0]);
+  assert.equal(byText(host, /^\+ Add group$/).length, 0,
+    "browsing the Library shows an organizing control");
+  // Collapsed sections stay quiet too: the action belongs to an OPEN section.
+  const host2 = await mount({ reorder: true, selectable: true, onAddGroup: () => {} });
+  assert.equal(byText(host2, /^\+ Add group$/).length, 0,
+    "a collapsed section shows the action for contents nobody can see");
+});
+
 // ---------------------------------------------------------------------------
 // THE PLACEMENT PANEL
 // ---------------------------------------------------------------------------
@@ -224,20 +260,92 @@ test("THE BACKEND IT RELIES ON WAS ALREADY THERE", async () => {
     "PlacementRequest no longer accepts both names");
 });
 
-test("ARRIVING FROM Add group… THE PANEL SAYS WHERE THINGS WILL LAND", async () => {
+test("Add group SWITCHES THE PANEL INTO AN EXPLICIT GROUP-CREATION STATE", () => {
+  // THE SECOND CORRECTION. Pre-setting two hidden `select` values moved the
+  // screen slightly and then said "Tick anything below to begin" — real use
+  // reported no visible path to actually making the group. It is now a mode
+  // with a name, a field and a count, rendered AT ZERO SELECTION.
   const src = codeOf(WORKSPACE);
-  // Pre-aimed: section chosen, group waiting to be named, nothing ticked.
-  const handler = src.slice(src.indexOf("onAddGroup={(sectionId) => {"));
-  const block = handler.slice(0, handler.indexOf("}}"));
-  assert.match(block, /setChosen\(\[\]\)/, "it pre-selects items the professional did not choose");
-  assert.match(block, /setDestSection\(sectionId\)/, "the section is not pre-targeted");
-  assert.match(block, /setDestGroup\("__new"\)/, "the group name is not waiting");
-  assert.match(block, /setOrganizing\(true\); setSelecting\(true\)/, "it does not open the filing panel");
-  // The zero-selection prompt names the destination rather than staying generic.
-  assert.match(src, /pendingGroupSection[\s\S]{0,200}Tick what belongs in the new group inside/,
-    "the panel does not say which section it is aimed at");
-  assert.match(src, /const pendingGroupSection = destGroup === "__new" && destSection && destSection !== "__new"/,
-    "the prompt is not derived from the pre-aimed destination");
+  const start = src.slice(src.indexOf("function startAddGroup"), src.indexOf("function cancelAddGroup"));
+  assert.match(start, /setGroupFor\(sectionId\)/, "the mode is not entered");
+  assert.match(start, /setChosen\(\[\]\)/, "it pre-selects items nobody chose");
+  assert.match(start, /setNewGroup\(""\)/, "a previous group name survives into the new one");
+  assert.match(start, /setOrganizing\(true\); setSelecting\(true\)/, "the panel is not opened");
+
+  // The panel branches on the MODE, before the ticked-count branch — so it
+  // shows with nothing selected.
+  const panel = src.slice(src.indexOf("{groupFor ? ("), src.indexOf(") : chosen.length === 0 ? ("));
+  assert.ok(panel.length > 400, "the group-creation branch is missing or empty");
+  assert.match(panel, /Add a group inside \{groupForSection\}/, "the panel does not name the target section");
+  assert.match(panel, /Group name/, "there is no labelled name field");
+  assert.match(panel, /Select the Library items below that belong in this group\./,
+    "the panel does not say what to do next");
+  assert.match(panel, /\{chosen\.length\} item\{chosen\.length === 1 \? "" : "s"\} selected/,
+    "there is no live count");
+  const body = bodyOf(WORKSPACE);
+  assert.ok(body.indexOf("{groupFor ? (") < body.indexOf("Tick anything below to begin"),
+    "the generic prompt still wins over the group-creation state");
+});
+
+test("THE NAME FIELD IS VISIBLE AND FOCUSED, AND THE COUNT IS ANNOUNCED", () => {
+  const panel = codeOf(WORKSPACE);
+  const block = panel.slice(panel.indexOf("{groupFor ? ("), panel.indexOf(") : chosen.length === 0 ? ("));
+  assert.match(block, /id="new-group-name"/, "the field has no id to label");
+  assert.match(block, /htmlFor="new-group-name"/, "the label is not tied to the field");
+  assert.match(block, /autoFocus/, "the field is not focused on entry");
+  assert.match(block, /aria-live="polite"/, "the count is not announced as it changes");
+});
+
+test("NOTHING IS CREATED UNTIL THERE IS BOTH A NAME AND A SELECTION", () => {
+  const src = codeOf(WORKSPACE);
+  const block = src.slice(src.indexOf("{groupFor ? ("), src.indexOf(") : chosen.length === 0 ? ("));
+  assert.match(block, /disabled=\{busy \|\| !newGroup\.trim\(\) \|\| chosen\.length === 0\}/,
+    "Create group is available without a name or without items");
+  // And the guard is in the handler too, not only on the button — Enter also
+  // reaches it, and a disabled attribute is not a rule.
+  const fn = src.slice(src.indexOf("async function createGroup")).slice(0, 1400);
+  assert.match(fn, /if \(!groupFor \|\| !name \|\| !chosen\.length\) return;/,
+    "createGroup would run with no name or no selection");
+  assert.match(fn, /const name = newGroup\.trim\(\);/, "a whitespace-only name would create a group");
+});
+
+test("CANCEL WRITES NOTHING", () => {
+  const src = codeOf(WORKSPACE);
+  const fn = src.slice(src.indexOf("function cancelAddGroup"), src.indexOf("async function createGroup"));
+  assert.ok(!/fetch\(|organize\(|place\(/.test(fn), "cancelling talks to the server");
+  assert.match(fn, /setGroupFor\(null\)/, "cancelling leaves the mode set");
+  assert.match(fn, /setNewGroup\(""\)/, "the typed name survives a cancel");
+  assert.match(fn, /setChosen\(\[\]\)/, "the selection survives a cancel");
+});
+
+test("SUCCESS IS UNAMBIGUOUS: THE GROUP APPEARS, EXPANDED, WITH A SENTENCE", () => {
+  const src = codeOf(WORKSPACE);
+  const fn = src.slice(src.indexOf("async function createGroup")).slice(0, 1400);
+  // One existing path, not a new one.
+  assert.match(fn, /organize\(\{ place: \{ sectionId: groupFor, newGroupName: name \} \}\)/,
+    "it does not go through the existing placement path");
+  // The section stays open and the new group is revealed rather than collapsed.
+  assert.match(fn, /setReveal\(made \? \[groupFor, made\.id\] : \[groupFor\]\)/,
+    "the new group is not revealed under its section");
+  // A sentence that names what happened, not "Organized 3 items".
+  assert.match(fn, /Added \$\{name\} to \$\{section\} with \$\{count\} item/,
+    "there is no specific success feedback");
+  // And the mode closes.
+  assert.match(fn, /setGroupFor\(null\)/, "the panel stays in group-creation after success");
+  // A failed write says so and changes nothing.
+  assert.match(fn, /if \(!data\) return;/, "a failed placement still reports success");
+});
+
+test("REVEALING NEVER CLOSES ANYTHING THE PROFESSIONAL OPENED OR CLOSED", () => {
+  const view = codeOf(VIEW);
+  assert.match(view, /const isOpen = \(id: string\) => open\[id\] \?\? revealed\.has\(id\);/,
+    "reveal is not derived — an explicit toggle may not win over it");
+  assert.match(view, /!\(m\[id\] \?\? revealed\.has\(id\)\)/,
+    "toggling a revealed heading would not close it");
+  // Derived, not synced: a setState inside an effect cascades a render for
+  // something already knowable while rendering.
+  assert.ok(!/useEffect\(\(\) => \{[\s\S]{0,120}setOpen\(/.test(view),
+    "reveal is pushed into state from an effect");
 });
 
 // ---------------------------------------------------------------------------

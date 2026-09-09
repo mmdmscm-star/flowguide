@@ -52,7 +52,7 @@ const keyOf = (s: string | null, g: string | null) => `${s ?? ""}|${g ?? ""}`;
 
 export function LibraryStructureView({
   refreshKey = 0, selectable = false, selected = [], onToggle, onOpen,
-  onToggleFavorite, onMove, onAddGroup, reorder = false, onVocabulary, onEmpty, rowSlot, renderRow,
+  onToggleFavorite, onMove, onAddGroup, revealIds, reorder = false, onVocabulary, onEmpty, rowSlot, renderRow,
 }: {
   refreshKey?: number;
   selectable?: boolean;
@@ -68,6 +68,9 @@ export function LibraryStructureView({
    *  panel rather than creating an empty container the professional would then
    *  have to find something to put in. */
   onAddGroup?: (sectionId: string) => void;
+  /** Headings to force open — a group that was just made should be visible,
+   *  not collapsed behind a chevron the professional has to find. */
+  revealIds?: string[];
   /** Move up / Move down. Never in a picker: choosing is not filing. */
   reorder?: boolean;
   onVocabulary?: (v: LibraryVocabulary) => void;
@@ -106,7 +109,17 @@ export function LibraryStructureView({
    *  the server refuses says so ABOVE the tree, and the tree stays. */
   const [notice, setNotice] = useState("");
   const [open, setOpen] = useState<Record<string, boolean>>({});
-  const toggle = (id: string) => setOpen((m) => ({ ...m, [id]: !m[id] }));
+  /* REVEALED HEADINGS ARE DERIVED, NOT SYNCED.
+   *
+   * A useEffect that pushed these into `open` would call setState during an
+   * effect and cascade a render for something already knowable at render time.
+   * So `open` keeps only what the professional has explicitly toggled — an
+   * absent entry means "not touched" — and a revealed id is open by default
+   * until they say otherwise. Collapsing writes `false`, which wins, so a
+   * heading closed on purpose stays closed. Nothing is ever force-CLOSED. */
+  const revealed = new Set(revealIds ?? []);
+  const isOpen = (id: string) => open[id] ?? revealed.has(id);
+  const toggle = (id: string) => setOpen((m) => ({ ...m, [id]: !(m[id] ?? revealed.has(id)) }));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -449,7 +462,7 @@ export function LibraryStructureView({
   // Every heading that can be opened. Groups included, so Expand all means what
   // it says rather than "expand the sections and leave you clicking again".
   const headingIds = [...sections.map((x) => x.id), ...groups.map((x) => x.id)];
-  const anyOpen = headingIds.some((id) => open[id]);
+  const anyOpen = headingIds.some(isOpen);
 
   const tree = (
     <div className="space-y-5">
@@ -477,7 +490,7 @@ export function LibraryStructureView({
         const loose = container(sec.id, null);
         const total = mine.reduce((n, g) => n + (container(sec.id, g.id)?.total ?? 0), 0)
           + (loose?.total ?? 0);
-        const shut = !open[sec.id];
+        const shut = !isOpen(sec.id);
         return (
           <section key={sec.id}>
             <SortableHeading id={dragId("section", sec.id)} disabled={!dragEnabled || busy}
@@ -488,6 +501,23 @@ export function LibraryStructureView({
               onCollapse={() => toggle(sec.id)}
               onRename={reorder ? (n) => rename("section", sec.id, n) : undefined}
               onAddGroup={reorder && onAddGroup ? () => onAddGroup(sec.id) : undefined}
+              /* THE ONE A PROFESSIONAL ACTUALLY FINDS. Sections can contain
+                 groups, and nothing on screen said so unless you opened a `…`
+                 you had no reason to open. While Select & Organize is running
+                 — the moment someone is already arranging things — an open
+                 section wears the action in the open. The overflow copy stays
+                 as a shortcut for anyone who learned it. */
+              inline={selectable && onAddGroup && !shut ? (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => onAddGroup(sec.id)}
+                  className="flex-none rounded border border-accent/40 px-2 py-0.5 text-xs
+                             font-medium text-accent hover:bg-accent/5 disabled:opacity-40"
+                >
+                  + Add group
+                </button>
+              ) : null}
               busy={busy}
               handle={dragEnabled ? (
                 <DragHandle label={`Drag to reorder section ${sec.name}`}
@@ -509,7 +539,7 @@ export function LibraryStructureView({
                   strategy={verticalListSortingStrategy}>
                 {mine.map((g, gi) => {
                   const c = container(sec.id, g.id);
-                  const gshut = !open[g.id];
+                  const gshut = !isOpen(g.id);
                   return (
                     <div key={g.id} className="pl-3 border-l border-border">
                       <SortableHeading id={dragId("group", g.id)} disabled={!dragEnabled || busy}
@@ -618,12 +648,14 @@ export function LibraryStructureView({
 }
 
 function Header({
-  level, name, count, collapsed, onCollapse, controls, onRename, onAddGroup, busy, handle,
+  level, name, count, collapsed, onCollapse, controls, onRename, onAddGroup, inline, busy, handle,
 }: {
   level: "section" | "group"; name: string; count: number;
   collapsed: boolean; onCollapse: () => void; controls?: React.ReactNode;
   /** Sections only. A group hangs off a section, so a group heading has none. */
   onAddGroup?: () => void;
+  /** An action that sits ON the heading line rather than behind the `…`. */
+  inline?: React.ReactNode;
   /** The drag grip, rendered outside the heading's own buttons. */
   handle?: React.ReactNode;
   /** Omitted wherever the structure is not the professional's to change —
@@ -681,6 +713,7 @@ function Header({
       </button>
       {onRename && <HeadingMenu name={name} busy={busy} onAddGroup={onAddGroup}
         onRename={() => { setDraft(name); setEditing(true); }} />}
+      {inline}
       <span className="ml-auto flex-none">{controls}</span>
     </div>
   );

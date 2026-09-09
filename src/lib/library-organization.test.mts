@@ -276,14 +276,32 @@ test("ZERO SELECTED says so, and offers nothing that cannot work", () => {
   const panel = organizePanel();
   assert.match(panel, /\{chosen\.length\} item\{chosen\.length === 1 \? "" : "s"\} selected/,
     "the count is not stated");
-  assert.match(panel, /\{chosen\.length === 0 \? \(/,
+  // TWO STATES CAN NOW PRECEDE A SELECTION, and the panel still distinguishes
+  // them: making a group, and everything else.
+  assert.match(panel, /\{groupFor \? \(/, "the group-creation state is not distinguished");
+  assert.match(panel, /\) : chosen\.length === 0 \? \(/,
     "the zero state is not distinguished from the working state");
   assert.match(panel, /Tick anything below to begin/, "nothing tells the professional selection comes first");
-  // The inputs used to be editable while every action was disabled: type a
-  // name, press the button, watch nothing happen.
-  const zero = panel.slice(panel.indexOf("{chosen.length === 0 ? ("), panel.indexOf(") : ("));
+
+  // GENERAL FILING KEEPS THE ORIGINAL RULE. The inputs used to be editable
+  // while every action was disabled: type a name, press the button, watch
+  // nothing happen.
+  const zero = panel.slice(panel.indexOf(") : chosen.length === 0 ? ("), panel.indexOf(") : ("));
   assert.ok(!/<input/.test(zero), "an input the professional can type into leads to no action");
   assert.ok(!/SmallAction/.test(zero), "an action button is offered with nothing to act on");
+
+  // MAKING A GROUP IS THE ONE EXEMPTION, AND IT EARNS IT. The name may be typed
+  // before anything is ticked — that is the point of the mode — so it does show
+  // a field and a disabled Create at zero. What made the original defect a
+  // defect was a dead control with NO REASON beside it, so the exemption holds
+  // only while the panel says what is still missing and counts what is chosen.
+  const making = panel.slice(panel.indexOf("{groupFor ? ("), panel.indexOf(") : chosen.length === 0 ? ("));
+  assert.match(making, /Select the Library items below that belong in this group\./,
+    "the group state offers a disabled action without saying what is missing");
+  assert.match(making, /item\{chosen\.length === 1 \? "" : "s"\} selected/,
+    "the group state does not count what has been chosen");
+  assert.match(making, /disabled=\{busy \|\| !newGroup\.trim\(\) \|\| chosen\.length === 0\}/,
+    "Create is not gated on both a name and a selection");
 });
 
 test("SELECTING activates the controls — they exist only in the working state", () => {
@@ -354,7 +372,20 @@ test("ORGANIZE says DONE, because its writes have already happened", () => {
   // hesitate before leaving work they had already finished.
   const panel = organizePanel();
   assert.match(panel, />\s*Done\s*</, "the organize panel does not offer Done");
-  assert.ok(!/>\s*Cancel\s*</.test(panel), "the organize panel still says Cancel");
+
+  // THE RULE IS ABOUT WRITES, NOT ABOUT THE WORD. Placing, labelling and
+  // starring all save immediately, so the way OUT of those is Done — "Cancel"
+  // would offer to undo what this button cannot undo.
+  //
+  // Making a group is the one part of this panel that STAGES: the group does
+  // not exist until Create, so there genuinely is something to abandon, and
+  // Cancel is the honest word for it — the same justification the create-Sendset
+  // panel has. So the word is permitted there and nowhere else in this panel.
+  const making = panel.slice(panel.indexOf("{groupFor ? ("), panel.indexOf(") : chosen.length === 0 ? ("));
+  const rest = panel.replace(making, "");
+  assert.ok(!/>\s*Cancel\s*</.test(rest),
+    "the organize panel says Cancel where its writes have already happened");
+  assert.match(making, />\s*Cancel\s*</, "group creation stages a choice but offers no way to abandon it");
 });
 
 test("CREATE keeps Cancel, because it genuinely stages a choice", () => {
