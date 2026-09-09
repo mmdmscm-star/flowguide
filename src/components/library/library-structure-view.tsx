@@ -541,7 +541,27 @@ export function LibraryStructureView({
                   const c = container(sec.id, g.id);
                   const gshut = !isOpen(g.id);
                   return (
-                    <div key={g.id} className="pl-3 border-l border-border">
+                    /* A GROUP HAS TO LOOK LIKE A CONTAINER, NOT LIKE MORE CARDS.
+                       The rail was already here — 1px of --color-border, which
+                       is the SAME width and the SAME grey as every item card's
+                       own edge. Surrounded by a dozen of them it read as more
+                       card, so after scrolling past the heading there was
+                       nothing to say whether a row was still inside the group.
+                       It differs in KIND now: twice the width, a darker tone,
+                       and a deeper inset than any loose row can have. gray-400
+                       measured against white is 2.05x the salience of that card
+                       edge, where gray-300 was 1.19x — which is why the old
+                       rail disappeared into the cards rather than bounding
+                       them. gray-500 was tried and reads as chrome.
+
+                       THREE CUES, ONLY ONE OF THEM COLOUR — the rail, the
+                       indent, and the gap before loose items resume — so the
+                       distinction survives greyscale, high contrast and a
+                       reader who cannot see the line at all. role="group" with
+                       the group's own name is the fourth, for a reader who
+                       cannot see any of it. */
+                    <div key={g.id} role="group" aria-label={g.name}
+                      className="border-l-2 border-gray-400 pl-4">
                       <SortableHeading id={dragId("group", g.id)} disabled={!dragEnabled || busy}
                         highlight={dragging?.kind === "item" && overHeading === dragId("group", g.id)}>
                         {(h) => (
@@ -566,7 +586,15 @@ export function LibraryStructureView({
                   );
                 })}
                 </SortableContext>
-                {itemList(loose, "")}
+                {/* THE RETURN TO SECTION LEVEL. Between groups `space-y-3` is
+                    the right gap; between the last group and the section's own
+                    loose items it is not enough, because that transition is a
+                    change of DEPTH rather than a change of sibling. Only when
+                    something is above it — a section with no groups keeps the
+                    spacing it always had. */}
+                <div className={mine.length > 0 ? "pt-3" : undefined}>
+                  {itemList(loose, "")}
+                </div>
               </div>
             )}
           </section>

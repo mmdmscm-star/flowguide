@@ -870,3 +870,74 @@ test("DROP AND STEP RECONCILE THE SAME WAY", () => {
   assert.ok(!/setData\(|setExtra\(/.test(drop),
     "a drop writes container state directly instead of re-reading it");
 });
+
+// ---------------------------------------------------------------------------
+// "AM I STILL INSIDE THIS GROUP?"
+//
+// Real use answered no. The rail was 1px of --color-border — the SAME width and
+// the SAME grey as every item card's own edge — so among a dozen cards it read
+// as more card, and after scrolling past a long group there was nothing to say
+// whether a row was still in it. What is pinned here is the STRUCTURE that
+// carries the distinction, not the pixels: which rows live inside the group's
+// container, that loose rows do not, and that the cue is not colour alone.
+// ---------------------------------------------------------------------------
+
+test("GROUPED ROWS LIVE INSIDE THE GROUP'S OWN CONTAINER; LOOSE ROWS DO NOT", async () => {
+  hasStructure = true;
+  const { host } = await mount({ reorder: true });
+  await expandAll(host);
+  const rowFor = (title: string) =>
+    [...host.querySelectorAll("li")].find((r) => (r.textContent ?? "").includes(title))!;
+
+  const grouped = rowFor("Grouped One");
+  const loose = rowFor("Loose 01");
+  assert.ok(grouped && loose, "the fixture rows are missing");
+
+  // THE WHOLE CLAIM, IN ONE LINE. Containment is what a rail, an indent and a
+  // screen reader all read from; if this is wrong no styling can fix it.
+  const box = grouped.closest('[role="group"]');
+  assert.ok(box, "a grouped row is not inside a group container");
+  assert.equal(box!.getAttribute("aria-label"), "Santa Rosa",
+    "the container does not carry the group's name for a reader who cannot see the rail");
+  assert.equal(loose.closest('[role="group"]'), null,
+    "a loose section row is inside the group container, so the hierarchy is wrong");
+});
+
+test("THE CUE IS NOT COLOUR ALONE", async () => {
+  hasStructure = true;
+  const { host } = await mount({ reorder: true });
+  await expandAll(host);
+  const box = [...host.querySelectorAll('[role="group"]')][0] as HTMLElement;
+  const cls = box.className;
+  // Three independent cues: a rail, an indent, and a name in the accessibility
+  // tree. Someone in greyscale, in high contrast, or using a screen reader
+  // still gets the boundary.
+  assert.match(cls, /border-l-2/, "the rail is no wider than a card edge");
+  assert.match(cls, /pl-4/, "grouped content is not inset from loose content");
+  assert.match(cls, /border-gray-400/, "the rail is back to a card-edge grey");
+  assert.ok(!/border-border\b/.test(cls),
+    "the rail uses the same token as every item card's own border");
+});
+
+test("LOOSE ITEMS GET AIR WHEN A GROUP PRECEDES THEM, AND NOT OTHERWISE", () => {
+  // The transition out of a group is a change of DEPTH, not of sibling, so the
+  // gap between groups is not enough for it. A section with no groups keeps the
+  // spacing it always had.
+  const src = readFileSync("src/components/library/library-structure-view.tsx", "utf8");
+  assert.match(src, /mine\.length > 0 \? "pt-3" : undefined/,
+    "loose items either always get the extra gap or never do");
+});
+
+test("A COLLAPSED GROUP STILL READS AS A GROUP", async () => {
+  hasStructure = true;
+  const { host } = await mount({ reorder: true });
+  // Sections open closed, so open the section but leave the group shut.
+  const chevrons = headingToggles(host);
+  await click(chevrons[0]);
+  const box = host.querySelector('[role="group"]');
+  assert.ok(box, "a collapsed group loses its container entirely");
+  assert.match((box as HTMLElement).className, /border-l-2/,
+    "a collapsed group loses the rail, so its heading floats free of the section");
+  assert.ok(!(box!.textContent ?? "").includes("Grouped One"),
+    "the group is not actually collapsed, so this proves nothing");
+});
