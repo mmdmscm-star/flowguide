@@ -402,9 +402,19 @@ test("the rename affordance is VISIBLE, not revealed by hovering", () => {
   assert.match(view, /aria-label=\{`Actions for \$\{name\}`\}/, "there is no visible actions control");
   assert.match(view, /aria-haspopup="menu"/);
   assert.match(view, /role="menuitem"/);
-  // One action. A heading is not a settings screen.
-  assert.equal((view.match(/role="menuitem"/g) ?? []).length, 1,
-    "the heading menu carries more than the one action it needs");
+  // TWO ACTIONS, AND NAMED. A heading is still not a settings screen — the
+  // ceiling is what this guard is for. "Add group…" joined Rename because real
+  // use produced a Section carrying two dimensions in its name ("Large - Santa
+  // Rosa"): groups were reachable only from inside the filing panel, and only
+  // under a section that already existed, so the second dimension had nowhere
+  // to go. The menu is where a professional looks at a section they already
+  // have. Anything beyond these two needs its own argument.
+  const items = view.match(/role="menuitem"/g) ?? [];
+  assert.equal(items.length, 2, "the heading menu is growing into a management screen");
+  assert.match(view, />\s*Rename\s*</, "Rename left the heading menu");
+  assert.match(view, />\s*Add group…\s*</, "Add group… is not in the heading menu");
+  // And the second one is SECTIONS ONLY — a group does not nest inside a group.
+  assert.match(view, /\{onAddGroup && \(/, "Add group… is not conditional, so groups would offer it");
 });
 
 test("rename happens IN PLACE, with no dialog and no management screen", () => {

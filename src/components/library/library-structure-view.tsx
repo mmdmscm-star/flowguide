@@ -52,7 +52,7 @@ const keyOf = (s: string | null, g: string | null) => `${s ?? ""}|${g ?? ""}`;
 
 export function LibraryStructureView({
   refreshKey = 0, selectable = false, selected = [], onToggle, onOpen,
-  onToggleFavorite, onMove, reorder = false, onVocabulary, onEmpty, rowSlot, renderRow,
+  onToggleFavorite, onMove, onAddGroup, reorder = false, onVocabulary, onEmpty, rowSlot, renderRow,
 }: {
   refreshKey?: number;
   selectable?: boolean;
@@ -63,6 +63,11 @@ export function LibraryStructureView({
   /** "Move…" on a row — hands the item to the Select & Organize panel rather than
    *  inventing a second way to choose a destination. */
   onMove?: (id: string) => void;
+  /** "Add group…" on a section — the same mechanism as Move…, pre-targeted to
+   *  that section. A group is born holding something, so this opens the filing
+   *  panel rather than creating an empty container the professional would then
+   *  have to find something to put in. */
+  onAddGroup?: (sectionId: string) => void;
   /** Move up / Move down. Never in a picker: choosing is not filing. */
   reorder?: boolean;
   onVocabulary?: (v: LibraryVocabulary) => void;
@@ -482,6 +487,7 @@ export function LibraryStructureView({
               level="section" name={sec.name} count={total} collapsed={!!shut}
               onCollapse={() => toggle(sec.id)}
               onRename={reorder ? (n) => rename("section", sec.id, n) : undefined}
+              onAddGroup={reorder && onAddGroup ? () => onAddGroup(sec.id) : undefined}
               busy={busy}
               handle={dragEnabled ? (
                 <DragHandle label={`Drag to reorder section ${sec.name}`}
@@ -612,10 +618,12 @@ export function LibraryStructureView({
 }
 
 function Header({
-  level, name, count, collapsed, onCollapse, controls, onRename, busy, handle,
+  level, name, count, collapsed, onCollapse, controls, onRename, onAddGroup, busy, handle,
 }: {
   level: "section" | "group"; name: string; count: number;
   collapsed: boolean; onCollapse: () => void; controls?: React.ReactNode;
+  /** Sections only. A group hangs off a section, so a group heading has none. */
+  onAddGroup?: () => void;
   /** The drag grip, rendered outside the heading's own buttons. */
   handle?: React.ReactNode;
   /** Omitted wherever the structure is not the professional's to change —
@@ -671,13 +679,14 @@ function Header({
           : "truncate text-sm font-medium text-foreground/80"}>{name}</span>
         <span className="flex-none text-xs text-muted">({count})</span>
       </button>
-      {onRename && <HeadingMenu name={name} busy={busy} onRename={() => { setDraft(name); setEditing(true); }} />}
+      {onRename && <HeadingMenu name={name} busy={busy} onAddGroup={onAddGroup}
+        onRename={() => { setDraft(name); setEditing(true); }} />}
       <span className="ml-auto flex-none">{controls}</span>
     </div>
   );
 }
 
-/** The one action a heading has, reachable without hovering.
+/** What a heading can do, reachable without hovering.
  *
  *  HOVER IS NOT AN AFFORDANCE ON A PHONE. The first version faded Rename in on
  *  hover and focus, which meant a touch device had no way to find it at all
@@ -689,8 +698,8 @@ function Header({
  *  outside — otherwise a drag that ends off the menu would close it mid-gesture.
  */
 function HeadingMenu({
-  name, busy, onRename,
-}: { name: string; busy?: boolean; onRename: () => void }) {
+  name, busy, onRename, onAddGroup,
+}: { name: string; busy?: boolean; onRename: () => void; onAddGroup?: () => void }) {
   const [open, setOpen] = useState(false);
   const box = useRef<HTMLDivElement | null>(null);
   const pressedOutside = useRef(false);
@@ -738,6 +747,22 @@ function HeadingMenu({
           >
             Rename
           </button>
+          {/* SECTIONS ONLY, and it files rather than creates. "Add group" that
+              made an empty group would leave the professional looking at a
+              named nothing and hunting for the way to fill it — so this opens
+              the panel they already use for filing, pre-aimed at this section,
+              and the group comes into existence holding what they chose. */}
+          {onAddGroup && (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => { setOpen(false); onAddGroup(); }}
+              className="w-full border-t border-border px-3 py-2 text-left text-sm
+                         text-foreground hover:bg-gray-50"
+            >
+              Add group…
+            </button>
+          )}
         </div>
       )}
     </div>

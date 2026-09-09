@@ -278,6 +278,12 @@ export default function LibraryWorkspace() {
   // same thing without a pointer.
   // =========================================================================
   const composing = selecting && !organizing;
+  /** The section "Add group…" aimed at, while nothing is ticked yet. Its NAME,
+   *  because the prompt says it out loud; null whenever the panel was opened
+   *  any other way. */
+  const pendingGroupSection = destGroup === "__new" && destSection && destSection !== "__new"
+    ? structure.sections.find((x) => x.id === destSection)?.name ?? null
+    : null;
   const composeSensors = useSensors(
     // Desktop pointer and keyboard. `distance` is what lets one control be both
     // a button and a drag handle: a press that never moves stays a click.
@@ -589,8 +595,14 @@ export default function LibraryWorkspace() {
                 and watched nothing happen. A control that accepts input it cannot
                 use is worse than one that is absent. */}
             {chosen.length === 0 ? (
+              /* AIMED IN ADVANCE, SO SAY SO. Arriving here from "Add group…"
+                 the destination is already chosen, and the generic prompt would
+                 have hidden that — the professional would tick things without
+                 knowing where they were about to land. */
               <p className="mt-3 border-t border-accent/30 pt-3 text-xs text-muted">
-                Tick anything below to begin — or tap a row.
+                {pendingGroupSection
+                  ? `Tick what belongs in the new group inside ${pendingGroupSection}, then name it.`
+                  : "Tick anything below to begin — or tap a row."}
               </p>
             ) : (
               <div className="mt-3 space-y-3 border-t border-accent/30 pt-3">
@@ -646,8 +658,30 @@ export default function LibraryWorkspace() {
                         <option value="__new">+ New group…</option>
                       </select>
                     )}
+                    {/* A GROUP FOR A SECTION THAT DOES NOT EXIST YET.
+                        This used to say "You can add groups inside it once it
+                        exists" — which sent a professional filing their FIRST
+                        things back to a single name box, having just been told
+                        two lines above that a group is for a town. One box
+                        takes one string, so the town ended up inside the
+                        section's name and the section became two dimensions
+                        wearing one label.
+
+                        No select here, deliberately: a section that does not
+                        exist has no groups to choose between, so the only
+                        useful control is the name of the first one. Optional —
+                        blank files straight into the section, exactly as
+                        "No group — straight in" does for an existing one.
+                        `placeItems` already accepts both names in one call. */}
                     {destSection === "__new" && newSection.trim() && (
-                      <p className="text-[11px] text-muted">You can add groups inside it once it exists.</p>
+                      <input
+                        value={newGroup}
+                        disabled={busy}
+                        onChange={(e) => setNewGroup(e.target.value)}
+                        placeholder="Group inside it — optional. A town, a specialty…"
+                        className="w-full rounded border border-border px-2.5 py-1.5 text-sm
+                                   focus:outline-none focus:ring-2 focus:ring-accent placeholder:text-gray-300"
+                      />
                     )}
                     {destGroup === "__new" && (
                       <input
@@ -666,7 +700,8 @@ export default function LibraryWorkspace() {
                           || (destGroup === "__new" && !newGroup.trim())}
                         onClick={() => place(
                           destSection === "__new"
-                            ? { newSectionName: newSection }
+                            ? { newSectionName: newSection,
+                                ...(newGroup.trim() ? { newGroupName: newGroup } : {}) }
                             : { sectionId: destSection,
                                 ...(destGroup === "__new" ? { newGroupName: newGroup }
                                    : destGroup ? { groupId: destGroup } : {}) })}
@@ -897,6 +932,16 @@ export default function LibraryWorkspace() {
                 // the Select & Organize panel rather than growing a second way to pick a
                 // destination.
                 setNotice(""); setChosen([id]); setOrganizing(true); setSelecting(true);
+                window.scrollTo({ top: 0, behavior: "smooth" });
+              }}
+              onAddGroup={(sectionId) => {
+                // THE SAME MECHANISM AS Move…, AIMED IN ADVANCE. Nothing is
+                // created here: the panel opens with this section already
+                // chosen and the group name waiting, and the group is born in
+                // `placeItems` holding whatever the professional then ticks.
+                setNotice(""); setChosen([]);
+                setDestSection(sectionId); setDestGroup("__new"); setNewGroup("");
+                setOrganizing(true); setSelecting(true);
                 window.scrollTo({ top: 0, behavior: "smooth" });
               }}
               renderRow={composing ? (rp) => (
