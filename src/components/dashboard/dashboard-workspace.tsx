@@ -1,4 +1,7 @@
 "use client";
+import { CreatorNav } from "@/components/nav/creator-nav";
+import { Button } from "@/components/ui/button";
+import { INPUT_SHELL } from "@/components/ui/field";
 
 import { useEffect, useState, useCallback } from "react";
 import { deleteConfirmMessage, deletePacketRequest } from "@/lib/delete-packet";
@@ -134,48 +137,54 @@ export default function DashboardWorkspace() {
 
   if (loading) {
     return (
-      <main className="min-h-screen flex items-center justify-center">
-        <p className="text-muted">Loading...</p>
+      <main className="min-h-screen flex items-center justify-center bg-canvas">
+        <p className="text-body text-ink-3">Loading…</p>
       </main>
     );
   }
 
   return (
-    <main className="max-w-2xl mx-auto px-5 py-8">
-
-      {/* Header */}
-      <div className="flex items-center justify-between mb-8">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">My Sendsets</h1>
-          <p className="text-sm text-muted mt-0.5">{userEmail}</p>
+    <div className="min-h-screen bg-canvas">
+      {/* THE SAME CHROME AS EVERY OTHER CREATOR SURFACE.
+          The Dashboard was the one top-level authoring screen NOT wearing
+          CreatorNav: Library and Your details were buttons in its own header,
+          so moving between the two surfaces changed where navigation lived and
+          what it looked like. Same nav, same sticky treatment, same boundary.
+          Sign out takes the right end — it is the one thing here that leaves
+          the workspace entirely, and it is the only item the shared nav has no
+          place for. */}
+      <div className="sticky top-0 z-20 bg-canvas/85 backdrop-blur-sm border-b border-line">
+        <div className="max-w-3xl mx-auto px-4 sm:px-6 py-3.5 flex items-center gap-3">
+          <CreatorNav current="packets" />
+          <button
+            onClick={handleLogout}
+            className="ml-auto text-meta text-ink-3 hover:text-ink transition-colors"
+          >
+            Sign out
+          </button>
         </div>
-        <div className="flex items-center gap-3">
-          {/* The Library is authoring-side and packet-independent, so it belongs
-              at the top level rather than inside a packet. */}
-          <button
-            onClick={() => router.push("/library")}
-            className="px-3 py-2 rounded-lg border border-border text-sm font-medium text-muted hover:text-foreground transition-colors"
-          >
-            Library
-          </button>
-          {/* Reachable whether or not there is a gap: the prompt above appears
-              only while the profile is unpublishable, and a professional who
-              has filled it in still needs a way back to change a phone number. */}
-          <button
-            onClick={() => router.push("/settings")}
-            className="px-3 py-2 rounded-lg border border-border text-sm font-medium text-muted hover:text-foreground transition-colors"
-          >
-            Your details
-          </button>
+      </div>
+
+      <main className="max-w-3xl mx-auto px-4 sm:px-6 pb-28">
+        <header className="pt-10 pb-4">
+          <h1 className="text-page font-semibold tracking-[-0.02em] text-ink">My Sendsets</h1>
+          {/* WHOSE workspace this is. It was the same size as the page's body
+              text and read as a line of content; it is a quiet attribution. */}
+          <p className="mt-2 text-meta text-ink-3">{userEmail}</p>
+        </header>
+
+        <div className="mb-6 flex flex-wrap items-center gap-x-4 gap-y-3">
           <div className="relative">
-            <button
+            <Button
+              variant="primary"
+              size="md"
               onClick={() => setShowNewMenu(!showNewMenu)}
-              className="px-4 py-2 rounded-lg bg-accent hover:bg-accent-hover text-white text-sm font-medium transition-colors"
             >
               New Sendset
-            </button>
+            </Button>
             {showNewMenu && (
-              <div className="absolute right-0 top-full mt-2 w-56 bg-white rounded-xl border border-border shadow-lg z-10 overflow-hidden">
+              <div className="absolute left-0 top-full mt-2 w-72 bg-ground rounded-[var(--radius-panel)] border border-line
+                              shadow-[0_12px_40px_-12px_rgb(26_26_28_/_0.28)] z-10 overflow-hidden divide-y divide-line">
                 {/* ONE COMPOSER, REACHED FROM BOTH DOORS.
                     This used to open a modal picker: a second implementation of
                     the same job, with its own selection state, its own filters
@@ -186,119 +195,133 @@ export default function DashboardWorkspace() {
                     through. So this now goes to the same place. */}
                 <button
                   onClick={() => { setShowNewMenu(false); router.push("/library?compose=1"); }}
-                  className="w-full text-left px-4 py-3 hover:bg-gray-50 transition-colors border-b border-border"
+                  className="w-full text-left px-4 py-3 hover:bg-ground-3 transition-colors"
                 >
-                  <div className="font-medium text-sm text-foreground">Use my Library</div>
-                  <div className="text-sm text-muted mt-0.5">Choose things you’ve already saved</div>
+                  <div className="text-body font-medium text-ink">Use my Library</div>
+                  <div className="mt-0.5 text-meta text-ink-2">Choose things you’ve already saved</div>
                 </button>
                 <button
                   onClick={() => { setShowNewMenu(false); router.push("/new"); }}
-                  className="w-full text-left px-4 py-3 hover:bg-gray-50 transition-colors border-b border-border"
+                  className="w-full text-left px-4 py-3 hover:bg-ground-3 transition-colors"
                 >
-                  <div className="font-medium text-sm text-foreground">Paste &amp; organize with AI</div>
-                  <div className="text-sm text-muted mt-0.5">Start with information you already have</div>
+                  <div className="text-body font-medium text-ink">Paste &amp; organize with AI</div>
+                  <div className="mt-0.5 text-meta text-ink-2">Start with information you already have</div>
                 </button>
                 <button
                   onClick={() => { setShowNewMenu(false); createPacket(); }}
-                  className="w-full text-left px-4 py-3 hover:bg-gray-50 transition-colors"
+                  className="w-full text-left px-4 py-3 hover:bg-ground-3 transition-colors"
                 >
-                  <div className="font-medium text-sm text-foreground">Start blank</div>
-                  <div className="text-sm text-muted mt-0.5">Build from scratch</div>
+                  <div className="text-body font-medium text-ink">Start blank</div>
+                  <div className="mt-0.5 text-meta text-ink-2">Build from scratch</div>
                 </button>
               </div>
             )}
           </div>
-          <button
-            onClick={handleLogout}
-            className="text-sm text-muted hover:text-foreground transition-colors"
-          >
-            Sign out
-          </button>
         </div>
-      </div>
 
-      {/* Search and status filter. Shown only once there is something to sift
-          through - a search box above an empty account is furniture. */}
-      {packets.length > 0 && (
-        <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center">
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search your Sendsets…"
-            aria-label="Search your Sendsets"
-            className="flex-1 px-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:ring-2 focus:ring-accent"
-          />
-          <div className="flex items-center gap-1" role="group" aria-label="Filter by status">
-            {([
-              ["all", "All", packets.length],
-              ["draft", "Drafts", packets.filter((p) => !isPublished(p)).length],
-              ["published", "Published", packets.filter(isPublished).length],
-            ] as const).map(([value, label, count]) => (
-              <button
-                key={value}
-                onClick={() => setStatusFilter(value)}
-                aria-pressed={statusFilter === value}
-                className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  statusFilter === value
-                    ? "bg-accent text-white"
-                    : "border border-border text-muted hover:text-foreground"
-                }`}
-              >
-                {label} {count}
-              </button>
-            ))}
+      {/* ONE SURFACE, THE WAY THE LIBRARY IS ONE SURFACE.
+          Search, the status filters and the list were three blocks sitting
+          directly on the page at the same elevation as the heading above them.
+          The controls that narrow the list now sit inside the thing they
+          narrow, on a quiet band, divided from the results by the one line
+          that earns itself: above it you change what you are looking at, below
+          it is what you got. */}
+      <div className="overflow-hidden rounded-[var(--radius-panel)] border border-line bg-ground">
+        {/* Shown only once there is something to sift through — a search box
+            above an empty account is furniture. */}
+        {packets.length > 0 && (
+          <div className="border-b border-line bg-ground-2 px-3 sm:px-4 py-3.5">
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search your Sendsets…"
+              aria-label="Search your Sendsets"
+              className={INPUT_SHELL}
+            />
+            <div className="mt-2.5 flex flex-wrap items-center gap-1.5"
+                 role="group" aria-label="Filter by status">
+              {([
+                ["all", "All", packets.length],
+                ["draft", "Drafts", packets.filter((p) => !isPublished(p)).length],
+                ["published", "Published", packets.filter(isPublished).length],
+              ] as const).map(([value, label, count]) => (
+                <button
+                  key={value}
+                  onClick={() => setStatusFilter(value)}
+                  aria-pressed={statusFilter === value}
+                  /* The same chip the Library filters wear: a pill on a ground,
+                     ink-filled when it is the one in force. The count rides
+                     inside it in tabular figures so the chips do not reflow as
+                     packets come and go. */
+                  className={`rounded-full px-3 py-1.5 text-meta font-medium transition-colors ${
+                    statusFilter === value
+                      ? "bg-ink text-white"
+                      : "bg-ground-3 text-ink-2 hover:bg-line/70"
+                  }`}
+                >
+                  {label}
+                  <span className={`ml-1.5 tabular-nums ${
+                    statusFilter === value ? "text-white/70" : "text-ink-3"}`}>{count}</span>
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
-      )}
+        )}
+        <div className="px-1 sm:px-2.5 py-3">
 
       {/* Packet list */}
       {deleteError && (
-        <p role="alert" className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+        <p role="alert" className="mx-2 mb-3 rounded-[var(--radius-control)] bg-red-50 px-3 py-2 text-meta text-red-700">
           {deleteError}
         </p>
       )}
 
       {packets.length === 0 ? (
-        <div className="text-center py-16">
-          <div className="text-4xl mb-4">📦</div>
-          <h2 className="text-lg font-semibold text-foreground mb-2">
-            No Sendsets yet
-          </h2>
-          <p className="text-sm text-muted mb-6 max-w-xs mx-auto">
+        /* NO EMOJI. A 4xl 📦 was the largest and most saturated thing a new
+           professional saw on their first screen, and it said nothing the
+           heading below it did not. The empty state is now the same quiet
+           centred block the Library uses. */
+        <div className="px-3 py-16 text-center">
+          <h2 className="text-title font-semibold text-ink">No Sendsets yet</h2>
+          <p className="mx-auto mt-2 max-w-sm text-body text-ink-2">
             Create your first Sendset to share recommendations with a client.
           </p>
-          <button
-            onClick={() => router.push("/new")}
-            className="px-6 py-2.5 rounded-lg bg-accent hover:bg-accent-hover text-white text-sm font-medium transition-colors"
-          >
+          <Button variant="primary" size="md" className="mt-5"
+            onClick={() => router.push("/new")}>
             Create your first Sendset
-          </button>
+          </Button>
         </div>
       ) : visiblePackets.length === 0 ? (
         // NOT the same as having no FlowGuides. Saying "none yet" here would be
         // a lie about the account, and the way out is to clear the filter, so
         // the way out is what this offers.
-        <div className="text-center py-12">
-          <p className="text-sm text-muted">
+        <div className="px-3 py-12 text-center">
+          <p className="text-body text-ink-2">
             {query.trim()
               ? <>Nothing matches “{query.trim()}”{statusFilter !== "all" ? " in this view" : ""}.</>
               : <>You have no {statusFilter === "published" ? "published" : "draft"} Sendsets.</>}
           </p>
-          <button
-            onClick={() => { setQuery(""); setStatusFilter("all"); }}
-            className="mt-3 px-3 py-1.5 rounded-lg border border-border text-sm font-medium text-muted hover:text-foreground"
-          >
+          <Button variant="secondary" size="sm" className="mt-4"
+            onClick={() => { setQuery(""); setStatusFilter("all"); }}>
             Clear filters
-          </button>
+          </Button>
         </div>
       ) : (
-        <div className="space-y-3">
+        /* A LIST, NOT A STACK OF CARDS. Every row carried its own outline, so
+           six Sendsets read as six containers. The row is a plain surface that
+           lifts on hover, exactly as a Library row does. */
+        <div className="space-y-0.5">
           {visiblePackets.map((packet) => (
             <div
               key={packet.id}
-              className="border border-border rounded-xl p-4 hover:border-accent/30 transition-colors"
+              className="rounded-[var(--radius-control)] px-3 py-3.5 transition-colors hover:bg-ground-3"
             >
-              <div className="flex items-start justify-between gap-3">
+              {/* THE ACTIONS STOP COMPETING WITH THE NAME ON A PHONE.
+                  Four controls beside a title in 390px left the title with
+                  almost nothing — "Santa Rosa — large communities" rendered as
+                  "S…". Side by side where there is room; underneath where
+                  there is not. Every action stays present either way. */}
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
                 <button
                   onClick={() =>
                     router.push(
@@ -309,73 +332,77 @@ export default function DashboardWorkspace() {
                   }
                   className="text-left flex-1 min-w-0"
                 >
-                  <h3 className="font-semibold text-foreground truncate">
+                  <h3 className="truncate text-body font-medium text-ink">
                     {packet.title || "Untitled Packet"}
                   </h3>
                   {packet.client_name && (
-                    <p className="text-sm text-muted truncate">
+                    <p className="truncate text-meta text-ink-2">
                       For {packet.client_name}
                     </p>
                   )}
-                  <div className="flex items-center gap-3 mt-2 text-xs text-muted">
+                  {/* FOUR BORDERED PILLS IN A ROW WAS THE DENSEST THING ON THE
+                      SCREEN, and three of the four were saying "ordinary".
+                      Draft and Not yet viewed are the resting states of every
+                      Sendset, so they are now quiet text on the meta line.
+                      Colour is spent on the two facts that are actually events:
+                      it went out, and someone opened it. Viewed is the one blue
+                      thing on this screen, which is what makes it worth
+                      looking at. */}
+                  <div className="mt-2 flex flex-wrap items-center gap-x-2.5 gap-y-1.5 text-micro text-ink-3">
                     <span>Updated {formatDate(packet.updated_at)}</span>
-                    <span
-                      className={`px-2 py-0.5 rounded-full font-medium ${
-                        packet.status === "published"
-                          ? "bg-green-50 text-green-700 border border-green-200"
-                          : "bg-gray-50 text-gray-600 border border-gray-200"
-                      }`}
-                    >
+                    <span aria-hidden>·</span>
+                    <span className={`rounded-full px-2 py-0.5 font-medium ${
+                      packet.status === "published"
+                        ? "bg-emerald-50 text-emerald-800"
+                        : "bg-ground-3 text-ink-2"
+                    }`}>
                       {packet.status === "published" ? "Published" : "Draft"}
                     </span>
                     {packet.status === "published" && (
-                      <span
-                        className={`px-2 py-0.5 rounded-full font-medium ${
-                          packet.viewed
-                            ? "bg-blue-50 text-blue-700 border border-blue-200"
-                            : "bg-gray-50 text-gray-500 border border-gray-200"
-                        }`}
-                      >
+                      <span className={`rounded-full px-2 py-0.5 font-medium ${
+                        packet.viewed
+                          ? "bg-mark-soft text-mark"
+                          : "bg-ground-3 text-ink-3"
+                      }`}>
                         {packet.viewed ? "Viewed" : "Not yet viewed"}
                       </span>
                     )}
                   </div>
                 </button>
-                <div className="flex items-center gap-1 flex-shrink-0">
+                {/* FOUR ACTIONS AT THE SAME WEIGHT, AND DELETE IN RED, meant
+                    the most destructive one was also the most visible thing on
+                    every row. They are one family now, and Delete only stops
+                    being quiet when the pointer is on it. */}
+                <div className="-ml-2 flex flex-wrap items-center gap-0.5 sm:ml-0 sm:flex-none">
                   {packet.status === "published" && (
                     <>
-                      <button
-                        onClick={() => router.push(`/edit/${packet.id}`)}
-                        className="px-3 py-1.5 text-xs font-medium text-muted hover:text-accent hover:bg-blue-50 rounded-lg transition-colors"
-                      >
+                      <Button variant="ghost" size="sm"
+                        onClick={() => router.push(`/edit/${packet.id}`)}>
                         Edit
-                      </button>
-                      <button
+                      </Button>
+                      <Button variant="ghost" size="sm"
                         onClick={() => copyLink(packet.slug, packet.id)}
-                        title="Anyone with this link can open the packet — no sign-in required."
-                        className="px-3 py-1.5 text-xs font-medium text-accent hover:bg-blue-50 rounded-lg transition-colors"
-                      >
-                        {copiedId === packet.id ? "Copied!" : "Copy Link"}
-                      </button>
+                        title="Anyone with this link can open the packet — no sign-in required.">
+                        {copiedId === packet.id ? "Copied!" : "Copy link"}
+                      </Button>
                     </>
                   )}
-                  <button
+                  <Button variant="ghost" size="sm"
                     onClick={() => duplicatePacket(packet.id)}
-                    disabled={duplicatingId === packet.id}
-                    className="px-3 py-1.5 text-xs font-medium text-muted hover:text-accent hover:bg-blue-50 rounded-lg transition-colors disabled:opacity-50"
-                  >
+                    disabled={duplicatingId === packet.id}>
                     {duplicatingId === packet.id ? "Duplicating…" : "Duplicate"}
-                  </button>
-                  <button
-                    onClick={() => deletePacket(packet)}
-                    className="px-3 py-1.5 text-xs font-medium text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                  >
+                  </Button>
+                  <Button variant="danger" size="sm" onClick={() => deletePacket(packet)}>
                     Delete
-                  </button>
+                  </Button>
                 </div>
               </div>
               {copiedId === packet.id && (
-                <p className="mt-3 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                /* KEPT AMBER, and kept its emphasis. This is the same class of
+                   thing as Highlight for Client: it says something left the
+                   workspace and is now readable by anyone holding the link.
+                   That is worth more voice than the rest of the row. */
+                <p className="mt-3 rounded-[var(--radius-control)] bg-amber-50 px-3 py-2 text-meta text-amber-900">
                   Link copied. Anyone with this link can view and forward the
                   packet. No sign-in is required.
                 </p>
@@ -384,6 +411,9 @@ export default function DashboardWorkspace() {
           ))}
         </div>
       )}
-    </main>
+        </div>
+      </div>
+      </main>
+    </div>
   );
 }

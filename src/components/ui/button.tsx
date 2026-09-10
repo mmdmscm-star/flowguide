@@ -22,7 +22,11 @@ const VARIANT: Record<ButtonVariant, string> = {
   primary:   "bg-ink text-white hover:bg-ink/90 active:bg-ink",
   secondary: "bg-ground-3 text-ink hover:bg-line/70 active:bg-line",
   ghost:     "text-ink-2 hover:text-ink hover:bg-ground-3",
-  danger:    "text-red-700 hover:bg-red-50",
+  /* FINDABLE, NOT DOMINANT. Red at rest made Delete the most visible thing on
+   * every row of a list — six destructive actions shouting down the names of
+   * the things they destroy. It carries the weight of its neighbours until the
+   * pointer is on it, and then says exactly what it is. */
+  danger:    "text-ink-2 hover:text-red-700 hover:bg-red-50 active:bg-red-100",
 };
 
 const SIZE: Record<ButtonSize, string> = {

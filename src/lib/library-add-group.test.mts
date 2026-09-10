@@ -368,16 +368,36 @@ test("LABELS, FAVOURITES, FILTER FLATTENING AND ORDERING ARE UNTOUCHED", async (
   assert.match(src, /reorder=\{!composing && canReorder\(/, "the reorder gate changed");
 });
 
+// The commit before this line of Library work began. Anchoring to a COMMIT is
+// the whole point: this read `git diff` against the WORKING TREE, so it checked
+// real code only while the package was still uncommitted and evaporated the
+// moment it landed — and once the tree was clean it failed outright, on a
+// change to a different directory. A guard whose subject depends on version
+// control state is not guarding the code.
+const BEFORE_THIS_WORK = "725d328";
+
 test("NOTHING NEW REACHES THE DATABASE OR THE RECIPIENT", async () => {
-  // SCOPED TO WHAT THIS PACKAGE ADDED, not to the whole file. `revision` is
-  // read in the workspace and always was; asserting the file never mentions it
-  // tested the repo's history rather than this change.
-  const added = execSync("git diff -U0 -- src/components/library/", { encoding: "utf8" })
-    .split("\n").filter((l) => l.startsWith("+") && !l.startsWith("+++")).join("\n");
-  assert.ok(added.length > 0, "there is no diff to check — did the change land?");
-  for (const forbidden of [/revision/, /updated_at/, /supabase/i, /\.delete\(/]) {
-    assert.ok(!forbidden.test(added), `this change introduced ${forbidden}`);
+  // Three of these are absolute and can be said about the whole directory: a
+  // Library component does not talk to the database, does not stamp a row's
+  // timestamp, and does not delete. Stated this way they hold forever instead
+  // of only for one diff.
+  const dir = execSync("git ls-files src/components/library/", { encoding: "utf8" })
+    .trim().split("\n").map((f) => codeOf(f)).join("\n");
+  for (const forbidden of [/updated_at/, /supabase/i, /\.delete\(/]) {
+    assert.ok(!forbidden.test(dir), `a Library component now carries ${forbidden}`);
   }
+
+  // `revision` is the exception and cannot be banned outright: the workspace
+  // reads the one it opened an entry with and sends it back as
+  // `expectedRevision`, which is a PRECONDITION, not a value being written.
+  // So that one stays scoped to what this line of work added.
+  const added = execSync(`git diff -U0 ${BEFORE_THIS_WORK} -- src/components/library/`,
+    { encoding: "utf8" })
+    .split("\n").filter((l) => l.startsWith("+") && !l.startsWith("+++")).join("\n");
+  assert.match(added, /onAddGroup/,
+    "this is not the diff it should be — the baseline or the path is wrong");
+  assert.ok(!/(?<![A-Za-z])revision/.test(added),
+    "this work started writing a revision rather than passing one through");
   // One structural home per item is still the model: placement sends ONE
   // section and at most one group, never a list.
   const src = codeOf(WORKSPACE);

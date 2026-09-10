@@ -41,14 +41,21 @@ export default async function DashboardPage() {
           that appears after a spinner is a first-run prompt the new
           professional has already scrolled past. */}
       {gap && (
-        <div className="max-w-2xl mx-auto px-5 pt-8">
-          <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
-            <p className="text-sm text-amber-900">
-              {IDENTITY_GAP_PROMPT[gap]}{" "}
-              <Link href="/settings" className="font-medium underline underline-offset-2 hover:text-amber-950">
-                Add your details
-              </Link>
-            </p>
+        /* ON THE PAGE'S OWN CANVAS, AT THE PAGE'S OWN WIDTH. This rendered in a
+           2xl column above a 3xl workspace, so the one thing a brand-new
+           professional must read was also the one thing misaligned with
+           everything under it. The amber stays: like the copied-link warning,
+           it is about what a client will or will not see. */
+        <div className="bg-canvas">
+          <div className="max-w-3xl mx-auto px-4 sm:px-6 pt-6">
+            <div className="rounded-[var(--radius-control)] bg-amber-50 px-4 py-3">
+              <p className="text-meta text-amber-900">
+                {IDENTITY_GAP_PROMPT[gap]}{" "}
+                <Link href="/settings" className="font-medium underline underline-offset-2 hover:text-amber-950">
+                  Add your details
+                </Link>
+              </p>
+            </div>
           </div>
         </div>
       )}
