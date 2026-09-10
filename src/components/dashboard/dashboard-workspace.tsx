@@ -1,4 +1,5 @@
 "use client";
+import { FilterChip, ChipCount, CHIP_ROW } from "@/components/ui/chip";
 import { CreatorNav } from "@/components/nav/creator-nav";
 import { Button } from "@/components/ui/button";
 import { INPUT_SHELL } from "@/components/ui/field";
@@ -154,14 +155,20 @@ export default function DashboardWorkspace() {
           the workspace entirely, and it is the only item the shared nav has no
           place for. */}
       <div className="sticky top-0 z-20 bg-canvas/85 backdrop-blur-sm border-b border-line">
-        <div className="max-w-3xl mx-auto px-4 sm:px-6 py-3.5 flex items-center gap-3">
-          <CreatorNav current="packets" />
-          <button
-            onClick={handleLogout}
-            className="ml-auto text-meta text-ink-3 hover:text-ink transition-colors"
-          >
-            Sign out
-          </button>
+        <div className="max-w-3xl mx-auto px-4 sm:px-6 py-2 sm:py-3.5 flex items-center gap-2 sm:gap-3">
+          <CreatorNav
+            current="packets"
+            trailing={
+              <button
+                onClick={handleLogout}
+                className="flex h-11 items-center whitespace-nowrap rounded-[var(--radius-control)] px-3
+                           text-body text-ink-3 transition-colors hover:bg-ground-3 hover:text-ink
+                           sm:h-auto sm:px-0 sm:text-meta sm:hover:bg-transparent"
+              >
+                Sign out
+              </button>
+            }
+          />
         </div>
       </div>
 
@@ -238,31 +245,26 @@ export default function DashboardWorkspace() {
               aria-label="Search your Sendsets"
               className={INPUT_SHELL}
             />
-            <div className="mt-2.5 flex flex-wrap items-center gap-1.5"
+            {/* THE SAME CHIP THE LIBRARY WEARS — the component, not a
+                lookalike. These were a second spelling of it, which is how the
+                Library's chips ended up 44px tall on a phone while these
+                stayed 34. */}
+            <div className={`-mx-3 mt-2.5 px-3 sm:mx-0 sm:px-0 ${CHIP_ROW}`}
                  role="group" aria-label="Filter by status">
               {([
                 ["all", "All", packets.length],
                 ["draft", "Drafts", packets.filter((p) => !isPublished(p)).length],
                 ["published", "Published", packets.filter(isPublished).length],
               ] as const).map(([value, label, count]) => (
-                <button
+                <FilterChip
                   key={value}
+                  active={statusFilter === value}
                   onClick={() => setStatusFilter(value)}
-                  aria-pressed={statusFilter === value}
-                  /* The same chip the Library filters wear: a pill on a ground,
-                     ink-filled when it is the one in force. The count rides
-                     inside it in tabular figures so the chips do not reflow as
-                     packets come and go. */
-                  className={`rounded-full px-3 py-1.5 text-meta font-medium transition-colors ${
-                    statusFilter === value
-                      ? "bg-ink text-white"
-                      : "bg-ground-3 text-ink-2 hover:bg-line/70"
-                  }`}
+                  label={`${label} — ${count}`}
                 >
                   {label}
-                  <span className={`ml-1.5 tabular-nums ${
-                    statusFilter === value ? "text-white/70" : "text-ink-3"}`}>{count}</span>
-                </button>
+                  <ChipCount active={statusFilter === value}>{count}</ChipCount>
+                </FilterChip>
               ))}
             </div>
           </div>

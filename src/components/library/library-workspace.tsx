@@ -523,7 +523,7 @@ export default function LibraryWorkspace() {
           over scrolling content is a boundary that would be genuinely ambiguous
           without it. Everything below groups with ground and space instead. */}
       <div className="sticky top-0 z-20 bg-canvas/85 backdrop-blur-sm border-b border-line">
-        <div className={`${shell} mx-auto px-4 sm:px-6 py-3.5 flex items-center gap-3`}>
+        <div className={`${shell} mx-auto px-4 sm:px-6 py-2 sm:py-3.5 flex items-center gap-3`}>
           <CreatorNav current="library" />
         </div>
       </div>

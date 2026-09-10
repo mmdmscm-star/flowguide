@@ -48,9 +48,14 @@ export function DragHandle({
       disabled={disabled}
       {...attributes}
       {...listeners}
-      className="flex-none touch-none cursor-grab active:cursor-grabbing rounded p-1 text-gray-300
-                 hover:text-gray-600 focus-visible:outline focus-visible:outline-2
-                 focus-visible:outline-accent disabled:cursor-default disabled:opacity-30"
+      /* The grip is how a row is reordered by touch, so on a phone it is the
+         LAST control that should be a 24px square. Same glyph, a target around
+         it. */
+      className="flex h-10 w-7 flex-none touch-none cursor-grab items-center justify-center
+                 rounded active:cursor-grabbing text-ink-3/50
+                 hover:text-ink-2 focus-visible:outline focus-visible:outline-2
+                 focus-visible:outline-mark disabled:cursor-default disabled:opacity-30
+                 sm:h-auto sm:w-auto sm:p-1"
     >
       <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
         <circle cx="7" cy="4" r="1.5" /><circle cx="13" cy="4" r="1.5" />

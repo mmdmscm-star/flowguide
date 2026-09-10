@@ -5,8 +5,12 @@
 // only asserts itself on focus.
 import type { InputHTMLAttributes, ReactNode } from "react";
 
+/* `text-body` is 16px on a phone, which is not decoration: iOS Safari zooms the
+ * whole page when a focused input is smaller than that, so a 15px field made
+ * the layout jump every time someone tapped it. The extra vertical padding is
+ * the same argument as the button heights. */
 export const INPUT_SHELL =
-  `w-full rounded-[var(--radius-control)] bg-ground border border-line px-3 py-2 text-body
+  `w-full rounded-[var(--radius-control)] bg-ground border border-line px-3 py-2.5 sm:py-2 text-body
    text-ink placeholder:text-ink-3 transition-colors
    focus:outline-none focus:border-mark focus:ring-2 focus:ring-mark/15`;
 

@@ -397,8 +397,11 @@ export function LibraryStructureView({
     // handles and is not a drop destination — dragging into it would be asking
     // for an order it does not have.
     const sortable = dragEnabled && c.sectionId !== null;
+    // A row is two lines on a phone, so the space BETWEEN rows has to say more
+    // than the space inside one. At 2px it did not, and an action line sat as
+    // close to the next name as to its own.
     const body = (
-      <ul className={`${indent} space-y-0.5`}>
+      <ul className={`${indent} space-y-2 sm:space-y-0.5`}>
         {rows.map((s, i) => {
           const controls = reorder && !selectable ? (
             // isLast IS NOT "the last row loaded". A paged container has
@@ -488,7 +491,9 @@ export function LibraryStructureView({
           <button
             type="button"
             onClick={() => setOpen(anyOpen ? {} : Object.fromEntries(headingIds.map((id) => [id, true])))}
-            className="rounded px-2 py-1 text-meta font-medium text-ink-3 transition-colors hover:bg-ground-3 hover:text-ink"
+            className="flex h-10 items-center rounded-[var(--radius-control)] px-2.5 text-meta font-medium
+                       text-ink-3 transition-colors hover:bg-ground-3 hover:text-ink
+                       sm:h-auto sm:px-2 sm:py-1"
           >
             {anyOpen ? "Collapse all" : "Expand all"}
           </button>
@@ -747,8 +752,10 @@ function Header({
   return (
     <div className="group/head flex items-center gap-1.5">
       {handle}
+      {/* The heading IS the toggle, so on a phone it needs the height of one.
+          It was 24–29px tall, which is a line of text, not a target. */}
       <button type="button" onClick={onCollapse} aria-expanded={!collapsed}
-        className="flex min-w-0 items-center gap-1.5 text-left">
+        className="flex min-h-11 min-w-0 items-center gap-1.5 text-left sm:min-h-0">
         <span className={`text-muted transition-transform ${collapsed ? "" : "rotate-90"}`} aria-hidden="true">›</span>
         <span className={level === "section"
           ? "truncate text-title font-semibold tracking-[-0.01em] text-ink"
@@ -811,7 +818,9 @@ function HeadingMenu({
         aria-label={`Actions for ${name}`}
         aria-haspopup="menu"
         aria-expanded={open}
-        className="rounded px-1.5 py-0.5 text-meta leading-none text-ink-3 hover:bg-ground-3 hover:text-ink disabled:opacity-40"
+        className="flex h-10 w-9 items-center justify-center rounded-[var(--radius-control)] text-meta
+                   leading-none text-ink-3 transition-colors hover:bg-ground-3 hover:text-ink
+                   disabled:opacity-40 sm:h-auto sm:w-auto sm:px-1.5 sm:py-0.5"
       >
         …
       </button>
@@ -864,7 +873,10 @@ function Controls({
   label: string;
   onUp: () => void; onDown: () => void; onMove?: () => void;
 }) {
-  const b = "px-0.5 sm:px-1 text-ink-3 hover:text-accent disabled:opacity-25 disabled:hover:text-ink-3";
+  const b = `flex h-10 w-9 items-center justify-center rounded-[var(--radius-control)] text-ink-3
+             transition-colors hover:bg-ground-3 hover:text-ink disabled:opacity-25
+             disabled:hover:bg-transparent disabled:hover:text-ink-3
+             sm:h-auto sm:w-auto sm:rounded-none sm:px-1 sm:hover:bg-transparent`;
   return (
     <span className="flex flex-none items-center">
       <button type="button" onClick={onUp} disabled={busy || isFirst}
@@ -874,7 +886,9 @@ function Controls({
       {onMove && (
         <button type="button" onClick={onMove} disabled={busy}
           aria-label={`Move ${label} somewhere else`}
-          className="ml-0.5 text-[11px] font-medium text-muted hover:text-accent disabled:opacity-40">
+          className="flex h-10 items-center rounded-[var(--radius-control)] px-2 text-meta font-medium
+                     text-ink-2 transition-colors hover:bg-ground-3 hover:text-ink disabled:opacity-40
+                     sm:ml-0.5 sm:h-auto sm:px-0 sm:text-micro sm:hover:bg-transparent">
           Move…
         </button>
       )}

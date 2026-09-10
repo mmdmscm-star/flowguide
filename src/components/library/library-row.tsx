@@ -35,7 +35,9 @@ export function FavoriteStar({
   return (
     <button type="button" onClick={onClick} aria-pressed={on}
       aria-label={on ? `Remove ${label} from favorites` : `Add ${label} to favorites`}
-      className={`flex-none px-0.5 sm:px-1 text-base leading-none transition-colors ${
+      className={`flex h-10 w-9 flex-none items-center justify-center rounded-[var(--radius-control)]
+                  text-lg leading-none transition-colors hover:bg-ground-3
+                  sm:h-auto sm:w-auto sm:rounded-none sm:px-1 sm:text-base sm:hover:bg-transparent ${
         on ? "text-favorite hover:text-favorite/80" : "text-ink-3/45 hover:text-favorite"}`}>
       {on ? "★" : "☆"}
     </button>
@@ -79,8 +81,17 @@ export function LibraryRow({
   handle, innerRef, shellRef, style, className, muted,
 }: LibraryRowProps) {
   return (
+    /* THE CONTROLS COME OFF THE NAME'S LINE ON A PHONE.
+     *
+     * A row is a grip, a thumbnail, a name, an address, labels, a favourite
+     * mark, two arrows and Move… — nine things. At a size worth reading, the
+     * five trailing controls left the name about a hundred pixels, and each of
+     * them was a target too small to hit reliably anyway. Wrapping is what
+     * makes both problems go away at once: the name gets the width, the
+     * controls get the height, and nothing is hidden or moved behind a menu. */
     <li ref={innerRef} style={style}
-        className={`flex items-center gap-1 ${muted ? "opacity-55" : ""} ${className ?? ""}`}>
+        className={`flex flex-wrap items-center gap-1 sm:flex-nowrap
+                    ${muted ? "opacity-55" : ""} ${className ?? ""}`}>
       {handle}
       {selectable ? (
         <label ref={shellRef} className={`${ROW_SHELL} ${selected ? ROW_SELECTED : ROW_PLAIN} cursor-pointer`}>
@@ -98,8 +109,20 @@ export function LibraryRow({
       {/* Outside the row's own control on purpose: a label wrapping a checkbox
           would swallow the click and select the row, and a button inside a
           button is not valid markup. */}
-      {star}
-      {controls}
+      {/* EVERY ACTION ON ONE LINE, or none of them. Leaving the star up on the
+          content line and dropping only the arrows split the row's actions
+          across two places and left the star orphaned mid-row. Below `sm` this
+          is the row's action line, right-aligned; at `sm` the wrapper becomes
+          `display:contents` and the star and controls are direct children of
+          the row again — the desktop layout is not merely similar to what it
+          was, it is the same boxes. */}
+      {(star || controls) && (
+        <span className="-mt-0.5 flex basis-full items-center justify-end gap-0.5
+                         sm:mt-0 sm:contents">
+          {star}
+          {controls}
+        </span>
+      )}
     </li>
   );
 }
@@ -121,7 +144,7 @@ export function LibraryRow({
  * controls unreachable on a phone. Letting the shell shrink hands the overflow
  * to the title, which already truncates, which is where it belongs. */
 export const ROW_SHELL =
-  "flex min-w-0 flex-1 items-center gap-2.5 sm:gap-3.5 rounded-[var(--radius-control)] px-2 sm:px-3 py-3 transition-colors";
+  "flex min-w-0 flex-1 items-center gap-2.5 sm:gap-3.5 rounded-[var(--radius-control)] px-2 sm:px-3 py-2 sm:py-3 transition-colors";
 export const ROW_SELECTED = "bg-mark-soft ring-1 ring-mark/30";
 export const ROW_PLAIN = "bg-transparent hover:bg-ground-3";
 

@@ -78,17 +78,55 @@
    * is the same signal at the same size, carrying less voice. */
   --color-favorite: #b8873b;
 
-  /* Type. The old surface was text-sm/text-xs almost everywhere — 333 of 375
-   * uses — and that cramping is most of what felt administrative. */
-  --text-micro: 0.719rem;      /* 11.5px — labels only, sparingly */
-  --text-meta: 0.8125rem;      /* 13px */
-  --text-body: 0.9375rem;      /* 15px — up from 14 */
-  --text-title: 1.0625rem;     /* 17px */
-  --text-page: 1.625rem;       /* 26px */
+  /* Type lives in its own block below — NOT here. `@theme inline` bakes each
+   * value into the utility at build time, which makes a size impossible to
+   * change per breakpoint. See THE SCALE IS RESPONSIVE. */
 
   /* Radii: three, down from six. */
   --radius-control: 6px;
   --radius-panel: 10px;
+}
+
+/* ==========================================================================
+ * THE SCALE IS RESPONSIVE, AND THAT IS THE POINT.
+ *
+ * Every size below was chosen at a desk and then shipped to a phone unchanged.
+ * On a real iPhone the result reads as a desktop interface compressed until it
+ * fits rather than one built to be read at arm's length — and "fits at 390px
+ * with no overflow" cannot detect that, because nothing is overflowing.
+ *
+ * `--text-meta` carried 49 of the 74 uses in the app: the DOMINANT interface
+ * size was 13px. That is the whole problem in one number.
+ *
+ * This block is `@theme` and NOT `@theme inline` on purpose. Inline bakes the
+ * literal value into `.text-body{font-size:.9375rem}`, so a media query has
+ * nothing left to change. Plain `@theme` emits the variable and compiles the
+ * utility to `font-size: var(--text-body)`, which a breakpoint can then move.
+ * The colours above stay inline; only sizes need to travel.
+ * ========================================================================== */
+@theme {
+  --text-micro: 0.719rem;      /* 11.5px */
+  --text-meta: 0.8125rem;      /* 13px */
+  --text-body: 0.9375rem;      /* 15px */
+  --text-title: 1.0625rem;     /* 17px */
+  --text-page: 1.625rem;       /* 26px */
+}
+
+/* Below Tailwind's `sm`, i.e. a phone held in one hand. The steps keep their
+ * desktop ratios (~1.11 between neighbours) rather than being nudged
+ * individually, so the hierarchy is the same hierarchy, read closer.
+ *
+ * 16px on body is not a taste: iOS Safari ZOOMS THE PAGE when a focused input
+ * is under 16px, so every text field on a phone was yanking the layout. That
+ * is a legibility bug and a usability bug wearing the same number. */
+@media (max-width: 639.98px) {
+  :root {
+    --text-micro: 0.8125rem;   /* 13px   — chips, counts */
+    --text-meta: 0.90625rem;   /* 14.5px — dates, subtitles, secondary */
+    --text-body: 1rem;         /* 16px   — ordinary interface text */
+    --text-title: 1.1875rem;   /* 19px */
+    --text-page: 1.75rem;      /* 28px */
+  }
 }
 
 body {

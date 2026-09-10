@@ -1,4 +1,5 @@
 "use client";
+import { FilterChip, CHIP_ROW } from "@/components/ui/chip";
 import type { LibraryVocabulary } from "@/lib/library-organization";
 
 // ONE FILTER SURFACE, wherever the Library is shown.
@@ -70,43 +71,22 @@ export function LibraryFilters({
       : [...value.labels, l] });
 
   return (
-    <div className={`flex flex-wrap items-center gap-2 ${className}`}>
-      <Chip active={!filtersActive(value)} onClick={() => onChange(EMPTY_FILTERS)}>All</Chip>
-      <Chip active={value.favorite} onClick={() => onChange({ ...value, favorite: !value.favorite })}>
+    /* ONE ROW THAT SCROLLS, NOT TWO THAT STACK. At a readable chip size these
+       wrap on a phone, and a second row of filters costs about fifty pixels of
+       a list that only had room for three items. The same treatment the nav
+       gets, for the same reason, bleeding to its container's edge so a
+       half-visible chip says there are more. */
+    <div className={`-mx-3 px-3 sm:mx-0 sm:px-0 ${CHIP_ROW} ${className}`}>
+      <FilterChip active={!filtersActive(value)} onClick={() => onChange(EMPTY_FILTERS)}>All</FilterChip>
+      <FilterChip active={value.favorite} onClick={() => onChange({ ...value, favorite: !value.favorite })}>
         ★ Favorites
-      </Chip>
+      </FilterChip>
       {vocabulary.labels.map((l) => (
-        <Chip key={`l:${l}`} active={value.labels.includes(l)} onClick={() => toggleLabel(l)}>
+        <FilterChip key={`l:${l}`} active={value.labels.includes(l)} onClick={() => toggleLabel(l)}>
           {l}
-        </Chip>
+        </FilterChip>
       ))}
     </div>
   );
 }
 
-/** One chip. The same control for categories and labels, because they narrow
- *  the same list in the same way. */
-function Chip({
-  active, onClick, children,
-}: {
-  active: boolean; onClick: () => void; children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={active}
-      /* A chip states a view, so the selected one carries the mark colour and
-         the rest carry none. Filled blue on every unselected chip was four
-         controls competing before the professional had chosen anything. */
-      className={`rounded-full px-3 py-1.5 text-meta font-medium transition-colors
-                  focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-mark/40 ${
-        active
-          ? "bg-ink text-white"
-          : "bg-ground-3 text-ink-2 hover:bg-line/70 hover:text-ink"
-      }`}
-    >
-      {children}
-    </button>
-  );
-}

@@ -29,9 +29,14 @@ const VARIANT: Record<ButtonVariant, string> = {
   danger:    "text-ink-2 hover:text-red-700 hover:bg-red-50 active:bg-red-100",
 };
 
+/* A FINGER IS NOT A CURSOR. `sm` was 32px tall and `md` 40 — fine under a
+ * mouse, both under the ~44px a thumb actually needs, and `sm` is what every
+ * row action in the app wears. The desktop proportions are unchanged; the
+ * phone gets the height it needs, and the horizontal padding to match so the
+ * target is not a wide thin strip. */
 const SIZE: Record<ButtonSize, string> = {
-  sm: "h-8 px-3 text-meta gap-1.5",
-  md: "h-10 px-4 text-body gap-2",
+  sm: "h-10 sm:h-8 px-3.5 sm:px-3 text-meta gap-1.5",
+  md: "h-12 sm:h-10 px-4.5 sm:px-4 text-body gap-2",
 };
 
 export function Button({
