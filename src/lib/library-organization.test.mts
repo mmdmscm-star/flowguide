@@ -412,7 +412,17 @@ test("a row is selectable by its card, not only by the checkbox", () => {
   // row's body for the drag preview look like a behaviour change.
   assert.match(row, /<label[^>]*cursor-pointer/,
     "the row card is not a label, so tapping it does not select");
-  assert.match(row, /border-accent bg-accent\/5/, "a selected row is not visibly selected");
+  // Selected is asserted as a DISTINCT treatment the card wears, not as one
+  // palette's spelling of it. The row moved from an accent border to a soft
+  // ground plus a ring when the list stopped being a stack of outlined boxes;
+  // the property that matters — selected does not look like unselected — is
+  // unchanged, and is what this now checks.
+  const sel = /ROW_SELECTED\s*=\s*"([^"]+)"/.exec(row);
+  const plain = /ROW_PLAIN\s*=\s*"([^"]+)"/.exec(row);
+  assert.ok(sel && sel[1].trim(), "there is no selected treatment at all");
+  assert.ok(plain && sel![1] !== plain[1], "a selected row is not visibly selected");
+  assert.match(row, /selected \? ROW_SELECTED : ROW_PLAIN/,
+    "the card does not switch treatment on selection");
 });
 
 // ---------------------------------------------------------------------------

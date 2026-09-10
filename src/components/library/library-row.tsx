@@ -83,9 +83,24 @@ export function LibraryRow({
 
 /** The row's shell, as classes rather than an element, so a drag preview can
  *  wear the same one without also inheriting the <li> a list item needs. */
-export const ROW_SHELL = "flex w-full items-center gap-3 rounded-lg border p-3";
-export const ROW_SELECTED = "border-accent bg-accent/5";
-export const ROW_PLAIN = "border-border bg-white";
+/* A LIST IS NOT A STACK OF BOXES.
+ *
+ * Every row used to carry its own 1px outline, so six saved things read as six
+ * containers rather than as one list — the densest source of visual noise on
+ * the screen. The row is now a plain surface that lifts on hover, and the list
+ * is held together by rhythm and the thumbnail's left edge instead: no rule
+ * between rows, because the alignment already does that work. Selected is the
+ * only state that draws a line, because there it carries meaning. */
+/* `min-w-0 flex-1`, NOT `w-full`. The star and the reorder controls are
+ * flex-none siblings of this shell inside the row. With `w-full` the shell kept
+ * an automatic minimum equal to its own content, so at 390px the row measured
+ * ~396 inside a 320px list and pushed "Move…" off the right edge — reorder
+ * controls unreachable on a phone. Letting the shell shrink hands the overflow
+ * to the title, which already truncates, which is where it belongs. */
+export const ROW_SHELL =
+  "flex min-w-0 flex-1 items-center gap-2.5 sm:gap-3.5 rounded-[var(--radius-control)] px-2 sm:px-3 py-3 transition-colors";
+export const ROW_SELECTED = "bg-mark-soft ring-1 ring-mark/30";
+export const ROW_PLAIN = "bg-transparent hover:bg-ground-3";
 
 /** EVERYTHING INSIDE THE ROW: thumbnail, title, subtitle, location, labels.
  *
@@ -100,24 +115,24 @@ export function LibraryRowBody({
     <>
       {photo
         /* eslint-disable-next-line @next/next/no-img-element */
-        ? <img src={photo} alt="" className="h-10 w-10 flex-none rounded object-cover bg-gray-100" />
-        : <div className="h-10 w-10 flex-none rounded bg-gray-100 flex items-center justify-center">
-            <svg viewBox="0 0 24 24" className="h-4 w-4 text-gray-300" fill="none" stroke="currentColor" strokeWidth="1.5">
+        ? <img src={photo} alt="" className="h-10 w-10 sm:h-11 sm:w-11 flex-none rounded-[var(--radius-control)] object-cover bg-ground-3" />
+        : <div className="h-10 w-10 sm:h-11 sm:w-11 flex-none rounded-[var(--radius-control)] bg-ground-3 flex items-center justify-center">
+            <svg viewBox="0 0 24 24" className="h-4 w-4 text-ink-3/70" fill="none" stroke="currentColor" strokeWidth="1.5">
               <rect x="3" y="4" width="18" height="16" rx="2" />
               <circle cx="8.5" cy="9.5" r="1.5" />
               <path d="M21 16l-5-5-4 4-2-2-4 4" />
             </svg>
           </div>}
       <div className="min-w-0 flex-1 text-left">
-        <p className="text-sm font-medium text-foreground truncate">{item.title || "Untitled"}</p>
-        <p className="text-sm text-muted truncate">{subtitleFor(item)}</p>
+        <p className="text-body font-medium text-ink truncate">{item.title || "Untitled"}</p>
+        <p className="text-meta text-ink-2 truncate">{subtitleFor(item)}</p>
         {(location || (item.labels ?? []).length > 0) && (
-          <p className="mt-1 flex flex-wrap items-center gap-1 text-[11px] leading-none">
+          <p className="mt-1.5 flex flex-wrap items-center gap-1.5 text-micro leading-none">
             {location && <LocationLine location={location} />}
             {/* Labels stay on the row in BOTH views. They cut across the
                 structure, so position never implies them. */}
             {(item.labels ?? []).map((l) => (
-              <span key={l} className="rounded-full bg-gray-100 px-1.5 py-0.5 text-muted">{l}</span>
+              <span key={l} className="rounded-full bg-ground-3 px-2 py-1 font-medium text-ink-2">{l}</span>
             ))}
           </p>
         )}

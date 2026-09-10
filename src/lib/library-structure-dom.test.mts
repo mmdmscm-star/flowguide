@@ -913,8 +913,17 @@ test("THE CUE IS NOT COLOUR ALONE", async () => {
   // tree. Someone in greyscale, in high contrast, or using a screen reader
   // still gets the boundary.
   assert.match(cls, /border-l-2/, "the rail is no wider than a card edge");
-  assert.match(cls, /pl-4/, "grouped content is not inset from loose content");
-  assert.match(cls, /border-gray-400/, "the rail is back to a card-edge grey");
+  const inset = /\bpl-(\d+)\b/.exec(cls);
+  assert.ok(inset && Number(inset[1]) >= 4,
+    "grouped content is not inset from loose content");
+  // THE RAIL IS THE ONE LINE ON THIS SCREEN THAT MEANS SOMETHING, so it is held
+  // to a contrast the decorative hairlines are not. A visual pass softened it
+  // to `border-line-2` — 1.45:1 against the page, down from 2.54:1 — which
+  // looked tidier and quietly undid the fix the rail was shipped for. Named
+  // tokens only: `line` (#e7e5e1) and `line-2` (#d9d6d1) are edges you feel,
+  // and neither is allowed here.
+  assert.match(cls, /border-(line-3|gray-400)\b/,
+    "the rail has been softened to a decorative hairline, so where a group ends stops being visible");
   assert.ok(!/border-border\b/.test(cls),
     "the rail uses the same token as every item card's own border");
 });

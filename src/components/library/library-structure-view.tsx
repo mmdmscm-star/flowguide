@@ -398,7 +398,7 @@ export function LibraryStructureView({
     // for an order it does not have.
     const sortable = dragEnabled && c.sectionId !== null;
     const body = (
-      <ul className={`${indent} space-y-2`}>
+      <ul className={`${indent} space-y-0.5`}>
         {rows.map((s, i) => {
           const controls = reorder && !selectable ? (
             // isLast IS NOT "the last row loaded". A paged container has
@@ -475,11 +475,11 @@ export function LibraryStructureView({
           A single section already has its own chevron, so a global toggle
           beside it would be two ways to do the same thing. */}
       {headingIds.length > 1 && (
-        <div className="flex justify-end">
+        <div className="mb-1 flex justify-end">
           <button
             type="button"
             onClick={() => setOpen(anyOpen ? {} : Object.fromEntries(headingIds.map((id) => [id, true])))}
-            className="text-xs font-medium text-muted hover:text-accent"
+            className="rounded px-2 py-1 text-meta font-medium text-ink-3 transition-colors hover:bg-ground-3 hover:text-ink"
           >
             {anyOpen ? "Collapse all" : "Expand all"}
           </button>
@@ -512,8 +512,9 @@ export function LibraryStructureView({
                   type="button"
                   disabled={busy}
                   onClick={() => onAddGroup(sec.id)}
-                  className="flex-none rounded border border-accent/40 px-2 py-0.5 text-xs
-                             font-medium text-accent hover:bg-accent/5 disabled:opacity-40"
+                  className="flex-none rounded-[var(--radius-control)] bg-ground-3 px-2.5 py-1
+                             text-meta font-medium text-ink-2 transition-colors
+                             hover:bg-line/70 hover:text-ink disabled:opacity-40"
                 >
                   + Add group
                 </button>
@@ -531,7 +532,7 @@ export function LibraryStructureView({
               )}
             </SortableHeading>
             {!shut && (
-              <div className="mt-2 space-y-3">
+              <div className="mt-3 space-y-5">
                 {/* Organized first, remainder last — the same rule as the page
                     itself: groups in order, then whatever sits loose in the
                     section. */}
@@ -561,7 +562,7 @@ export function LibraryStructureView({
                        the group's own name is the fourth, for a reader who
                        cannot see any of it. */
                     <div key={g.id} role="group" aria-label={g.name}
-                      className="border-l-2 border-gray-400 pl-4">
+                      className="border-l-2 border-line-3 pl-5">
                       <SortableHeading id={dragId("group", g.id)} disabled={!dragEnabled || busy}
                         highlight={dragging?.kind === "item" && overHeading === dragId("group", g.id)}>
                         {(h) => (
@@ -605,10 +606,10 @@ export function LibraryStructureView({
           a section, not called Uncategorized, and not something to finish. */}
       {data.unorganized.total > 0 && (
         <section>
-          <p className="text-xs font-medium uppercase tracking-wide text-muted">
-            Everything else <span className="ml-1 font-normal normal-case">({data.unorganized.total})</span>
+          <p className="text-micro font-semibold uppercase tracking-[0.08em] text-ink-3">
+            Everything else <span className="ml-1.5 font-medium tabular-nums">{data.unorganized.total}</span>
           </p>
-          <p className="mb-2 mt-0.5 text-[11px] text-muted/80">Newest first. Nothing here needs a section.</p>
+          <p className="mb-2.5 mt-1 text-meta text-ink-3">Newest first. Nothing here needs a section.</p>
           {itemList(data.unorganized, "")}
         </section>
       )}
@@ -735,9 +736,11 @@ function Header({
         className="flex min-w-0 items-center gap-1.5 text-left">
         <span className={`text-muted transition-transform ${collapsed ? "" : "rotate-90"}`} aria-hidden="true">›</span>
         <span className={level === "section"
-          ? "truncate text-sm font-semibold text-foreground"
-          : "truncate text-sm font-medium text-foreground/80"}>{name}</span>
-        <span className="flex-none text-xs text-muted">({count})</span>
+          ? "truncate text-title font-semibold tracking-[-0.01em] text-ink"
+          : "truncate text-body font-medium text-ink-2"}>{name}</span>
+        {/* A count is reference, not headline: it sits back rather than
+            competing with the name it belongs to. */}
+        <span className="flex-none text-meta tabular-nums text-ink-3">{count}</span>
       </button>
       {onRename && <HeadingMenu name={name} busy={busy} onAddGroup={onAddGroup}
         onRename={() => { setDraft(name); setEditing(true); }} />}
@@ -793,7 +796,7 @@ function HeadingMenu({
         aria-label={`Actions for ${name}`}
         aria-haspopup="menu"
         aria-expanded={open}
-        className="px-1.5 text-sm leading-none text-muted hover:text-accent disabled:opacity-40"
+        className="rounded px-1.5 py-0.5 text-meta leading-none text-ink-3 hover:bg-ground-3 hover:text-ink disabled:opacity-40"
       >
         …
       </button>
@@ -846,7 +849,7 @@ function Controls({
   label: string;
   onUp: () => void; onDown: () => void; onMove?: () => void;
 }) {
-  const b = "px-1 text-gray-400 hover:text-accent disabled:opacity-25 disabled:hover:text-gray-400";
+  const b = "px-0.5 sm:px-1 text-ink-3 hover:text-accent disabled:opacity-25 disabled:hover:text-ink-3";
   return (
     <span className="flex flex-none items-center">
       <button type="button" onClick={onUp} disabled={busy || isFirst}
@@ -873,7 +876,7 @@ function StarButton({ item, onToggle }: { item: LibrarySnapshot; onToggle: (id: 
       onClick={() => { const next = !on; setOn(next); onToggle(item.id, next); }}
       aria-pressed={on}
       aria-label={on ? `Remove ${item.title || "this item"} from favorites` : `Add ${item.title || "this item"} to favorites`}
-      className={`flex-none px-1 text-lg leading-none transition-colors ${
+      className={`flex-none px-0.5 sm:px-1 text-lg leading-none transition-colors ${
         on ? "text-amber-500 hover:text-amber-600" : "text-gray-300 hover:text-amber-500"}`}>
       {on ? "★" : "☆"}
     </button>

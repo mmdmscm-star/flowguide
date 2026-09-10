@@ -70,7 +70,7 @@ export function LibraryFilters({
       : [...value.labels, l] });
 
   return (
-    <div className={`flex flex-wrap items-center gap-1.5 ${className}`}>
+    <div className={`flex flex-wrap items-center gap-2 ${className}`}>
       <Chip active={!filtersActive(value)} onClick={() => onChange(EMPTY_FILTERS)}>All</Chip>
       <Chip active={value.favorite} onClick={() => onChange({ ...value, favorite: !value.favorite })}>
         ★ Favorites
@@ -96,10 +96,14 @@ function Chip({
       type="button"
       onClick={onClick}
       aria-pressed={active}
-      className={`rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${
+      /* A chip states a view, so the selected one carries the mark colour and
+         the rest carry none. Filled blue on every unselected chip was four
+         controls competing before the professional had chosen anything. */
+      className={`rounded-full px-3 py-1.5 text-meta font-medium transition-colors
+                  focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-mark/40 ${
         active
-          ? "border-accent bg-accent text-white"
-          : "border-border bg-white text-foreground hover:border-accent"
+          ? "bg-ink text-white"
+          : "bg-ground-3 text-ink-2 hover:bg-line/70 hover:text-ink"
       }`}
     >
       {children}

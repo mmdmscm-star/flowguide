@@ -20,6 +20,7 @@ import { LibrarySearch } from "@/components/library/library-search";
 import { showStructure, canReorder, type GroupRow, type SectionRow } from "@/lib/library-structure";
 import type { LibraryVocabulary } from "@/lib/library-organization";
 import { CreatorNav } from "@/components/nav/creator-nav";
+import { Button } from "@/components/ui/button";
 import { ImportWithAI } from "@/components/library/import-with-ai";
 import { createFromLibrary } from "@/lib/create-from-library";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -512,22 +513,25 @@ export default function LibraryWorkspace() {
   const shell = composing ? "max-w-6xl" : "max-w-lg";
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="sticky top-0 z-20 bg-white border-b border-border">
-        <div className={`${shell} mx-auto px-5 py-3 flex items-center gap-3`}>
+    <div className="min-h-screen bg-ground">
+      {/* The one hairline worth spending on this screen: sticky chrome sitting
+          over scrolling content is a boundary that would be genuinely ambiguous
+          without it. Everything below groups with ground and space instead. */}
+      <div className="sticky top-0 z-20 bg-ground/90 backdrop-blur-sm border-b border-line">
+        <div className={`${shell} mx-auto px-6 py-3.5 flex items-center gap-3`}>
           <CreatorNav current="library" />
         </div>
       </div>
 
-      <div className={`${shell} mx-auto px-5 pb-24`}>
-        <header className="pt-6 pb-4">
-          <h1 className="text-2xl font-bold text-foreground">Your Library</h1>
+      <div className={`${shell} mx-auto px-6 pb-28`}>
+        <header className="pt-10 pb-4">
+          <h1 className="text-page font-semibold tracking-[-0.02em] text-ink">Your Library</h1>
           {/* ONE SENTENCE. The independence rule — that inserting makes a copy —
               is explained where it is actually needed: at the moment of
               insertion, and again in the update and delete confirmations.
               Repeating it here made the Library open with a paragraph about
               semantics before saying what it is for. */}
-          <p className="mt-2 text-sm text-muted">
+          <p className="mt-2 max-w-prose text-body text-ink-2">
             Save things you use often and add them to any Sendset.
           </p>
         </header>
@@ -535,20 +539,32 @@ export default function LibraryWorkspace() {
         {/* Also here, not only in the empty state: writing an entry directly is a
             permanent way to use the Library, not a first-run bootstrap. */}
         {!editing && !creating && !viewing && (
-          <div className="mb-4 flex flex-wrap items-center gap-2">
-            <button
-              onClick={() => { setNotice(""); setImporting(true); }}
-              className="px-3 py-1.5 rounded-lg bg-accent hover:bg-accent-hover text-white text-sm font-medium"
-            >
+          <div className="mb-7 flex flex-col items-start gap-2.5">
+            {/* THREE KINDS OF ACTION WERE WEARING ONE ROW.
+                Getting material IN (import, add), leaving for somewhere else
+                (create a Sendset), and changing a mode you stay inside (select
+                & organize) were four equal-looking buttons on a single line, so
+                nothing said which was the ordinary next thing. They are the
+                same four actions with the same handlers — regrouped, and given
+                a hierarchy. Adding material leads, in ink.
+
+                TWO ROWS, NOT ONE ROW WITH A DIVIDER IN IT. The first attempt
+                separated the kinds with a hairline. It never once rendered as
+                designed: this column is max-w-lg, so the four buttons always
+                wrapped 3 + 1, stranding the divider mid-line and orphaning the
+                last action — the grouping read as a wrapping accident. The
+                break is now deliberate and width-independent, and the hairline
+                is gone, which is what this palette's own rule already said:
+                group with space and weight, not with borders. */}
+            <div className="flex flex-wrap items-center gap-2">
+            <Button variant="primary" size="md"
+              onClick={() => { setNotice(""); setImporting(true); }}>
               Import with AI
-            </button>
-            <button
-              onClick={() => { setNotice(""); setCreating(true); }}
-              className="px-3 py-2 rounded-lg border border-border bg-white text-sm font-medium
-                         text-foreground hover:border-accent hover:text-accent"
-            >
+            </Button>
+            <Button variant="secondary" size="md"
+              onClick={() => { setNotice(""); setCreating(true); }}>
               Add manually
-            </button>
+            </Button>
             {/* OFFERED ONLY WHEN THERE IS SOMETHING TO CHOOSE. On an empty
                 Library this opened selection mode over an empty list — an
                 action that looks live and leads nowhere. Hidden rather than
@@ -556,15 +572,15 @@ export default function LibraryWorkspace() {
                 thing to wonder about, and Import with AI and Add manually are
                 the useful actions in that state. Unknown (null) keeps it
                 hidden, so a failed load never offers a dead end either. */}
+            </div>
             {hasAny === true && (
-              <>
-                <button
-                  onClick={() => { setNotice(""); setChosen([]); setAddedTitles({}); setOrganizing(false); setSelecting(true); }}
-                  className="px-3 py-2 rounded-lg border border-border bg-white text-sm font-medium
-                             text-foreground hover:border-accent hover:text-accent"
-                >
+              /* Ghost text pulled back by its own padding so this row's words
+                 line up with the filled buttons above, not with their boxes. */
+              <div className="-ml-4 flex flex-wrap items-center gap-1">
+                <Button variant="ghost" size="md"
+                  onClick={() => { setNotice(""); setChosen([]); setAddedTitles({}); setOrganizing(false); setSelecting(true); }}>
                   Create a Sendset
-                </button>
+                </Button>
                 {/* THE OTHER DOOR, AND IT SAYS WHAT IT OPENS.
                     This was called "Organize", which stopped being true the
                     moment the Library itself became draggable: the fastest way
@@ -575,14 +591,11 @@ export default function LibraryWorkspace() {
                     select them for WHAT — so the name now carries both the
                     action and its purpose. The mode is unchanged throughout;
                     only what it was called was wrong. */}
-                <button
-                  onClick={() => { setNotice(""); setChosen([]); setOrganizing(true); setSelecting(true); }}
-                  className="px-3 py-2 rounded-lg border border-border bg-white text-sm font-medium
-                             text-foreground hover:border-accent hover:text-accent"
-                >
+                <Button variant="ghost" size="md"
+                  onClick={() => { setNotice(""); setChosen([]); setOrganizing(true); setSelecting(true); }}>
                   Select &amp; Organize
-                </button>
-              </>
+                </Button>
+              </div>
             )}
           </div>
         )}
@@ -593,7 +606,10 @@ export default function LibraryWorkspace() {
             professional pick the right door before knowing which room they
             wanted, and get it wrong half the time. */}
         {/* Said where the action was taken, not at the bottom of the page. */}
-        {notice && <p className="mb-3 text-sm text-green-700">{notice}</p>}
+        {notice && (
+          <p className="mb-4 rounded-[var(--radius-control)] bg-emerald-50 px-3 py-2
+                        text-meta font-medium text-emerald-800">{notice}</p>
+        )}
 
         {/* TWO ENTRY POINTS, TWO EXPERIENCES.
             Selection state is shared underneath — one mode, internally — but a
@@ -604,8 +620,8 @@ export default function LibraryWorkspace() {
             nothing about what to do next and quite a lot about how the code is
             arranged. Each intent now shows only its own action. */}
         {selecting && organizing && (
-          <div className="mb-4 rounded-xl border border-accent/40 bg-accent/5 p-3">
-            <p className="text-sm font-medium text-foreground">Select &amp; Organize</p>
+          <div className="mb-5 rounded-[var(--radius-panel)] bg-mark-soft p-4">
+            <p className="text-title font-semibold tracking-[-0.01em] text-ink">Select &amp; Organize</p>
             <p className="mt-1 text-sm text-muted">
               Choose one or more Library items to move, label, or favorite together. These
               changes only affect your Library — nothing is copied into a Sendset or seen
@@ -650,9 +666,9 @@ export default function LibraryWorkspace() {
                  what is still missing. Rendered at ZERO selection too, which is
                  the whole point: the previous version showed nothing until
                  something was ticked, so the state change was invisible. */
-              <div className="mt-3 space-y-3 border-t border-accent/30 pt-3">
+              <div className="mt-4 space-y-4 border-t border-mark/15 pt-4">
                 <div>
-                  <p className="text-sm font-medium text-foreground">
+                  <p className="text-title font-semibold tracking-[-0.01em] text-ink">
                     Add a group inside {groupForSection}
                   </p>
                   <label htmlFor="new-group-name"
@@ -694,13 +710,13 @@ export default function LibraryWorkspace() {
                 </div>
               </div>
             ) : chosen.length === 0 ? (
-              <p className="mt-3 border-t border-accent/30 pt-3 text-xs text-muted">
+              <p className="mt-3 border-t border-mark/15 pt-4 text-xs text-muted">
                 Tick anything below to begin — or tap a row.
               </p>
             ) : (
-              <div className="mt-3 space-y-3 border-t border-accent/30 pt-3">
+              <div className="mt-4 space-y-4 border-t border-mark/15 pt-4">
                 <div>
-                  <p className="text-xs font-medium text-foreground">Where should these live?</p>
+                  <p className="text-meta font-semibold text-ink">Where should these live?</p>
                   <p className="text-xs text-muted">
                     One place per item — for example Places, Services, People or Documents.
                     You can add a group inside it, like a town or a specialty.
@@ -807,7 +823,7 @@ export default function LibraryWorkspace() {
                 </div>
 
                 <div>
-                  <p className="text-xs font-medium text-foreground">Labels</p>
+                  <p className="text-meta font-semibold text-ink">Labels</p>
                   <p className="text-xs text-muted">
                     Other ways you would want to find it later, wherever it lives.
                     As many as you like — a specialty, a status such as Preferred.
@@ -839,7 +855,7 @@ export default function LibraryWorkspace() {
         )}
 
         {selecting && !organizing && (
-          <div className="mb-4 rounded-xl border border-accent/40 bg-accent/5 p-3">
+          <div className="mb-5 rounded-[var(--radius-panel)] bg-mark-soft p-4">
             <p className="text-sm font-medium text-foreground">Start a Sendset</p>
             <p className="mt-1 text-sm text-muted">
               Drag items across, or press Add. The order on the right is the order your
@@ -1142,14 +1158,10 @@ function SmallAction({
   disabled, onClick, children,
 }: { disabled?: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      className="rounded-lg border border-border bg-white px-2.5 py-1.5 text-xs font-medium
-                 text-foreground hover:border-accent hover:text-accent disabled:opacity-50"
-    >
+    // Kept as a named wrapper so ~20 call sites read the same; the look is now
+    // the shared Button's rather than this file's own.
+    <Button type="button" variant="secondary" size="sm" onClick={onClick} disabled={disabled}>
       {children}
-    </button>
+    </Button>
   );
 }

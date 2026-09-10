@@ -10,6 +10,61 @@
   --color-surface: #f9fafb;
   --color-card: #ffffff;
   --font-sans: var(--font-geist-sans);
+
+  /* ==========================================================================
+   * THE CREATOR SURFACE'S OWN VOCABULARY.
+   *
+   * The recipient packet has had a real design system for some time — 96
+   * resolved properties, three treatments, one per medium. The creator app,
+   * the thing the professional looks at every day, had none: no shared button,
+   * no scale, 17 visual signatures across 27 buttons, six radii, seven greys
+   * that bypassed the tokens above. Each package was careful on its own and
+   * none of them shared a vocabulary, which is exactly what "it looks
+   * assembled" feels like from the inside.
+   *
+   * THE GOVERNING IDEA: group with SPACE AND GROUND, not with borders. Almost
+   * everything here used to be a box wearing the same 1px hairline — cards,
+   * rows, panels and buttons alike — and that sameness is what reads as an
+   * admin panel. A border is spent only where a boundary would otherwise be
+   * genuinely ambiguous.
+   *
+   * These land BESIDE the tokens above rather than replacing them, so an
+   * unconverted surface is untouched and reverting is deleting a file.
+   * ====================================================================== */
+
+  /* Neutrals. A whisper warm, and only a whisper: Preview renders the real
+   * packet inside this chrome, and the packet's Default treatment is cool. */
+  --color-ink: #1a1a1c;        /* primary text, primary actions */
+  --color-ink-2: #5b5a58;      /* secondary text */
+  --color-ink-3: #8b8985;      /* meta, counts, placeholders */
+  --color-line: #e7e5e1;       /* hairline — used sparingly */
+  --color-line-2: #d9d6d1;     /* an edge you notice without reading it */
+  /* STRUCTURAL, NOT DECORATIVE. The group rail is the one line on this screen
+     that carries meaning — it says where a group ends — so it is a full step
+     darker than the others. Softening it to line-2 dropped it from 2.54:1 to
+     1.45:1 against the page and quietly undid the fix it was shipped for. */
+  --color-line-3: #a8a5a0;     /* a boundary that must not be missed: 2.45:1 */
+  --color-ground: #ffffff;
+  --color-ground-2: #faf9f8;   /* grouped surface; replaces most borders */
+  --color-ground-3: #f2f0ed;   /* hover, inset, selected */
+
+  /* Blue is demoted to meaning rather than decoration: links, selection and
+   * focus. Primary actions are ink. #2563eb is Tailwind's blue-600 and is the
+   * single strongest "default SaaS dashboard" signal an interface can carry. */
+  --color-mark: #2f5fb0;
+  --color-mark-soft: #eef3fb;
+
+  /* Type. The old surface was text-sm/text-xs almost everywhere — 333 of 375
+   * uses — and that cramping is most of what felt administrative. */
+  --text-micro: 0.719rem;      /* 11.5px — labels only, sparingly */
+  --text-meta: 0.8125rem;      /* 13px */
+  --text-body: 0.9375rem;      /* 15px — up from 14 */
+  --text-title: 1.0625rem;     /* 17px */
+  --text-page: 1.625rem;       /* 26px */
+
+  /* Radii: three, down from six. */
+  --radius-control: 6px;
+  --radius-panel: 10px;
 }
 
 body {

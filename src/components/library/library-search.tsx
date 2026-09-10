@@ -1,5 +1,7 @@
 "use client";
 
+import { INPUT_SHELL } from "@/components/ui/field";
+
 // The search box, above the list rather than inside it.
 //
 // It has to survive the switch between the structured Library and the flat
@@ -16,8 +18,7 @@ export function LibrarySearch({
       onChange={(e) => onChange(e.target.value)}
       placeholder="Search your Library…"
       aria-label="Search your Library"
-      className={`w-full px-3 py-2 rounded-lg border border-border text-sm
-                  focus:outline-none focus:ring-2 focus:ring-accent placeholder:text-gray-400 ${className}`}
+      className={`${INPUT_SHELL} ${className}`}
     />
   );
 }
