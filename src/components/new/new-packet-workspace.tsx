@@ -1,4 +1,5 @@
 "use client";
+import { CreatorNav } from "@/components/nav/creator-nav";
 
 import { useEffect, useRef, useState } from "react";
 import { PHOTO_ACCEPT_ATTR } from "@/lib/photo-upload";
@@ -418,26 +419,49 @@ export default function NewPacketWorkspace() {
   const ready = Boolean(rawText.trim()) && !processing && !blockingNow;
 
   return (
-    <main className="mx-auto max-w-2xl px-5 py-8">
-      <button
-        onClick={() => router.push("/dashboard")}
-        className="mb-8 inline-block text-sm text-muted transition-colors hover:text-foreground"
-      >
-        &larr; Back to dashboard
-      </button>
+    /* THE SHARED SHELL, LATE BUT NOT ARBITRARILY LATE.
+     *
+     * This was the only one of CreatorNav's own four destinations not wearing
+     * it, and the reason was real when it was made: the nav was created while
+     * /new was still a PUBLIC front door, and creator navigation on a
+     * signed-out page would have been wrong. /new was gated behind a session
+     * afterwards and the nav was never retrofitted, so what remained was a
+     * hand-rolled "← Back to dashboard" on an authenticated screen that every
+     * neighbouring screen navigates differently.
+     *
+     * That link is GONE rather than kept beside the nav: "My Sendsets" is the
+     * dashboard, and two controls for one destination is the drift this whole
+     * pass exists to remove. */
+    <div className="min-h-screen bg-canvas">
+      <div className="sticky top-0 z-20 bg-canvas/85 backdrop-blur-sm border-b border-line">
+        {/* The bar matches THIS page's column, not the Library's. A nav at 3xl
+            over a 2xl body puts the first tab left of the heading under it —
+            the same misalignment the Dashboard's first-run prompt had. The rule
+            everywhere is that the bar and the body share a left edge. */}
+        <div className="max-w-2xl mx-auto px-4 sm:px-6 py-2 sm:py-3.5 flex items-center gap-2 sm:gap-3">
+          <CreatorNav current="new" />
+        </div>
+      </div>
+
+      {/* A NARROWER MEASURE THAN THE LIBRARY'S, ON PURPOSE. This screen is one
+          heading, two sentences and a box to paste into — prose and a single
+          surface, not a list with trailing controls. The shell above matches
+          the rest of the app; the reading column inside it suits what is
+          actually here. */}
+      <main className="mx-auto max-w-2xl px-4 sm:px-6 pt-8 pb-20">
 
       {/* The heading names the professional's situation rather than the
           machine's job. The packet is the product; AI is one input. */}
-      <h1 className="text-2xl font-bold tracking-tight text-foreground">
+      <h1 className="text-page font-bold tracking-tight text-ink">
         Start with what you already have
       </h1>
-      <p className="mt-2 max-w-xl text-base leading-relaxed text-muted">
+      <p className="mt-2 max-w-xl text-body leading-relaxed text-ink-2">
         Paste notes, a spreadsheet, an email thread, or anything else you&rsquo;re working from.
         Sendset will shape it into a draft you can review, refine, and send.
       </p>
 
       {/* THE CREATION SURFACE.
-          One card, using the same rounded-xl / border language as an item card,
+          One card, using the same rounded-[var(--radius-panel)] / border language as an item card,
           so the thing you compose in visually rhymes with the thing you are
           composing. `focus-within` lights the WHOLE surface rather than just the
           field — the page responds to you, instead of a control switching on. */}
@@ -457,13 +481,13 @@ export default function NewPacketWorkspace() {
           const dropped = Array.from(e.dataTransfer?.files ?? []);
           if (dropped.length) ingestFiles(dropped);
         }}
-        className={`mt-7 overflow-hidden rounded-xl border bg-card transition-shadow duration-200 focus-within:border-accent/40 focus-within:shadow-[0_0_0_3px_rgb(37_99_235_/_0.08)] ${
-          dragging ? "border-accent shadow-[0_0_0_3px_rgb(37_99_235_/_0.16)]" : "border-border"}`}>
+        className={`mt-7 overflow-hidden rounded-[var(--radius-panel)] border bg-ground transition-shadow duration-200 focus-within:border-mark/40 focus-within:shadow-[0_0_0_3px_rgb(37_99_235_/_0.08)] ${
+          dragging ? "border-mark shadow-[0_0_0_3px_rgb(37_99_235_/_0.16)]" : "border-line"}`}>
         {/* Packet type lives here as document metadata rather than a mode
             switch. Still visible, still one tap to change — it was previously
             the loudest element on a page whose subject is the paste area. */}
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-border bg-surface px-4 py-2.5">
-          <span className="text-xs text-muted">Packet type</span>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-line bg-ground-2 px-4 py-2.5">
+          <span className="text-meta text-ink-2">Packet type</span>
           <div className="flex flex-wrap gap-1">
             {PACKET_TYPES.map((type) => {
               const active = packetType === type.value;
@@ -473,10 +497,11 @@ export default function NewPacketWorkspace() {
                   onClick={() => setPacketType(type.value)}
                   aria-pressed={active}
                   disabled={processing}
-                  className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors disabled:opacity-50 ${
+                  className={`flex h-10 flex-none items-center rounded-full px-3.5 text-meta font-medium
+                              transition-colors disabled:opacity-50 sm:h-auto sm:rounded-md sm:px-2.5 sm:py-1 ${
                     active
-                      ? "bg-card text-foreground ring-1 ring-border"
-                      : "text-muted hover:text-foreground"
+                      ? "bg-ground text-ink ring-1 ring-border"
+                      : "text-ink-2 hover:text-ink"
                   }`}
                 >
                   {type.label}
@@ -486,18 +511,18 @@ export default function NewPacketWorkspace() {
           </div>
         </div>
 
-        {/* text-base is 16px — below 16 iOS Safari auto-zooms the page on focus,
+        {/* text-body is 16px — below 16 iOS Safari auto-zooms the page on focus,
             which is a real bug on the authoring surface of a product whose
             recipient reading tier was deliberately raised for older eyes. */}
         {sourceImages.length > 0 && (
-          <div className="border-b border-border bg-card/60 px-4 py-3">
-            <p className="text-sm font-medium text-foreground">
+          <div className="border-b border-line bg-ground/60 px-4 py-3">
+            <p className="text-body font-medium text-ink">
               {sourceImages.length === 1 ? "Read from your picture" : `Read from your ${sourceImages.length} pictures`}
             </p>
-            <p className="mt-0.5 text-xs text-muted">
+            <p className="mt-0.5 text-meta text-ink-2">
               Check the text against each picture and fix anything it misread — especially
               prices, phone numbers and licence or registration numbers.{" "}
-              <span className="font-medium text-foreground">Tap a picture to see it full size.</span>{" "}
+              <span className="font-medium text-ink">Tap a picture to see it full size.</span>{" "}
               What you organize is the text below, not the pictures.
             </p>
 
@@ -512,12 +537,12 @@ export default function NewPacketWorkspace() {
                     type="button"
                     onClick={() => setInspecting(img)}
                     aria-label={`${img.label} — open full size`}
-                    className="block overflow-hidden rounded-lg border border-border bg-white transition-shadow hover:shadow-md focus:outline-none focus:ring-2 focus:ring-accent/50"
+                    className="block overflow-hidden rounded-[var(--radius-control)] border border-line bg-ground transition-shadow hover:shadow-md focus:outline-none focus:ring-2 focus:ring-mark/15/50"
                   >
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={img.preview} alt={img.label}
                          className="h-24 w-24 object-contain sm:h-28 sm:w-28" />
-                    <span className="block border-t border-border px-1.5 py-1 text-left text-[11px] text-muted">
+                    <span className="block border-t border-line px-1.5 py-1 text-left text-[11px] text-ink-2">
                       {img.status === "reading" ? "Reading…"
                         : img.status === "failed" ? "Couldn’t read" : img.label}
                     </span>
@@ -527,7 +552,7 @@ export default function NewPacketWorkspace() {
                       type="button"
                       onClick={() => retryImage(img.id)}
                       disabled={processing || readingImage}
-                      className="mt-1 block w-full rounded-md border border-border py-0.5 text-[11px] font-medium text-accent hover:text-accent-hover disabled:opacity-60"
+                      className="mt-1 block w-full rounded-md border border-line py-0.5 text-[11px] font-medium text-mark hover:text-mark/80 disabled:opacity-60"
                     >
                       Try again
                     </button>
@@ -537,7 +562,7 @@ export default function NewPacketWorkspace() {
                     onClick={() => removeImage(img.id)}
                     disabled={processing || readingImage}
                     aria-label={`Remove ${img.label}`}
-                    className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full border border-border bg-card text-xs leading-none text-muted shadow-sm hover:text-foreground disabled:opacity-60"
+                    className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full border border-line bg-ground text-meta leading-none text-ink-2 shadow-sm hover:text-ink disabled:opacity-60"
                   >
                     ×
                   </button>
@@ -550,7 +575,7 @@ export default function NewPacketWorkspace() {
                 these were sent to be transcribed. Saying so is cheap, and a
                 professional photographing a client document is entitled to
                 know which of the two just happened. */}
-            <p className="mt-2 text-xs text-muted/80">
+            <p className="mt-2 text-meta text-ink-2/80">
               Sent to our AI provider for transcription using zero-data-retention
               routing, one picture at a time. If you continue, Sendset keeps the
               source pictures with the ingestion evidence for the normal retention
@@ -564,20 +589,20 @@ export default function NewPacketWorkspace() {
           placeholder="Paste your notes here…"
           aria-label="Your notes"
           disabled={processing}
-          className="block h-64 w-full resize-y border-0 bg-card px-4 py-3.5 text-base leading-relaxed text-foreground outline-none placeholder:text-gray-400 disabled:opacity-60 sm:h-80"
+          className="block h-64 w-full resize-y border-0 bg-ground px-4 py-3.5 text-body leading-relaxed text-ink outline-none placeholder:text-ink-3 disabled:opacity-60 sm:h-80"
         />
 
         {/* Guidance lives BELOW the field, not inside the placeholder, so it
             survives the first keystroke. */}
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-border bg-surface px-4 py-2.5">
-          <p className="text-xs leading-relaxed text-muted">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-line bg-ground-2 px-4 py-2.5">
+          <p className="text-meta leading-relaxed text-ink-2">
             Drag files or pictures here, or click to choose. It doesn&rsquo;t need to be tidy —
             spreadsheet rows, names, prices, links and contacts all work.
           </p>
           {/* A PICTURE IS SOURCE MATERIAL, not content. It is read into the box
               below, where it can be corrected, and only the corrected text is
               ever structured. The picture itself never reaches a client. */}
-          <label className={`ml-auto shrink-0 cursor-pointer text-xs font-medium text-accent hover:text-accent-hover ${
+          <label className={`ml-auto shrink-0 cursor-pointer text-meta font-medium text-mark hover:text-mark/80 ${
             processing || readingImage ? "pointer-events-none opacity-60" : ""}`}>
             {readingImage ? "Reading your pictures…" : "or use pictures"}
             <input
@@ -594,7 +619,7 @@ export default function NewPacketWorkspace() {
               }}
             />
           </label>
-          <label className={`shrink-0 cursor-pointer text-xs font-medium text-accent hover:text-accent-hover ${processing || readingImage ? "pointer-events-none opacity-60" : ""}`}>
+          <label className={`shrink-0 cursor-pointer text-meta font-medium text-mark hover:text-mark/80 ${processing || readingImage ? "pointer-events-none opacity-60" : ""}`}>
             {fileName ? `Added ${fileName} — add another` : "or open a .csv, .txt or .md file"}
             <input
               type="file"
@@ -629,11 +654,11 @@ export default function NewPacketWorkspace() {
           className="fixed inset-0 z-50 flex flex-col bg-black/90"
         >
           <div className="flex flex-none items-center justify-between gap-3 px-4 py-3 text-white">
-            <span className="text-sm font-medium">{inspecting.label}</span>
+            <span className="text-body font-medium">{inspecting.label}</span>
             <button
               type="button"
               onClick={(e) => { e.stopPropagation(); setInspecting(null); }}
-              className="rounded-md border border-white/30 px-2.5 py-1 text-xs font-medium hover:bg-white/10"
+              className="rounded-md border border-white/30 px-2.5 py-1 text-meta font-medium hover:bg-ground/10"
             >
               Close
             </button>
@@ -646,14 +671,14 @@ export default function NewPacketWorkspace() {
             <img src={inspecting.preview} alt={`${inspecting.label}, full size`}
                  className="mx-auto block max-w-none" />
           </div>
-          <p className="flex-none px-4 py-2 text-center text-xs text-white/70">
+          <p className="flex-none px-4 py-2 text-center text-meta text-white/70">
             Pinch or scroll to zoom. Tap anywhere outside to close.
           </p>
         </div>
       )}
 
       {error && (
-        <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+        <div className="mt-4 rounded-[var(--radius-control)] border border-red-200 bg-red-50 p-3 text-body text-red-700">
           {error}
         </div>
       )}
@@ -663,7 +688,7 @@ export default function NewPacketWorkspace() {
           anything. It sits at the organize layer rather than beside the picture
           control because a pasted rate sheet and a photographed one have the
           same problem — and a CSV of one venue's rooms does too. */}
-      <div className="mt-5 rounded-lg border border-border bg-card/60 p-3">
+      <div className="mt-5 rounded-[var(--radius-control)] border border-line bg-ground/60 p-3">
         <label className="flex items-start gap-2.5 cursor-pointer">
           <input
             type="checkbox"
@@ -673,13 +698,17 @@ export default function NewPacketWorkspace() {
               setKeepTogether(e.target.checked);
               if (!e.target.checked) setGroupingTitle("");
             }}
-            className="mt-0.5 flex-none"
+            /* The LABEL is the tap target — it wraps this input, so anywhere on
+               the two lines toggles it. What was wrong is that the box itself
+               rendered at the browser's default 13px, which is hard to see and
+               harder to read as checked. */
+            className="mt-0.5 h-5 w-5 flex-none accent-[var(--color-ink)] sm:h-4 sm:w-4"
           />
           <span className="min-w-0">
-            <span className="block text-sm font-medium text-foreground">
+            <span className="block text-body font-medium text-ink">
               Keep this together as one item
             </span>
-            <span className="block text-xs text-muted">
+            <span className="block text-meta text-ink-2">
               Everything in this source will be organized under one item, with the
               rest kept as its details. Leave this off and Sendset works out the
               structure itself.
@@ -688,7 +717,7 @@ export default function NewPacketWorkspace() {
         </label>
         {keepTogether && (
           <div className="mt-3 pl-7">
-            <label htmlFor="grouping-title" className="block text-xs font-medium text-foreground">
+            <label htmlFor="grouping-title" className="block text-meta font-medium text-ink">
               Name this item
             </label>
             <input
@@ -698,10 +727,10 @@ export default function NewPacketWorkspace() {
               onChange={(e) => setGroupingTitle(e.target.value)}
               placeholder="e.g. Spring Lake Village"
               disabled={processing || readingImage}
-              className="mt-1 w-full max-w-sm rounded-lg border border-border bg-white px-3 py-2 text-sm
-                         text-foreground outline-none focus:ring-2 focus:ring-accent disabled:opacity-60"
+              className="mt-1 w-full max-w-sm rounded-[var(--radius-control)] border border-line bg-ground px-3 py-2 text-body
+                         text-ink outline-none focus:ring-2 focus:ring-mark/15 disabled:opacity-60"
             />
-            <p className="mt-1 text-xs text-muted/80">
+            <p className="mt-1 text-meta text-ink-2/80">
               Your words, not the model&rsquo;s — this is what your client will see.
             </p>
           </div>
@@ -712,7 +741,7 @@ export default function NewPacketWorkspace() {
           picture is named here, with the way out, rather than leaving the
           professional to discover it by pressing something inert. */}
       {blockingNow && (
-        <p className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+        <p className="mt-4 rounded-[var(--radius-control)] border border-amber-200 bg-amber-50 p-3 text-body text-amber-900">
           {blockingMessage(blockingNow)}
         </p>
       )}
@@ -724,10 +753,10 @@ export default function NewPacketWorkspace() {
           // A faded-accent disabled state reads as a BROKEN primary button on
           // arrival. Neutral-until-ready reads as "not yet", and turning accent
           // the moment there is something to work with is a small earned moment.
-          className={`rounded-lg px-6 py-3 text-base font-medium transition-colors ${
+          className={`rounded-[var(--radius-control)] px-6 py-3 text-body font-medium transition-colors ${
             ready
-              ? "bg-accent text-white hover:bg-accent-hover"
-              : "cursor-not-allowed bg-gray-100 text-gray-400"
+              ? "bg-ink text-white hover:bg-ink/90"
+              : "cursor-not-allowed bg-ground-3 text-ink-3"
           }`}
         >
           {processing ? "Creating first draft…" : "Create first draft"}
@@ -737,18 +766,20 @@ export default function NewPacketWorkspace() {
         <button
           onClick={handleStartBlank}
           disabled={processing}
-          className="text-sm text-muted underline-offset-4 transition-colors hover:text-foreground hover:underline disabled:opacity-50"
+          className="flex h-11 items-center text-body text-ink-2 underline-offset-4 transition-colors
+                     hover:text-ink hover:underline disabled:opacity-50 sm:h-auto"
         >
           Start blank instead
         </button>
       </div>
 
       {processing && (
-        <div className="mt-6 flex items-center gap-3 text-sm text-muted">
-          <div className="h-4 w-4 animate-spin rounded-full border-2 border-accent border-t-transparent" />
+        <div className="mt-6 flex items-center gap-3 text-body text-ink-2">
+          <div className="h-4 w-4 animate-spin rounded-full border-2 border-mark border-t-transparent" />
           AI is reading your notes and organizing them into sections...
         </div>
       )}
-    </main>
+      </main>
+    </div>
   );
 }
