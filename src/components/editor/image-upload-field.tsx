@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { PHOTO_ACCEPT_ATTR } from "@/lib/photo-upload";
+import { INPUT_SHELL } from "@/components/ui/field";
 
 // One field, four places: the account profile's logo and headshot, and the
 // per-packet custom identity's logo and headshot. All four were a preview plus
@@ -55,19 +56,30 @@ export default function ImageUploadField({
 
   return (
     <div>
-      <div className="flex items-center gap-3">
+      {/* THREE THINGS DO NOT FIT ON ONE LINE OF A PHONE, and this row was the
+          reason the whole page overflowed. Two faults, one visible:
+
+          `flex-1` WITHOUT `min-w-0` — a flex item's automatic minimum is its
+          content, so the URL box refused to shrink below the width of the URL
+          in it, pushed Upload off the right edge, and widened the PAGE. That is
+          why the paragraph above was clipped too: one overflowing row makes
+          every well-behaved element beside it look broken.
+
+          And even shrinking correctly, a preview, a URL and an Upload button
+          leave a phone about ninety pixels of URL. So below `sm` the row
+          becomes: preview and Upload together on one line, the URL box full
+          width beneath them. Same three controls, same order, nothing hidden. */}
+      <div className="flex flex-wrap items-center gap-2 sm:flex-nowrap sm:gap-3">
         {value && preview}
-        <input
-          type="url"
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder={placeholder}
-          disabled={disabled}
-          className="flex-1 px-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:ring-2 focus:ring-accent"
-        />
         <label
-          className={`shrink-0 px-3 py-2 rounded-lg border border-border text-sm cursor-pointer
-                      hover:bg-gray-50 ${busy || disabled ? "opacity-60 pointer-events-none" : ""}`}
+          /* DOM order is Upload-then-URL so the phone can put Upload beside the
+             preview; `sm:order-2` puts the URL back in front of it on a wider
+             screen, where it always was. Order is stated on BOTH sides rather
+             than left to the DOM on one of them. */
+          className={`order-1 flex h-11 shrink-0 cursor-pointer items-center rounded-[var(--radius-control)]
+                      border border-line px-3.5 text-meta transition-colors hover:bg-ground-3
+                      sm:order-2 sm:h-auto sm:px-3 sm:py-2
+                      ${busy || disabled ? "opacity-60 pointer-events-none" : ""}`}
         >
           {busy ? "Uploading…" : "Upload"}
           <input
@@ -83,8 +95,16 @@ export default function ImageUploadField({
             }}
           />
         </label>
+        <input
+          type="url"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+          disabled={disabled}
+          className={`${INPUT_SHELL} order-2 min-w-0 basis-full sm:order-1 sm:basis-auto sm:flex-1`}
+        />
       </div>
-      {error && <p className="mt-1 text-sm text-red-600">{error}</p>}
+      {error && <p className="mt-1 text-meta text-red-700">{error}</p>}
     </div>
   );
 }

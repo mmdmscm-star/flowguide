@@ -56,11 +56,20 @@ export default async function SettingsPage() {
     : EMPTY;
 
   return (
-    <main className="mx-auto max-w-2xl px-5 py-8">
-      <div className="mb-6">
-        <CreatorNav current="settings" />
+    /* The shell the rest of the app wears. This page had the nav in a plain div
+       in the page body, so it scrolled away with the content and sat on white
+       rather than on the canvas — the last creator surface not on the standard
+       chrome. The bar matches this page's own column, so the first tab and the
+       heading beneath it share a left edge. */
+    <div className="min-h-screen bg-canvas">
+      <div className="sticky top-0 z-20 bg-canvas/85 backdrop-blur-sm border-b border-line">
+        <div className="max-w-2xl mx-auto px-4 sm:px-6 py-2 sm:py-3.5 flex items-center gap-2 sm:gap-3">
+          <CreatorNav current="settings" />
+        </div>
       </div>
-      <ProfileSettings initial={initial} />
-    </main>
+      <main className="mx-auto max-w-2xl px-4 sm:px-6 pt-8 pb-20">
+        <ProfileSettings initial={initial} />
+      </main>
+    </div>
   );
 }

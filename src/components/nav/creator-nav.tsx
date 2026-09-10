@@ -1,6 +1,6 @@
 "use client";
 import Link from "next/link";
-import type { ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 
 // The places a professional moves between while authoring: their packets,
 // their Library, starting a new FlowGuide — and their own details, which used
@@ -19,7 +19,7 @@ const TABS = [
   { key: "packets", href: "/dashboard", label: "My Sendsets" },
   { key: "library", href: "/library", label: "Library" },
   { key: "new", href: "/new", label: "New Sendset" },
-  { key: "settings", href: "/settings", label: "Your details" },
+  { key: "settings", href: "/settings", label: "Your Details" },
 ] as const;
 
 export type CreatorNavTab = (typeof TABS)[number]["key"];
@@ -56,9 +56,28 @@ export function CreatorNav({
    *  is what keeps this from looking like a tab cut in half. */
   pinned?: ReactNode;
 }) {
+  // WHERE YOU ARE MUST BE VISIBLE WHEN YOU ARRIVE.
+  //
+  // The row scrolls on a phone and starts at the left, so the further right a
+  // destination sits the less of it you see on entry: Your Details is fourth,
+  // and opening its own page showed it half cut off at the edge — the one tab
+  // that should have been obvious was the one hiding. This brings the current
+  // tab into view on mount, without animation (there is nothing to animate
+  // from) and only when the row actually scrolls, so nothing moves at a desk.
+  const row = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    const el = row.current;
+    const active = el?.querySelector<HTMLElement>("[aria-current='page']");
+    if (!el || !active || el.scrollWidth <= el.clientWidth) return;
+    const pad = 16;
+    const right = active.offsetLeft + active.offsetWidth - el.clientWidth + pad;
+    if (right > 0) el.scrollLeft = right;
+  }, [current]);
+
   return (
     <>
     <nav
+      ref={row}
       aria-label="Your Sendset workspace"
       /* The fade is not decoration. Without it the scroll container simply
          cuts a label off at its edge, and the next thing in the bar — Sign out

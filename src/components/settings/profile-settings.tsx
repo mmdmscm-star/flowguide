@@ -53,16 +53,20 @@ export default function ProfileSettings({ initial }: { initial: ProfileFields })
 
   return (
     <div>
-      <div className="flex items-baseline justify-between gap-3 mb-1">
-        <h2 className="text-lg font-semibold text-foreground">Your details</h2>
-        <span className="text-sm text-muted" aria-live="polite">
+      {/* `items-baseline` on a row that WRAPS puts the save status on its own
+          line aligned to nothing. It is a start-aligned row that wraps, and the
+          status keeps its own line on a phone rather than fighting the
+          heading for width. */}
+      <div className="mb-1 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+        <h2 className="text-page font-semibold tracking-[-0.02em] text-ink">Your Details</h2>
+        <span className="text-meta text-ink-3" aria-live="polite">
           {status === "saving" && "Saving…"}
           {status === "saved" && "Saved"}
-          {status === "error" && <span className="text-red-600">Could not save — check your connection</span>}
+          {status === "error" && <span className="text-red-700">Could not save — check your connection</span>}
         </span>
       </div>
 
-      <p className="text-sm text-muted mb-4">
+      <p className="text-body text-ink-2 mb-4">
         This is how you appear to clients — at the top of every Sendset, and in
         the contact card at the bottom. It is used by the web, email and printed
         versions alike. Changes apply to Sendsets you publish from now on;
@@ -71,7 +75,7 @@ export default function ProfileSettings({ initial }: { initial: ProfileFields })
 
       {/* The gap, when there is one — said once, here, where it can be fixed. */}
       {gap && (
-        <p className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+        <p className="mb-4 rounded-[var(--radius-control)] bg-amber-50 px-3 py-2 text-body text-amber-900">
           {IDENTITY_GAP_PROMPT[gap]} Until then, publishing will ask you to
           confirm before sending a Sendset with no contact details.
         </p>
