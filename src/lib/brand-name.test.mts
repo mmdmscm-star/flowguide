@@ -98,7 +98,10 @@ test("MANY take the plural, ONE does not", () => {
 
   const editor = codeOf("src/components/editor/legacy-packet-editor.tsx");
   assert.match(editor, /Sendset name/, "the private title field");
-  assert.match(editor, /Your Sendset is live!/, "the publish confirmation");
+  // The PUNCTUATION is not the property. This pinned the exclamation mark, so
+  // dropping it — along with the 4xl 🎉 above it — failed a test about whether
+  // one object is called a Sendset or Sendsets. The singular is what matters.
+  assert.match(editor, /Your Sendset is live\b/, "the publish confirmation");
   // A determiner in front of the plural is the way this goes wrong.
   for (const f of SURFACES)
     for (const wrong of [/\bthis Sendsets\b/, /\ba Sendsets\b/, /\bNew Sendsets\b/,

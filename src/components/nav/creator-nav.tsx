@@ -41,7 +41,7 @@ export type CreatorNavTab = (typeof TABS)[number]["key"];
 // CAPABILITY IS UNCHANGED at every width: the same four places, in the same
 // order, with the same names.
 export function CreatorNav({
-  current, trailing,
+  current, trailing, pinned,
 }: {
   current?: CreatorNavTab;
   /** An action belonging to the bar rather than to the tabs — Sign out, on the
@@ -50,8 +50,14 @@ export function CreatorNav({
    *  immediately after, so "New Sendset" read as "New SendsSign out"; pushed to
    *  the far right on a wider screen, where there is room for both. */
   trailing?: ReactNode;
+  /** Same slot, PINNED rather than scrolling: for something that has to stay
+   *  visible. The editors put save status here — a signal you have to scroll a
+   *  navigation bar sideways to find is not a signal. The nav's own edge fade
+   *  is what keeps this from looking like a tab cut in half. */
+  pinned?: ReactNode;
 }) {
   return (
+    <>
     <nav
       aria-label="Your Sendset workspace"
       /* The fade is not decoration. Without it the scroll container simply
@@ -60,7 +66,7 @@ export function CreatorNav({
          "New SendsSign out". A label that fades has obviously been scrolled;
          one that stops dead looks like a rendering fault. */
       className="-mx-4 flex min-w-0 flex-1 items-center gap-1 overflow-x-auto px-4
-                 [mask-image:linear-gradient(to_right,transparent_0,black_16px,black_calc(100%-28px),transparent_100%)]
+                 [mask-image:linear-gradient(to_right,transparent_0,black_16px,black_calc(100%-40px),transparent_100%)]
                  [scrollbar-width:none] [&::-webkit-scrollbar]:hidden
                  sm:mx-0 sm:gap-3 sm:overflow-visible sm:px-0 sm:[mask-image:none]"
     >
@@ -90,5 +96,9 @@ export function CreatorNav({
       ))}
       {trailing && <span className="flex flex-none items-center sm:ml-auto">{trailing}</span>}
     </nav>
+    {/* The gap is doing real work: the nav clips its last tab at the scroller's
+        edge, and without space after it this reads as one broken word. */}
+    {pinned && <span className="flex flex-none items-center pl-1 sm:pl-0">{pinned}</span>}
+    </>
   );
 }

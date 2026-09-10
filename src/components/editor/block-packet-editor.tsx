@@ -67,15 +67,23 @@ const HEADING_ROLES: { role: HeadingKind; name: string; defaultText: string }[] 
   { role: "label", name: "Label", defaultText: "New label" },
 ];
 
-// Per-role styling for a heading-like editor block (matches the prototype).
+// DEPTH IS SAID BY INDENT AND WEIGHT, NOT BY BLUE.
+//
+// A heading was a blue-bordered blue-tinted panel and a label was a blue dashed
+// outline with blue uppercase text, which made the structural scaffolding the
+// most saturated thing in the editor — louder than the packet's own content,
+// and spending the one colour this palette reserves for meaning on "this is a
+// heading". The three roles are already distinguished three other ways: how far
+// they are indented, how heavy their text is, and how much ground they carry.
+// That is enough, and it leaves blue for links, selection and focus.
 function composeStyle(role: HeadingKind) {
   switch (role) {
     case "heading":
-      return { indent: "", box: "rounded-xl border-2 border-accent/40 bg-accent/5 px-3 py-2.5", input: "text-lg font-bold text-foreground", placeholder: "Heading", subtext: true };
+      return { indent: "", box: "rounded-[var(--radius-panel)] bg-ground-3 px-3.5 py-3", input: "text-title font-semibold tracking-[-0.01em] text-ink", placeholder: "Heading", subtext: true };
     case "subheading":
-      return { indent: "pl-6", box: "rounded-lg border border-border bg-white px-3 py-2", input: "text-base font-semibold text-foreground", placeholder: "Subheading", subtext: true };
+      return { indent: "pl-6", box: "rounded-[var(--radius-control)] bg-ground-2 px-3.5 py-2.5", input: "text-body font-semibold text-ink", placeholder: "Subheading", subtext: true };
     case "label":
-      return { indent: "pl-10", box: "rounded-lg border border-dashed border-accent/40 bg-white px-3 py-1.5", input: "text-xs font-semibold uppercase tracking-wide text-accent", placeholder: "Label", subtext: false };
+      return { indent: "pl-10", box: "rounded-[var(--radius-control)] bg-ground-2 px-3.5 py-2", input: "text-meta font-semibold uppercase tracking-[0.07em] text-ink-2", placeholder: "Label", subtext: false };
   }
 }
 
@@ -106,15 +114,15 @@ function BlockControls({
   return (
     <div className="flex flex-col items-center gap-0.5 pt-1.5 flex-shrink-0">
       <button type="button" onClick={onUp} disabled={isFirst || disabled} aria-label="Move up"
-        className="text-gray-400 hover:text-accent disabled:opacity-20 disabled:hover:text-gray-400 p-0.5">
+        className="text-ink-3 hover:text-mark disabled:opacity-20 disabled:hover:text-ink-3 p-0.5">
         {chevron("up")}
       </button>
       <button type="button" {...attributes} {...listeners} disabled={disabled} aria-label="Drag to reorder"
-        className="text-gray-400 hover:text-gray-700 cursor-grab active:cursor-grabbing touch-none p-0.5 disabled:opacity-20 disabled:cursor-default">
+        className="text-ink-3 hover:text-ink cursor-grab active:cursor-grabbing touch-none p-0.5 disabled:opacity-20 disabled:cursor-default">
         {dragDots}
       </button>
       <button type="button" onClick={onDown} disabled={isLast || disabled} aria-label="Move down"
-        className="text-gray-400 hover:text-accent disabled:opacity-20 disabled:hover:text-gray-400 p-0.5">
+        className="text-ink-3 hover:text-mark disabled:opacity-20 disabled:hover:text-ink-3 p-0.5">
         {chevron("down")}
       </button>
     </div>
@@ -146,7 +154,7 @@ function SortableBlock({
         {block.kind !== "item" && s ? (
           <div className={s.box}>
             <div className="flex items-center justify-between gap-2 mb-1.5">
-              <span className="text-[11px] font-semibold uppercase tracking-wide text-muted">{s.placeholder}</span>
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-ink-2">{s.placeholder}</span>
               <button type="button" onClick={() => onDelete(block.id)} disabled={disabled}
                 className="text-[11px] font-medium text-red-500 hover:text-red-700 disabled:opacity-30">
                 Delete
@@ -158,7 +166,7 @@ function SortableBlock({
               onChange={(e) => onEdit(block.id, "text", e.target.value)}
               onBlur={() => onSaveHeading(block.id)}
               placeholder={s.placeholder}
-              className={`w-full bg-transparent focus:outline-none placeholder:text-gray-300 placeholder:normal-case placeholder:font-normal placeholder:tracking-normal disabled:opacity-60 ${s.input}`}
+              className={`w-full bg-transparent focus:outline-none placeholder:text-ink-3/45 placeholder:normal-case placeholder:font-normal placeholder:tracking-normal disabled:opacity-60 ${s.input}`}
             />
             {s.subtext && (
               <input
@@ -167,14 +175,16 @@ function SortableBlock({
                 onChange={(e) => onEdit(block.id, "subtext", e.target.value)}
                 onBlur={() => onSaveHeading(block.id)}
                 placeholder="Optional subtext"
-                className="w-full bg-transparent text-sm text-gray-600 focus:outline-none placeholder:text-gray-300 disabled:opacity-60"
+                className="w-full bg-transparent text-body text-ink-2 focus:outline-none placeholder:text-ink-3/45 disabled:opacity-60"
               />
             )}
           </div>
         ) : block.kind === "item" ? (
           <div className="relative">
             <button type="button" onClick={() => onEditItem(block.id)} disabled={disabled}
-              className="absolute top-2 right-2 z-10 text-xs font-medium text-white bg-accent/90 hover:bg-accent px-2.5 py-1 rounded-lg shadow-sm disabled:opacity-40">
+              className="absolute top-2 right-2 z-10 rounded-[var(--radius-control)] bg-ground/90
+                         px-3 py-1.5 text-meta font-medium text-ink-2 shadow-sm backdrop-blur-sm
+                         transition-colors hover:bg-ground hover:text-ink disabled:opacity-40">
               Edit item
             </button>
             <ItemCard item={block.item} audience="professional" />
@@ -190,7 +200,15 @@ function AddBlockBar({ disabled, onAdd }: { disabled: boolean; onAdd: (role: Hea
     <div className="flex items-center justify-center gap-1.5 my-2">
       {HEADING_ROLES.map(({ role, name, defaultText }) => (
         <button key={role} type="button" disabled={disabled} onClick={() => onAdd(role, defaultText)}
-          className="px-2.5 py-1 rounded-lg border border-dashed border-accent/50 text-accent text-[11px] font-semibold hover:bg-accent hover:text-white hover:border-accent transition-colors disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-accent">
+          /* INSERTION POINTS REPEAT; THEY MUST NOT SHOUT — AND THEY MUST NOT
+             HIDE. One of these sits between every pair of blocks, so a dashed
+             blue outline made "add a heading" the most repeated colour on the
+             screen. Revealing them on hover would fix that and cost every one
+             of them on a phone, where there is no hover: they are quiet and
+             always present instead. */
+          className="flex h-9 flex-none items-center rounded-full bg-ground-3 px-3 text-micro
+                     font-medium text-ink-2 transition-colors hover:bg-line/70 hover:text-ink
+                     disabled:opacity-30 sm:h-auto sm:py-1.5">
           + {name}
         </button>
       ))}
@@ -436,31 +454,39 @@ export function BlockPacketEditor({
     ? { text: "Saving…", cls: "bg-amber-100 text-amber-800" }
     : errorMsg
       ? { text: "Save failed — reverted", cls: "bg-red-100 text-red-700" }
-      : { text: "All changes saved", cls: "bg-gray-100 text-gray-500" };
+      : { text: "All changes saved", cls: "bg-ground-3 text-ink-2" };
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="sticky top-0 z-20 bg-white border-b border-border">
-        <div className="max-w-lg mx-auto px-5 py-3 flex items-center gap-3">
+    <div className="min-h-screen bg-canvas">
+      <div className="sticky top-0 z-20 bg-canvas/85 backdrop-blur-sm border-b border-line">
+        <div className="max-w-3xl mx-auto px-4 sm:px-6 py-2 sm:py-3.5 flex items-center gap-2 sm:gap-3">
           {/* A block-editor user previously had NO route to their own details:
               the profile fields lived inside the legacy editor and nowhere
               else. This is the same nav the legacy editor carries, pointing at
-              the one shared form — not a second copy of it. */}
-          <CreatorNav />
-          <span className={`ml-auto text-xs font-medium px-2 py-1 rounded-full ${statusPill.cls}`}>{statusPill.text}</span>
+              the one shared form — not a second copy of it. The status pill
+              rides in the bar's trailing slot, which is where the other two
+              authoring surfaces put what belongs to the bar rather than to the
+              tabs. */}
+          <CreatorNav
+            pinned={
+              <span className={`whitespace-nowrap rounded-full px-2 py-0.5 text-micro font-medium ${statusPill.cls}`}>
+                {statusPill.text}
+              </span>
+            }
+          />
         </div>
         {!saving && errorMsg && (
-          <div className="max-w-lg mx-auto px-5 pb-2 text-xs text-red-600">{errorMsg}</div>
+          <div className="max-w-3xl mx-auto px-4 sm:px-6 pb-2 text-meta text-red-700">{errorMsg}</div>
         )}
       </div>
 
-      <div className="max-w-lg mx-auto px-5 pb-24">
+      <div className="max-w-3xl mx-auto px-4 sm:px-6 pb-28">
         <header className="pt-6 pb-4">
-          <p className="text-xs uppercase tracking-widest text-muted mb-1">Block composition</p>
-          <h1 className="text-2xl font-bold text-foreground leading-tight whitespace-pre-line">{title || "Untitled Packet"}</h1>
-          <p className="text-xs text-muted">Only you see this name.</p>
+          <p className="text-meta uppercase tracking-widest text-ink-2 mb-1">Block composition</p>
+          <h1 className="text-page font-bold text-ink leading-tight whitespace-pre-line">{title || "Untitled Packet"}</h1>
+          <p className="text-meta text-ink-2">Only you see this name.</p>
 
-          <label htmlFor="client-title" className="mt-4 block text-xs font-medium uppercase tracking-wide text-muted mb-1">
+          <label htmlFor="client-title" className="mt-4 block text-meta font-medium uppercase tracking-wide text-ink-2 mb-1">
             Title your client sees <span className="normal-case font-normal">(optional)</span>
           </label>
           <input
@@ -469,13 +495,13 @@ export function BlockPacketEditor({
             value={clientTitle}
             onChange={(e) => updateClientTitle(e.target.value)}
             placeholder="Senior Living Communities"
-            className="w-full text-base font-semibold text-foreground bg-transparent border-none outline-none placeholder:text-gray-300"
+            className="w-full text-body font-semibold text-ink bg-transparent border-none outline-none placeholder:text-ink-3/45"
           />
-          <p className="text-xs text-muted">
+          <p className="text-meta text-ink-2">
             Leave blank and your client sees no title at all.{titleSaved ? " Saved." : ""}
           </p>
 
-          <label htmlFor="map-url" className="mt-4 block text-xs font-medium uppercase tracking-wide text-muted mb-1">
+          <label htmlFor="map-url" className="mt-4 block text-meta font-medium uppercase tracking-wide text-ink-2 mb-1">
             Map link <span className="normal-case font-normal">(optional)</span>
           </label>
           <input
@@ -484,34 +510,34 @@ export function BlockPacketEditor({
             value={mapUrl}
             onChange={(e) => updateMapUrl(e.target.value)}
             placeholder="Paste a Google My Maps or any map link"
-            className="w-full text-sm text-foreground bg-transparent border-none outline-none placeholder:text-gray-300"
+            className="w-full text-body text-ink bg-transparent border-none outline-none placeholder:text-ink-3/45"
           />
           {mapUnsaved ? (
             // Says what is true: the box holds something, and it is not saved.
             // It does not claim the stored value was lost — it was not.
-            <p className="text-xs text-amber-700">
+            <p className="text-meta text-amber-700">
               Not saved — a map link needs to start with http:// or https://.
             </p>
           ) : (
-            <p className="text-xs text-muted">
+            <p className="text-meta text-ink-2">
               Shown to your client on the web, in email and on the printed copy.
               {mapSaved ? " Saved." : ""}
             </p>
           )}
 
-          <p className="mt-2 text-xs text-muted">
+          <p className="mt-2 text-meta text-ink-2">
             {headingCount} heading{headingCount === 1 ? "" : "s"} · {itemCount} item{itemCount === 1 ? "" : "s"} · headings are visual only and do not own the items after them
           </p>
         </header>
 
         {justConverted && (
-          <div className="mb-4 p-3 rounded-lg bg-green-50 border border-green-200 text-sm text-green-800">
+          <div className="mb-4 p-3 rounded-[var(--radius-control)] bg-green-50 border border-green-200 text-body text-green-800">
             Converted to the block editor. Item content was preserved; each section became a heading block.
           </div>
         )}
 
         {readOnly && (
-          <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <div className="mb-4 rounded-[var(--radius-control)] border border-amber-200 bg-amber-50 px-4 py-3 text-body text-amber-800">
             This packet is <strong>{status}</strong>. Unpublish it to edit its composition.
           </div>
         )}
@@ -522,10 +548,10 @@ export function BlockPacketEditor({
 
         {/* Deliberate reversion control — only for owned DRAFT block packets. */}
         {!readOnly && (
-          <div className="mb-4 flex items-center justify-between gap-3 p-3 rounded-lg border border-border bg-white">
+          <div className="mb-4 flex items-center justify-between gap-3 p-3 rounded-[var(--radius-control)] border border-line bg-ground">
             <div className="min-w-0">
-              <p className="text-sm font-medium text-foreground">Composition: blocks</p>
-              <p className="text-xs text-muted">Return to the legacy section editor. Block-only headings and order are discarded.</p>
+              <p className="text-body font-medium text-ink">Composition: blocks</p>
+              <p className="text-meta text-ink-2">Return to the legacy section editor. Block-only headings and order are discarded.</p>
             </div>
             <CompositionModeControl packetId={packetId} direction="revert" />
           </div>
@@ -555,7 +581,7 @@ export function BlockPacketEditor({
         </DndContext>
 
         {blocks.length === 0 && (
-          <p className="text-center text-sm text-muted py-8">This packet has no blocks yet.</p>
+          <p className="text-center text-body text-ink-2 py-8">This packet has no blocks yet.</p>
         )}
 
         {/* Same component the legacy editor mounts — one delete, wherever the

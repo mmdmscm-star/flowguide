@@ -1,4 +1,7 @@
 "use client";
+import { Button } from "@/components/ui/button";
+import { MODAL_SCRIM, MODAL_PANEL, MODAL_TITLE, MODAL_LEDE, MODAL_FOOT }
+  from "@/components/ui/modal";
 
 import { useState } from "react";
 
@@ -79,36 +82,35 @@ export function CompositionModeControl({ packetId, direction }: { packetId: stri
 
   return (
     <>
-      <button
-        type="button"
+      {/* SWITCHING EDITOR IS NOT THE JOB. This was a filled primary sitting at
+          the top of the editor, so the loudest control on the screen offered to
+          change how the packet is composed rather than to work on it. It is a
+          secondary now — and reverting, which discards headings and order,
+          keeps `danger`: quiet until it is pointed at, then unmistakable. */}
+      <Button
+        variant={direction === "convert" ? "secondary" : "danger"}
+        size="sm"
         onClick={() => { setError(""); setOpen(true); }}
-        className={
-          direction === "convert"
-            ? "text-xs font-medium text-white bg-accent hover:bg-accent-hover px-3 py-1.5 rounded-lg"
-            : "text-xs font-medium text-red-600 border border-red-200 hover:bg-red-50 px-3 py-1.5 rounded-lg"
-        }
       >
         {c.button}
-      </button>
+      </Button>
 
       {open && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 overflow-y-auto p-4" role="dialog">
-          <div className="w-full max-w-md my-12 rounded-2xl bg-white shadow-xl p-5">
-            <h2 className="text-base font-semibold text-foreground">{c.title}</h2>
-            {c.lead && <p className={`mt-1 text-sm ${c.danger ? "text-red-600" : "text-muted"}`}>{c.lead}</p>}
-            <ul className="mt-3 space-y-1.5 text-sm text-foreground list-disc pl-5">
+        <div className={MODAL_SCRIM} role="dialog">
+          <div className={`${MODAL_PANEL} max-w-md my-12 p-5`}>
+            <h2 className={MODAL_TITLE}>{c.title}</h2>
+            {c.lead && <p className={`${MODAL_LEDE} ${c.danger ? "text-red-700" : ""}`}>{c.lead}</p>}
+            <ul className="mt-3 list-disc space-y-1.5 pl-5 text-body text-ink">
               {c.points.map((p, i) => <li key={i}>{p}</li>)}
             </ul>
-            {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
-            <div className="mt-5 flex items-center justify-end gap-2">
-              <button type="button" onClick={() => setOpen(false)} disabled={busy}
-                className="text-sm text-muted hover:text-foreground px-3 py-1.5 disabled:opacity-40">
+            {error && <p className="mt-3 text-meta text-red-700">{error}</p>}
+            <div className={`${MODAL_FOOT} justify-end`}>
+              <Button variant="ghost" size="md" onClick={() => setOpen(false)} disabled={busy}>
                 Cancel
-              </button>
-              <button type="button" onClick={run} disabled={busy}
-                className={`text-sm font-medium text-white px-4 py-1.5 rounded-lg disabled:opacity-50 ${c.danger ? "bg-red-600 hover:bg-red-700" : "bg-accent hover:bg-accent-hover"}`}>
+              </Button>
+              <Button variant={c.danger ? "danger" : "primary"} size="md" onClick={run} disabled={busy}>
                 {busy ? "Working…" : c.confirm}
-              </button>
+              </Button>
             </div>
           </div>
         </div>

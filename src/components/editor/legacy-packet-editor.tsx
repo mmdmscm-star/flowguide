@@ -1,4 +1,7 @@
 "use client";
+import { INPUT_SHELL } from "@/components/ui/field";
+import { Button } from "@/components/ui/button";
+import { MODAL_SCRIM, MODAL_PANEL, MODAL_TITLE, MODAL_LEDE } from "@/components/ui/modal";
 
 import { useEffect, useState, useCallback, useRef, type ReactNode } from "react";
 import ImageUploadField from "./image-upload-field";
@@ -180,8 +183,8 @@ function LibraryBar({ packetId, sectionId, disabled, itemCount, refreshKey, onSa
   }, [refreshKey]);
 
   const empty = hasSaved === false;
-  const PRIMARY = "flex-none px-3 py-1.5 rounded-lg bg-accent hover:bg-accent-hover text-white text-sm font-medium disabled:opacity-60";
-  const SECONDARY = "flex-none px-3 py-1.5 rounded-lg border border-border bg-white text-sm font-medium text-foreground hover:border-accent hover:text-accent disabled:opacity-60";
+  const PRIMARY = "flex-none px-3 py-1.5 rounded-[var(--radius-control)] bg-ink hover:bg-ink/90 text-white text-body font-medium disabled:opacity-60";
+  const SECONDARY = "flex-none px-3 py-1.5 rounded-[var(--radius-control)] border border-line bg-ground text-body font-medium text-ink hover:border-mark hover:text-mark disabled:opacity-60";
 
   const addBtn = (
     <button key="add" onClick={() => setPicker(true)} disabled={disabled || empty}
@@ -199,10 +202,10 @@ function LibraryBar({ packetId, sectionId, disabled, itemCount, refreshKey, onSa
   );
 
   return (
-    <div className="mb-4 flex flex-wrap items-center gap-3 p-3 rounded-lg border border-border bg-white">
+    <div className="mb-4 flex flex-wrap items-center gap-3 p-3 rounded-[var(--radius-control)] border border-line bg-ground">
       <div className="min-w-[12rem] flex-1">
-        <p className="text-sm font-medium text-foreground">Library</p>
-        <p className="text-xs text-muted">
+        <p className="text-body font-medium text-ink">Library</p>
+        <p className="text-meta text-ink-2">
           {empty
             ? "Nothing saved yet. Save something here to reuse it in your next Sendset."
             : "Reuse something you saved, or save one of these for next time."}
@@ -1152,7 +1155,7 @@ export function LegacyPacketEditor() {
   if (loading || !packet) {
     return (
       <main className="min-h-screen flex items-center justify-center">
-        <p className="text-muted">Loading...</p>
+        <p className="text-ink-2">Loading...</p>
       </main>
     );
   }
@@ -1160,39 +1163,52 @@ export function LegacyPacketEditor() {
   const sortedSections = [...sections].sort((a, b) => a.sortOrder - b.sortOrder);
 
   return (
-    <main className="max-w-2xl mx-auto px-5 py-6 pb-24">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <CreatorNav />
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-muted">
-            {saveStatus === "saving" ? "Saving..." : saveStatus === "error" ? "Save failed" : "Saved"}
-          </span>
-          <span
-            className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-              packet.status === "published"
-                ? "bg-green-50 text-green-700 border border-green-200"
-                : "bg-gray-50 text-gray-600 border border-gray-200"
-            }`}
-          >
-            {packet.status === "published" ? "Published" : "Draft"}
-          </span>
+    <div className="min-h-screen bg-canvas">
+      {/* THE SAME CHROME AS THE LIBRARY AND THE DASHBOARD. This nav sat in the
+          page body and scrolled away with the content, while every other
+          authoring surface keeps it pinned — so the editor was the one screen
+          where the way out moved. Save status and the draft/published state
+          ride here too: they describe THIS packet as a whole, which is what a
+          bar across the top of it is for.
+
+          The pills lost their borders and their green box. Draft is the resting
+          state of most packets and is quiet; Published is the event. */}
+      <div className="sticky top-0 z-20 bg-canvas/85 backdrop-blur-sm border-b border-line">
+        <div className="max-w-3xl mx-auto px-4 sm:px-6 py-2 sm:py-3.5 flex items-center gap-2 sm:gap-3">
+          <CreatorNav
+            pinned={
+              <span className="flex items-center gap-2 whitespace-nowrap">
+                <span className="text-meta text-ink-3" role="status">
+                  {saveStatus === "saving" ? "Saving…" : saveStatus === "error" ? "Save failed" : "Saved"}
+                </span>
+                <span className={`rounded-full px-2 py-0.5 text-micro font-medium ${
+                  packet.status === "published"
+                    ? "bg-emerald-50 text-emerald-800"
+                    : "bg-ground-3 text-ink-2"
+                }`}>
+                  {packet.status === "published" ? "Published" : "Draft"}
+                </span>
+              </span>
+            }
+          />
         </div>
       </div>
 
+      <main className="max-w-3xl mx-auto px-4 sm:px-6 pt-6 pb-32">
+
       {/* Reverted-from-blocks success notice */}
       {searchParams.get("reverted") === "1" && (
-        <div className="mb-4 p-3 rounded-lg bg-green-50 border border-green-200 text-sm text-green-800">
+        <div className="mb-4 p-3 rounded-[var(--radius-control)] bg-green-50 border border-green-200 text-body text-green-800">
           Reverted to the legacy section editor. Item content was preserved; block-only headings and ordering were discarded.
         </div>
       )}
 
       {/* Deliberate conversion control — only for owned DRAFT legacy packets. */}
       {packet.status === "draft" && (
-        <div className="mb-4 flex items-center justify-between gap-3 p-3 rounded-lg border border-border bg-surface">
+        <div className="mb-4 flex items-center justify-between gap-3 p-3 rounded-[var(--radius-control)] border border-line bg-ground-2">
           <div className="min-w-0">
-            <p className="text-sm font-medium text-foreground">Composition: sections</p>
-            <p className="text-xs text-muted">Switch to the flat block editor to freely order headings and items.</p>
+            <p className="text-body font-medium text-ink">Composition: sections</p>
+            <p className="text-meta text-ink-2">Switch to the flat block editor to freely order headings and items.</p>
           </div>
           <CompositionModeControl packetId={packetId} direction="convert" />
         </div>
@@ -1200,7 +1216,7 @@ export function LegacyPacketEditor() {
 
       {/* Publish error */}
       {publishError && (
-        <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
+        <div className="mb-4 p-3 rounded-[var(--radius-control)] bg-red-50 border border-red-200 text-body text-red-700">
           {publishError}
         </div>
       )}
@@ -1227,7 +1243,7 @@ export function LegacyPacketEditor() {
 
       {/* AI review banner */}
       {showAiBanner && !importRunId && (
-        <div className="mb-4 p-3 rounded-lg bg-blue-50 border border-blue-200 text-sm text-blue-800 flex items-center justify-between">
+        <div className="mb-4 p-3 rounded-[var(--radius-control)] bg-blue-50 border border-blue-200 text-body text-blue-800 flex items-center justify-between">
           <span>AI organized your info. Review and edit anything before publishing.</span>
           <button
             onClick={() => setShowAiBanner(false)}
@@ -1244,7 +1260,7 @@ export function LegacyPacketEditor() {
           field, which is why "Options for Bonnie Smith" was also the heading
           Bonnie Smith saw. Two labelled inputs, no toggle and no settings. */}
       <div className="mb-6">
-        <label className="block text-xs font-medium uppercase tracking-wide text-muted mb-1">
+        <label className="block text-meta font-medium uppercase tracking-wide text-ink-2 mb-1">
           Sendset name
         </label>
         <textarea
@@ -1253,11 +1269,11 @@ export function LegacyPacketEditor() {
           onChange={(e) => updatePacketField("title", e.target.value)}
           placeholder="Options for the Smith family"
           rows={1}
-          className="w-full text-2xl font-bold text-foreground bg-transparent border-none outline-none resize-none overflow-hidden placeholder:text-gray-300"
+          className="w-full text-page font-bold text-ink bg-transparent border-none outline-none resize-none overflow-hidden placeholder:text-ink-3/45"
         />
-        <p className="text-xs text-muted">Only you see this. It is how you find this Sendset later.</p>
+        <p className="text-meta text-ink-2">Only you see this. It is how you find this Sendset later.</p>
 
-        <label className="mt-4 block text-xs font-medium uppercase tracking-wide text-muted mb-1">
+        <label className="mt-4 block text-meta font-medium uppercase tracking-wide text-ink-2 mb-1">
           Title your client sees <span className="normal-case font-normal">(optional)</span>
         </label>
         <input
@@ -1265,16 +1281,16 @@ export function LegacyPacketEditor() {
           value={packet.clientTitle}
           onChange={(e) => updatePacketField("clientTitle", e.target.value)}
           placeholder="Senior Living Communities"
-          className="w-full text-base font-semibold text-foreground bg-transparent border-none outline-none placeholder:text-gray-300"
+          className="w-full text-body font-semibold text-ink bg-transparent border-none outline-none placeholder:text-ink-3/45"
         />
-        <p className="text-xs text-muted">Leave blank and your client sees no title at all.</p>
+        <p className="text-meta text-ink-2">Leave blank and your client sees no title at all.</p>
 
         <input
           type="text"
           value={packet.clientName}
           onChange={(e) => updatePacketField("clientName", e.target.value)}
           placeholder="Prepared for (optional)"
-          className="w-full mt-4 text-sm text-muted bg-transparent border-none outline-none placeholder:text-gray-300"
+          className="w-full mt-4 text-body text-ink-2 bg-transparent border-none outline-none placeholder:text-ink-3/45"
         />
       </div>
 
@@ -1289,11 +1305,11 @@ export function LegacyPacketEditor() {
         onNotice={setLibraryNotice}
         onRefresh={loadPacket}
       />
-      {libraryNotice && <p className="mb-4 text-sm text-green-700">{libraryNotice}</p>}
+      {libraryNotice && <p className="mb-4 text-body text-green-700">{libraryNotice}</p>}
 
       {/* Personal note */}
       <div className="mb-8">
-        <label className="block text-xs font-medium uppercase tracking-widest text-muted mb-2">
+        <label className="block text-meta font-medium uppercase tracking-widest text-ink-2 mb-2">
           Note
         </label>
         <textarea
@@ -1301,13 +1317,13 @@ export function LegacyPacketEditor() {
           onChange={(e) => updatePacketField("personalNote", e.target.value)}
           placeholder="Add a welcome, some context, or instructions…"
           rows={4}
-          className="w-full px-3.5 py-3 rounded-lg border border-border bg-white text-sm text-foreground resize-y focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent placeholder:text-gray-300"
+          className={`${INPUT_SHELL} resize-y`}
         />
       </div>
 
       {/* Map URL */}
       <div className="mb-8">
-        <label className="block text-xs font-medium uppercase tracking-widest text-muted mb-2">
+        <label className="block text-meta font-medium uppercase tracking-widest text-ink-2 mb-2">
           Map Link (optional)
         </label>
         <input
@@ -1315,10 +1331,10 @@ export function LegacyPacketEditor() {
           value={packet.mapUrl}
           onChange={(e) => updateMapUrl(e.target.value)}
           placeholder="Paste a Google My Maps or any map link"
-          className="w-full px-3.5 py-2.5 rounded-lg border border-border bg-white text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent placeholder:text-gray-300"
+          className={INPUT_SHELL}
         />
         {mapUnsaved && (
-          <p className="mt-1.5 text-xs text-amber-700">
+          <p className="mt-1.5 text-meta text-amber-700">
             Not saved — a map link needs to start with http:// or https://.
           </p>
         )}
@@ -1333,11 +1349,11 @@ export function LegacyPacketEditor() {
             type="checkbox"
             checked={packet.showQuickNav}
             onChange={(e) => setShowQuickNav(e.target.checked)}
-            className="mt-0.5 h-4 w-4 shrink-0 rounded border-border text-accent focus:ring-2 focus:ring-accent"
+            className="mt-0.5 h-4 w-4 shrink-0 rounded border-line text-mark focus:ring-2 focus:ring-mark/15"
           />
           <span className="min-w-0">
-            <span className="block text-sm font-medium text-foreground">Show quick navigation</span>
-            <span className="mt-0.5 block text-sm text-muted">
+            <span className="block text-body font-medium text-ink">Show quick navigation</span>
+            <span className="mt-0.5 block text-body text-ink-2">
               Display a clickable list of items at the top of sections with multiple items.
             </span>
           </span>
@@ -1353,7 +1369,7 @@ export function LegacyPacketEditor() {
         {/* A refused section delete, said where the sections are — the server
             blocks deleting a section AI is actively writing into. */}
         {sectionError && (
-          <p className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          <p className="mb-3 rounded-[var(--radius-control)] border border-amber-200 bg-amber-50 px-3 py-2 text-body text-amber-900">
             {sectionError}
           </p>
         )}
@@ -1377,7 +1393,7 @@ export function LegacyPacketEditor() {
                 {...handle.attributes}
                 {...handle.listeners}
                 aria-label="Drag to reorder section"
-                className="text-gray-400 hover:text-gray-700 cursor-grab active:cursor-grabbing flex-shrink-0 touch-none -ml-1 mt-1 p-1"
+                className="text-ink-3 hover:text-ink cursor-grab active:cursor-grabbing flex-shrink-0 touch-none -ml-1 mt-1 p-1"
               >
                 <svg className="w-4 h-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
                   <circle cx="7" cy="4" r="1.5" />
@@ -1394,19 +1410,19 @@ export function LegacyPacketEditor() {
                   value={section.title}
                   onChange={(e) => updateSection(section.id, "title", e.target.value)}
                   placeholder="Section title"
-                  className="w-full text-lg font-bold text-foreground bg-transparent border-none outline-none placeholder:text-gray-300"
+                  className="w-full text-title font-bold text-ink bg-transparent border-none outline-none placeholder:text-ink-3/45"
                 />
                 <input
                   type="text"
                   value={section.description}
                   onChange={(e) => updateSection(section.id, "description", e.target.value)}
                   placeholder="Section description (optional)"
-                  className="w-full mt-0.5 text-sm text-muted bg-transparent border-none outline-none placeholder:text-gray-300"
+                  className="w-full mt-0.5 text-body text-ink-2 bg-transparent border-none outline-none placeholder:text-ink-3/45"
                 />
               </div>
               <button
                 onClick={() => deleteSection(section.id)}
-                className="text-sm text-red-400 hover:text-red-600 mt-1 flex-shrink-0"
+                className="text-body text-red-400 hover:text-red-600 mt-1 flex-shrink-0"
               >
                 Delete
               </button>
@@ -1466,7 +1482,7 @@ export function LegacyPacketEditor() {
             <div className="mt-3 flex items-center gap-4">
               <button
                 onClick={() => addItem(section.id)}
-                className="text-sm text-accent hover:text-accent-hover font-medium"
+                className="text-body text-mark hover:text-mark/80 font-medium"
               >
                 + Add Item
               </button>
@@ -1476,10 +1492,10 @@ export function LegacyPacketEditor() {
                   inside it for Photos — so a map, a diagram or a screenshot
                   meant inventing a thing to hang it on first. */}
               <label
-                className={`text-sm font-medium cursor-pointer ${
+                className={`text-body font-medium cursor-pointer ${
                   pictureBusy === section.id
-                    ? "text-muted pointer-events-none"
-                    : "text-accent hover:text-accent-hover"}`}
+                    ? "text-ink-2 pointer-events-none"
+                    : "text-mark hover:text-mark/80"}`}
               >
                 {pictureBusy === section.id ? "Adding picture…" : "+ Add picture"}
                 <input
@@ -1501,13 +1517,13 @@ export function LegacyPacketEditor() {
                   setAppendText("");
                   setShowAppendModal(true);
                 }}
-                className="text-sm text-accent hover:text-accent-hover font-medium"
+                className="text-body text-mark hover:text-mark/80 font-medium"
               >
                 + Add items with AI
               </button>
             </div>
             {pictureError && (
-              <p className="mt-1 text-sm text-red-600">{pictureError}</p>
+              <p className="mt-1 text-body text-red-600">{pictureError}</p>
             )}
               </>
             )}
@@ -1520,7 +1536,7 @@ export function LegacyPacketEditor() {
       <div className="flex gap-3 mb-8">
         <button
           onClick={addSection}
-          className="flex-1 py-3 border-2 border-dashed border-border rounded-xl text-sm font-medium text-muted hover:text-accent hover:border-accent transition-colors"
+          className="flex-1 py-3 border-2 border-dashed border-line rounded-[var(--radius-panel)] text-body font-medium text-ink-2 hover:text-mark hover:border-mark transition-colors"
         >
           + Add Section
         </button>
@@ -1530,7 +1546,7 @@ export function LegacyPacketEditor() {
             setAppendText("");
             setShowAppendModal(true);
           }}
-          className="flex-1 py-3 border-2 border-dashed border-accent/30 rounded-xl text-sm font-medium text-accent hover:bg-accent hover:text-white transition-colors"
+          className="flex-1 py-3 border-2 border-dashed border-mark/30 rounded-[var(--radius-panel)] text-body font-medium text-mark hover:bg-ink hover:text-white transition-colors"
         >
           + Add new sections with AI
         </button>
@@ -1544,15 +1560,15 @@ export function LegacyPacketEditor() {
           professional is actually finished. Draft or published is irrelevant:
           saving to the Library has never had anything to do with publishing. */}
       {items.length > 0 && (
-        <div className="mb-8 rounded-xl border border-border bg-white p-4">
-          <p className="text-sm font-medium text-foreground">Reuse any of these next time?</p>
-          <p className="mt-1 text-xs text-muted">
+        <div className="mb-8 rounded-[var(--radius-panel)] border border-line bg-ground p-4">
+          <p className="text-body font-medium text-ink">Reuse any of these next time?</p>
+          <p className="mt-1 text-meta text-ink-2">
             Save any of these to your Library and use them in your next Sendset. You
             do not have to publish this one first.
           </p>
           <button
             onClick={() => setPromoting(true)}
-            className="mt-3 px-3 py-1.5 rounded-lg bg-accent hover:bg-accent-hover text-white text-sm font-medium"
+            className="mt-3 px-3 py-1.5 rounded-[var(--radius-control)] bg-ink hover:bg-ink/90 text-white text-body font-medium"
           >
             Save to Library
           </button>
@@ -1577,15 +1593,15 @@ export function LegacyPacketEditor() {
       {/* Add with AI modal */}
       {showAppendModal && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-5">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-auto p-6">
-            <h2 className="text-lg font-bold text-foreground mb-1">
+          <div className="bg-ground rounded-[var(--radius-panel)] shadow-xl w-full max-w-lg max-h-[90vh] overflow-auto p-6">
+            <h2 className="text-title font-bold text-ink mb-1">
               {appendTargetSection ? "Add items with AI" : "Add new sections with AI"}
             </h2>
-            <p className="text-sm text-muted mb-4">
+            <p className="text-body text-ink-2 mb-4">
               {appendTargetSection ? (
                 <>
                   Paste new information below. AI will structure it into items and add them to{" "}
-                  <span className="font-medium text-foreground">
+                  <span className="font-medium text-ink">
                     {appendTargetSection.title?.trim() || "this section"}
                   </span>
                   {" "}— it won&apos;t create new sections or change existing content.
@@ -1598,13 +1614,13 @@ export function LegacyPacketEditor() {
               value={appendText}
               onChange={(e) => setAppendText(e.target.value)}
               placeholder="Paste new recommendations, community info, or any raw data..."
-              className="w-full h-48 px-4 py-3 rounded-xl border border-border text-sm focus:outline-none focus:ring-2 focus:ring-accent resize-none"
+              className="w-full h-48 px-4 py-3 rounded-[var(--radius-panel)] border border-line text-body focus:outline-none focus:ring-2 focus:ring-mark/15 resize-none"
               autoFocus
             />
             <div className="flex justify-end gap-3 mt-4">
               <button
                 onClick={() => { setShowAppendModal(false); setAppendText(""); setAppendTargetSection(null); }}
-                className="px-4 py-2 text-sm font-medium text-muted hover:text-foreground transition-colors"
+                className="px-4 py-2 text-body font-medium text-ink-2 hover:text-ink transition-colors"
                 disabled={appendLoading}
               >
                 Cancel
@@ -1612,7 +1628,7 @@ export function LegacyPacketEditor() {
               <button
                 onClick={handleAppend}
                 disabled={appendLoading || appendText.trim().length < 10}
-                className="px-6 py-2 rounded-lg bg-accent hover:bg-accent-hover text-white text-sm font-medium transition-colors disabled:opacity-50"
+                className="px-6 py-2 rounded-[var(--radius-control)] bg-ink hover:bg-ink/90 text-white text-body font-medium transition-colors disabled:opacity-50"
               >
                 {appendLoading ? "Organizing..." : "Organize with AI"}
               </button>
@@ -1629,11 +1645,11 @@ export function LegacyPacketEditor() {
       {/* Selected sender's details — rendered just above the Sender chooser so
           the chooser stays pinned at the very bottom. Nothing shows for "No sender". */}
       {packet.identityMode === "default" && (
-        <div className="mb-8 border border-border rounded-xl p-4">
-          <label className="block text-xs font-medium uppercase tracking-widest text-muted mb-1">
+        <div className="mb-8 border border-line rounded-[var(--radius-panel)] p-4">
+          <label className="block text-meta font-medium uppercase tracking-widest text-ink-2 mb-1">
             Your Default Profile
           </label>
-          <p className="text-xs text-muted mb-3">
+          <p className="text-meta text-ink-2 mb-3">
             Editing these updates your profile on <strong>every</strong> Sendset set to “My default profile.”
           </p>
           <ProfessionalProfileFields
@@ -1645,11 +1661,11 @@ export function LegacyPacketEditor() {
       )}
 
       {packet.identityMode === "custom" && (
-        <div className="mb-8 border border-border rounded-xl p-4">
-          <label className="block text-xs font-medium uppercase tracking-widest text-muted mb-1">
+        <div className="mb-8 border border-line rounded-[var(--radius-panel)] p-4">
+          <label className="block text-meta font-medium uppercase tracking-widest text-ink-2 mb-1">
             Custom Organization
           </label>
-          <p className="text-xs text-muted mb-3">
+          <p className="text-meta text-ink-2 mb-3">
             These details apply to this Sendset only. Editing them does <strong>not</strong> change your default profile.
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -1658,28 +1674,28 @@ export function LegacyPacketEditor() {
               value={packet.customIdentity?.name || ""}
               onChange={(e) => updateCustomField("name", e.target.value)}
               placeholder="Name"
-              className="px-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:ring-2 focus:ring-accent"
+              className={INPUT_SHELL}
             />
             <input
               type="text"
               value={packet.customIdentity?.businessName || ""}
               onChange={(e) => updateCustomField("businessName", e.target.value)}
               placeholder="Business name (optional)"
-              className="px-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:ring-2 focus:ring-accent"
+              className={INPUT_SHELL}
             />
             <input
               type="email"
               value={packet.customIdentity?.email || ""}
               onChange={(e) => updateCustomField("email", e.target.value)}
               placeholder="Email"
-              className="px-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:ring-2 focus:ring-accent"
+              className={INPUT_SHELL}
             />
             <input
               type="tel"
               value={packet.customIdentity?.phone || ""}
               onChange={(e) => updateCustomField("phone", e.target.value)}
               placeholder="Phone"
-              className="px-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:ring-2 focus:ring-accent"
+              className={INPUT_SHELL}
             />
           </div>
           <div className="mt-3">
@@ -1688,9 +1704,9 @@ export function LegacyPacketEditor() {
               value={packet.customIdentity?.footerLabel || ""}
               onChange={(e) => updateCustomField("footerLabel", e.target.value)}
               placeholder="Footer label (optional)"
-              className="w-full px-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:ring-2 focus:ring-accent"
+              className={INPUT_SHELL}
             />
-            <p className="mt-1 text-xs text-muted">Shown above the name on the Sendset. Leave blank to hide it.</p>
+            <p className="mt-1 text-meta text-ink-2">Shown above the name on the Sendset. Leave blank to hide it.</p>
           </div>
           <div className="mt-3">
             <ImageUploadField
@@ -1705,7 +1721,7 @@ export function LegacyPacketEditor() {
               value={packet.customIdentity?.headshotUrl || ""}
               onChange={(url) => updateCustomField("headshotUrl", url)}
               placeholder="Headshot URL, or upload"
-              preview={<img src={packet.customIdentity!.headshotUrl} alt="Headshot" className="w-10 h-10 rounded-full object-cover flex-shrink-0 border border-border" />}
+              preview={<img src={packet.customIdentity!.headshotUrl} alt="Headshot" className="w-10 h-10 rounded-full object-cover flex-shrink-0 border border-line" />}
             />
           </div>
           <input
@@ -1713,11 +1729,11 @@ export function LegacyPacketEditor() {
             value={packet.customIdentity?.websiteUrl || ""}
             onChange={(e) => updateCustomField("websiteUrl", e.target.value)}
             placeholder="Website URL (optional)"
-            className="mt-2 w-full px-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:ring-2 focus:ring-accent"
+            className={`${INPUT_SHELL} mt-2`}
           />
 
           <div className="mt-4">
-            <label className="block text-xs font-medium uppercase tracking-widest text-muted mb-2">
+            <label className="block text-meta font-medium uppercase tracking-widest text-ink-2 mb-2">
               Links (optional)
             </label>
             {(packet.customIdentity?.links.length ?? 0) > 0 && (
@@ -1729,20 +1745,20 @@ export function LegacyPacketEditor() {
                       value={link.label}
                       onChange={(e) => updateCustomLink(index, "label", e.target.value)}
                       placeholder="Label (e.g. Facebook)"
-                      className="w-36 flex-shrink-0 px-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:ring-2 focus:ring-accent"
+                      className={`${INPUT_SHELL} w-36 flex-shrink-0`}
                     />
                     <input
                       type="url"
                       value={link.url}
                       onChange={(e) => updateCustomLink(index, "url", e.target.value)}
                       placeholder="https://..."
-                      className="flex-1 min-w-0 px-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:ring-2 focus:ring-accent"
+                      className={`${INPUT_SHELL} min-w-0 flex-1`}
                     />
                     <button
                       type="button"
                       onClick={() => removeCustomLink(index)}
                       aria-label="Remove link"
-                      className="text-muted hover:text-red-600 px-1 flex-shrink-0"
+                      className="text-ink-2 hover:text-red-600 px-1 flex-shrink-0"
                     >
                       ×
                     </button>
@@ -1753,7 +1769,7 @@ export function LegacyPacketEditor() {
             <button
               type="button"
               onClick={addCustomLink}
-              className="text-sm text-accent hover:text-accent-hover font-medium"
+              className="text-body text-mark hover:text-mark/80 font-medium"
             >
               + Add link
             </button>
@@ -1763,11 +1779,11 @@ export function LegacyPacketEditor() {
 
       {/* Sender chooser — pinned at the very bottom, where the signature sits.
           The selected sender's details (if any) render just above this block. */}
-      <div className="mb-8 border border-border rounded-xl p-4">
-        <label className="block text-xs font-medium uppercase tracking-widest text-muted mb-1">
+      <div className="mb-8 border border-line rounded-[var(--radius-panel)] p-4">
+        <label className="block text-meta font-medium uppercase tracking-widest text-ink-2 mb-1">
           Sender
         </label>
-        <p className="text-xs text-muted mb-3">
+        <p className="text-meta text-ink-2 mb-3">
           Who is this packet from? Applies to this packet only.
         </p>
         <div className="space-y-2">
@@ -1778,7 +1794,7 @@ export function LegacyPacketEditor() {
           ] as { value: IdentityMode; title: string; desc: string }[]).map((opt) => (
             <label
               key={opt.value}
-              className={`flex items-start gap-3 rounded-lg border border-border p-3 cursor-pointer transition-colors ${
+              className={`flex items-start gap-3 rounded-[var(--radius-control)] border border-line p-3 cursor-pointer transition-colors ${
                 packet.identityMode === opt.value ? "ring-2 ring-accent" : "hover:border-muted"
               }`}
             >
@@ -1791,15 +1807,15 @@ export function LegacyPacketEditor() {
                 className="mt-0.5"
               />
               <span>
-                <span className="block text-sm font-medium text-foreground">{opt.title}</span>
-                <span className="block text-sm text-muted">{opt.desc}</span>
+                <span className="block text-body font-medium text-ink">{opt.title}</span>
+                <span className="block text-body text-ink-2">{opt.desc}</span>
               </span>
             </label>
           ))}
         </div>
 
         {packet.identityMode === "none" && (
-          <p className="mt-4 text-xs text-muted">
+          <p className="mt-4 text-meta text-ink-2">
             No sender will appear on this packet — no name, logo, or contact footer.
           </p>
         )}
@@ -1815,39 +1831,37 @@ export function LegacyPacketEditor() {
         }}
       />
 
-      {/* Action bar */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-border px-5 py-3">
-        <div className="max-w-2xl mx-auto flex items-center justify-between">
-          <button
-            onClick={() => window.open(`/preview/${packet.id}`, "_blank")}
-            className="text-sm text-accent hover:text-accent-hover font-medium"
-          >
+      {/* THE BAR THAT SENDS THE THING. It is the only place on this screen
+          where an action leaves the workspace, so it keeps its own ground and
+          the one hairline separating it from the page — and it now matches the
+          page's width instead of the old 2xl column, so Preview no longer sat
+          inboard of everything above it.
+
+          Publish is the ink primary. Copy link WAS a blue-on-blue bordered
+          button, which made the thing you do after publishing louder than
+          publishing; it is a plain secondary now. Unpublish keeps `danger`,
+          which is quiet until it is pointed at. */}
+      <div className="fixed bottom-0 left-0 right-0 bg-ground/95 backdrop-blur-sm border-t border-line px-4 sm:px-6 py-2.5 sm:py-3">
+        <div className="max-w-3xl mx-auto flex items-center justify-between gap-2">
+          <Button variant="ghost" size="md"
+            onClick={() => window.open(`/preview/${packet.id}`, "_blank")}>
             Preview
-          </button>
+          </Button>
           <div className="flex items-center gap-2">
             {packet.status === "published" && (
               <>
-                <button
-                  onClick={copyPacketLink}
-                  className="px-4 py-2 rounded-lg text-sm font-medium text-accent bg-blue-50 hover:bg-blue-100 border border-blue-100 transition-colors"
-                >
-                  {copiedLink ? "Copied!" : "Copy Link"}
-                </button>
-                <button
-                  onClick={handleUnpublish}
-                  className="text-sm text-muted hover:text-red-500 transition-colors"
-                >
+                <Button variant="secondary" size="md" onClick={copyPacketLink}>
+                  {copiedLink ? "Copied!" : "Copy link"}
+                </Button>
+                <Button variant="danger" size="md" onClick={handleUnpublish}>
                   Unpublish
-                </button>
+                </Button>
               </>
             )}
             {packet.status === "draft" && (
-              <button
-                onClick={() => publishPacket(false)}
-                className="px-6 py-2 rounded-lg bg-accent hover:bg-accent-hover text-white text-sm font-medium transition-colors"
-              >
+              <Button variant="primary" size="md" onClick={() => publishPacket(false)}>
                 Publish
-              </button>
+              </Button>
             )}
           </div>
         </div>
@@ -1855,33 +1869,32 @@ export function LegacyPacketEditor() {
 
       {/* Publish success modal */}
       {showPublishModal && (
-        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-5">
-          <div className="bg-white rounded-2xl p-6 max-w-sm w-full text-center">
-            <div className="text-4xl mb-3">🎉</div>
-            <h2 className="text-xl font-bold text-foreground mb-2">Your Sendset is live!</h2>
-            <p className="text-sm text-muted mb-4">Share this link with your client:</p>
-            <div className="bg-surface border border-border rounded-lg px-3 py-2 text-sm text-foreground mb-4 break-all">
+        <div className={MODAL_SCRIM}>
+          <div className={`${MODAL_PANEL} max-w-sm p-6 text-center`}>
+            {/* NO CONFETTI EMOJI. A 4xl 🎉 was the largest thing in a dialog
+                whose actual job is to hand over a link — the same call as the
+                Dashboard's 📦, and the link is the celebration. */}
+            <h2 className={MODAL_TITLE}>Your Sendset is live</h2>
+            <p className={MODAL_LEDE}>Share this link with your client:</p>
+            {/* The link is the content of this dialog, so it is set in the face
+                a link is read in rather than in the interface face. */}
+            <div className="mt-4 break-all rounded-[var(--radius-control)] bg-ground-2 px-3 py-2.5
+                            font-mono text-meta text-ink">
               {typeof window !== "undefined" ? `${window.location.origin}/p/${packet.slug}` : ""}
             </div>
-            <button
-              onClick={() => {
-                copyPacketLink();
-                setShowPublishModal(false);
-              }}
-              className="w-full px-4 py-2.5 rounded-lg bg-accent hover:bg-accent-hover text-white text-sm font-medium transition-colors mb-2"
-            >
-              Copy Link
-            </button>
-            <button
-              onClick={() => setShowPublishModal(false)}
-              className="text-sm text-muted hover:text-foreground"
-            >
+            <Button variant="primary" size="md" className="mt-4 w-full"
+              onClick={() => { copyPacketLink(); setShowPublishModal(false); }}>
+              Copy link
+            </Button>
+            <Button variant="ghost" size="md" className="mt-1 w-full"
+              onClick={() => setShowPublishModal(false)}>
               Close
-            </button>
+            </Button>
           </div>
         </div>
       )}
-    </main>
+      </main>
+    </div>
   );
 }
 
@@ -1909,7 +1922,7 @@ function SortableSection({
     opacity: isDragging ? 0.5 : 1,
   };
   return (
-    <div ref={setNodeRef} style={style} className="mb-8 border border-border rounded-xl p-4">
+    <div ref={setNodeRef} style={style} className="mb-8 border border-line rounded-[var(--radius-panel)] p-4">
       {children({ attributes, listeners })}
     </div>
   );
@@ -2006,7 +2019,7 @@ function SortableDetailRow({
         {...attributes}
         {...listeners}
         aria-label={named ? `Reorder detail: ${named}` : "Reorder detail"}
-        className="text-gray-300 hover:text-gray-600 cursor-grab active:cursor-grabbing flex-shrink-0 touch-none p-1 -ml-1"
+        className="text-ink-3/45 hover:text-ink-2 cursor-grab active:cursor-grabbing flex-shrink-0 touch-none p-1 -ml-1"
       >
         <svg className="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
           <circle cx="7" cy="4" r="1.5" />
@@ -2022,18 +2035,18 @@ function SortableDetailRow({
         value={detail.label}
         onChange={(e) => onUpdateDetail(itemId, detail.id, "label", e.target.value)}
         placeholder="Label"
-        className="flex-1 px-2.5 py-1.5 rounded border border-border text-sm focus:outline-none focus:ring-2 focus:ring-accent placeholder:text-gray-300"
+        className="flex-1 px-2.5 py-1.5 rounded border border-line text-body focus:outline-none focus:ring-2 focus:ring-mark/15 placeholder:text-ink-3/45"
       />
       <input
         type="text"
         value={detail.value}
         onChange={(e) => onUpdateDetail(itemId, detail.id, "value", e.target.value)}
         placeholder="Value"
-        className="flex-1 px-2.5 py-1.5 rounded border border-border text-sm focus:outline-none focus:ring-2 focus:ring-accent placeholder:text-gray-300"
+        className="flex-1 px-2.5 py-1.5 rounded border border-line text-body focus:outline-none focus:ring-2 focus:ring-mark/15 placeholder:text-ink-3/45"
       />
       <button
         onClick={() => onRemoveDetail(itemId, detail.id)}
-        className="text-sm text-red-400 hover:text-red-600 px-1"
+        className="text-body text-red-400 hover:text-red-600 px-1"
         aria-label={named ? `Remove detail: ${named}` : "Remove detail"}
       >
         ×
@@ -2111,14 +2124,14 @@ function ItemEditor({
   const otherSections = sections.filter((s) => s.id !== item.sectionId);
 
   return (
-    <div ref={setNodeRef} style={style} className="border border-border rounded-lg p-3 bg-white">
+    <div ref={setNodeRef} style={style} className="border border-line rounded-[var(--radius-control)] p-3 bg-ground">
       <div className="flex items-start justify-between gap-2">
         <button
           type="button"
           {...attributes}
           {...listeners}
           aria-label="Drag to reorder"
-          className="text-gray-400 hover:text-gray-700 cursor-grab active:cursor-grabbing flex-shrink-0 touch-none -ml-1 p-1"
+          className="text-ink-3 hover:text-ink cursor-grab active:cursor-grabbing flex-shrink-0 touch-none -ml-1 p-1"
         >
           <svg className="w-4 h-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
             <circle cx="7" cy="4" r="1.5" />
@@ -2135,7 +2148,7 @@ function ItemEditor({
           onChange={(e) => onUpdateField(item.id, "title", e.target.value)}
           placeholder={titleLabelFor(item)}
           aria-label={titleLabelFor(item)}
-          className="flex-1 font-medium text-sm text-foreground bg-transparent border-none outline-none placeholder:text-gray-300"
+          className="flex-1 font-medium text-body text-ink bg-transparent border-none outline-none placeholder:text-ink-3/45"
         />
         <div className="flex items-center gap-1 flex-shrink-0">
           {otherSections.length > 0 && (
@@ -2145,7 +2158,7 @@ function ItemEditor({
                 if (e.target.value) onMove(item.id, e.target.value);
               }}
               aria-label="Move to section"
-              className="text-sm text-muted border border-border rounded px-1 py-0.5 bg-white max-w-[8rem] focus:outline-none focus:ring-2 focus:ring-accent"
+              className="text-body text-ink-2 border border-line rounded px-1 py-0.5 bg-ground max-w-[8rem] focus:outline-none focus:ring-2 focus:ring-mark/15"
             >
               <option value="">Move to…</option>
               {otherSections.map((s) => (
@@ -2157,13 +2170,13 @@ function ItemEditor({
           )}
           <button
             onClick={() => setExpanded(!expanded)}
-            className="text-sm text-muted hover:text-foreground px-1"
+            className="text-body text-ink-2 hover:text-ink px-1"
           >
             {expanded ? "▾" : "▸"}
           </button>
           <button
             onClick={() => onDelete(item.id)}
-            className="text-sm text-red-400 hover:text-red-600 px-1"
+            className="text-body text-red-400 hover:text-red-600 px-1"
           >
             ×
           </button>
@@ -2183,13 +2196,13 @@ function ItemEditor({
 
           {/* Address */}
           <div className="flex items-center gap-2">
-            <span className="text-gray-400 text-sm flex-shrink-0">📍</span>
+            <span className="text-ink-3 text-body flex-shrink-0">📍</span>
             <input
               type="text"
               value={item.address}
               onChange={(e) => onUpdateField(item.id, "address", e.target.value)}
               placeholder="Address (auto-links to Google Maps)"
-              className="flex-1 px-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:ring-2 focus:ring-accent placeholder:text-gray-300"
+              className={`${INPUT_SHELL} flex-1`}
             />
           </div>
 
@@ -2199,14 +2212,14 @@ function ItemEditor({
             onChange={(e) => onUpdateField(item.id, "description", e.target.value)}
             placeholder="Description"
             rows={2}
-            className="w-full px-3 py-2 rounded-lg border border-border text-sm resize-y focus:outline-none focus:ring-2 focus:ring-accent placeholder:text-gray-300"
+            className={`${INPUT_SHELL} resize-y`}
           />
 
           {/* Details */}
           <div>
             <div className="flex items-center justify-between mb-1">
-              <span className="text-xs font-medium text-muted uppercase tracking-wide">Details</span>
-              <button onClick={() => onAddDetail(item.id)} className="text-sm text-accent hover:text-accent-hover">
+              <span className="text-meta font-medium text-ink-2 uppercase tracking-wide">Details</span>
+              <button onClick={() => onAddDetail(item.id)} className="text-body text-mark hover:text-mark/80">
                 + Add
               </button>
             </div>
@@ -2221,8 +2234,8 @@ function ItemEditor({
           {/* Links */}
           <div>
             <div className="flex items-center justify-between mb-1">
-              <span className="text-xs font-medium text-muted uppercase tracking-wide">Links</span>
-              <button onClick={() => onAddLink(item.id)} className="text-sm text-accent hover:text-accent-hover">
+              <span className="text-meta font-medium text-ink-2 uppercase tracking-wide">Links</span>
+              <button onClick={() => onAddLink(item.id)} className="text-body text-mark hover:text-mark/80">
                 + Add
               </button>
             </div>
@@ -2233,18 +2246,18 @@ function ItemEditor({
                   value={link.url}
                   onChange={(e) => onUpdateLink(item.id, link.id, "url", e.target.value)}
                   placeholder="https://..."
-                  className="flex-[2] px-2.5 py-1.5 rounded border border-border text-sm focus:outline-none focus:ring-2 focus:ring-accent placeholder:text-gray-300"
+                  className="flex-[2] px-2.5 py-1.5 rounded border border-line text-body focus:outline-none focus:ring-2 focus:ring-mark/15 placeholder:text-ink-3/45"
                 />
                 <input
                   type="text"
                   value={link.label}
                   onChange={(e) => onUpdateLink(item.id, link.id, "label", e.target.value)}
                   placeholder="Label"
-                  className="flex-1 px-2.5 py-1.5 rounded border border-border text-sm focus:outline-none focus:ring-2 focus:ring-accent placeholder:text-gray-300"
+                  className="flex-1 px-2.5 py-1.5 rounded border border-line text-body focus:outline-none focus:ring-2 focus:ring-mark/15 placeholder:text-ink-3/45"
                 />
                 <button
                   onClick={() => onRemoveLink(item.id, link.id)}
-                  className="text-sm text-red-400 hover:text-red-600 px-1"
+                  className="text-body text-red-400 hover:text-red-600 px-1"
                 >
                   ×
                 </button>
@@ -2255,7 +2268,7 @@ function ItemEditor({
           {/* Photos */}
           <div>
             <div className="flex items-center justify-between mb-1">
-              <span className="text-xs font-medium text-muted uppercase tracking-wide">Photos</span>
+              <span className="text-meta font-medium text-ink-2 uppercase tracking-wide">Photos</span>
               <div className="flex items-center gap-3">
                 {/* THE ACTION, NOT A STEP TOWARDS IT. Upload was previously
                     reachable only by pressing "+ Add" first and then noticing a
@@ -2263,10 +2276,10 @@ function ItemEditor({
                     most people want was two moves behind the thing most people
                     do not. Pasting a URL stays, one button along. */}
                 <label
-                  className={`text-sm ${
+                  className={`text-body ${
                     newPhotoUploading === item.id
-                      ? "text-muted pointer-events-none"
-                      : "text-accent hover:text-accent-hover cursor-pointer"}`}
+                      ? "text-ink-2 pointer-events-none"
+                      : "text-mark hover:text-mark/80 cursor-pointer"}`}
                 >
                   {newPhotoUploading === item.id ? "Uploading…" : "Upload"}
                   <input
@@ -2282,7 +2295,7 @@ function ItemEditor({
                     }}
                   />
                 </label>
-                <button onClick={() => onAddPhoto(item.id)} className="text-sm text-accent hover:text-accent-hover">
+                <button onClick={() => onAddPhoto(item.id)} className="text-body text-mark hover:text-mark/80">
                   + Add URL
                 </button>
               </div>
@@ -2297,11 +2310,11 @@ function ItemEditor({
                       <img
                         src={photo.url}
                         alt=""
-                        className="w-16 h-16 rounded-lg object-cover border border-border"
+                        className="w-16 h-16 rounded-[var(--radius-control)] object-cover border border-line"
                       />
                       <button
                         onClick={() => onRemovePhoto(item.id, photo.id)}
-                        className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-red-500 text-white text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                        className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-red-500 text-white text-meta flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
                       >
                         ×
                       </button>
@@ -2320,14 +2333,14 @@ function ItemEditor({
                     onChange={(e) => onUpdatePhoto(item.id, photo.id, e.target.value)}
                     placeholder="Paste image URL..."
                     autoFocus
-                    className="flex-1 px-2.5 py-1.5 rounded border border-border text-sm focus:outline-none focus:ring-2 focus:ring-accent placeholder:text-gray-300"
+                    className="flex-1 px-2.5 py-1.5 rounded border border-line text-body focus:outline-none focus:ring-2 focus:ring-mark/15 placeholder:text-ink-3/45"
                   />
                   {/* Upload sits BESIDE the URL field, not instead of it. A
                       professional who already keeps images somewhere should not
                       have to re-upload them to keep working. */}
                   <label
-                    className={`shrink-0 px-2.5 py-1.5 rounded border border-border text-sm cursor-pointer
-                                hover:bg-gray-50 ${photoUploading === photo.id ? "opacity-60 pointer-events-none" : ""}`}
+                    className={`shrink-0 px-2.5 py-1.5 rounded border border-line text-body cursor-pointer
+                                hover:bg-ground-2 ${photoUploading === photo.id ? "opacity-60 pointer-events-none" : ""}`}
                   >
                     {photoUploading === photo.id ? "Uploading…" : "Upload"}
                     <input
@@ -2345,13 +2358,13 @@ function ItemEditor({
                   </label>
                   <button
                     onClick={() => onRemovePhoto(item.id, photo.id)}
-                    className="text-sm text-red-400 hover:text-red-600 px-1"
+                    className="text-body text-red-400 hover:text-red-600 px-1"
                   >
                     ×
                   </button>
                 </div>
               ))}
-            {photoError && <p className="text-sm text-red-600 mt-1">{photoError}</p>}
+            {photoError && <p className="text-body text-red-600 mt-1">{photoError}</p>}
           </div>
 
           {/* TWO FIELDS, TWO AUDIENCES — and the labels have to make that
@@ -2362,7 +2375,7 @@ function ItemEditor({
 
           {/* Shown to the client. */}
           <div>
-            <label className="block text-xs font-medium text-amber-800 mb-1">
+            <label className="block text-meta font-medium text-amber-800 mb-1">
               Highlight for Client
               <span className="ml-1.5 font-normal text-amber-700/80">
                 Shown to your client as a highlighted callout.
@@ -2373,7 +2386,7 @@ function ItemEditor({
               onChange={(e) => onUpdateField(item.id, "highlight", e.target.value)}
               placeholder="e.g. I checked and they heat their pool to 82 degrees, because you asked."
               rows={2}
-              className="w-full px-3 py-2 rounded-lg border border-amber-200 bg-amber-50 text-sm resize-y focus:outline-none focus:ring-2 focus:ring-amber-300 placeholder:text-amber-400/70"
+              className="w-full px-3 py-2 rounded-[var(--radius-control)] border border-amber-200 bg-amber-50 text-body resize-y focus:outline-none focus:ring-2 focus:ring-amber-300 placeholder:text-amber-400/70"
             />
           </div>
 
@@ -2381,9 +2394,9 @@ function ItemEditor({
               amber box above so the two are not mistaken for each other at a
               glance — same shape would invite writing a client note here. */}
           <div>
-            <label className="block text-xs font-medium text-muted mb-1">
+            <label className="block text-meta font-medium text-ink-2 mb-1">
               Private Notes
-              <span className="ml-1.5 font-normal text-muted/80">
+              <span className="ml-1.5 font-normal text-ink-2/80">
                 Only you see this. Never shown to your client, or in print or email.
               </span>
             </label>
@@ -2392,29 +2405,29 @@ function ItemEditor({
               onChange={(e) => onUpdateField(item.id, "notes", e.target.value)}
               placeholder="For your reference only"
               rows={2}
-              className="w-full px-3 py-2 rounded-lg border border-border bg-surface text-sm resize-y focus:outline-none focus:ring-2 focus:ring-gray-300 placeholder:text-gray-400"
+              className={`${INPUT_SHELL} resize-y bg-ground-2`}
             />
           </div>
 
           {/* Contacts — an ordered list; an item may have multiple people. */}
           <div>
             <div className="flex items-center justify-between">
-              <span className="text-xs font-medium text-muted">Contacts (people)</span>
+              <span className="text-meta font-medium text-ink-2">Contacts (people)</span>
               <button
                 onClick={() => onAddContact(item.id)}
-                className="text-sm text-accent hover:text-accent-hover font-medium"
+                className="text-body text-mark hover:text-mark/80 font-medium"
               >
                 + Add contact
               </button>
             </div>
             <div className="mt-2 space-y-2">
               {item.contacts.map((c, ci) => {
-                const cInput = "px-2.5 py-1.5 rounded border border-border text-sm focus:outline-none focus:ring-2 focus:ring-accent placeholder:text-gray-300";
+                const cInput = "px-2.5 py-1.5 rounded border border-line text-body focus:outline-none focus:ring-2 focus:ring-mark/15 placeholder:text-ink-3/45";
                 return (
-                  <div key={c.id} className="rounded-lg border border-border p-2">
+                  <div key={c.id} className="rounded-[var(--radius-control)] border border-line p-2">
                     <div className="flex items-center justify-between mb-1.5">
-                      <span className="text-xs font-medium text-muted">Contact {ci + 1}</span>
-                      <button onClick={() => onRemoveContact(item.id, c.id)} className="text-xs text-red-400 hover:text-red-600 font-medium">Remove</button>
+                      <span className="text-meta font-medium text-ink-2">Contact {ci + 1}</span>
+                      <button onClick={() => onRemoveContact(item.id, c.id)} className="text-meta text-red-400 hover:text-red-600 font-medium">Remove</button>
                     </div>
                     <div className="grid grid-cols-2 gap-2">
                       <input type="text" value={c.name} onChange={(e) => onUpdateContact(item.id, c.id, "name", e.target.value)} placeholder="Name" className={cInput} />
@@ -2441,19 +2454,19 @@ function OriginalInput({ text }: { text: string }) {
   const [open, setOpen] = useState(false);
 
   return (
-    <div className="mb-8 border border-border rounded-xl overflow-hidden">
+    <div className="mb-8 border border-line rounded-[var(--radius-panel)] overflow-hidden">
       <button
         onClick={() => setOpen(!open)}
-        className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-gray-50 transition-colors"
+        className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-ground-2 transition-colors"
       >
-        <span className="text-xs font-medium uppercase tracking-widest text-muted">
+        <span className="text-meta font-medium uppercase tracking-widest text-ink-2">
           Original Input
         </span>
-        <span className="text-xs text-muted">{open ? "▾ Hide" : "▸ Show"}</span>
+        <span className="text-meta text-ink-2">{open ? "▾ Hide" : "▸ Show"}</span>
       </button>
       {open && (
         <div className="px-4 pb-4">
-          <pre className="text-xs text-muted leading-relaxed whitespace-pre-wrap font-sans bg-gray-50 rounded-lg p-3 max-h-64 overflow-y-auto">
+          <pre className="text-meta text-ink-2 leading-relaxed whitespace-pre-wrap font-sans bg-ground-2 rounded-[var(--radius-control)] p-3 max-h-64 overflow-y-auto">
             {text}
           </pre>
         </div>
