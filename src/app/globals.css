@@ -22,11 +22,19 @@
    * none of them shared a vocabulary, which is exactly what "it looks
    * assembled" feels like from the inside.
    *
-   * THE GOVERNING IDEA: group with SPACE AND GROUND, not with borders. Almost
-   * everything here used to be a box wearing the same 1px hairline — cards,
-   * rows, panels and buttons alike — and that sameness is what reads as an
-   * admin panel. A border is spent only where a boundary would otherwise be
-   * genuinely ambiguous.
+   * THE GOVERNING IDEA: group with SPACE AND GROUND FIRST, and with a line only
+   * where those two cannot do the work. Almost everything here used to be a box
+   * wearing the same 1px hairline — cards, rows, panels and buttons alike — and
+   * that sameness is what reads as an admin panel.
+   *
+   * "ALMOST NO BOUNDARIES" IS NOT THE RULE, and reading it as one is how the
+   * first pass went wrong. Subtraction alone left a narrow column of text
+   * floating on white: quiet, but under-composed, and on a wide screen it read
+   * as unfinished rather than calm. What replaced the borders has to be as
+   * deliberate as what it replaced. So: ONE ground behind the page and ANOTHER
+   * in front of it, so a working surface is a surface rather than an absence;
+   * a line between sections, where the alternative is guessing where one ends.
+   * The test is whether a boundary earns its line, not whether lines are rare.
    *
    * These land BESIDE the tokens above rather than replacing them, so an
    * unconverted surface is untouched and reverting is deleting a file.
@@ -44,8 +52,17 @@
      darker than the others. Softening it to line-2 dropped it from 2.54:1 to
      1.45:1 against the page and quietly undid the fix it was shipped for. */
   --color-line-3: #a8a5a0;     /* a boundary that must not be missed: 2.45:1 */
-  --color-ground: #ffffff;
-  --color-ground-2: #faf9f8;   /* grouped surface; replaces most borders */
+  /* TWO PLANES, NOT ONE. The page recedes and the working surface sits on it.
+   * With both at #ffffff nothing was contained by anything, which is most of
+   * why a filtered result read as text loose on a page. */
+  --color-ground: #ffffff;     /* the working surface: lists, panels, forms */
+  /* `canvas`, NOT `page`. Tailwind resolves `text-*` against BOTH --text-* and
+   * --color-*, so a --color-page beside the existing --text-page silently
+   * turned `text-page` into a colour: the page heading kept its class, lost its
+   * size, and rendered near-white on white. A name may live in one namespace
+   * or the other, never both. Asserted in library-tokens.test.mts. */
+  --color-canvas: #f7f6f4;     /* the plane the working surface sits on */
+  --color-ground-2: #faf9f8;   /* a quiet band WITHIN a surface */
   --color-ground-3: #f2f0ed;   /* hover, inset, selected */
 
   /* Blue is demoted to meaning rather than decoration: links, selection and
@@ -53,6 +70,13 @@
    * single strongest "default SaaS dashboard" signal an interface can carry. */
   --color-mark: #2f5fb0;
   --color-mark-soft: #eef3fb;
+
+  /* Favorites. Amber-500 (#f59e0b) was chosen when a saturated blue was the
+   * loudest thing on the screen and a star had to compete with it. Demoting
+   * blue promoted the star by default, and it became the first thing the eye
+   * landed on — a filing mark outranking the names of the things filed. This
+   * is the same signal at the same size, carrying less voice. */
+  --color-favorite: #b8873b;
 
   /* Type. The old surface was text-sm/text-xs almost everywhere — 333 of 375
    * uses — and that cramping is most of what felt administrative. */

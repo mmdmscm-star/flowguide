@@ -11,7 +11,7 @@ import { containerKey, dragId, parseDragId, planDrop } from "@/lib/library-drag"
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import type { LibrarySnapshot } from "@/lib/library-adapter";
 import type { LibraryVocabulary } from "@/lib/library-organization";
-import { LibraryRow, type LibraryRowProps } from "@/components/library/library-row";
+import { LibraryRow, FavoriteStar, type LibraryRowProps } from "@/components/library/library-row";
 
 // THE LIBRARY, WITH ITS STRUCTURE SHOWING.
 //
@@ -465,9 +465,18 @@ export function LibraryStructureView({
   const anyOpen = headingIds.some(isOpen);
 
   const tree = (
-    <div className="space-y-5">
+    // A LINE BETWEEN SECTIONS, AND NOWHERE ELSE INSIDE THE LIST.
+    //
+    // Space alone separates a group from loose items well, because those sit at
+    // different depths and the rail already says so. Two SECTIONS are peers at
+    // the same depth, so the only thing distinguishing "more of this section"
+    // from "a new section" was the weight of a heading several rows up — and on
+    // a long list that reading has to be redone every time the eye lands. This
+    // is one hairline per boundary, drawn between sections and never around
+    // them: the list is still one list, with the places it turns marked.
+    <div>
       {notice && (
-        <p role="status" className="rounded-md bg-amber-50 px-2.5 py-1.5 text-xs text-amber-900">
+        <p role="status" className="mb-3 rounded-[var(--radius-control)] bg-amber-50 px-3 py-2 text-meta text-amber-900">
           {notice}
         </p>
       )}
@@ -475,7 +484,7 @@ export function LibraryStructureView({
           A single section already has its own chevron, so a global toggle
           beside it would be two ways to do the same thing. */}
       {headingIds.length > 1 && (
-        <div className="mb-1 flex justify-end">
+        <div className="flex justify-end pb-2">
           <button
             type="button"
             onClick={() => setOpen(anyOpen ? {} : Object.fromEntries(headingIds.map((id) => [id, true])))}
@@ -485,6 +494,11 @@ export function LibraryStructureView({
           </button>
         </div>
       )}
+      {/* The divided container starts HERE, below the collapse control. Wrapping
+          that control in it too drew a rule under it, which made a one-line
+          toggle look like a band of its own — a divider announcing a boundary
+          that does not exist. */}
+      <div className="divide-y divide-line">
       {sections.map((sec, si) => {
         const mine = groups.filter((g) => g.sectionId === sec.id);
         const loose = container(sec.id, null);
@@ -492,7 +506,7 @@ export function LibraryStructureView({
           + (loose?.total ?? 0);
         const shut = !isOpen(sec.id);
         return (
-          <section key={sec.id}>
+          <section key={sec.id} className="py-4 first:pt-1 last:pb-1">
             <SortableHeading id={dragId("section", sec.id)} disabled={!dragEnabled || busy}
               highlight={dragging?.kind === "item" && overHeading === dragId("section", sec.id)}>
               {(h) => (
@@ -605,7 +619,7 @@ export function LibraryStructureView({
       {/* WHAT HAS NOT BEEN FILED, and that is a fine place for it to stay. Not
           a section, not called Uncategorized, and not something to finish. */}
       {data.unorganized.total > 0 && (
-        <section>
+        <section className="py-4 first:pt-1 last:pb-1">
           <p className="text-micro font-semibold uppercase tracking-[0.08em] text-ink-3">
             Everything else <span className="ml-1.5 font-medium tabular-nums">{data.unorganized.total}</span>
           </p>
@@ -613,6 +627,7 @@ export function LibraryStructureView({
           {itemList(data.unorganized, "")}
         </section>
       )}
+      </div>
     </div>
   );
 
@@ -872,13 +887,7 @@ function StarButton({ item, onToggle }: { item: LibrarySnapshot; onToggle: (id: 
   // low-stakes gesture and should not feel like submitting a form.
   const [on, setOn] = useState(item.isFavorite === true);
   return (
-    <button type="button"
-      onClick={() => { const next = !on; setOn(next); onToggle(item.id, next); }}
-      aria-pressed={on}
-      aria-label={on ? `Remove ${item.title || "this item"} from favorites` : `Add ${item.title || "this item"} to favorites`}
-      className={`flex-none px-0.5 sm:px-1 text-lg leading-none transition-colors ${
-        on ? "text-amber-500 hover:text-amber-600" : "text-gray-300 hover:text-amber-500"}`}>
-      {on ? "★" : "☆"}
-    </button>
+    <FavoriteStar on={on} label={item.title || "this item"}
+      onClick={() => { const next = !on; setOn(next); onToggle(item.id, next); }} />
   );
 }

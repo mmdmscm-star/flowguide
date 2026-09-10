@@ -1,7 +1,8 @@
 "use client";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { type LibrarySnapshot } from "@/lib/library-adapter";
-import { LibraryRow, type LibraryRowProps } from "@/components/library/library-row";
+import { LibraryRow, FavoriteStar, type LibraryRowProps } from "@/components/library/library-row";
+import { INPUT_SHELL } from "@/components/ui/field";
 import type { LibraryVocabulary } from "@/lib/library-organization";
 import type { GroupRow, SectionRow } from "@/lib/library-structure";
 
@@ -209,22 +210,22 @@ export function LibraryList({
           value={innerQ}
           onChange={(e) => setInnerQ(e.target.value)}
           placeholder="Search your Library…"
-          className="w-full px-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:ring-2 focus:ring-accent placeholder:text-gray-400"
+          className={INPUT_SHELL}
         />
       )}
 
-      {error && <p className="mt-3 text-sm text-red-700">{error}</p>}
+      {error && <p className="mt-3 text-meta text-red-700">{error}</p>}
 
       {loading && items.length === 0 && (
-        <p className="mt-4 text-xs text-muted">Loading…</p>
+        <p className="px-3 py-8 text-center text-meta text-ink-3">Loading…</p>
       )}
 
       {!loading && items.length === 0 && (
         q
-          ? <p className="mt-4 text-sm text-muted">Nothing in your Library matches “{q}”.</p>
-          : <div className="mt-4">
+          ? <p className="px-3 py-10 text-center text-body text-ink-2">Nothing in your Library matches “{q}”.</p>
+          : <div>
               {emptyHint ?? (
-                <p className="text-sm text-muted">
+                <p className="px-3 py-10 text-center text-body text-ink-2">
                   Your Library is empty. Save an item from a Sendset to reuse it later.
                 </p>
               )}
@@ -244,18 +245,9 @@ export function LibraryList({
             controls: rowSlot?.(s).controls,
             muted: rowSlot?.(s).muted,
             star: onToggleFavorite ? (
-              <button
-                type="button"
+              <FavoriteStar on={isStarred(s)} label={s.title || "this item"}
                 onClick={() => { const next = !isStarred(s);
-                  setStarred((m) => ({ ...m, [s.id]: next })); onToggleFavorite(s.id, next); }}
-                aria-pressed={isStarred(s)}
-                aria-label={isStarred(s) ? `Remove ${s.title || "this item"} from favorites` : `Add ${s.title || "this item"} to favorites`}
-                className={`flex-none px-1 text-lg leading-none transition-colors ${
-                  isStarred(s) ? "text-amber-500 hover:text-amber-600" : "text-gray-300 hover:text-amber-500"
-                }`}
-              >
-                {isStarred(s) ? "★" : "☆"}
-              </button>
+                  setStarred((m) => ({ ...m, [s.id]: next })); onToggleFavorite(s.id, next); }} />
             ) : null,
           };
           return renderRow
@@ -272,7 +264,7 @@ export function LibraryList({
             type="button"
             onClick={loadMore}
             disabled={loadingMore}
-            className="text-sm font-medium text-accent hover:text-accent-hover disabled:opacity-60"
+            className="text-meta font-medium text-mark hover:text-mark/80 disabled:opacity-60"
           >
             {loadingMore ? "Loading…" : "Show more"}
           </button>

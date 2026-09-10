@@ -1,4 +1,7 @@
 "use client";
+import { Button } from "@/components/ui/button";
+import { INPUT_SHELL } from "@/components/ui/field";
+import { MODAL_PANEL, MODAL_TITLE } from "@/components/ui/modal";
 
 import { useState } from "react";
 import { PHOTO_ACCEPT_ATTR } from "@/lib/photo-upload";
@@ -234,8 +237,10 @@ export function BlockItemEditor({
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
 
-  const field = "w-full px-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:ring-2 focus:ring-accent placeholder:text-gray-300";
-  const smallBtn = "text-xs font-medium text-accent hover:text-accent-hover";
+  const field = INPUT_SHELL;
+  // Quiet, and the same quiet everywhere: these add a row to a group, they do
+// not act on the item. Blue would put a dozen of them above the fields.
+  const smallBtn = "text-meta font-medium text-ink-2 hover:text-ink transition-colors";
 
   async function handleSave() {
     setError("");
@@ -292,38 +297,38 @@ export function BlockItemEditor({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 overflow-y-auto p-4" role="dialog">
-      <div className="w-full max-w-lg my-8 rounded-2xl bg-white shadow-xl">
-        <div className="sticky top-0 flex items-center gap-3 px-5 py-3 border-b border-border bg-white rounded-t-2xl">
-          <h2 className="text-sm font-semibold text-foreground">Edit item</h2>
-          <button onClick={onClose} disabled={busy} className="ml-auto text-sm text-muted hover:text-foreground disabled:opacity-40">Cancel</button>
-          <button onClick={handleSave} disabled={busy} className="text-sm font-medium text-white bg-accent hover:bg-accent-hover px-4 py-1.5 rounded-lg disabled:opacity-50">
+    <div className="fixed inset-0 z-50 flex items-start justify-center bg-ink/25 backdrop-blur-[2px] overflow-y-auto p-4" role="dialog">
+      <div className={`${MODAL_PANEL} max-w-xl my-8 max-h-none`}>
+        <div className="sticky top-0 z-10 flex items-center gap-2 px-5 py-3.5 border-b border-line bg-ground/95 backdrop-blur-sm rounded-t-[var(--radius-panel)]">
+          <h2 className={MODAL_TITLE}>Edit item</h2>
+          <Button variant="ghost" size="sm" className="ml-auto" onClick={onClose} disabled={busy}>Cancel</Button>
+          <Button variant="primary" size="sm" onClick={handleSave} disabled={busy}>
             {busy ? "Saving…" : "Save"}
-          </button>
+          </Button>
         </div>
 
         <div className="px-5 py-4 space-y-4">
-          {error && <p className="text-xs text-red-600">{error}</p>}
+          {error && <p className="text-meta text-red-700">{error}</p>}
 
           <label className="block">
-            <span className="text-xs font-medium text-muted">Title</span>
+            <span className="text-meta font-medium text-ink-2">Title</span>
             <input value={title} disabled={busy} onChange={(e) => setTitle(e.target.value)} placeholder="Item title" className={field} />
           </label>
 
           <label className="block">
-            <span className="text-xs font-medium text-muted">Address</span>
+            <span className="text-meta font-medium text-ink-2">Address</span>
             <input value={address} disabled={busy} onChange={(e) => setAddress(e.target.value)} placeholder="Address (auto-links to Google Maps)" className={field} />
           </label>
 
           <label className="block">
-            <span className="text-xs font-medium text-muted">Description</span>
+            <span className="text-meta font-medium text-ink-2">Description</span>
             <textarea value={description} disabled={busy} onChange={(e) => setDescription(e.target.value)} rows={2} placeholder="Description" className={field} />
           </label>
 
           {/* Two audiences, said out loud in both labels — see the same pair
               in the legacy editor for why the wording is load-bearing. */}
           <label className="block">
-            <span className="text-xs font-medium text-amber-800">
+            <span className="text-meta font-medium text-amber-800">
               Highlight for Client
               <span className="ml-1.5 font-normal text-amber-700/80">Shown to your client.</span>
             </span>
@@ -332,9 +337,9 @@ export function BlockItemEditor({
           </label>
 
           <label className="block">
-            <span className="text-xs font-medium text-muted">
+            <span className="text-meta font-medium text-ink-2">
               Private Notes
-              <span className="ml-1.5 font-normal text-muted/80">Only you see this.</span>
+              <span className="ml-1.5 font-normal text-ink-3">Only you see this.</span>
             </span>
             <textarea value={notes} disabled={busy} onChange={(e) => setNotes(e.target.value)} rows={2}
               placeholder="For your reference only" className={field} />
@@ -345,9 +350,9 @@ export function BlockItemEditor({
               Library entry: none of it is copied into a FlowGuide, and none of
               it ever reaches a recipient. */}
           {organization && (
-            <div className="rounded-lg border border-dashed border-border bg-gray-50/60 p-3">
+            <div className="rounded-[var(--radius-control)] bg-ground-2 p-3.5">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-medium uppercase tracking-wide text-muted">
+                <span className="text-micro font-medium uppercase tracking-[0.07em] text-ink-3">
                   Library organization
                 </span>
                 <button
@@ -361,7 +366,7 @@ export function BlockItemEditor({
                   {isFavorite ? "★" : "☆"}
                 </button>
               </div>
-              <p className="mt-1 text-xs text-muted">
+              <p className="mt-1.5 text-meta text-ink-3">
                 Only you see this. It is how you find this again — it is never copied
                 into a Sendset.
               </p>
@@ -375,18 +380,18 @@ export function BlockItemEditor({
                   This used to say "use Organize", which now names a mode that
                   hides the drag handles. It points at the two things that
                   actually move an item instead. */}
-              <p className="mt-3 text-xs text-muted">
+              <p className="mt-3 text-meta text-ink-3">
                 {locationLabel
-                  ? <>In <span className="font-medium text-foreground">{locationLabel}</span>. Drag it in your Library to move it, or use Move… on its row.</>
+                  ? <>In <span className="font-medium text-ink">{locationLabel}</span>. Drag it in your Library to move it, or use Move… on its row.</>
                   : <>Not in a section. Drag it into one, or use Move… on its row.</>}
               </p>
 
-              <label className="mt-3 block text-xs text-muted">Labels</label>
+              <label className="mt-3 block text-meta font-medium text-ink-2">Labels</label>
               {labels.length > 0 && (
                 <div className="mb-1.5 flex flex-wrap gap-1.5">
                   {labels.map((l) => (
-                    <span key={l} className="inline-flex items-center gap-1 rounded-full border border-border
-                                             bg-white px-2 py-0.5 text-xs text-foreground">
+                    <span key={l} className="inline-flex items-center gap-1 rounded-full
+                                             bg-ground-3 px-2.5 py-1 text-micro font-medium text-ink-2">
                       {l}
                       <button
                         type="button"
@@ -424,7 +429,7 @@ export function BlockItemEditor({
           {/* Details */}
           <div>
             <div className="flex items-center justify-between mb-1">
-              <span className="text-xs font-medium text-muted">Details</span>
+              <span className="text-meta font-medium text-ink-2">Details</span>
               <button className={smallBtn} disabled={busy} onClick={() => setDetails((d) => [...d, draftDetail({ label: "", value: "" })])}>+ Add detail</button>
             </div>
             <DndContext
@@ -456,7 +461,7 @@ export function BlockItemEditor({
           {/* Links */}
           <div>
             <div className="flex items-center justify-between mb-1">
-              <span className="text-xs font-medium text-muted">Links</span>
+              <span className="text-meta font-medium text-ink-2">Links</span>
               <button className={smallBtn} disabled={busy} onClick={() => setLinks((l) => [...l, { url: "", label: "" }])}>+ Add link</button>
             </div>
             <div className="space-y-2">
@@ -473,7 +478,7 @@ export function BlockItemEditor({
           {/* Photos */}
           <div>
             <div className="flex items-center justify-between mb-1">
-              <span className="text-xs font-medium text-muted">Photos</span>
+              <span className="text-meta font-medium text-ink-2">Photos</span>
               <div className="flex items-center gap-2">
                 {/* UPLOAD FIRST, because it is what most people want and it was
                     the one you could not see. Pasting a URL stays for someone
@@ -498,7 +503,7 @@ export function BlockItemEditor({
                 <button className={smallBtn} disabled={busy} onClick={() => setPhotos((p) => [...p, { url: "" }])}>+ Add URL</button>
               </div>
             </div>
-            {imageError && <p className="mb-1 text-sm text-red-600">{imageError}</p>}
+            {imageError && <p className="mb-1 text-meta text-red-700">{imageError}</p>}
             <div className="space-y-2">
               {photos.map((p, i) => (
                 <div key={i} className="flex gap-2">
@@ -512,16 +517,16 @@ export function BlockItemEditor({
           {/* Contacts — an ordered list; a community may legitimately have several people. */}
           <div>
             <div className="flex items-center justify-between mb-1">
-              <span className="text-xs font-medium text-muted">Contacts (people)</span>
+              <span className="text-meta font-medium text-ink-2">Contacts (people)</span>
               <button className={smallBtn} disabled={busy} onClick={() => setContacts((cs) => [...cs, emptyContact()])}>+ Add contact</button>
             </div>
             <div className="space-y-2">
               {contacts.map((c, i) => {
                 const up = (patch: Partial<Contact>) => setContacts((arr) => arr.map((x, j) => j === i ? { ...x, ...patch } : x));
                 return (
-                  <div key={i} className="rounded-lg border border-border p-2">
+                  <div key={i} className="rounded-[var(--radius-control)] bg-ground-2 p-3">
                     <div className="flex items-center justify-between mb-1.5">
-                      <span className="text-[11px] font-medium text-muted">Contact {i + 1}</span>
+                      <span className="text-micro font-medium uppercase tracking-[0.07em] text-ink-3">Contact {i + 1}</span>
                       <button className="text-[11px] font-medium text-red-400 hover:text-red-600" disabled={busy}
                         onClick={() => setContacts((arr) => arr.filter((_, j) => j !== i))}>Remove</button>
                     </div>

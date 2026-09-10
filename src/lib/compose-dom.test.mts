@@ -298,18 +298,38 @@ const shellOf = (host: Element) =>
   [...host.querySelectorAll("div")].map((d) => d.className)
     .filter((c) => /max-w-\S+ mx-auto/.test(c));
 
+// A RELATIONSHIP, NOT TWO SPELLINGS. This pinned `max-w-lg` on one side and
+// "not max-w-lg" on the other, so widening the browsing column — a deliberate
+// visual decision, since a Library row is a name, an address, labels and
+// controls rather than a sentence — failed a test about COMPOSING. What has to
+// hold is that assembling gets more room than browsing, and that the nav bar
+// tracks whichever is in force. The numbers below are Tailwind's own scale.
+const MAX_W_REM: Record<string, number> = {
+  sm: 24, md: 28, lg: 32, xl: 36, "2xl": 42, "3xl": 48,
+  "4xl": 56, "5xl": 64, "6xl": 72, "7xl": 80,
+};
+const widthOf = (cls: string) => {
+  const m = /max-w-(\S+)/.exec(cls);
+  const rem = m ? MAX_W_REM[m[1]] : undefined;
+  assert.ok(rem !== undefined, `unrecognised shell width: ${cls}`);
+  return rem!;
+};
+
 test("COMPOSING WIDENS THE WORKSPACE; the ordinary Library keeps its column", async () => {
   const host = await mount();
-  // Browsing: one reading column, unchanged.
   const browsing = shellOf(host);
   assert.ok(browsing.length >= 2, "the page shell was not found");
-  for (const c of browsing)
-    assert.match(c, /max-w-lg\b/, `the ordinary Library is no longer a column: ${c}`);
+  // Browsing is one measure, applied consistently to every shell on the page.
+  const browseWidths = new Set(browsing.map(widthOf));
+  assert.equal(browseWidths.size, 1,
+    `the browsing page is not one consistent column: ${browsing.join(" | ")}`);
+  const browseWidth = [...browseWidths][0];
 
   await openCompose(host);
   const composingShell = shellOf(host);
   for (const c of composingShell)
-    assert.ok(!/max-w-lg\b/.test(c), `the composition surface is still a 32rem column: ${c}`);
+    assert.ok(widthOf(c) > browseWidth,
+      `assembling a Sendset got no more room than browsing did: ${c}`);
   // The nav bar widens WITH the body — a narrow header over a wide page reads
   // as broken rather than roomy.
   assert.equal(composingShell.length, browsing.length,

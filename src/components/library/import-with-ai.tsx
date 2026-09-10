@@ -1,4 +1,8 @@
 "use client";
+import { Button } from "@/components/ui/button";
+import { INPUT_SHELL } from "@/components/ui/field";
+import { MODAL_SCRIM, MODAL_PANEL, MODAL_TITLE, MODAL_LEDE, MODAL_FOOT }
+  from "@/components/ui/modal";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { uploadCreatorImage } from "@/lib/image-upload-client";
 import { BlockItemEditor } from "@/components/editor/block-item-editor";
@@ -177,12 +181,12 @@ export function ImportWithAI({ onClose, onSaved }: { onClose: () => void; onSave
   const selected = proposals.filter((p) => p.selected).length;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/30 p-4">
-      <div className="w-full max-w-lg max-h-[85vh] overflow-y-auto rounded-xl border border-border bg-white p-4">
+    <div className={MODAL_SCRIM}>
+      <div className={`${MODAL_PANEL} max-w-xl p-5`}>
         {phase === "idle" && (
           <>
-            <p className="text-sm font-medium text-foreground">Import with AI</p>
-            <p className="mt-1 mb-3 text-xs text-muted">
+            <p className={MODAL_TITLE}>Import with AI</p>
+            <p className={`${MODAL_LEDE} mb-4`}>
               Paste anything you already have — a list of communities, services, contacts. AI
               organizes it into reusable items, you review them, and only what you choose is
               saved. No Sendset is created.
@@ -191,45 +195,45 @@ export function ImportWithAI({ onClose, onSaved }: { onClose: () => void; onSave
               value={text}
               onChange={(e) => setText(e.target.value)}
               placeholder="Paste your information here…"
-              className="w-full h-56 px-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:ring-2 focus:ring-accent resize-none"
+              className={`${INPUT_SHELL} h-56 resize-none`}
             />
-            {error && <p className="mt-2 text-sm text-red-700">{error}</p>}
-            <div className="mt-3 flex items-center gap-2">
-              <button onClick={start} disabled={busy || text.trim().length < 10}
-                className="px-3 py-1.5 rounded-lg bg-accent hover:bg-accent-hover text-white text-sm font-medium disabled:opacity-60">
+            {error && <p className="mt-2 text-meta text-red-700">{error}</p>}
+            <div className={MODAL_FOOT}>
+              <Button variant="primary" size="md" onClick={start}
+                disabled={busy || text.trim().length < 10}>
                 {busy ? "Starting…" : "Organize with AI"}
-              </button>
-              <button onClick={onClose} disabled={busy}
-                className="ml-auto text-sm font-medium text-muted hover:text-foreground">Cancel</button>
+              </Button>
+              <Button variant="ghost" size="md" className="ml-auto"
+                onClick={onClose} disabled={busy}>Cancel</Button>
             </div>
           </>
         )}
 
         {phase === "extracting" && (
           <>
-            <p className="text-sm font-medium text-foreground">Organizing…</p>
-            <p className="mt-1 text-xs text-muted">
+            <p className={MODAL_TITLE}>Organizing…</p>
+            <p className={MODAL_LEDE}>
               {done} of {total} parts done. This keeps going if you close the tab — reopen your
               Library and it picks up where it left off.
             </p>
-            <div className="mt-3 h-1.5 w-full rounded-full bg-gray-100">
-              <div className="h-1.5 rounded-full bg-accent transition-all"
+            <div className="mt-4 h-1.5 w-full rounded-full bg-ground-3">
+              <div className="h-1.5 rounded-full bg-ink transition-all"
                    style={{ width: `${total ? Math.round((done / total) * 100) : 0}%` }} />
             </div>
-            {error && <p className="mt-2 text-sm text-red-700">{error}</p>}
-            <div className="mt-3 flex items-center gap-2">
-              <button onClick={onClose} className="text-sm font-medium text-muted hover:text-foreground">
+            {error && <p className="mt-2 text-meta text-red-700">{error}</p>}
+            <div className={MODAL_FOOT}>
+              <Button variant="secondary" size="md" onClick={onClose}>
                 Close — this keeps running
-              </button>
-              <button onClick={abandon} disabled={busy}
-                className="ml-auto text-sm font-medium text-red-700 hover:text-red-800">Abandon</button>
+              </Button>
+              <Button variant="danger" size="md" className="ml-auto"
+                onClick={abandon} disabled={busy}>Abandon</Button>
             </div>
           </>
         )}
 
         {phase === "review" && (editing ? (
           <div>
-            <p className="mb-3 text-sm font-medium text-foreground">Editing a proposed item</p>
+            <p className={`${MODAL_TITLE} mb-4`}>Editing a proposed item</p>
             <BlockItemEditor
               uploadImage={(f) => uploadCreatorImage("/api/library/images", f)}
               item={snapshotToItem({ ...editing, id: editing.id, revision: 1, updatedAt: "" })}
@@ -244,28 +248,28 @@ export function ImportWithAI({ onClose, onSaved }: { onClose: () => void; onSave
           </div>
         ) : (
           <>
-            <p className="text-sm font-medium text-foreground">Review what AI found</p>
-            <p className="mt-1 mb-3 text-xs text-muted">
+            <p className={MODAL_TITLE}>Review what AI found</p>
+            <p className={`${MODAL_LEDE} mb-4`}>
               Nothing is saved until you choose it. Edits and selections are kept — you can close
               this and come back.
             </p>
-            {notice && <p className="mb-2 text-sm text-green-700">{notice}</p>}
-            {error && <p className="mb-2 text-sm text-red-700">{error}</p>}
+            {notice && <p className="mb-2 text-meta text-emerald-700">{notice}</p>}
+            {error && <p className="mb-2 text-meta text-red-700">{error}</p>}
 
             {proposals.length === 0 ? (
-              <p className="text-sm text-muted">Nothing left to review.</p>
+              <p className="py-6 text-center text-body text-ink-2">Nothing left to review.</p>
             ) : (
-              <ul className="space-y-1">
+              <ul className="divide-y divide-line rounded-[var(--radius-control)] border border-line">
                 {proposals.map((p) => (
-                  <li key={p.id} className="flex items-center gap-2 rounded-lg border border-border p-2">
+                  <li key={p.id} className="flex items-center gap-2.5 px-3 py-2.5">
                     <input type="checkbox" checked={p.selected}
                            onChange={() => patch(p, { selected: !p.selected })} />
-                    <span className="min-w-0 flex-1 truncate text-sm text-foreground">
+                    <span className="min-w-0 flex-1 truncate text-body text-ink">
                       {p.title?.trim() || <span className="text-red-700">Needs a title</span>}
-                      {p.address ? <span className="text-muted"> · {p.address}</span> : null}
+                      {p.address ? <span className="text-ink-2"> · {p.address}</span> : null}
                     </span>
                     <button onClick={() => setEditing(p)}
-                            className="flex-none text-sm font-medium text-accent hover:text-accent-hover">
+                            className="flex-none text-meta font-medium text-mark hover:text-mark/80">
                       Edit
                     </button>
                   </li>
@@ -273,28 +277,27 @@ export function ImportWithAI({ onClose, onSaved }: { onClose: () => void; onSave
               </ul>
             )}
 
-            <div className="mt-4 flex flex-wrap items-center gap-2">
-              <button onClick={saveSelected} disabled={busy || selected === 0}
-                className="px-3 py-1.5 rounded-lg bg-accent hover:bg-accent-hover text-white text-sm font-medium disabled:opacity-60">
+            <div className={MODAL_FOOT}>
+              <Button variant="primary" size="md" onClick={saveSelected}
+                disabled={busy || selected === 0}>
                 {busy ? "Saving…" : selected ? `Save ${selected} to Library` : "Save to Library"}
-              </button>
-              <button onClick={() => finish()} disabled={busy}
-                className="px-3 py-1.5 rounded-lg border border-border text-sm font-medium text-foreground hover:border-accent">
+              </Button>
+              <Button variant="secondary" size="md" onClick={() => finish()} disabled={busy}>
                 Finish
-              </button>
-              <button onClick={abandon} disabled={busy}
-                className="ml-auto text-sm font-medium text-red-700 hover:text-red-800">Abandon</button>
+              </Button>
+              <Button variant="danger" size="md" className="ml-auto"
+                onClick={abandon} disabled={busy}>Abandon</Button>
             </div>
           </>
         ))}
 
         {phase === "closed" && (
           <>
-            <p className="text-sm font-medium text-foreground">This import is closed</p>
-            <p className="mt-1 text-xs text-muted">Anything you saved is in your Library.</p>
-            <button onClick={onClose} className="mt-3 px-3 py-1.5 rounded-lg bg-accent text-white text-sm font-medium">
-              Done
-            </button>
+            <p className={MODAL_TITLE}>This import is closed</p>
+            <p className={MODAL_LEDE}>Anything you saved is in your Library.</p>
+            <div className={MODAL_FOOT}>
+              <Button variant="primary" size="md" onClick={onClose}>Done</Button>
+            </div>
           </>
         )}
       </div>

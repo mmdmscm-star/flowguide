@@ -19,6 +19,29 @@ export function LocationLine({ location }: { location: string }) {
   return <span className="truncate text-[11px] text-muted/80">{location}</span>;
 }
 
+/** THE FAVOURITE MARK, in one place.
+ *
+ *  It existed twice — once in the structured view and once in the flat list —
+ *  in two spellings of the same button, which is how the two lists start
+ *  looking like two different products. State ownership genuinely differs
+ *  between the two (one holds its own, one is handed a map), so this takes the
+ *  answer rather than the state and leaves that where it was.
+ *
+ *  Quiet on purpose: see `--color-favorite`. A filing mark should not be the
+ *  first thing the eye finds on a screen full of names. */
+export function FavoriteStar({
+  on, label, onClick,
+}: { on: boolean; label: string; onClick: () => void }) {
+  return (
+    <button type="button" onClick={onClick} aria-pressed={on}
+      aria-label={on ? `Remove ${label} from favorites` : `Add ${label} to favorites`}
+      className={`flex-none px-0.5 sm:px-1 text-base leading-none transition-colors ${
+        on ? "text-favorite hover:text-favorite/80" : "text-ink-3/45 hover:text-favorite"}`}>
+      {on ? "★" : "☆"}
+    </button>
+  );
+}
+
 export interface LibraryRowProps {
   item: LibrarySnapshot;
   selectable: boolean;

@@ -503,27 +503,32 @@ export default function LibraryWorkspace() {
 
   // ONE COLUMN IS THE RIGHT LIBRARY AND THE WRONG WORKSHOP.
   //
-  // `max-w-lg` is 32rem: a comfortable reading column for a list, and far too
-  // little for two working panes. Squeezed into it, names and addresses
-  // truncated and the tray was too thin to read as a destination at all. So the
-  // shell widens while composing and returns to its column the moment that ends.
+  // `max-w-lg` is 32rem — a comfortable measure for reading prose, and the
+  // wrong one for this. A Library row is not a sentence: it is a name, an
+  // address, labels, a favourite mark and reorder controls, and at 32rem those
+  // fought each other while two thirds of a desktop screen stayed empty. The
+  // column read as under-composed rather than calm, and the header's own
+  // actions could not fit on one line inside it.
+  //
+  // 48rem gives the row its parts without letting a list sprawl into a table.
+  // Composing still widens further, because two working panes need it.
   //
   // The nav bar widens with it. A page whose header stays narrow while its body
   // does not looks broken rather than roomy.
-  const shell = composing ? "max-w-6xl" : "max-w-lg";
+  const shell = composing ? "max-w-6xl" : "max-w-3xl";
 
   return (
-    <div className="min-h-screen bg-ground">
+    <div className="min-h-screen bg-canvas">
       {/* The one hairline worth spending on this screen: sticky chrome sitting
           over scrolling content is a boundary that would be genuinely ambiguous
           without it. Everything below groups with ground and space instead. */}
-      <div className="sticky top-0 z-20 bg-ground/90 backdrop-blur-sm border-b border-line">
-        <div className={`${shell} mx-auto px-6 py-3.5 flex items-center gap-3`}>
+      <div className="sticky top-0 z-20 bg-canvas/85 backdrop-blur-sm border-b border-line">
+        <div className={`${shell} mx-auto px-4 sm:px-6 py-3.5 flex items-center gap-3`}>
           <CreatorNav current="library" />
         </div>
       </div>
 
-      <div className={`${shell} mx-auto px-6 pb-28`}>
+      <div className={`${shell} mx-auto px-4 sm:px-6 pb-28`}>
         <header className="pt-10 pb-4">
           <h1 className="text-page font-semibold tracking-[-0.02em] text-ink">Your Library</h1>
           {/* ONE SENTENCE. The independence rule — that inserting makes a copy —
@@ -539,7 +544,7 @@ export default function LibraryWorkspace() {
         {/* Also here, not only in the empty state: writing an entry directly is a
             permanent way to use the Library, not a first-run bootstrap. */}
         {!editing && !creating && !viewing && (
-          <div className="mb-7 flex flex-col items-start gap-2.5">
+          <div className="mb-6 flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
             {/* THREE KINDS OF ACTION WERE WEARING ONE ROW.
                 Getting material IN (import, add), leaving for somewhere else
                 (create a Sendset), and changing a mode you stay inside (select
@@ -548,14 +553,14 @@ export default function LibraryWorkspace() {
                 same four actions with the same handlers — regrouped, and given
                 a hierarchy. Adding material leads, in ink.
 
-                TWO ROWS, NOT ONE ROW WITH A DIVIDER IN IT. The first attempt
-                separated the kinds with a hairline. It never once rendered as
-                designed: this column is max-w-lg, so the four buttons always
-                wrapped 3 + 1, stranding the divider mid-line and orphaning the
-                last action — the grouping read as a wrapping accident. The
-                break is now deliberate and width-independent, and the hairline
-                is gone, which is what this palette's own rule already said:
-                group with space and weight, not with borders. */}
+                OPPOSITE ENDS, NOT A DIVIDER AND NOT TWO ROWS. A hairline
+                between them never rendered as designed — at max-w-lg the four
+                buttons always wrapped 3 + 1 and stranded it mid-line — and
+                stacking them into two rows said "these are different" without
+                saying how. At a working width the distinction is positional:
+                what ADDS material starts the row, what ACTS on what is already
+                there ends it, and the space between them is the separator. On a
+                narrow screen they wrap into two rows and keep their order. */}
             <div className="flex flex-wrap items-center gap-2">
             <Button variant="primary" size="md"
               onClick={() => { setNotice(""); setImporting(true); }}>
@@ -574,9 +579,9 @@ export default function LibraryWorkspace() {
                 hidden, so a failed load never offers a dead end either. */}
             </div>
             {hasAny === true && (
-              /* Ghost text pulled back by its own padding so this row's words
-                 line up with the filled buttons above, not with their boxes. */
-              <div className="-ml-4 flex flex-wrap items-center gap-1">
+              /* Ghost text pushed out by its own padding so this cluster's
+                 words end flush with the column, not its boxes. */
+              <div className="-mr-4 flex flex-wrap items-center gap-1">
                 <Button variant="ghost" size="md"
                   onClick={() => { setNotice(""); setChosen([]); setAddedTitles({}); setOrganizing(false); setSelecting(true); }}>
                   Create a Sendset
@@ -1019,8 +1024,26 @@ export default function LibraryWorkspace() {
               ? "grid gap-5 lg:grid-cols-[minmax(0,55fr)_minmax(0,45fr)]"
               : ""}>
               <div className="min-w-0">
-          <LibrarySearch value={q} onChange={setQ} className="mb-3" />
-          <LibraryFilters vocabulary={vocab} value={filters} onChange={setFilters} className="mb-3" />
+        {/* THE LIBRARY IS A SURFACE, NOT A REGION OF THE PAGE.
+            Search, the filter chips and the list were three blocks of content
+            sitting directly on the page at the same elevation as the heading
+            above them, held together by nothing but proximity. With a filter
+            on — where the hierarchy deliberately collapses to a flat list —
+            there was no heading either, and the result read as loose text
+            rather than as a set of results.
+
+            One container fixes both, and it is the SAME container in every
+            state, so narrowing a list never looks like leaving the page it was
+            on. The controls that narrow the list sit inside the thing they
+            narrow, on a quiet band, divided from the results by the one line
+            that earns itself here: above it you change what you are looking
+            at, below it is what you got. */}
+        <div className="overflow-hidden rounded-[var(--radius-panel)] border border-line bg-ground">
+          <div className="border-b border-line bg-ground-2 px-3 sm:px-4 py-3.5">
+            <LibrarySearch value={q} onChange={setQ} />
+            <LibraryFilters vocabulary={vocab} value={filters} onChange={setFilters} className="mt-2.5" />
+          </div>
+          <div className="px-1 sm:px-2.5 py-3">
           {/* Suggestions for the label input, from the professional's own
               words. Where something lives is chosen from real sections, not
               typed, so there is nothing to suggest for it. */}
@@ -1084,9 +1107,11 @@ export default function LibraryWorkspace() {
             emptyHint={
               // SAY IT ONCE. A professional opening an empty Library needs to
               // know what goes in it and how to start, not a short manual.
-              <div className="rounded-xl border border-border bg-white p-4">
-                <p className="text-base font-semibold text-foreground">Nothing saved yet</p>
-                <p className="mt-1 text-sm text-muted">
+              // No box: this already sits inside the Library's own surface, and
+              // a card within a card is the pattern this pass exists to remove.
+              <div className="px-3 py-10 text-center">
+                <p className="text-title font-semibold text-ink">Nothing saved yet</p>
+                <p className="mx-auto mt-2 max-w-sm text-body text-ink-2">
                   Import information you already have, add something manually, or save
                   things while building a Sendset.
                 </p>
@@ -1094,6 +1119,8 @@ export default function LibraryWorkspace() {
             }
           />
           )}
+          </div>
+        </div>
               </div>
               {composing && (
                 <aside
