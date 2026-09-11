@@ -298,8 +298,15 @@ test("THE HANDLER IS THE GUARANTEE, and the button agrees with it", () => {
   // The button uses the SAME predicate, so a disabled control and a refused
   // action cannot disagree about why.
   assert.match(NEW, /const blockingNow = blockingImage\(sourceImages\)/);
-  assert.match(NEW, /const ready = Boolean\(rawText\.trim\(\)\) && !processing && !blockingNow;/,
-    "the button can be pressed while a picture is unsettled");
+  // THE CONJUNCTS, NOT THE WHOLE LINE. This pinned the expression verbatim, so
+  // adding an unrelated reason to withhold the button — the paste-pairing
+  // advisory — failed a test about unsettled PICTURES. What has to hold is that
+  // readiness still depends on each of these; anything further ANDed on can
+  // only make the button harder to press, never easier.
+  const ready = /const ready = ([^;]+);/.exec(NEW)?.[1] ?? "";
+  for (const conjunct of ["Boolean(rawText.trim())", "!processing", "!blockingNow"])
+    assert.ok(ready.includes(conjunct),
+      `readiness no longer depends on ${conjunct}: ${ready}`);
   // And a disabled primary button with no reason reads as broken.
   assert.match(NEW, /\{blockingNow && \([\s\S]{0,300}blockingMessage\(blockingNow\)/,
     "the blocking picture is not named next to the button");

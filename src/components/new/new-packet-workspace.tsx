@@ -311,6 +311,18 @@ export default function NewPacketWorkspace() {
     // run CLAIMS is coherent, not that the claim is complete.
     const blocked = blockingImage(sourceImages);
     if (blocked) { setError(blockingMessage(blocked)); return; }
+    // AND THE PAIRING ADVISORY IS ANSWERED FIRST, for the same reason.
+    //
+    // A warning that is merely on screen while Create still works is not a
+    // warning; it is decoration that happens to be true. Both answers clear it
+    // — "Clear and re-copy" empties the box, "Use it as pasted" accepts the
+    // text as it stands — so this asks for a decision, never for a particular
+    // one. Start blank instead is deliberately NOT gated: it ignores the
+    // pasted text entirely, which is its own way out.
+    if (pairingWarning) {
+      setError("Choose whether to re-copy that text or use it as pasted before creating a draft.");
+      return;
+    }
     setError("");
     setProcessing(true);
 
@@ -423,7 +435,7 @@ export default function NewPacketWorkspace() {
   // The SAME predicate the handler enforces, so a disabled button and a refused
   // action can never disagree about why.
   const blockingNow = blockingImage(sourceImages);
-  const ready = Boolean(rawText.trim()) && !processing && !blockingNow;
+  const ready = Boolean(rawText.trim()) && !processing && !blockingNow && !pairingWarning;
 
   return (
     /* THE SHARED SHELL, LATE BUT NOT ARBITRARILY LATE.
