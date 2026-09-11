@@ -71,10 +71,30 @@ test("THE SHARE STEP STILL CARRIES WHAT MADE IT WORTH LANDING ON", () => {
   assert.match(message, /Copy link only/, "there is no way to take just the link");
 });
 
+/** The branch rendered once publishing has succeeded, from its guard to the
+ *  draft branch's `return`. */
+export function publishedBranch(src: string) {
+  const from = src.indexOf('if (status === "published")');
+  assert.ok(from >= 0, "the share step no longer has a published state");
+  const to = src.indexOf("\n  return (", from);
+  return src.slice(from, to > from ? to : undefined);
+}
+
 test("IT READS AS A SENDSET AT THE MOMENT OF SUCCESS", () => {
   // This surface used to be reached deliberately and was outside the brand
   // guard. It now receives everyone who publishes.
-  const share = codeOf(SHARE);
-  assert.match(share, /can now see this Sendset\b/, "the confirmation calls it something else");
-  assert.doesNotMatch(share, /see this packet\b/, "the old wording is still there");
+  //
+  // THE PROPERTY, NOT ONE SENTENCE. This pinned the literal "can now see this
+  // Sendset", which is a proxy for the rule and not the rule: a visual pass
+  // rewrote the confirmation into a heading and a lede that both say Sendset,
+  // and the proxy failed while the rule held. So the whole published branch is
+  // checked instead — every word of it, which is more than the one line was.
+  const branch = publishedBranch(codeOf(SHARE));
+  assert.match(branch, /\bSendset\b/,
+    "the moment of success never names what was published");
+  // `packetId` is the internal identifier and is allowed; prose is not.
+  assert.doesNotMatch(branch.replace(/packetId/g, ""), /packet/i,
+    "the success copy still calls a Sendset a packet");
+  // And it must actually say the state was reached, not merely offer sharing.
+  assert.match(branch, /Published/, "nothing confirms that publishing worked");
 });

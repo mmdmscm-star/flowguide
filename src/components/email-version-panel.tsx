@@ -1,8 +1,9 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { Button } from "./ui/button";
 
-// COPY A FORMATTED FLOWGUIDE, for a client who wants the content in the email
+// COPY A FORMATTED SENDSET, for a client who wants the content in the email
 // body rather than behind a link.
 //
 // THREE TIERS, because copying rich HTML is the part that actually breaks:
@@ -75,14 +76,12 @@ export default function EmailVersionPanel({
   }
 
   return (
-    <div className="mx-auto mt-3 max-w-xl text-left">
-      <div className="flex items-center justify-between">
-        <p className="text-sm font-medium text-green-800">Email version</p>
-        <button onClick={onClose} className="text-sm text-green-700 hover:text-green-900 underline">
-          Close
-        </button>
+    <div>
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+        <p className="text-body font-medium text-ink">Email version</p>
+        <Button variant="ghost" size="sm" onClick={onClose}>Close</Button>
       </div>
-      <p className="mt-1 text-sm text-muted">
+      <p className="mt-1 max-w-prose text-meta text-ink-2">
         For a client who would rather read it in the email itself. Copy this, then paste
         into Gmail, Outlook or Apple Mail. The live link is included so they can still open
         the interactive version.
@@ -91,19 +90,16 @@ export default function EmailVersionPanel({
       {/* The rendered version, shown at the width an email client will use.
           This is also the node tier 2 selects, so what is copied is exactly
           what is shown. */}
-      <div className="mt-2 max-h-80 overflow-auto rounded-lg border border-green-300 bg-white p-2">
+      <div className="mt-3 max-h-80 overflow-auto rounded-[var(--radius-control)] border border-line bg-white p-2">
         <div ref={stage} dangerouslySetInnerHTML={{ __html: html }} />
       </div>
 
-      <div className="mt-2 flex items-center gap-3">
-        <button
-          onClick={copy}
-          className="px-4 py-1.5 rounded-lg bg-accent hover:bg-accent-hover text-white text-sm font-medium"
-        >
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <Button variant="primary" size="md" onClick={copy}>
           {state === "copied" ? "Copied!" : "Copy formatted email"}
-        </button>
+        </Button>
         {state === "manual" && (
-          <span className="text-sm text-red-700">
+          <span role="alert" className="text-meta text-red-700">
             Your browser blocked the copy — select the version above and copy it by hand.
           </span>
         )}

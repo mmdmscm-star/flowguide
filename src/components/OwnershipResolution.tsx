@@ -1,5 +1,6 @@
 "use client";
 import { useCallback, useState } from "react";
+import { Button } from "./ui/button";
 
 // The professional's way out of a media-ownership block.
 //
@@ -114,10 +115,14 @@ export default function OwnershipResolution({
   const needsAction = blocking.length > 0;
 
   return (
-    <div className={`rounded-xl border p-4 mb-5 text-left ${
-      needsAction ? "border-amber-300 bg-amber-50/70" : "border-border bg-white"
+    /* THE AMBER IS UNCHANGED — it is the one deliberate "act now" signal on a
+       surface that is otherwise calm, and this pass did not touch what it means
+       or when it appears. What changed is that every word of the panel whose
+       whole job is to be READ was 12px on a phone. */
+    <div className={`rounded-[var(--radius-panel)] border p-4 text-left ${
+      needsAction ? "border-amber-300 bg-amber-50/70" : "border-line bg-ground"
     }`}>
-      <p className="text-sm font-medium text-foreground">
+      <p className="text-body font-medium text-ink">
         {needsAction
           ? `Check ${blocking.length === 1 ? "this photo" : `these ${blocking.length} photos`} before publishing`
           : kept.length > 0
@@ -125,21 +130,21 @@ export default function OwnershipResolution({
             : "Worth a look before publishing"}
       </p>
       {needsAction ? (
-        <p className="mt-1 text-xs text-amber-900">
+        <p className="mt-1 text-meta text-amber-900">
           Your original source puts {blocking.length === 1 ? "this photo" : "these photos"} on a
           different item than {blocking.length === 1 ? "it is" : "they are"} on now. Move
           {blocking.length === 1 ? " it" : " them"}, or keep {blocking.length === 1 ? "it" : "them"} where
           {blocking.length === 1 ? " it is" : " they are"} if that was deliberate.
         </p>
       ) : kept.length > 0 ? (
-        <p className="mt-1 text-xs text-muted">
+        <p className="mt-1 text-meta text-ink-2">
           Your source lists {kept.length === 1 ? "it" : "them"} under
           {kept.length === 1 ? " a different item" : " different items"}, and you chose to keep
           {kept.length === 1 ? " it" : " them"} here. Undo any of these to put the check back.
         </p>
       ) : null}
 
-      {error && <p className="mt-2 text-xs text-red-700">{error}</p>}
+      {error && <p role="alert" className="mt-2 text-meta text-red-700">{error}</p>}
 
       <ul className="mt-3 space-y-2">
         {blocking.map((f) => {
@@ -148,7 +153,7 @@ export default function OwnershipResolution({
           const keeping = busy === `${key}:keep`;
           const anyBusy = busy !== null;
           return (
-            <li key={key} className="flex items-start gap-3 rounded-lg border border-amber-200 bg-white p-3">
+            <li key={key} className="flex items-start gap-3 rounded-[var(--radius-control)] border border-amber-200 bg-white p-3">
               {f.url && (
                 /* eslint-disable-next-line @next/next/no-img-element */
                 <img
@@ -158,30 +163,22 @@ export default function OwnershipResolution({
                 />
               )}
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium text-foreground truncate">{f.itemTitle}</p>
-                <p className="mt-0.5 text-xs text-muted">
+                <p className="truncate text-body font-medium text-ink">{f.itemTitle}</p>
+                <p className="mt-0.5 text-meta text-ink-2">
                   {f.proposedItemTitle
-                    ? <>Your source lists this photo under <span className="font-medium text-foreground">{f.proposedItemTitle}</span>.</>
+                    ? <>Your source lists this photo under <span className="font-medium text-ink">{f.proposedItemTitle}</span>.</>
                     : f.detail}
                 </p>
                 <div className="mt-2 flex flex-wrap items-center gap-2">
                   {f.actions.includes("move") && f.proposedItemTitle && (
-                    <button
-                      onClick={() => act(f, "move")}
-                      disabled={anyBusy}
-                      className="px-3 py-1.5 rounded-lg bg-accent hover:bg-accent-hover text-white text-xs font-medium transition-colors disabled:opacity-60"
-                    >
+                    <Button variant="primary" onClick={() => act(f, "move")} disabled={anyBusy}>
                       {moving ? "Moving…" : `Move to ${f.proposedItemTitle}`}
-                    </button>
+                    </Button>
                   )}
                   {f.actions.includes("keep") && (
-                    <button
-                      onClick={() => act(f, "keep")}
-                      disabled={anyBusy}
-                      className="px-3 py-1.5 rounded-lg border border-border text-xs font-medium text-muted hover:text-foreground transition-colors disabled:opacity-60"
-                    >
+                    <Button variant="secondary" onClick={() => act(f, "keep")} disabled={anyBusy}>
                       {keeping ? "Keeping…" : "Keep here"}
-                    </button>
+                    </Button>
                   )}
                 </div>
               </div>
@@ -193,7 +190,7 @@ export default function OwnershipResolution({
       {kept.length > 0 && (
         <div className={needsAction ? "mt-3 border-t border-amber-200 pt-3" : "mt-3"}>
           {needsAction && (
-            <p className="text-xs font-medium text-amber-900">
+            <p className="text-meta font-medium text-amber-900">
               Kept here intentionally
             </p>
           )}
@@ -201,16 +198,16 @@ export default function OwnershipResolution({
             {kept.map((f) => {
               const undoing = busy === `${rowKey(f)}:unkeep`;
               return (
-                <li key={rowKey(f)} className="flex items-center gap-2 text-xs">
+                <li key={rowKey(f)} className="flex items-center gap-2 text-meta">
                   {/* Which photo, not just which item — an item can hold several,
                       and "Primrose" alone does not say which one was kept. */}
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={f.url} alt="" className="h-7 w-7 flex-none rounded object-cover bg-amber-100" />
-                  <span className="min-w-0 flex-1 truncate font-medium text-foreground">{f.itemTitle}</span>
+                  <span className="min-w-0 flex-1 truncate font-medium text-ink">{f.itemTitle}</span>
                   <button
                     onClick={() => act(f, "unkeep")}
                     disabled={busy !== null}
-                    className="flex-none underline text-muted hover:text-foreground disabled:opacity-60"
+                    className="flex-none underline text-ink-2 hover:text-ink disabled:opacity-60"
                   >
                     {undoing ? "Undoing…" : "Undo"}
                   </button>
@@ -226,16 +223,16 @@ export default function OwnershipResolution({
           because staying silent about something the check genuinely noticed is
           how the original incident stayed invisible. */}
       {advisory.length > 0 && (
-        <div className={`mt-3 border-t pt-3 ${needsAction ? "border-amber-200" : "border-border"}`}>
-          <p className={`text-xs font-medium ${needsAction ? "text-amber-900" : "text-foreground"}`}>Also worth checking</p>
+        <div className={`mt-3 border-t pt-3 ${needsAction ? "border-amber-200" : "border-line"}`}>
+          <p className={`text-meta font-medium ${needsAction ? "text-amber-900" : "text-ink"}`}>Also worth checking</p>
           <ul className="mt-1 space-y-1">
             {advisory.map((f, i) => (
-              <li key={`${rowKey(f)}:${i}`} className="text-xs text-muted">
-                <span className="font-medium text-foreground">{f.itemTitle}</span> — {f.detail}
+              <li key={`${rowKey(f)}:${i}`} className="text-meta text-ink-2">
+                <span className="font-medium text-ink">{f.itemTitle}</span> — {f.detail}
               </li>
             ))}
           </ul>
-          <p className="mt-2 text-xs text-muted">
+          <p className="mt-2 text-meta text-ink-2">
             These don&apos;t stop you publishing.
           </p>
         </div>

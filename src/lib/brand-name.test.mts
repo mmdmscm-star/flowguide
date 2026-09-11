@@ -20,6 +20,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { publishedBranch } from "./publish-lands-on-share.test.mts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const codeOf = (rel: string) =>
@@ -108,8 +109,14 @@ test("MANY take the plural, ONE does not", () => {
   // one post-publish experience rather than two. What has to stay true is that
   // the sentence a professional reads at the moment of success calls the thing
   // a Sendset — wherever that sentence is.
-  const share = codeOf("src/components/preview-actions.tsx");
-  assert.match(share, /can now see this Sendset\b/, "the publish confirmation");
+  // THE BRANCH, NOT THE SENTENCE — see publish-lands-on-share.test.mts, which
+  // owns this rule and exports the branch it applies to. Pinned here as one
+  // literal, it failed the first time the confirmation was rewritten while
+  // still saying "Sendset" in every line of it.
+  const branch = publishedBranch(codeOf("src/components/preview-actions.tsx"));
+  assert.match(branch, /\bSendset\b/, "the publish confirmation");
+  assert.doesNotMatch(branch.replace(/packetId/g, ""), /packet/i,
+    "the publish confirmation calls a Sendset a packet");
   assert.doesNotMatch(editor, /Your Sendset is live/,
     "the editor still has its own publish dialog, so there are two of them again");
   // A determiner in front of the plural is the way this goes wrong.

@@ -32,13 +32,12 @@ export default async function PreviewPage({ params, searchParams }: Props) {
 
   if (!packet) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen px-5 text-center">
-        <div className="text-5xl mb-4">📄</div>
-        <h1 className="text-xl font-bold text-foreground mb-2">
-          Packet not found
+      <div className="flex min-h-screen flex-col items-center justify-center bg-canvas px-5 text-center">
+        <h1 className="text-page font-semibold tracking-[-0.02em] text-ink">
+          Sendset not found
         </h1>
-        <p className="text-sm text-muted max-w-xs">
-          This packet doesn&apos;t exist or you don&apos;t have access.
+        <p className="mt-2 max-w-xs text-meta text-ink-2">
+          This Sendset doesn&apos;t exist, or it isn&apos;t one of yours.
         </p>
       </div>
     );

@@ -39,6 +39,22 @@ const SIZE: Record<ButtonSize, string> = {
   md: "h-12 sm:h-10 px-4.5 sm:px-4 text-body gap-2",
 };
 
+/* SOME ACTIONS ARE NAVIGATION. "Print / Save as PDF" opens a route, so it has
+ * to be an anchor — middle-click, open in a new tab, copy the address. It was
+ * therefore the one control on the share step that could not use the component
+ * and so wore its own hand-rolled treatment, which is exactly how seventeen
+ * signatures happened the first time. The class list is the shared thing; the
+ * element is the caller's. */
+export function buttonClass(
+  variant: ButtonVariant = "secondary", size: ButtonSize = "sm", className = "",
+) {
+  return `inline-flex flex-none items-center justify-center rounded-[var(--radius-control)]
+          font-medium transition-colors
+          focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-mark/40
+          disabled:pointer-events-none disabled:opacity-40
+          ${VARIANT[variant]} ${SIZE[size]} ${className}`;
+}
+
 export function Button({
   variant = "secondary", size = "sm", className = "", children, ...rest
 }: {
@@ -47,14 +63,7 @@ export function Button({
   children: ReactNode;
 } & ButtonHTMLAttributes<HTMLButtonElement>) {
   return (
-    <button
-      {...rest}
-      className={`inline-flex flex-none items-center justify-center rounded-[var(--radius-control)]
-                  font-medium transition-colors
-                  focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-mark/40
-                  disabled:pointer-events-none disabled:opacity-40
-                  ${VARIANT[variant]} ${SIZE[size]} ${className}`}
-    >
+    <button {...rest} className={buttonClass(variant, size, className)}>
       {children}
     </button>
   );

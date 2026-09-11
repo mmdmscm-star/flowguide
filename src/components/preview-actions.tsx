@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import OwnershipResolution, { type OwnershipState } from "./OwnershipResolution";
+import { Button, buttonClass } from "./ui/button";
 import ClientMessagePanel from "./client-message-panel";
 import EmailVersionPanel from "./email-version-panel";
 
@@ -169,85 +170,108 @@ export function PreviewActions({ packetId, slug, initialStatus, title, clientNam
 
   if (status === "published") {
     return (
-      <div className="bg-green-50 border-b border-green-200 px-5 py-3 text-center">
-        <p className="text-sm text-green-800 font-medium mb-1">
-          Published — your client can now see this Sendset
-        </p>
-        <p className="text-xs text-green-700 mb-2">
-          Anyone with this link can open the Sendset — no sign-in required. Share
+      <section aria-labelledby="share-heading" className="pt-8 pb-8 sm:pt-10">
+        {/* THE MOMENT OF ARRIVAL, not an alert about it.
+            This was a full-bleed green band — green ground, green rules, green
+            text on green — carrying every word of the share step inside it.
+            Green-on-green is the shape of a system message, and it kept saying
+            "notice this" for as long as the professional stayed on the page,
+            which is the opposite of finished. The state itself is worth one
+            quiet mark: the SAME pill the Dashboard already uses to say a
+            Sendset is published, so the two surfaces agree. */}
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+          <h1 id="share-heading" className="text-page font-semibold tracking-[-0.02em] text-ink">
+            Ready to send
+          </h1>
+          <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-micro font-medium text-emerald-800">
+            Published
+          </span>
+        </div>
+        <p className="mt-2 max-w-prose text-meta text-ink-2">
+          Anyone with the link can open this Sendset — no sign-in required. Share
           it only with people you want to see it.
         </p>
+
         {/* The message CONTAINS the link, so it takes precedence and
-            "Copy link only" becomes the secondary action beside it. The link
+            "Copy link only" is the quieter action beside it. The link
             behaviour itself is unchanged. */}
-        <ClientMessagePanel
-          title={title}
-          clientName={clientName}
-          professionalName={professionalName}
-          url={shareUrl}
-          onCopyLink={copyLink}
-          linkCopied={copied}
-        />
-        {/* A second way to deliver the SAME packet, for a client who wants the
-            content in the email body rather than behind a link. */}
-        {emailDoc ? (
-          <EmailVersionPanel html={emailDoc.html} text={emailDoc.text} onClose={() => setEmailDoc(null)} />
-        ) : (
-          <div className="mt-2">
-            <button
-              onClick={createEmailVersion}
-              disabled={emailBusy}
-              className="text-sm text-green-700 hover:text-green-900 underline disabled:opacity-60"
-            >
-              {emailBusy ? "Building…" : "Create email version"}
-            </button>
-            {emailError && <p className="mt-1 text-sm text-red-600">{emailError}</p>}
-          </div>
-        )}
+        <div className="mt-6">
+          <ClientMessagePanel
+            title={title}
+            clientName={clientName}
+            professionalName={professionalName}
+            url={shareUrl}
+            onCopyLink={copyLink}
+            linkCopied={copied}
+          />
+        </div>
 
         {copyFailed && (
-          <p className="mt-1 text-sm text-red-600">
+          <p role="alert" className="mt-2 text-meta text-red-700">
             Your browser blocked the copy — the link is {shareUrl}
           </p>
         )}
 
-        {/* A THIRD way to deliver the same packet, for the professional who
-            hands over paper. Opened in a new tab rather than navigated to, so
-            the publish confirmation this bar is part of stays put. */}
-        <div className="mt-2">
-          <a
-            href={`/p/${slug}/print`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-sm text-green-700 hover:text-green-900 underline"
-          >
-            Print / Save as PDF
-          </a>
+        {/* ONE SENDSET, THREE RENDERERS — SO THEY READ AS PEERS.
+            The email version and the print route were underlined links stacked
+            under the message panel at two different sizes, which ranked two of
+            the three delivery methods as afterthoughts. They are the same
+            Sendset, delivered differently, and they are grouped as such. No
+            capability is added or removed here. */}
+        <div className="mt-4 overflow-hidden rounded-[var(--radius-panel)] border border-line bg-ground">
+          <div className="border-b border-line bg-ground-2 px-4 py-3">
+            <h2 className="text-body font-medium text-ink">Other ways to send it</h2>
+            <p className="mt-0.5 text-meta text-ink-2">
+              The same Sendset, delivered differently.
+            </p>
+          </div>
+          <div className="p-4">
+            {emailDoc ? (
+              <EmailVersionPanel html={emailDoc.html} text={emailDoc.text} onClose={() => setEmailDoc(null)} />
+            ) : (
+              <div className="flex flex-wrap items-center gap-2">
+                <Button variant="secondary" size="md" onClick={createEmailVersion} disabled={emailBusy}>
+                  {emailBusy ? "Building…" : "Email version"}
+                </Button>
+                {/* Opened in a new tab rather than navigated to, so the share
+                    step stays where the professional left it. */}
+                <a
+                  href={`/p/${slug}/print`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={buttonClass("secondary", "md")}
+                >
+                  Print / Save as PDF
+                </a>
+              </div>
+            )}
+            {emailError && <p role="alert" className="mt-2 text-meta text-red-700">{emailError}</p>}
+          </div>
         </div>
 
-        <div className="mt-3">
-          <a
-            href={`/edit/${packetId}`}
-            className="text-xs text-green-700 hover:text-green-900 underline"
-          >
+        <div className="mt-6">
+          <a href={`/edit/${packetId}`} className={buttonClass("ghost", "md", "-ml-4.5 sm:-ml-4")}>
             ← Back to editor
           </a>
         </div>
-      </div>
+      </section>
     );
   }
 
   return (
-    <div className="bg-amber-50 border-b border-amber-200 px-5 py-3 text-center">
-      <p className="text-sm text-amber-800 font-medium mb-2">
-        Preview — this is how your client will see it
+    <section aria-labelledby="preview-heading" className="pt-8 pb-8 sm:pt-10">
+      <h1 id="preview-heading" className="text-page font-semibold tracking-[-0.02em] text-ink">
+        Preview
+      </h1>
+      <p className="mt-2 max-w-prose text-meta text-ink-2">
+        This is how your client will see it. Publish when you are happy with it.
       </p>
 
       {/* The block and the way out are the same screen. Sending someone
           elsewhere to fix this and back again to retry is how a safety state
           turns into a dead end. */}
       {ownership && (
-        <div className="mx-auto mb-3 max-w-2xl">
+        <div className="mt-5">
           <OwnershipResolution
             packetId={packetId}
             state={ownership}
@@ -271,27 +295,20 @@ export function PreviewActions({ packetId, slug, initialStatus, title, clientNam
       )}
 
       {resolved && (
-        <p className="text-xs text-green-700 mb-2">
+        <p className="mt-4 text-meta text-emerald-800">
           Photos sorted — you can publish now.
         </p>
       )}
-      {error && <p className="text-xs text-red-600 mb-2">{error}</p>}
+      {error && <p role="alert" className="mt-4 text-meta text-red-700">{error}</p>}
 
-      <div className="flex items-center justify-center gap-3">
-        <button
-          onClick={() => publishPacket(false)}
-          disabled={publishing}
-          className="px-4 py-1.5 rounded-lg bg-accent hover:bg-accent-hover text-white text-xs font-medium transition-colors disabled:opacity-60"
-        >
+      <div className="mt-5 flex flex-wrap items-center gap-2">
+        <Button variant="primary" size="md" onClick={() => publishPacket(false)} disabled={publishing}>
           {publishing ? "Publishing…" : "Publish"}
-        </button>
-        <a
-          href={`/edit/${packetId}`}
-          className="text-xs text-amber-600 hover:text-amber-800 underline"
-        >
+        </Button>
+        <a href={`/edit/${packetId}`} className={buttonClass("ghost", "md")}>
           ← Back to editor
         </a>
       </div>
-    </div>
+    </section>
   );
 }
