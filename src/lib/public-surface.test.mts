@@ -13,6 +13,16 @@ import { samplePacket } from "./sample-data.ts";
 const codeOf = (p: string) =>
   readFileSync(p, "utf8").split("\n").filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join("\n");
 
+/** The same source with runs of whitespace flattened to one space.
+ *
+ *  PROSE IN JSX WRAPS. A sentence on the page is several lines in the file,
+ *  broken wherever the line length ran out, so a regex written against the
+ *  sentence fails against the file — and shortening it until it fits one line
+ *  only pins the assertion to today's wrapping. Every check below that is about
+ *  what a VISITOR READS goes through here; checks about the code's shape do
+ *  not. */
+const proseOf = (p: string) => codeOf(p).replace(/\s+/g, " ");
+
 const LANDING = "src/app/page.tsx";
 const DEMO_SRC = "src/lib/sample-data.ts";
 
@@ -114,13 +124,13 @@ test("the demo exercises the product rather than gesturing at it", () => {
 test("the landing page answers all seven questions, in order", () => {
   const src = codeOf(LANDING);
   const beats = [
-    "Everything you found",                       // what it is
+    "Start with what you have",                   // what it is
     "isn’t missing. It’s scattered",              // why it exists
     "What goes in, and what comes out",           // in / out
     "Three steps",                                // what it does
     "Four ways to hand it over",                  // what comes out
     "Build it once",                              // versus rebuilding
-    "Start with one real client",                 // what to do next
+    "Start with one you really have to send",     // what to do next
   ];
   let at = -1;
   for (const beat of beats) {
@@ -131,10 +141,51 @@ test("the landing page answers all seven questions, in order", () => {
   }
 });
 
-test("public copy says GUIDE, never packet", () => {
+test("public copy says SENDSET — not packet, and no longer guide", () => {
+  // "Guide" was the PUBLIC SUBSTITUTE for "packet", chosen when the object had
+  // no name of its own. It does have one now, and the app says it on every
+  // screen: My Sendsets, New Sendset, this Sendset. A visitor met "guide"
+  // outside and "Sendset" inside, which is one object with two names.
   const src = codeOf(LANDING);
   assert.doesNotMatch(src, /\bpackets?\b/i, "the landing page uses internal vocabulary");
-  assert.match(src, /client-ready guide/, "the hero subhead changed");
+  assert.doesNotMatch(src, /\bguides?\b/i, "the landing page still calls a Sendset a guide");
+  // Named where a name can be introduced: as a countable object, not inside the
+  // subhead, where "Sendset helps you shape it into a Sendset" is the tautology
+  // the /new copy already had to be corrected for.
+  assert.match(proseOf(LANDING), /A Sendset: one clear, organized version of what you/,
+    "section 3 no longer says what a Sendset is");
+  assert.match(src, /See a real Sendset/, "the object is never named as a countable thing");
+});
+
+test("PDF IS AN OUTPUT, NEVER AN INPUT", () => {
+  // /new refuses both by name — "can\u2019t read PDFs yet", "Word documents" — and the
+  // page used to list "a PDF someone sent you" among the material you arrive
+  // with. Whatever the page says goes in has to be something that does.
+  const src = codeOf(LANDING);
+  for (const line of src.split("\n")) {
+    if (!/\bPDFs?\b|\bWord\b|\.docx|\.xlsx/i.test(line)) continue;
+    // The one legitimate mention: the list of ways a finished Sendset goes out.
+    assert.match(line, /link, email, message, print, or PDF/,
+      `the landing page mentions a format it cannot read: ${line.trim()}`);
+  }
+  // And the input list names only what /new accepts.
+  const prose = proseOf(LANDING);
+  assert.match(prose, /a spreadsheet saved as CSV/, "the In panel overstates what it reads");
+  assert.match(prose, /photograph the pages you were handed/,
+    "photographed pages — the input the page never mentioned — are gone again");
+});
+
+test("THE AUDIENCE IS NOT ONLY ADVISORS", () => {
+  // Every one of these narrowed the product to someone who researches on
+  // another person's behalf. A small business sending its own prices is doing
+  // the same job with material that was always theirs.
+  const prose = proseOf(LANDING);
+  assert.doesNotMatch(prose, /who researches options on someone/,
+    "the audience is defined as researchers again");
+  assert.match(prose, /Small businesses sending their own options, prices or schedules/,
+    "the audience no longer includes people communicating their own information");
+  assert.match(prose, /whether you gathered it on their behalf or it was yours to begin with/,
+    "the page no longer says both kinds of material count");
 });
 
 test("the landing page is horizontal — no vertical lock-in", () => {
@@ -150,7 +201,21 @@ test("the trust-model claim is about REVIEW, not about the model", () => {
   assert.doesNotMatch(src, /doesn.t invent|never invents|no hallucination/i,
     "the page makes an absolute claim about model output");
   assert.match(src, /You stay in the middle/, "the trust-model paragraph is gone");
-  assert.match(src, /nothing reaches your client until/, "the review guarantee is gone");
+  // BROADER THAN "your client", same guarantee: the thing being described is one
+  // person putting information in front of another, which is not always advice
+  // and not always a client.
+  assert.match(proseOf(LANDING), /nothing reaches anyone until you/, "the review guarantee is gone");
+  // WHAT THE PRODUCT NOTICES, NOT WHAT IT CATCHES. "Sendset says so when the
+  // source contradicts itself" reads as a promise to detect every case. It asks
+  // about what it spots, and claims nothing about what it does not.
+  assert.match(proseOf(LANDING),
+    /When Sendset spots something that needs your attention, it asks you to review it before you send/,
+    "the review prompt is gone");
+  assert.doesNotMatch(src, /\balways\b[^.]*\b(spot|catch|detect|flag)|\b(catches|detects|spots) (any|every|all)/i,
+    "the page promises to catch everything");
+  // The old comprehension claim, in the words it used.
+  assert.doesNotMatch(src, /reads it and pulls out/,
+    "step one claims to understand whatever it is given");
 });
 
 test("both CTAs, pointing where they should", () => {

@@ -21,12 +21,26 @@ import Link from "next/link";
 // paragraphs what one picture shows.
 //
 // The primary action is the DEMO, not signup. For a professional weighing a
-// peer's product, opening a finished FlowGuide explains more in ten seconds
-// than the page can in five hundred words — and it is the one path with no
-// form, no account and no way to lose work.
+// peer's product, opening a finished Sendset explains more in ten seconds than
+// the page can in five hundred words — and it is the one path with no form, no
+// account and no way to lose work.
 //
-// Vocabulary: "guide", never "packet". `packet` remains the internal name in
-// the schema, the API and the docs; it is not what a professional calls this.
+// VOCABULARY: the finished object is a SENDSET, publicly and in the product.
+// It used to be "a guide" here — a public substitute chosen when the only other
+// word was "packet", before the object had a name of its own. With the app
+// saying "My Sendsets" and "this Sendset" on every screen, a visitor met one
+// word outside and another inside. `packet` is still the internal name in the
+// schema, the API and the docs, and never appears here.
+//
+// THE OBJECT IS NAMED BY THE CTAs, not by the subhead. "Sendset helps you shape
+// it into a Sendset" is the tautology the /new copy already had to learn its
+// way out of, so the subhead names the product and "See a real Sendset" names
+// the object one line below it. Section 3 then defines it outright.
+//
+// WHAT THE PAGE MAY CLAIM AS INPUT is what /new actually accepts: pasted text,
+// a .csv/.txt/.md file, and photographed pages. Not PDFs and not Word — both
+// are refused by name ("can't read PDFs yet"), and this page used to imply
+// otherwise. PDF belongs on the OUTPUT side only.
 
 export default function Home() {
   return (
@@ -43,12 +57,13 @@ export default function Home() {
               Sendset
             </p>
             <h1 className="mt-5 text-[2.1rem] leading-[1.12] sm:text-[2.6rem] font-bold tracking-tight text-foreground text-balance">
-              Everything you found, in one thing your client can actually use.
+              Start with what you have. Send something people can actually use.
             </h1>
             <p className="mt-6 text-lg leading-relaxed text-muted max-w-2xl">
-              You&rsquo;ve already done the work. Sendset turns your notes into a clear,
-              client-ready guide &mdash; then lets you share it by link, email, message,
-              print, or PDF without rebuilding it for every format.
+              You&rsquo;ve already done the work. Pasted text, spreadsheet rows,
+              photographs of the pages you were handed &mdash; Sendset helps you shape it
+              into one clear, organized thing to hand over. You check it before anyone
+              else sees it, then send it by link, email, message, print, or PDF.
             </p>
             <div className="mt-9 flex flex-wrap items-center gap-x-6 gap-y-3">
               <Link
@@ -66,7 +81,7 @@ export default function Home() {
             </div>
           </div>
 
-          {/* One option out of a real guide, exactly as a client receives it.
+          {/* One option out of a real Sendset, exactly as it is received.
               Height-capped from the top on wide screens so the hero does not
               become a column of screenshot; the crop is the same artifact. */}
           <div className="mt-10 sm:mt-1 mx-auto w-full max-w-[19rem] sm:max-w-none
@@ -94,23 +109,22 @@ export default function Home() {
       {/* ---- 2. Why it exists --------------------------------------------- */}
       <Section title="The information isn’t missing. It’s scattered.">
         <P>
-          By the time you&rsquo;re ready to advise a client, you already have what they
+          By the time you&rsquo;re ready to send it, you already have everything they
           need. It&rsquo;s just spread across nine browser tabs, a spreadsheet, three
-          email threads, photos on your phone, a PDF someone sent you, and notes only
-          you can read.
+          email threads, photos on your phone, a printout someone handed you, and notes
+          only you can read.
         </P>
         <P>
           So you assemble it by hand. An email with links. A document. A few
           screenshots. A follow-up message with the one thing you forgot.
         </P>
         <P>
-          What arrives is a pile &mdash; and your client has to do the assembly
-          themselves, usually on a phone, usually while making a decision that matters
-          to them.
+          What arrives is a pile &mdash; and they have to do the assembly themselves,
+          usually on a phone, usually while making a decision that matters to them.
         </P>
         <P>
-          Sendset exists to close that last gap. Not to do your research; to turn the
-          research you&rsquo;ve already done into one clear thing you can hand over.
+          Sendset exists to close that last gap. Not to do the work for you &mdash; to
+          help what you&rsquo;ve already done arrive as one clear thing you can hand over.
         </P>
       </Section>
 
@@ -118,44 +132,45 @@ export default function Home() {
       <Section title="What goes in, and what comes out">
         <div className="grid gap-4 sm:grid-cols-2">
           <Panel label="In">
-            Notes, lists, links, emails, and other material you&rsquo;ve already
-            gathered. Sendset helps organize it into a draft you can review and
-            refine.
+            Notes and pasted text, a spreadsheet saved as CSV, photographs of the pages
+            you were handed. Sendset helps organize it into a draft.
           </Panel>
           <Panel label="Out">
-            A structured guide, laid out to be read on a phone &mdash; like the one
-            above.
+            A Sendset: one clear, organized version of what you&rsquo;re sending, laid
+            out to be read on a phone &mdash; like the one above.
           </Panel>
         </div>
         <P className="mt-6">
           <strong className="font-semibold text-foreground">You stay in the middle.</strong>{" "}
-          Sendset works from the material you give it &mdash; your words, your
-          findings &mdash; and organises it into a draft. That draft opens in an editor,
-          and nothing reaches your client until you&rsquo;ve read it, corrected anything
-          that&rsquo;s off, and decided it&rsquo;s right.
+          Sendset works from the material you give it &mdash; your words, your source
+          material &mdash; and organizes it into a draft. That draft opens in an editor,
+          and nothing reaches anyone until you&rsquo;ve read it, corrected anything
+          that&rsquo;s off, and decided it&rsquo;s right. When Sendset spots something
+          that needs your attention, it asks you to review it before you send.
         </P>
       </Section>
 
       {/* ---- 4. How it works ---------------------------------------------- */}
       <Section title="Three steps">
         <ol className="space-y-6">
-          <Step n={1} heading="Paste what you have.">
-            However rough. Sendset reads it and pulls out the options, the details,
-            the links.
+          <Step n={1} heading="Bring in what you have.">
+            Paste your text, open a CSV, or photograph the pages you were handed.
+            Pictures are transcribed into the same box, where you can correct the words
+            before anything is organized. It doesn&rsquo;t need to be tidy.
           </Step>
-          <Step n={2} heading="Review and edit.">
-            It comes back organised into sections. Change anything &mdash; fix a price,
-            add a photo, write a note to your client at the top. You see it before they
-            do.
+          <Step n={2} heading="Read the draft, and change what needs changing.">
+            It comes back organized into sections. Fix a price, drop an option, add a
+            photo, write a personal note at the top. Anything Sendset has asked you to
+            look at, you settle here. You see all of it before anyone else does.
           </Step>
-          <Step n={3} heading="Send it the way that client prefers.">
-            One guide, several formats, chosen when you send rather than when you build.
+          <Step n={3} heading="Send it the way that person prefers.">
+            One Sendset, several formats &mdash; chosen when you send, not when you build.
           </Step>
         </ol>
       </Section>
 
       {/* ---- 5. The four formats ------------------------------------------ */}
-      <Section title="One guide. Four ways to hand it over.">
+      <Section title="One Sendset. Four ways to hand it over.">
         {/* THE SAME SENDSET, FOUR TIMES. This used to be four paragraphs saying
             what each format looks like; the picture says it, and says the part
             prose could not — that they are one object, not four documents.
@@ -176,14 +191,14 @@ export default function Home() {
             sizes="(min-width: 640px) 768px, 100vw"
             width={342}
             height={470}
-            alt="The same guide handed over four ways: the interactive link on a phone, a short message with the link ready to paste, the guide inside the body of an email, and the same guide printed on paper."
+            alt="The same Sendset handed over four ways: the interactive link on a phone, a short message with the link ready to paste, the Sendset inside the body of an email, and the same Sendset printed on paper."
             className="block w-full h-auto rounded-xl border border-border
                        aspect-[342/470] sm:aspect-[768/660] object-cover object-top"
           />
         </picture>
         <P className="mt-6">
-          You build it once. Which format goes out is a decision you make when you send
-          it, not when you build it.
+          You build it once. Which one goes out is a decision you make when you send it
+          &mdash; and whichever they open, it&rsquo;s the same Sendset.
         </P>
       </Section>
 
@@ -193,34 +208,35 @@ export default function Home() {
           Sharing the same information several ways usually means rebuilding or
           reformatting it for each one. And the moment something changes&mdash;a price,
           a date, one option dropping out&mdash;you can end up with multiple versions in
-          the world and no easy way to know which one your client is looking at.
+          the world and no easy way to know which one they are looking at.
         </P>
         <P>
-          With Sendset there&rsquo;s one guide. Update it, and the link your client
-          already has shows the current version. Nothing to resend, nothing to correct.
+          A Sendset is one thing. Update it, and the link you already sent shows the
+          current version. Nothing to resend, nothing to correct.
         </P>
       </Section>
 
       {/* ---- 7. Who it's for ----------------------------------------------- */}
-      <Section title="For professionals who hand over what they’ve found">
+      <Section title="For people who have to explain what they’ve put together">
         <P>
-          Consultants, planners, advisors, agents, coaches, relocation professionals
-          &mdash; anyone who researches options on someone else&rsquo;s behalf and then
-          has to explain them clearly.
+          Consultants, planners, advisors, coaches, agents, relocation professionals.
+          Small businesses sending their own options, prices or schedules. Anyone who has
+          to put information in front of someone else and make it easy to take in
+          &mdash; whether you gathered it on their behalf or it was yours to begin with.
         </P>
         <P>
-          If your work ends with <em>&ldquo;here&rsquo;s what I found, and here&rsquo;s
-          what I&rsquo;d do&rdquo;</em>, Sendset is for that handover.
+          If your work ends with <em>&ldquo;here&rsquo;s what I put together, and
+          here&rsquo;s what I&rsquo;d do&rdquo;</em>, Sendset is for that handover.
         </P>
       </Section>
 
       {/* ---- 8. What to do next -------------------------------------------- */}
       <section className="mt-20 rounded-2xl border border-border bg-surface px-7 py-10 sm:px-10">
         <h2 className="text-2xl font-bold tracking-tight text-foreground text-balance">
-          Start with one real client.
+          Start with one you really have to send.
         </h2>
         <p className="mt-4 text-lg leading-relaxed text-muted max-w-xl">
-          The fastest way to judge it is to build one &mdash; the guide you&rsquo;d
+          The fastest way to judge it is to build one &mdash; the Sendset you&rsquo;d
           otherwise assemble by hand this week.
         </p>
         <div className="mt-7 flex flex-wrap items-center gap-x-6 gap-y-3">

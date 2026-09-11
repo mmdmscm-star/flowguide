@@ -44,9 +44,15 @@ const sourceSerif = Source_Serif_4({
 
 // The description is what a professional reads in a link preview when the URL
 // is pasted into a message or an email — which, for now, is how most people
-// will meet FlowGuide. "Living client packets for professionals" was internal
+// will meet Sendset. "Living client packets for professionals" was internal
 // vocabulary: it said nothing a stranger could act on, and "packet" is not the
 // word a professional uses.
+//
+// It names the PRODUCT and not the object, for the same reason the landing
+// page's subhead does: 155 characters is no place to introduce a noun and then
+// use it. "Client" is gone from it too — the thing being described is one
+// person putting information in front of another, which is not always advice
+// and not always a client.
 //
 // The card image is ONE static asset in /public. There is no per-page OG
 // generation and none is wanted.
@@ -58,22 +64,22 @@ export const metadata: Metadata = {
   metadataBase: new URL("https://sendset.io"),
   title: "Sendset",
   description:
-    "Turn the notes you already have into one clear guide your client can use — and send it by link, email, message, or print.",
+    "Start with what you already have. Sendset helps you shape it into one clear thing, yours to check before you send it by link, email, message, or print.",
   openGraph: {
     title: "Sendset",
     description:
-      "Turn the notes you already have into one clear guide your client can use — and send it by link, email, message, or print.",
+      "Start with what you already have. Sendset helps you shape it into one clear thing, yours to check before you send it by link, email, message, or print.",
     url: "/",
     siteName: "Sendset",
     type: "website",
     images: [{ url: "/og.jpg", width: 1200, height: 630,
-               alt: "Sendset — one guide your client can actually use" }],
+               alt: "Sendset — one clear thing people can actually use" }],
   },
   twitter: {
     card: "summary_large_image",
     title: "Sendset",
     description:
-      "Turn the notes you already have into one clear guide your client can use — and send it by link, email, message, or print.",
+      "Start with what you already have. Sendset helps you shape it into one clear thing, yours to check before you send it by link, email, message, or print.",
     images: ["/og.jpg"],
   },
 };

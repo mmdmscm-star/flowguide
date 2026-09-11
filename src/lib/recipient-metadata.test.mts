@@ -6,14 +6,32 @@ import { recipientMetadata, RECIPIENT_DESCRIPTION } from "./recipient-metadata.t
 const codeOf = (p: string) => readFileSync(p, "utf8");
 const RECIPIENT_ROUTES = ["src/app/p/[slug]/page.tsx", "src/app/p/[slug]/print/page.tsx"];
 
-// The exact strings that reached a client's text message.
-const MARKETING = [
+/** The exact strings that reached a client's text message. Kept verbatim even
+ *  though the landing page no longer says any of them: this is the incident,
+ *  and a guard that forgets what happened is a guard that lets it happen the
+ *  same way twice. */
+const LEAKED = [
   "Everything you found",
   "Turn the notes you already have",
   "your client can actually use",
   "/og.png",
   "/og.jpg",
 ];
+
+/** …and whatever the marketing description SAYS TODAY, read from the root
+ *  layout rather than copied here.
+ *
+ *  A frozen list stops protecting the moment the copy changes — it went stale
+ *  on the first landing-page rewrite and would have watched the new sentence
+ *  leak without failing. What must never ride along with a client's link is the
+ *  CURRENT marketing copy, so the current marketing copy is what this reads. */
+function liveMarketingDescription(): string {
+  const m = /description:\s*\n?\s*"([^"]{40,})"/.exec(codeOf("src/app/layout.tsx"));
+  assert.ok(m, "the root layout declares no marketing description to protect against");
+  return m![1];
+}
+
+const MARKETING = [...LEAKED, liveMarketingDescription()];
 
 // ---------------------------------------------------------------------------
 // THE BOUNDARY
@@ -129,7 +147,16 @@ test("metadataBase IS THE CANONICAL DOMAIN, not a deploy alias", () => {
 });
 
 test("the public homepage KEEPS its marketing metadata", () => {
+  // THE PROPERTY, NOT THE SENTENCE. This pinned the description's first six
+  // words, which is a proxy for "the homepage still has marketing metadata" and
+  // fails the first time that copy is rewritten — as it did. What has to stay
+  // true is that the root still declares a marketing description in all three
+  // places, and that it is not the recipient one leaking upward.
   const layout = codeOf("src/app/layout.tsx");
-  assert.match(layout, /Turn the notes you already have/, "the marketing description was removed");
+  const described = layout.match(/description:\s*\n?\s*"[^"]{40,}"/g) ?? [];
+  assert.equal(described.length, 3,
+    `expected a description on the root, its openGraph and its twitter card; found ${described.length}`);
+  assert.ok(!layout.includes(RECIPIENT_DESCRIPTION),
+    "the homepage now wears the recipient's description");
   assert.match(layout, /\/og\.jpg/, "the marketing card was removed");
 });
