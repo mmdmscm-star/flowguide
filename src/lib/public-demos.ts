@@ -1,5 +1,8 @@
 import type { Packet } from "./types.ts";
 import { samplePacket } from "./sample-data.ts";
+import { harborHouseDemo } from "./demo-harbor-house.ts";
+import { monthOneDemo } from "./demo-month-one.ts";
+import { redAwningDemo } from "./demo-red-awning.ts";
 
 // EVERY PUBLIC DEMO, IN ONE LIST.
 //
@@ -20,7 +23,13 @@ import { samplePacket } from "./sample-data.ts";
 // So the guard iterates THIS, and a demo that is not in here is not served.
 // Adding a fixture to the array is what puts it under the rules.
 export const PUBLIC_DEMOS: readonly Packet[] = [
+  // Order matters only in that the venue shortlist is the one the landing
+  // page's primary call to action points at, and the one the richness bar in
+  // public-surface.test.mts holds to a higher standard than the rest.
   samplePacket,
+  harborHouseDemo,
+  monthOneDemo,
+  redAwningDemo,
 ];
 
 const BY_SLUG: ReadonlyMap<string, Packet> =

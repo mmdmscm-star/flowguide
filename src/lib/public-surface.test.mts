@@ -27,7 +27,12 @@ const proseOf = (p: string) => codeOf(p).replace(/\s+/g, " ");
 
 const LANDING = "src/app/page.tsx";
 /** The fixture FILES, for the checks that read source rather than values. */
-const DEMO_SOURCES = ["src/lib/sample-data.ts"];
+const DEMO_SOURCES = [
+  "src/lib/sample-data.ts",
+  "src/lib/demo-harbor-house.ts",
+  "src/lib/demo-month-one.ts",
+  "src/lib/demo-red-awning.ts",
+];
 
 /** Every string ONE demo would put on screen. */
 function stringsOf(packet: Packet): string[] {
