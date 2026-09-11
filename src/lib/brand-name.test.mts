@@ -34,6 +34,11 @@ const SURFACES = [
   "src/app/p/[slug]/page.tsx",
   "src/app/p/[slug]/not-found.tsx",
   "src/app/preview/[id]/page.tsx",
+  // THE SHARE STEP'S OWN COPY, which the server shell above does not contain.
+  // It was outside this list while it spoke only to someone who had navigated
+  // to Preview deliberately; it now receives everyone who publishes, and it was
+  // saying "your client can now see this packet" at the moment of success.
+  "src/components/preview-actions.tsx",
   "src/lib/recipient-metadata.ts",
   "src/components/print/print-packet.tsx",
   "src/components/nav/creator-nav.tsx",
@@ -98,10 +103,15 @@ test("MANY take the plural, ONE does not", () => {
 
   const editor = codeOf("src/components/editor/legacy-packet-editor.tsx");
   assert.match(editor, /Sendset name/, "the private title field");
-  // The PUNCTUATION is not the property. This pinned the exclamation mark, so
-  // dropping it — along with the 4xl 🎉 above it — failed a test about whether
-  // one object is called a Sendset or Sendsets. The singular is what matters.
-  assert.match(editor, /Your Sendset is live\b/, "the publish confirmation");
+  // THE CONFIRMATION LIVES WHERE PUBLISHING NOW LANDS. It used to be a dialog
+  // in the editor; publishing routes into the share step instead, so there is
+  // one post-publish experience rather than two. What has to stay true is that
+  // the sentence a professional reads at the moment of success calls the thing
+  // a Sendset — wherever that sentence is.
+  const share = codeOf("src/components/preview-actions.tsx");
+  assert.match(share, /can now see this Sendset\b/, "the publish confirmation");
+  assert.doesNotMatch(editor, /Your Sendset is live/,
+    "the editor still has its own publish dialog, so there are two of them again");
   // A determiner in front of the plural is the way this goes wrong.
   for (const f of SURFACES)
     for (const wrong of [/\bthis Sendsets\b/, /\ba Sendsets\b/, /\bNew Sendsets\b/,

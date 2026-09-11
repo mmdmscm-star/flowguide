@@ -60,7 +60,7 @@ export function PreviewActions({ packetId, slug, initialStatus, title, clientNam
       if (!res.ok) {
         if (res.status === 422 && (data.error === "no_profile" || data.error === "no_contact")) {
           const proceed = confirm(
-            "This packet does not include professional contact information. You can still publish it, but the contact footer will not appear."
+            "This Sendset does not include professional contact information. You can still publish it, but the contact footer will not appear."
           );
           if (proceed) {
             await publishPacket(true);
@@ -135,10 +135,10 @@ export function PreviewActions({ packetId, slug, initialStatus, title, clientNam
     return (
       <div className="bg-green-50 border-b border-green-200 px-5 py-3 text-center">
         <p className="text-sm text-green-800 font-medium mb-1">
-          Published — your client can now see this packet
+          Published — your client can now see this Sendset
         </p>
         <p className="text-xs text-green-700 mb-2">
-          Anyone with this link can open the packet — no sign-in required. Share
+          Anyone with this link can open the Sendset — no sign-in required. Share
           it only with people you want to see it.
         </p>
         {/* The message CONTAINS the link, so it takes precedence and

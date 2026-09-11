@@ -1,7 +1,6 @@
 "use client";
 import { INPUT_SHELL } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
-import { MODAL_SCRIM, MODAL_PANEL, MODAL_TITLE, MODAL_LEDE } from "@/components/ui/modal";
 
 import { useEffect, useState, useCallback, useRef, type ReactNode } from "react";
 import ImageUploadField from "./image-upload-field";
@@ -256,7 +255,6 @@ export function LegacyPacketEditor() {
   // from two different moments: while building, and again where the work ends.
   const [promoting, setPromoting] = useState(false);
   const [libraryKey, setLibraryKey] = useState(0);
-  const [showPublishModal, setShowPublishModal] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
   const [showAppendModal, setShowAppendModal] = useState(false);
   const [appendText, setAppendText] = useState("");
@@ -1096,7 +1094,20 @@ export function LegacyPacketEditor() {
       return;
     }
     setPacket((prev) => prev ? { ...prev, status: "published" } : prev);
-    setShowPublishModal(true);
+    // ONE POST-PUBLISH EXPERIENCE, AND IT IS THE GOOD ONE.
+    //
+    // This used to open a dialog holding the link and nothing else, while
+    // publishing from Preview landed on a page with the client message written
+    // for you, the email version, Print/Save as PDF and a way back. Same
+    // action, same endpoint, two different outcomes decided by which button you
+    // happened to press — and the weaker one was in the editor's own bottom
+    // bar, which is where the work happens. A professional could publish for
+    // months and never learn the other half existed.
+    //
+    // Preview reads the packet's status on the server, so arriving now lands
+    // directly on the share step rather than on a page offering to publish
+    // something already published.
+    router.push(`/preview/${packetId}`);
   }
 
   async function handleUnpublish() {
@@ -1868,31 +1879,6 @@ export function LegacyPacketEditor() {
       </div>
 
       {/* Publish success modal */}
-      {showPublishModal && (
-        <div className={MODAL_SCRIM}>
-          <div className={`${MODAL_PANEL} max-w-sm p-6 text-center`}>
-            {/* NO CONFETTI EMOJI. A 4xl 🎉 was the largest thing in a dialog
-                whose actual job is to hand over a link — the same call as the
-                Dashboard's 📦, and the link is the celebration. */}
-            <h2 className={MODAL_TITLE}>Your Sendset is live</h2>
-            <p className={MODAL_LEDE}>Share this link with your client:</p>
-            {/* The link is the content of this dialog, so it is set in the face
-                a link is read in rather than in the interface face. */}
-            <div className="mt-4 break-all rounded-[var(--radius-control)] bg-ground-2 px-3 py-2.5
-                            font-mono text-meta text-ink">
-              {typeof window !== "undefined" ? `${window.location.origin}/p/${packet.slug}` : ""}
-            </div>
-            <Button variant="primary" size="md" className="mt-4 w-full"
-              onClick={() => { copyPacketLink(); setShowPublishModal(false); }}>
-              Copy link
-            </Button>
-            <Button variant="ghost" size="md" className="mt-1 w-full"
-              onClick={() => setShowPublishModal(false)}>
-              Close
-            </Button>
-          </div>
-        </div>
-      )}
       </main>
     </div>
   );
