@@ -1,4 +1,6 @@
 "use client";
+import { checkPastedPairing, type PairingVerdict } from "@/lib/paste-pairing";
+import { Button } from "@/components/ui/button";
 import { CreatorNav } from "@/components/nav/creator-nav";
 
 import { useEffect, useRef, useState } from "react";
@@ -38,6 +40,11 @@ const PACKET_TYPES = [
 export default function NewPacketWorkspace() {
   const router = useRouter();
   const [rawText, setRawText] = useState("");
+  /** SET ONLY BY A PASTE, AND ONLY WHEN THE TWO CLIPBOARD FLAVOURS CONTRADICT
+   *  EACH OTHER. Advisory: it never blocks, never edits the text, and holds no
+   *  HTML — `checkPastedPairing` reads the fragment once and returns a verdict,
+   *  and the fragment is gone when the handler returns. */
+  const [pairingWarning, setPairingWarning] = useState<PairingVerdict | null>(null);
   const [fileName, setFileName] = useState("");
   const [readingImage, setReadingImage] = useState(false);
   /** OPTIONAL, AND OFF. Ambiguous grouping happens with pasted text, a CSV and
@@ -583,8 +590,68 @@ export default function NewPacketWorkspace() {
             </p>
           </div>
         )}
+        {/* SAID BEFORE THE IMPORT, WHERE IT CAN STILL BE ACTED ON.
+            Above the box rather than below it: this is about the text now
+            sitting in the box, and a caution underneath the thing it cautions
+            about is read after the decision. It is amber for the same reason
+            the copied-link notice is — it concerns what a client will end up
+            reading. */}
+        {pairingWarning && (
+          <div role="status"
+               className="border-b border-amber-200 bg-amber-50 px-4 py-3.5 text-amber-900">
+            <p className="text-body font-medium">
+              This page&rsquo;s prices may not line up with the right items
+            </p>
+            {/* CONCRETE, BECAUSE A VAGUE WARNING CANNOT BE CHECKED. One real row
+                from what was just pasted, both readings side by side. */}
+            <p className="mt-1.5 text-meta">
+              The page you copied lists each price before its item name, so
+              flattening it to plain text moved {pairingWarning.conflicts} of{" "}
+              {pairingWarning.compared} prices onto the wrong row. Pasted,{" "}
+              <span className="font-medium">{pairingWarning.example.label}</span>{" "}
+              reads <span className="font-medium tabular-nums">{pairingWarning.example.plainValue}</span>;
+              on the page it is{" "}
+              <span className="font-medium tabular-nums">{pairingWarning.example.htmlValue}</span>.
+            </p>
+            <p className="mt-1.5 text-meta text-amber-900/80">
+              Sendset has not changed anything — it cannot tell which reading you
+              meant, so it will use the text exactly as pasted.
+            </p>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              {/* THE SAFE STOP. Clears the box so a re-copy starts clean rather
+                  than appending to a source already known to be wrong. */}
+              <Button variant="secondary" size="sm"
+                onClick={() => { setRawText(""); setFileName(""); setDelimiterHint(null); setPairingWarning(null); }}>
+                Clear and re-copy
+              </Button>
+              {/* THE EXPLICIT CONTINUE. Dismissing changes nothing about the
+                  text; it records that the professional has read this. */}
+              <Button variant="ghost" size="sm" onClick={() => setPairingWarning(null)}>
+                Use it as pasted
+              </Button>
+            </div>
+          </div>
+        )}
         <textarea
           value={rawText}
+          /* THE PASTE IS NOT INTERCEPTED. No preventDefault, no rewriting: the
+             browser inserts the same plain text it always did, and this only
+             looks at what ELSE the clipboard was carrying. A copied page can
+             hold its structure in text/html while its text/plain flattening
+             says something different about which value belongs to which row —
+             which is how a menu reached a draft with every price one dish out.
+             Reading it costs nothing and changes nothing. */
+          onPaste={(e) => {
+            try {
+              const html = e.clipboardData?.getData("text/html") ?? "";
+              const plain = e.clipboardData?.getData("text/plain") ?? "";
+              setPairingWarning(checkPastedPairing(html, plain));
+            } catch {
+              // A clipboard that will not describe itself is not a problem to
+              // report; it is simply a paste with nothing extra to check.
+              setPairingWarning(null);
+            }
+          }}
           onChange={(e) => { setRawText(e.target.value); setDelimiterHint(null); }}
           placeholder="Paste your notes here…"
           aria-label="Your notes"
