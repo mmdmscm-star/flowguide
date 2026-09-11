@@ -12,13 +12,17 @@ import { packetMapUrl } from "@/lib/maps-url";
 
 type Props = {
   params: Promise<{ id: string }>;
+  /** Read on the SERVER, like /edit does, so the client component needs no
+   *  search-params hook and no Suspense boundary to know why it was opened. */
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 };
 
-export default async function PreviewPage({ params }: Props) {
+export default async function PreviewPage({ params, searchParams }: Props) {
   const session = await getSession();
   if (!session) redirect("/login");
 
   const { id } = await params;
+  const sp = await searchParams;
   const packet = await getPacketForEditor(id, session.userId);
 
   // Preview must be recipient-truthful, so it applies the same rule the live
@@ -56,6 +60,7 @@ export default async function PreviewPage({ params }: Props) {
           title={packet.clientTitle}
           clientName={packet.clientName}
           professionalName={packet.professional?.name}
+          resolveOwnership={sp.resolve === "photos"}
         />
       }
     >

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import OwnershipResolution, { type OwnershipState } from "./OwnershipResolution";
 import ClientMessagePanel from "./client-message-panel";
 import EmailVersionPanel from "./email-version-panel";
@@ -13,9 +13,13 @@ type Props = {
   title?: string | null;
   clientName?: string | null;
   professionalName?: string | null;
+  /** Set when the professional was sent here BY a publish that was refused for
+   *  photo ownership. The reason travels in the URL so the arrival explains
+   *  itself and can be linked to, reloaded, or shared with support. */
+  resolveOwnership?: boolean;
 };
 
-export function PreviewActions({ packetId, slug, initialStatus, title, clientName, professionalName }: Props) {
+export function PreviewActions({ packetId, slug, initialStatus, title, clientName, professionalName, resolveOwnership }: Props) {
   const [status, setStatus] = useState(initialStatus);
   const [publishing, setPublishing] = useState(false);
   const [error, setError] = useState("");
@@ -36,16 +40,48 @@ export function PreviewActions({ packetId, slug, initialStatus, title, clientNam
   // is derived by the ownership route, which is the single place that decides
   // what FlowGuide is willing to offer — so the panel is loaded from there
   // rather than from a second, thinner copy of the same facts.
-  async function loadOwnership() {
+  /** FETCHING AND SETTING ARE SEPARATE. A function that returns the state lets
+   *  the effect below decide whether the component is still mounted before
+   *  storing it, and keeps the store out of the effect's synchronous body,
+   *  which is what the cascading-render rule is about. */
+  const fetchOwnership = useCallback(async (): Promise<OwnershipState | null> => {
     try {
       const res = await fetch(`/api/packets/${packetId}/ownership`);
-      if (!res.ok) return;   // includes 503: an unavailable check has no panel to draw
-      setOwnership(await res.json());
+      if (!res.ok) return null;   // includes 503: an unavailable check has no panel to draw
+      return (await res.json()) as OwnershipState;
     } catch {
       // Leaving the panel unmounted falls back to the 409's own sentence, which
       // already says what is wrong even when it cannot say what to press.
+      return null;
     }
-  }
+  }, [packetId]);
+
+  const loadOwnership = useCallback(async () => {
+    const next = await fetchOwnership();
+    if (next) setOwnership(next);
+  }, [fetchOwnership]);
+
+  // ARRIVING BECAUSE OF THE PHOTOS, rather than discovering it by pressing
+  // Publish a second time.
+  //
+  // The editor's Publish can be refused for unresolved photo ownership, and the
+  // editor has nothing to draw for it — the resolution panel lives here. It now
+  // sends the professional here and says why, and this is the half that makes
+  // that worth doing: without it they would land on a page that looks entirely
+  // normal and would have to press Publish again to find out.
+  //
+  // Asked for explicitly rather than fetched on every mount: someone opening
+  // Preview to look at their Sendset is not asking about photo provenance, and
+  // a request nobody needs is a request that can fail in front of them.
+  useEffect(() => {
+    if (!resolveOwnership) return;
+    let cancelled = false;
+    void (async () => {
+      const next = await fetchOwnership();
+      if (!cancelled && next) setOwnership(next);
+    })();
+    return () => { cancelled = true; };
+  }, [resolveOwnership, fetchOwnership]);
 
   async function publishPacket(skipProfileCheck: boolean) {
     setError("");

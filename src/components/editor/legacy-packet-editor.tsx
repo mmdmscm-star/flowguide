@@ -1088,6 +1088,23 @@ export function LegacyPacketEditor() {
         }
         return;
       }
+      // PHOTO OWNERSHIP HAS A HOME, AND IT IS NOT HERE.
+      //
+      // This refusal is a decision to make — which item a photo belongs on —
+      // and the panel that makes it lives on the share step. Falling through to
+      // the banner below left the one message a professional cannot act on in
+      // the one place with nothing to press. `OwnershipDecisions` above shows
+      // decisions already MADE, deliberately not findings, and turning it into
+      // a second gate is the duplication this avoids.
+      //
+      // The reason travels in the URL, so the arrival explains itself.
+      if (res.status === 409 && data.error === "ownership_unresolved") {
+        router.push(`/preview/${packetId}?resolve=photos`);
+        return;
+      }
+      // Everything else stays here and says so. `ownership_unavailable` is a
+      // 503 meaning the CHECK could not run — there is no panel to draw for it
+      // and the server's own sentence already says to try again.
       const errMsg = data.message || data.error || "Could not publish";
       setPublishError(errMsg);
       window.scrollTo({ top: 0, behavior: "smooth" });
