@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { samplePacket } from "@/lib/sample-data";
+import { isPublicDemo, publicDemo } from "@/lib/public-demos";
 import { getPublishedPacket, markPacketViewed } from "@/lib/queries";
 import { PacketHeader } from "@/components/packet-header";
 import { PersonalNote } from "@/components/personal-note";
@@ -28,8 +28,9 @@ const isSupabaseConfigured =
   !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
 async function resolvePacket(slug: string): Promise<Packet | null> {
-  // Demo packet always works, even without a database
-  if (slug === "demo") return samplePacket;
+  // A demo always works, even without a database.
+  const demo = publicDemo(slug);
+  if (demo) return demo;
 
   // If Supabase is configured, try the database
   if (isSupabaseConfigured) {
@@ -59,7 +60,7 @@ export default async function PacketPage({ params }: Props) {
   // Is the person reading this its author? Costs a recipient nothing: with no
   // session cookie this returns null without a query. Everything below renders
   // identically either way — the only difference is one bar ABOVE the packet.
-  const ownedId = isSupabaseConfigured && slug !== "demo" ? await ownedPacketId(slug) : null;
+  const ownedId = isSupabaseConfigured && !isPublicDemo(slug) ? await ownedPacketId(slug) : null;
 
   // The SHARED rule for whether a stored map link is one a recipient can
   // follow. This page used to put the raw column value in an href, which made
@@ -73,7 +74,7 @@ export default async function PacketPage({ params }: Props) {
   // a genuinely useful signal into one that cannot be trusted. Only possible to
   // fix now that the page knows who is looking; no backfill, since there is no
   // way to tell which past views were the owner's.
-  if (slug !== "demo" && isSupabaseConfigured && !ownedId) {
+  if (!isPublicDemo(slug) && isSupabaseConfigured && !ownedId) {
     markPacketViewed(slug).catch(() => {});
   }
 

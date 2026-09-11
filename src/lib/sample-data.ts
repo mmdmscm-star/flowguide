@@ -30,6 +30,11 @@ import type { Packet } from "./types.ts";
 export const samplePacket: Packet = {
   slug: "demo",
   title: "Offsite Venue Options",
+  // THE RECIPIENT-FACING HEADING. Absent, the page opened with "Prepared for
+  // the Northbeam team" and no title — fine when the only way here was a link
+  // somebody sent you and you already knew what it was, wrong once a demo is
+  // one of several a stranger picks from.
+  clientTitle: "Offsite Venue Options",
   clientName: "the Northbeam team",
   personalNote:
     "Hi Priya,\n\nHere are the five venues I looked at for the March offsite, with the three I'd put in front of you first. I've listed day rates, capacity and what's included so you can compare them properly rather than digging through five websites.\n\nTwo things worth knowing now: The Foundry will only hold March 12–13 until the 28th, and Cedar & Vine's catering minimum goes up in January.\n\nHave a look and tell me which two you'd like to tour — I'll arrange them.\n\nThanks,\nMaya",

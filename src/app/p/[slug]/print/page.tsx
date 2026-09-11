@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
-import { samplePacket } from "@/lib/sample-data";
+import { publicDemo } from "@/lib/public-demos";
 import { getPublishedPacket } from "@/lib/queries";
 import { PrintPacket } from "@/components/print/print-packet";
 import PrintToolbar from "@/components/print/print-toolbar";
@@ -39,7 +39,8 @@ const isSupabaseConfigured =
 export const metadata: Metadata = recipientMetadata;
 
 async function resolvePacket(slug: string): Promise<Packet | null> {
-  if (slug === "demo") return samplePacket;
+  const demo = publicDemo(slug);
+  if (demo) return demo;
   return isSupabaseConfigured ? getPublishedPacket(slug) : null;
 }
 

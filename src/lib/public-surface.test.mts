@@ -9,6 +9,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { samplePacket } from "./sample-data.ts";
+import { PUBLIC_DEMOS } from "./public-demos.ts";
+import type { Packet } from "./types.ts";
 
 const codeOf = (p: string) =>
   readFileSync(p, "utf8").split("\n").filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join("\n");
@@ -24,17 +26,20 @@ const codeOf = (p: string) =>
 const proseOf = (p: string) => codeOf(p).replace(/\s+/g, " ");
 
 const LANDING = "src/app/page.tsx";
-const DEMO_SRC = "src/lib/sample-data.ts";
+/** The fixture FILES, for the checks that read source rather than values. */
+const DEMO_SOURCES = ["src/lib/sample-data.ts"];
 
-/** Every string the demo would put on screen. */
-function demoStrings(): string[] {
-  const out: string[] = [samplePacket.title, samplePacket.clientName ?? "", samplePacket.personalNote ?? ""];
-  const pro = samplePacket.professional as Record<string, unknown>;
+/** Every string ONE demo would put on screen. */
+function stringsOf(packet: Packet): string[] {
+  const out: string[] = [
+    packet.title, packet.clientTitle ?? "", packet.clientName ?? "", packet.personalNote ?? "",
+  ];
+  const pro = packet.professional as Record<string, unknown>;
   for (const v of Object.values(pro)) if (typeof v === "string") out.push(v);
-  for (const s of samplePacket.sections) {
+  for (const s of packet.sections) {
     out.push(s.title ?? "", s.description ?? "");
     for (const i of s.items) {
-      out.push(i.title, i.description ?? "", i.address ?? "");
+      out.push(i.title, i.description ?? "", i.address ?? "", i.highlight ?? "");
       for (const d of i.details ?? []) out.push(d.label, d.value);
       for (const l of i.links ?? []) out.push(l.url, l.label ?? "");
       for (const c of i.contacts ?? []) out.push(c.name ?? "", c.role ?? "", c.phone ?? "", c.email ?? "");
@@ -43,6 +48,18 @@ function demoStrings(): string[] {
   }
   return out.filter(Boolean);
 }
+
+/** …and every string EVERY demo would, which is what the safety rules read.
+ *
+ *  These used to read one object. The rules below are about things a diff
+ *  cannot show — whether a business is real, whether a phone number belongs to
+ *  somebody — so a demo they do not visit is a demo nobody checked. */
+const ALL_DEMO_STRINGS = PUBLIC_DEMOS.flatMap(stringsOf);
+
+/** Iterate demos with their slug, so a failure names the fixture at fault. */
+const eachDemo = (fn: (packet: Packet, where: string) => void) => {
+  for (const d of PUBLIC_DEMOS) fn(d, `/p/${d.slug}`);
+};
 
 // ---------------------------------------------------------------------------
 // THE DEMO CARRIES NOTHING PRIVATE
@@ -54,12 +71,13 @@ test("THE DEMO HAS NO PRIVATE NOTE ANYWHERE", () => {
   // anything handed to it is serialised into the RSC payload and readable in
   // view-source even when it is never drawn. The previous demo leaked its note
   // exactly that way. A fixture must carry nothing private at all.
-  for (const s of samplePacket.sections) {
-    for (const i of s.items) {
-      assert.equal(i.notes, undefined, `demo item "${i.title}" carries a private note`);
-    }
-  }
-  assert.doesNotMatch(codeOf(DEMO_SRC), /\bnotes:/, "the demo fixture declares a notes field");
+  eachDemo((packet, where) => {
+    for (const s of packet.sections)
+      for (const i of s.items)
+        assert.equal(i.notes, undefined, `${where}: item "${i.title}" carries a private note`);
+  });
+  for (const src of DEMO_SOURCES)
+    assert.doesNotMatch(codeOf(src), /\bnotes:/, `${src} declares a notes field`);
 });
 
 // ---------------------------------------------------------------------------
@@ -73,14 +91,14 @@ test("no real business is given invented prices, staff or addresses", () => {
     "Sunrise", "Brookdale", "Oakmont", "Pacifica",
     "senior", "assisted living", "memory care", "placement",
   ];
-  const haystack = demoStrings().join(" \n ").toLowerCase();
+  const haystack = ALL_DEMO_STRINGS.join(" \n ").toLowerCase();
   for (const word of forbidden) {
     assert.ok(!haystack.includes(word.toLowerCase()), `the public demo says "${word}"`);
   }
 });
 
 test("contact details use the ranges reserved for fiction", () => {
-  const strings = demoStrings();
+  const strings = ALL_DEMO_STRINGS;
   const phones = strings.filter((s) => /^\(\d{3}\) \d{3}-\d{4}$/.test(s.trim()));
   assert.ok(phones.length >= 4, `expected several phone numbers, found ${phones.length}`);
   for (const p of phones) {
@@ -102,7 +120,51 @@ test("contact details use the ranges reserved for fiction", () => {
   }
 });
 
-test("the demo exercises the product rather than gesturing at it", () => {
+test("EVERY DEMO IS SERVED, AND ONLY ONCE", () => {
+  // A fixture that is not in the registry is not under the rules above, and a
+  // duplicate slug means one of two demos silently never renders.
+  assert.ok(PUBLIC_DEMOS.length >= 1, "there are no public demos");
+  const slugs = PUBLIC_DEMOS.map((d) => d.slug);
+  assert.equal(new Set(slugs).size, slugs.length, `two demos share a slug: ${slugs}`);
+  for (const slug of slugs)
+    assert.match(slug, /^[a-z0-9]+(-[a-z0-9]+)*$/, `"${slug}" is not a URL-safe slug`);
+  assert.ok(slugs.includes("demo"),
+    "the slug the landing page's primary call to action points at is gone");
+});
+
+test("EVERY DEMO CLEARS THE FLOOR, whatever it is a demo of", () => {
+  // THE FLOOR, NOT THE FLAGSHIP'S BAR. The venue demo is a comparison with
+  // opinions in it, and it carries contacts and links because a venue has a
+  // manager and a website. A menu does not, and neither does a plank. Applying
+  // that bar to every fixture would force an invented phone number onto a taco
+  // — which is worse than a thin demo, because it is a fact nobody needed and
+  // one more thing that has to be fictional.
+  //
+  // What every demo must be is SUBSTANTIAL and LEGIBLE: enough content to read
+  // as work somebody did, at least one gallery so it is not a wall of text,
+  // details on most of its items, a heading, and someone behind it.
+  eachDemo((packet, where) => {
+    const items = packet.sections.flatMap((s) => s.items);
+    assert.ok(packet.sections.length >= 2, `${where}: fewer than two sections`);
+    assert.ok(items.length >= 4, `${where}: fewer than four items`);
+    assert.ok(packet.sections.some((s) => s.items.length >= 2),
+      `${where}: no section has enough items to show an index`);
+    assert.ok(items.filter((i) => (i.photos ?? []).length >= 2).length >= 1,
+      `${where}: not one gallery — it will read as a wall of text`);
+    const withDetails = items.filter((i) => (i.details ?? []).length >= 3);
+    assert.ok(withDetails.length * 2 >= items.length,
+      `${where}: only ${withDetails.length} of ${items.length} items carry details`);
+    assert.ok((packet.personalNote ?? "").length > 150,
+      `${where}: the note is not doing real work`);
+    assert.ok((packet.clientTitle ?? "").trim(),
+      `${where}: no recipient-facing heading, so the page opens with no title`);
+    const pro = packet.professional;
+    assert.ok(pro.name && pro.businessName && pro.phone && pro.email,
+      `${where}: nobody is behind this Sendset`);
+  });
+});
+
+test("the FLAGSHIP demo exercises the product rather than gesturing at it", () => {
   const items = samplePacket.sections.flatMap((s) => s.items);
   assert.ok(samplePacket.sections.length >= 3, "fewer than three sections");
   assert.ok(items.length >= 5, "fewer than five items");

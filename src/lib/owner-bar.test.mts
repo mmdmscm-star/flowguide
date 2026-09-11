@@ -42,8 +42,16 @@ test("the cookie name is not duplicated", () => {
 test("the recipient page renders the bar ONLY for a confirmed owner", () => {
   assert.match(RECIPIENT, /\{ownedId && <OwnerBar/,
     "the bar must be gated on the resolved owner id, never on the mere presence of a session");
-  assert.match(RECIPIENT, /slug !== "demo" \? await ownedPacketId\(slug\) : null/,
-    "the sample packet has no owner and must not attempt the check");
+  // A DEMO HAS NO OWNER, so the check is skipped for one — and this used to
+  // name the one demo by its slug. There are several now, and the rule was
+  // never about that slug: it is that a public demo never goes looking for an
+  // owner. The registry answers that for all of them.
+  assert.match(RECIPIENT, /!isPublicDemo\(slug\) \? await ownedPacketId\(slug\) : null/,
+    "a public demo now attempts an owner lookup it can never satisfy");
+  // …and the check still HAPPENS for everything else, or the bar is simply
+  // gone and the assertion above is satisfied by skipping it for everyone.
+  assert.match(RECIPIENT, /await ownedPacketId\(slug\)/,
+    "the owner lookup is gone entirely, so no professional ever sees the bar");
 });
 
 test("the owner bar cannot act on anything", () => {
