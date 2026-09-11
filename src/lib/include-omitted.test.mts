@@ -209,14 +209,33 @@ test("PLAIN-TEXT EMAIL: a label-less detail is standalone text, with no stray co
     "the label-less line is indented differently from its neighbours");
 });
 
-test("LABELLED DETAILS ARE VISUALLY UNCHANGED", () => {
-  // The two-column layouts are still there, untouched, for every detail that
-  // has a label. Only the empty-label case takes the new path.
+test("LABELLED DETAILS KEEP THEIR TWO COLUMNS", () => {
+  // The two-column layouts are still there for every detail that has a label.
+  // Only the empty-label case takes the full-width path.
+  //
+  // THE COLUMN, NOT THE CLASS LIST. This pinned the atomic value's exact
+  // classes — `flex-shrink-0 whitespace-nowrap text-right` — as a stand-in for
+  // "the value is still a right-aligned column". Two of those three were the
+  // cause of a later defect: a value that could neither shrink nor wrap
+  // squeezed its label to 31px and printed it one letter per line. They are
+  // gone and the column is not, which is what this test was ever about.
   assert.match(CARD, /justify-between/, "the block row lost its pair layout");
-  assert.match(CARD, /flex-shrink-0 whitespace-nowrap text-right/, "the atomic row lost its column");
+  assert.match(CARD, /text-right text-\[color:var\(--sg-ink\)\]/,
+    "the atomic row's value stopped being a right-aligned column");
   assert.match(PRINT_CSS, /\.pg-detail-value \{ text-align: right; overflow-wrap: anywhere; \}/,
     "print's labelled value stopped being right aligned");
   assert.match(EMAIL, /width:45%">\$\{esc\(d\.label\)\}/, "email's labelled pair changed");
+  // …and the label-less row is still the OTHER thing: full width, left aligned,
+  // read as the sentence it is. A `text-right` creeping onto it would shove
+  // source prose against the right edge with nothing beside it.
+  // Bounded by CODE, not by a comment: codeOf() strips comments, so a comment
+  // landmark here would slice an empty string and the assertion below would
+  // pass about nothing.
+  const from = CARD.indexOf('if (!String(detail.label ?? "").trim())');
+  const to = CARD.indexOf("if (atomic)", from);
+  assert.ok(from > 0 && to > from, "the label-less branch moved; this test is reading the wrong code");
+  const labelless = CARD.slice(from, to);
+  assert.doesNotMatch(labelless, /text-right/, "the label-less row was given a value column");
 });
 
 test("EDITOR ROUND TRIP preserves a label-less row", () => {

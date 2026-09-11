@@ -209,12 +209,31 @@ export function ItemCard({ item, audience = "recipient" }: { item: Item; audienc
                 );
               }
 
-              // ATOMIC ROW — never wraps or stacks, at any width. The value is
-              // flex-shrink-0, so it always keeps its full natural width and the
-              // label absorbs every bit of the pressure by wrapping. items-start
-              // keeps the value on the first line, so values stay aligned across
-              // rows regardless of how tall their labels grow. This is what makes
-              // a run of short values scannable as a column.
+              // ATOMIC ROW — a short value anchored right, so a run of them
+              // reads as a column down the card. items-start keeps the value on
+              // the first line, so values stay aligned no matter how tall their
+              // labels grow.
+              //
+              // THE LABEL KEEPS ITS OWN WIDTH. This used to say the value never
+              // wrapped or shrank "and the label absorbs every bit of the
+              // pressure by wrapping" — which assumed the label would wrap
+              // between words. It did not. `overflow-wrap: anywhere` LOWERS an
+              // element's min-content width to a single character (break-word
+              // does not — that is the whole difference between them), and
+              // `min-w-0` removed the flex floor that would have stopped it. So
+              // a 17-character value beside a one-word label squeezed that label
+              // to 31px and printed it down the card one letter per line.
+              //
+              // Two changes, and they only work together. The label drops
+              // `min-w-0` and uses `break-words`, so its floor is its longest
+              // WORD. The value may now shrink and wrap, because a label with a
+              // floor and a value that cannot yield is not a fix — it is the
+              // same squeeze with the overflow hidden, which clips the value
+              // instead of mangling the label. Measured at 320/360/390/512 on
+              // all four demos: labels broken 5 → 0, nothing clipped at any
+              // width, and at 360 and above the rendering is unchanged down to
+              // the line count. Only a screen narrow enough to force the choice
+              // now wraps a value, which is the trade this row should make.
               if (atomic) {
                 return (
                   <div
@@ -222,17 +241,22 @@ export function ItemCard({ item, audience = "recipient" }: { item: Item; audienc
                     className={`flex items-start gap-x-6 ${divider}`}
                     style={{ padding: "var(--sg-details-row-pad)", fontSize: "var(--sg-body)", lineHeight: "var(--sg-body-lh)" }}
                   >
-                    {/* flex-1 + min-w-0 lets the label take the remaining space
-                        and wrap inside it; overflow-wrap:anywhere guarantees even
-                        a single unbroken word yields rather than pushing the
-                        value out of the card. */}
+                    {/* No min-w-0: a flex item's default `min-width: auto`
+                        resolves to its min-content size, and with break-words
+                        (not anywhere) that size is the longest word. The label
+                        can therefore wrap between words but never inside one. */}
                     <span
-                      className="flex-1 min-w-0 font-medium [overflow-wrap:anywhere]"
+                      className="flex-1 font-medium break-words"
                       style={{ color: "var(--sg-label)" }}
                     >
                       {detail.label}
                     </span>
-                    <span className="flex-shrink-0 whitespace-nowrap text-right text-[color:var(--sg-ink)]">
+                    {/* Shrinkable and wrappable, which costs nothing while there
+                        is room — a short value has no break opportunity to take.
+                        overflow-wrap:anywhere here is the last resort that keeps
+                        an unbreakable token (a long word, a URL) inside the card
+                        rather than clipped by the container's overflow-hidden. */}
+                    <span className="min-w-0 text-right text-[color:var(--sg-ink)] [overflow-wrap:anywhere]">
                       {detail.value}
                     </span>
                   </div>
