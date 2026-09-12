@@ -188,16 +188,24 @@ test("the FLAGSHIP demo exercises the product rather than gesturing at it", () =
 // THE LANDING PAGE
 // ---------------------------------------------------------------------------
 
-test("the landing page answers all seven questions, in order", () => {
+test("the landing page answers its questions, in order", () => {
+  // THE ORDER CHANGED, AND THAT WAS THE POINT. It used to run what-it-is,
+  // why-it-exists, in/out, how, formats, versus-rebuilding, who, what-next —
+  // seven beats of reasoning before a visitor saw a single finished thing.
+  // Someone who already understood Sendset read that page and temporarily lost
+  // the thread. Four real ones now come second, before any explanation, and the
+  // two sections that argued about delivery formats are one section near the
+  // bottom.
   const src = codeOf(LANDING);
   const beats = [
-    "Start with what you have",                   // what it is
-    "isn’t missing. It’s scattered",              // why it exists
-    "What goes in, and what comes out",           // in / out
-    "Three steps",                                // what it does
-    "Four ways to hand it over",                  // what comes out
-    "Build it once",                              // versus rebuilding
-    "Start with one you really have to send",     // what to do next
+    "Turn what you have into something worth opening",  // what it makes
+    "four different piles of information",              // four real ones, linked
+    "wasn’t in a useful shape",                         // the same rows, twice
+    "Three steps",                                      // how
+    "Build it once. Use it again",                      // the Library
+    "Made for the phone in their hand",                 // where it gets opened
+    "Share it the way that suits",                      // delivery, in its place
+    "Start with one you really have to send",           // what to do next
   ];
   let at = -1;
   for (const beat of beats) {
@@ -219,8 +227,12 @@ test("public copy says SENDSET — not packet, and no longer guide", () => {
   // Named where a name can be introduced: as a countable object, not inside the
   // subhead, where "Sendset helps you shape it into a Sendset" is the tautology
   // the /new copy already had to be corrected for.
-  assert.match(proseOf(LANDING), /A Sendset: one clear, organized version of what you/,
-    "section 3 no longer says what a Sendset is");
+  // WHERE THE OBJECT IS DEFINED MOVED, because the section that defined it did.
+  // It is now the line under four worked examples, which is a better place to
+  // say what the thing is than a panel labelled "Out".
+  assert.match(proseOf(LANDING),
+    /a set of items with photos, details, links and notes, laid out to be read on a phone/,
+    "the page no longer says what a Sendset is");
   assert.match(src, /See a real Sendset/, "the object is never named as a countable thing");
 });
 
@@ -228,16 +240,18 @@ test("PDF IS AN OUTPUT, NEVER AN INPUT", () => {
   // /new refuses both by name — "can\u2019t read PDFs yet", "Word documents" — and the
   // page used to list "a PDF someone sent you" among the material you arrive
   // with. Whatever the page says goes in has to be something that does.
-  const src = codeOf(LANDING);
-  for (const line of src.split("\n")) {
-    if (!/\bPDFs?\b|\bWord\b|\.docx|\.xlsx/i.test(line)) continue;
-    // The one legitimate mention: the list of ways a finished Sendset goes out.
-    assert.match(line, /link, email, message, print, or PDF/,
-      `the landing page mentions a format it cannot read: ${line.trim()}`);
+  // WHAT MATTERS IS THE SIDE OF THE ARROW, not the number of mentions. Pinning
+  // one permitted sentence made the rule brittle the moment delivery earned a
+  // second one; what must stay true is that PDF and Word never appear as
+  // something Sendset READS.
+  for (const m of proseOf(LANDING).matchAll(/[^.]*\b(PDFs?|Word|docx|xlsx)\b[^.]*\./gi)) {
+    assert.doesNotMatch(m[0],
+      /\b(reads?|imports?|uploads?|pastes?|accepts?|bring in|open a)\b/i,
+      `the landing page treats a format it cannot read as an input: ${m[0].trim()}`);
   }
   // And the input list names only what /new accepts.
   const prose = proseOf(LANDING);
-  assert.match(prose, /a spreadsheet saved as CSV/, "the In panel overstates what it reads");
+  assert.match(prose, /open a CSV/, "the page overstates what it reads");
   assert.match(prose, /photograph the pages you were handed/,
     "photographed pages — the input the page never mentioned — are gone again");
 });
@@ -249,9 +263,12 @@ test("THE AUDIENCE IS NOT ONLY ADVISORS", () => {
   const prose = proseOf(LANDING);
   assert.doesNotMatch(prose, /who researches options on someone/,
     "the audience is defined as researchers again");
-  assert.match(prose, /Small businesses sending their own options, prices or schedules/,
+  // The audience SECTION is gone — four worked examples say who this is for
+  // better than a list of job titles did, and one of the four IS a small
+  // business sending its own prices. The claim moved; it did not leave.
+  assert.match(prose, /A small business sending its own prices/,
     "the audience no longer includes people communicating their own information");
-  assert.match(prose, /whether you gathered it on their behalf or it was yours to begin with/,
+  assert.match(prose, /Whether you gathered the information for someone else or it was yours to begin with/,
     "the page no longer says both kinds of material count");
 });
 

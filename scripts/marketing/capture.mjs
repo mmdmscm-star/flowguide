@@ -246,6 +246,23 @@ async function main() {
       }`,
     });
 
+    // 2. THE WORKOUT, DAY A, at phone width — the right half of the before/after
+    //    on the landing page. The LEFT half is not captured: it is the same
+    //    rows rendered as a spreadsheet grid, in markup, on the page itself, so
+    //    the two panels cannot drift apart and the claim that they are the same
+    //    data is structural rather than a promise.
+    //
+    //    ONE card, measured rather than guessed, so a content change moves the
+    //    crop instead of slicing it. One is the whole argument and two is a
+    //    column of screenshot: a name, a photograph of the movement, a coaching
+    //    line, the numbers, and the one note the trainer wanted read — none of
+    //    which a spreadsheet row can carry.
+    await shot(cdp, {
+      url: `${ORIGIN}/p/month-one`, width: 390, height: 2200,
+      out: join(WORK, "workout-after.png"),
+      select: `() => document.querySelector('#item-a1 > div').getBoundingClientRect()`,
+    });
+
     // 3. PRINT — the paper, from its section heading down through one item, so
     //    the tile shows the document rather than another copy of the header.
     await shot(cdp, {
@@ -384,6 +401,8 @@ async function main() {
   webp("formats-wide.png", "formats-wide@1x.webp", 74, 768);
   webp("formats-narrow.png", "formats-narrow.webp", 78);
   webp("formats-narrow.png", "formats-narrow@1x.webp", 74, 342);
+  webp("workout-after.png", "workout-after.webp", 80);
+  webp("workout-after.png", "workout-after@1x.webp", 76, 390);
 
   // THE LINK CARD IS A PHOTOGRAPH OF A PHOTOGRAPH, so it is a JPEG. A PNG of
   // this material is ~450KB for no visible gain, and every unfurl service that
@@ -394,7 +413,8 @@ async function main() {
 
   const size = (p) => (readFileSync(p).length / 1024).toFixed(1) + " KB";
   for (const f of ["hero.webp", "hero@1x.webp", "formats-wide.webp",
-                   "formats-wide@1x.webp", "formats-narrow.webp", "formats-narrow@1x.webp"])
+                   "formats-wide@1x.webp", "formats-narrow.webp", "formats-narrow@1x.webp",
+                   "workout-after.webp", "workout-after@1x.webp"])
     console.log(`  public/marketing/${f.padEnd(18)} ${size(join(OUT, f))}`);
   console.log(`  public/og.jpg${" ".repeat(19)} ${size(join(ROOT, "public", "og.jpg"))}`);
   if (!existsSync(join(OUT, "hero.webp"))) throw new Error("nothing was written");

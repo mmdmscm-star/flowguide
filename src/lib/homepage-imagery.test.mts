@@ -19,6 +19,12 @@ const raw = (p: string) => readFileSync(join(ROOT, p), "utf8");
 const kb = (p: string) => statSync(join(ROOT, p)).size / 1024;
 
 const PAGE = raw("src/app/page.tsx");
+/** The same source with runs of whitespace flattened. PROSE IN JSX WRAPS: a
+ *  sentence on the page is several lines in the file, broken wherever the line
+ *  length ran out, so a regex written against the sentence fails against the
+ *  file — and shortening it until it fits only pins the assertion to today's
+ *  wrapping. Anything asserting what a VISITOR READS goes through here. */
+const PROSE = PAGE.replace(/\s+/g, " ");
 const referenced = [...PAGE.matchAll(/"(\/marketing\/[a-z0-9@.-]+)"/g)].map((m) => m[1]);
 const srcset = [...PAGE.matchAll(/(\/marketing\/[a-z0-9@.-]+)\s+\d+w/g)].map((m) => m[1]);
 const ASSETS = [...new Set([...referenced, ...srcset])];
@@ -49,8 +55,8 @@ test("THE PAGE CAN AFFORD THEM", () => {
   // what a professional on a phone should wait for, not what a design tool
   // happened to export.
   const budget: Record<string, number> = {
-    "/marketing/hero.webp": 120,
-    "/marketing/hero@1x.webp": 60,
+    "/marketing/workout-after.webp": 120,
+    "/marketing/workout-after@1x.webp": 60,
     "/marketing/formats-wide.webp": 200,
     "/marketing/formats-wide@1x.webp": 90,
     "/marketing/formats-narrow.webp": 120,
@@ -72,16 +78,39 @@ test("NOTHING MOVES WHILE THEY LOAD", () => {
   // bytes arrive. The composite additionally pins an aspect ratio at each
   // width, because <picture> swaps between two shapes at the breakpoint.
   const imgs = [...PAGE.matchAll(/<img\b[\s\S]*?\/>/g)].map((m) => m[0]);
-  assert.equal(imgs.length, 2, "the homepage grew or lost an image");
   for (const img of imgs) {
     assert.match(img, /width=\{\d+\}/, "an image has no intrinsic width");
     assert.match(img, /height=\{\d+\}/, "an image has no intrinsic height");
     assert.match(img, /sizes="/, "an image has no sizes, so srcset picks blind");
+  }
+
+  // TWO KINDS OF PICTURE, AND ONLY ONE OF THEM IS DESCRIBED.
+  //
+  // A photograph of the product carries meaning a reader who cannot see it
+  // would otherwise lose, so it gets real alt text. The thumbnail on an example
+  // card does not: it sits inside a link that already says the business, the
+  // title, a sentence and the contents, and describing the picture as well
+  // would make a screen reader read the same card twice. An empty alt is the
+  // correct answer there, not a missing one — so the two are counted apart
+  // rather than held to one rule.
+  const described = imgs.filter((i) => !/alt=""/.test(i));
+  const decorative = imgs.filter((i) => /alt=""/.test(i));
+  assert.equal(described.length, 2,
+    "the homepage grew or lost a photograph of the product");
+  assert.equal(decorative.length, 1,
+    "the example cards' thumbnail changed shape; there should be exactly one <img> for all four");
+  for (const img of described) {
     const alt = img.match(/alt="([^"]*)"/)?.[1] ?? "";
     assert.ok(alt.split(/\s+/).length >= 8,
       `alt text is too thin to replace the picture: "${alt}"`);
     assert.ok(!/image|screenshot|picture of/i.test(alt),
       `alt text describes the file rather than the thing: "${alt}"`);
+  }
+  for (const img of decorative) {
+    assert.match(img, /aspect-\[\d+\/\d+\]/,
+      "the card thumbnail reserves no space, so the grid jumps as photographs arrive");
+    assert.match(img, /loading="lazy"/,
+      "four card photographs load eagerly, ahead of the words that explain them");
   }
   assert.match(PAGE, /aspect-\[342\/470\] sm:aspect-\[768\/660\]/,
     "the composite does not pin an aspect ratio at each width");
@@ -98,21 +127,31 @@ test("THE PICTURES REPLACED PROSE RATHER THAN JOINING IT", () => {
                       "The same guide on paper, for a client"])
     assert.ok(!PAGE.includes(gone), `the composite did not replace: "${gone}"`);
   assert.ok(!PAGE.includes("function Format("), "the Format helper outlived its callers");
-  // The section still says the thing the picture cannot.
-  assert.match(PAGE, /You build it once\./);
+  // The section still says the thing the picture cannot: that these are one
+  // object rather than four documents, and that it stays current after sending.
+  // It used to be "You build it once." in a section of its own, arguing against
+  // rebuilding; the argument survived and its second section did not.
+  assert.match(PROSE, /no second version in the world/,
+    "the delivery section no longer says the picture's unsayable half");
+  assert.match(PROSE, /update it, and the link you already sent shows the current one/,
+    "the one-live-link promise is gone");
 });
 
-test("ON A PHONE, THE ACTIONS COME BEFORE THE PICTURE", () => {
-  // A visitor deciding in seconds must reach the two CTAs without scrolling
-  // past a product shot. The artifact follows them.
+test("NOTHING COMES BETWEEN THE VISITOR AND THE ACTIONS", () => {
+  // A visitor deciding in seconds must reach the CTAs without scrolling past a
+  // product shot. This used to be enforced as an ORDER, because the hero held a
+  // screenshot beside the words. It holds no picture now — four real Sendsets
+  // sit immediately below it and do that job better than a photograph of one —
+  // so the rule is simply that the header has no image in it at all.
   const header = PAGE.slice(PAGE.indexOf("<header"), PAGE.indexOf("</header>"));
-  assert.ok(header.indexOf("See a real Sendset") < header.indexOf("hero.webp"),
-    "the hero image sits above the primary action");
-  assert.ok(header.indexOf("Start your first Sendset") < header.indexOf("hero.webp"),
-    "the hero image sits above the secondary action");
-  // The two-column arrangement is a wide-screen refinement, never the phone's.
-  assert.match(header, /sm:grid sm:grid-cols-\[1fr_17rem\]/,
-    "the hero lost its single-column-on-a-phone layout");
+  assert.ok(!/<img|<picture|\/marketing\//.test(header),
+    "the hero has a picture again, which a visitor must scroll past to act");
+  assert.match(header, /Start your first Sendset/, "the hero lost its primary action");
+  assert.match(header, /See a real Sendset/, "the hero lost its way into a real one");
+  // And the examples follow immediately, before any explanation of them.
+  const afterHeader = PAGE.slice(PAGE.indexOf("</header>"));
+  assert.ok(afterHeader.indexOf("FEATURED.map") < afterHeader.indexOf("Three steps"),
+    "the page explains itself before showing anything");
 });
 
 test("NO STOCK PHOTOGRAPHY, NO ICON SET, NO ILLUSTRATION, NO MOTION", () => {
@@ -120,7 +159,17 @@ test("NO STOCK PHOTOGRAPHY, NO ICON SET, NO ILLUSTRATION, NO MOTION", () => {
   // image on it is a photograph of this product; nothing is decorative.
   for (const src of ASSETS) assert.match(src, /^\/marketing\//);
   assert.ok(!/<svg|\.svg"/.test(PAGE), "an icon or illustration appeared");
-  assert.ok(!/unsplash|pexels|shutterstock|getty/i.test(PAGE), "stock photography appeared");
+  // NO IMAGE URL IS WRITTEN ON THIS PAGE except the captures. The example cards
+  // do show a photograph that is not of the product — but it is one from inside
+  // the Sendset that card opens, read out of that fixture at render time. That
+  // is the line: content from the thing being linked to, never a picture
+  // somebody chose to decorate this page with. A hard-coded src is how the
+  // second becomes possible, so there is no way to write one.
+  const hardcoded = [...PAGE.matchAll(/src="(https?:[^"]+)"/g)].map((m) => m[1]);
+  assert.deepEqual(hardcoded, [],
+    `an image URL was written into the page: ${hardcoded.join(", ")}`);
+  assert.match(PAGE, /src=\{photo\}/,
+    "the card thumbnail is no longer read out of the demo it links to");
   assert.ok(!/animate-|transition-transform|@keyframes|framer|motion/.test(PAGE),
     "the page gained motion");
 });
@@ -128,8 +177,9 @@ test("NO STOCK PHOTOGRAPHY, NO ICON SET, NO ILLUSTRATION, NO MOTION", () => {
 test("THE CAPTURE IS REPRODUCIBLE, AND CANNOT REWRITE THE PACKET", () => {
   const script = raw("scripts/marketing/capture.mjs");
   assert.match(raw("package.json"), /"capture:marketing"/, "there is no way to run it");
-  // It photographs the demo, and only the demo.
+  // It photographs demos, and only demos — never a real packet from the database.
   assert.match(script, /\$\{ORIGIN\}\/p\/demo/);
+  assert.match(script, /\$\{ORIGIN\}\/p\/month-one/);
   assert.ok(!/getPublishedPacket|createServerClient|from\("packets"\)/.test(script),
     "the capture reaches into the database");
   // The only things it touches before a shot: dev-server chrome and animation.
