@@ -85,10 +85,25 @@ test("THE BEFORE/AFTER IS THE SAME OBJECT, not two that agree", () => {
   // …and the right panel is a photograph of /p/month-one, which renders it.
   assert.match(readFileSync(join(ROOT, "scripts/marketing/capture.mjs"), "utf8"),
     /\$\{ORIGIN\}\/p\/month-one/, "the after panel is no longer captured from the live Sendset");
-  // The claim the page makes about them.
-  assert.match(PAGE.replace(/\s+/g, " "),
-    /this page reads both panels out of the same Sendset/,
+  // THE CLAIM THE PAGE MAKES ABOUT THEM, AND THE ONE IT MUST NOT.
+  //
+  // The after panel is a crop of ONE exercise card, so the page may say the two
+  // panels come from the same Sendset — they do — but not that they show the
+  // same list. It used to read "Same four exercises, same sets, same reps, same
+  // starting weights", which describes two panels displaying four rows each,
+  // and only the left one does.
+  // COMMENTS STRIPPED, THEN FLATTENED. A comment explaining what the old copy
+  // said would otherwise trip the negative assertion below — the guard is about
+  // what a visitor reads, not about what the file explains to the next reader.
+  const prose = CODE.replace(/\s+/g, " ");
+  assert.match(prose, /read out of the same Sendset/,
     "the page stopped saying why the two panels agree");
+  assert.match(prose, /what the first of them becomes on the right/,
+    "the page no longer says the after panel is one row of the left one");
+  assert.match(prose, /The first of those rows, as a Sendset/,
+    "the after panel's caption promises more than the crop shows");
+  assert.doesNotMatch(prose, /Same four exercises|same sets, same reps|same starting weights/i,
+    "the copy claims both panels show every row, and the right one shows one card");
   // And Day A is still four exercises with four numbers each, or the
   // spreadsheet stops being a fair picture of what a row can hold.
   const dayA = monthOneDemo.sections.find((s) => s.title === "Day A")!;

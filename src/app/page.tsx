@@ -226,8 +226,11 @@ export default function Home() {
 
           {/* AFTER — a photograph of the live Sendset those rows became. */}
           <figure className="m-0 flex min-w-0 flex-col">
+            {/* SCOPED TO WHAT IS ACTUALLY SHOWN. The crop is one exercise card,
+                so a caption reading "the same rows" would promise four of them
+                and show one. */}
             <figcaption className="mb-2 text-sm font-medium text-foreground">
-              The same rows, as a Sendset
+              The first of those rows, as a Sendset
             </figcaption>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
@@ -241,9 +244,14 @@ export default function Home() {
             />
           </figure>
         </div>
+        {/* THE CLAIM IS THE SOURCE, NOT THE CROP. Both panels are read out of
+            the same Sendset — the rows on one side, and what one of them becomes
+            on the other. Saying "same four exercises, same sets, same reps"
+            described two panels showing the same list, and only the left one
+            does; the right is a photograph of a single card. */}
         <P className="mt-6">
-          Same four exercises, same sets, same reps, same starting weights &mdash; this
-          page reads both panels out of the same Sendset.{" "}
+          Both panels are the same Day A, read out of the same Sendset: the rows on the
+          left, and what the first of them becomes on the right.{" "}
           <Link href="/p/month-one" target="_blank" rel="noopener" className="font-medium text-accent underline-offset-4 hover:underline">
             Open the whole month
           </Link>.
