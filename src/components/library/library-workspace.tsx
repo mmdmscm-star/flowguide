@@ -284,6 +284,16 @@ export default function LibraryWorkspace() {
   // =========================================================================
   const composing = selecting && !organizing;
 
+  /** THE ONE CREATE. The panel's button and the tray's call this — the same
+   *  request, the same busy flag, the same failure — so offering it in two
+   *  places is two ways to reach one action rather than two workflows. */
+  async function createSendset() {
+    setBusy(true); setNotice("");
+    const { packetId, message } = await createFromLibrary(chosen);
+    if (!packetId) { setNotice(message ?? "Could not create it."); setBusy(false); return; }
+    router.push(`/edit/${packetId}`);
+  }
+
   /* ---------------------------------------------------------------------------
    * MAKING A GROUP IS ITS OWN STATE, NOT A HINT.
    *
@@ -562,7 +572,13 @@ export default function LibraryWorkspace() {
                 there ends it, and the space between them is the separator. On a
                 narrow screen they wrap into two rows and keep their order. */}
             <div className="flex flex-wrap items-center gap-2">
-            <Button variant="primary" size="md"
+            {/* INK MEANS "WHERE YOU ARE", so it follows the mode. Import with AI
+                leads when nothing is under way; once Create a Sendset or Select
+                & Organize is opened, it steps down and the mode that is actually
+                running carries the ink. It used to stay ink throughout, so a
+                professional composing a Sendset was shown Import as the thing
+                they were doing. */}
+            <Button variant={selecting ? "secondary" : "primary"} size="md"
               onClick={() => { setNotice(""); setImporting(true); }}>
               Import with AI
             </Button>
@@ -581,8 +597,11 @@ export default function LibraryWorkspace() {
             {hasAny === true && (
               /* Ghost text pushed out by its own padding so this cluster's
                  words end flush with the column, not its boxes. */
-              <div className="-mr-4 flex flex-wrap items-center gap-1">
-                <Button variant="ghost" size="md"
+              // The pull-out lines ghost TEXT up with the column. A filled
+              // button has a box, and pulling that past the column pushed its
+              // edge to the screen's; so it applies only while nothing is active.
+              <div className={`${selecting ? "" : "-mr-4 "}flex flex-wrap items-center gap-1`}>
+                <Button variant={composing ? "primary" : "ghost"} size="md" aria-pressed={composing}
                   onClick={() => { setNotice(""); setChosen([]); setAddedTitles({}); setOrganizing(false); setSelecting(true); }}>
                   Create a Sendset
                 </Button>
@@ -596,7 +615,8 @@ export default function LibraryWorkspace() {
                     select them for WHAT — so the name now carries both the
                     action and its purpose. The mode is unchanged throughout;
                     only what it was called was wrong. */}
-                <Button variant="ghost" size="md"
+                <Button variant={selecting && organizing ? "primary" : "ghost"} size="md"
+                  aria-pressed={selecting && organizing}
                   onClick={() => { setNotice(""); setChosen([]); setOrganizing(true); setSelecting(true); }}>
                   Select &amp; Organize
                 </Button>
@@ -874,18 +894,12 @@ export default function LibraryWorkspace() {
               <span className={`text-sm font-medium ${chosen.length ? "text-foreground" : "text-muted"}`}>
                 {chosen.length} item{chosen.length === 1 ? "" : "s"} added
               </span>
-              <button
-                onClick={async () => {
-                  setBusy(true); setNotice("");
-                  const { packetId, message } = await createFromLibrary(chosen);
-                  if (!packetId) { setNotice(message ?? "Could not create it."); setBusy(false); return; }
-                  router.push(`/edit/${packetId}`);
-                }}
+              <Button variant="primary" size="sm" className="ml-2"
+                onClick={createSendset}
                 disabled={busy || chosen.length === 0}
-                className="ml-2 px-3 py-2 rounded-lg bg-accent hover:bg-accent-hover text-white text-sm font-medium disabled:opacity-60"
               >
                 {busy ? "Creating…" : "Create Sendset"}
-              </button>
+              </Button>
               <button
                 onClick={() => {
                   setSelecting(false); setChosen([]); setAddedTitles({});
@@ -1021,7 +1035,15 @@ export default function LibraryWorkspace() {
               // usable narrow layout rather than two unusable ones.
               // `minmax(0,…)` is what stops a long name widening its column
               // past its share and pushing the page into horizontal scroll.
-              ? "grid gap-5 lg:grid-cols-[minmax(0,55fr)_minmax(0,45fr)]"
+              //
+              // AND BELOW `lg` TOO. The one-column case had no template at all,
+              // so its implicit track was `auto` and grew to its widest content
+              // — a tray row's truncated title, which as nowrap text counts at
+              // full length. Adding an item with a long name widened the whole
+              // column past the screen (564px at 375px with three items), which
+              // is the sideways drift that appeared only while selecting.
+              // grid-cols-1 is repeat(1, minmax(0, 1fr)): the same guarantee.
+              ? "grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,55fr)_minmax(0,45fr)]"
               : ""}>
               <div className="min-w-0">
         {/* THE LIBRARY IS A SURFACE, NOT A REGION OF THE PAGE.
@@ -1135,6 +1157,22 @@ export default function LibraryWorkspace() {
                     onUp={(id) => nudge(id, -1)}
                     onDown={(id) => nudge(id, 1)}
                     onRemove={removeFromTray}
+                    footer={chosen.length > 0 && (
+                      // WHERE THE CHOICE ENDS, ON A PHONE. Below `lg` the tray
+                      // follows the Library down the page, so the only Create
+                      // was a long scroll back up from the list it had just
+                      // been built from. From `lg` the tray sits beside the
+                      // panel and this is not needed, so it is not shown.
+                      <div className="lg:hidden">
+                        {notice && (
+                          <p role="alert" className="mb-2 text-meta text-red-700">{notice}</p>
+                        )}
+                        <Button variant="primary" size="md" className="w-full"
+                          onClick={createSendset} disabled={busy}>
+                          {busy ? "Creating…" : `Create Sendset with ${chosen.length} item${chosen.length === 1 ? "" : "s"}`}
+                        </Button>
+                      </div>
+                    )}
                   />
                 </aside>
               )}

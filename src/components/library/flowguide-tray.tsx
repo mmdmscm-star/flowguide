@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { useDndContext, useDroppable } from "@dnd-kit/core";
 import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -72,13 +73,16 @@ function Row({
 }
 
 export function FlowGuideTray({
-  entries, busy, onUp, onDown, onRemove,
+  entries, busy, onUp, onDown, onRemove, footer,
 }: {
   entries: TrayEntry[];
   busy: boolean;
   onUp: (id: string) => void;
   onDown: (id: string) => void;
   onRemove: (id: string) => void;
+  /** Rendered at the foot of the tray, attached to what it acts on. The tray
+   *  does not know what creating is; the caller passes its own action in. */
+  footer?: ReactNode;
 }) {
   // The whole pane is the drop target, so an aim that misses every row still
   // lands somewhere sensible — the end.
@@ -162,6 +166,8 @@ export function FlowGuideTray({
       <p className="mt-3 text-[11px] text-muted/80">
         Each one is copied in. Your Library keeps its own copy, exactly where it is.
       </p>
+
+      {footer && <div className="mt-4">{footer}</div>}
     </div>
   );
 }

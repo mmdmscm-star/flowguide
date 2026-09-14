@@ -675,3 +675,66 @@ test("the list components can hand the row over, and still render it by default"
       `${f} lost its default row rendering`);
   }
 });
+
+// ---------------------------------------------------------------------------
+// ON A PHONE: which mode you are in, where Create is, and no sideways drift.
+// Found on a real iPhone. jsdom has no media queries, so what is proven here is
+// the state and the wiring; the widths were measured separately against a
+// served build at 320, 375, 390 and 1280.
+// ---------------------------------------------------------------------------
+
+/** Is this button wearing the primary (ink) variant? Read from its classes,
+ *  because jsdom does not compute style. */
+const isInk = (b: Element | undefined) => /\bbg-ink\b/.test(b?.getAttribute("class") ?? "");
+const trayCreate = (host: Element) =>
+  [...host.querySelectorAll("aside button")].find((b) => /^Create Sendset with \d+ items?$/.test((b.textContent ?? "").trim()));
+
+test("THE INK FOLLOWS THE MODE YOU ARE ACTUALLY IN", async () => {
+  // Import with AI stayed ink after Create a Sendset was chosen, so composing a
+  // Sendset was drawn as if Import were the thing under way.
+  const host = await mount();
+  assert.ok(isInk(byText(host, /^Import with AI$/)), "at rest, Import with AI should lead");
+  assert.ok(!isInk(byText(host, /^Create a Sendset$/)), "nothing is being composed yet");
+
+  await openCompose(host);
+  assert.ok(!isInk(byText(host, /^Import with AI$/)), "Import still looks active while composing");
+  const create = byText(host, /^Create a Sendset$/);
+  assert.ok(isInk(create), "the mode you are in is not the one that looks active");
+  assert.equal(create?.getAttribute("aria-pressed"), "true", "the active mode is not announced");
+  assert.ok(!isInk(byText(host, /^Select & Organize$/)), "two modes look active at once");
+
+  await click([...host.querySelectorAll("button")].find((b) => (b.textContent ?? "").trim() === "Cancel")!);
+  await click(byText(host, /^Select & Organize$/)!);
+  assert.ok(isInk(byText(host, /^Select & Organize$/)), "organizing does not look active");
+  assert.ok(!isInk(byText(host, /^Create a Sendset$/)), "Create still looks active after leaving it");
+  assert.ok(!isInk(byText(host, /^Import with AI$/)), "Import looks active while organizing");
+});
+
+test("CREATE SITS AT THE FOOT OF THE TRAY: absent at 0, counted at 1 and many", async () => {
+  const host = await mount();
+  await openCompose(host);
+  assert.equal(trayCreate(host), undefined, "an empty tray offers to create nothing");
+
+  await click(addFor(host, "Bravo Manor")!);
+  assert.equal(trayCreate(host)?.textContent?.trim(), "Create Sendset with 1 item");
+  await click(addFor(host, "Alpha House")!);
+  assert.equal(trayCreate(host)?.textContent?.trim(), "Create Sendset with 2 items");
+
+  // It is the SAME action as the panel's: the tray, in its order, and nothing else.
+  await click(trayCreate(host)!);
+  assert.deepEqual(created?.libraryItemIds, ["i-2", "i-1"],
+    "the tray's Create sent something other than the tray");
+  assert.deepEqual(Object.keys(created ?? {}), ["libraryItemIds"]);
+  assert.equal(writes.filter((w) => w.path === "/api/packets/from-library").length, 1,
+    "one press created more than once");
+});
+
+test("the tray's Create is a phone affordance, and the grid cannot be widened by a long name", () => {
+  // From `lg` the tray sits beside the panel that already holds Create.
+  const tray = WORKSPACE.slice(WORKSPACE.indexOf("<FlowGuideTray"), WORKSPACE.indexOf("</aside>"));
+  assert.match(tray, /<div className="lg:hidden">/, "the tray's Create now shows on desktop too");
+  // Below `lg` the one-column grid had no template, so its implicit `auto`
+  // track grew to a tray row's nowrap title: 564px at 375px with three items.
+  assert.match(WORKSPACE, /"grid grid-cols-1 gap-5 lg:grid-cols-\[minmax\(0,55fr\)_minmax\(0,45fr\)\]"/,
+    "the single-column composer is auto-sized again, and a long title widens the page");
+});

@@ -352,9 +352,21 @@ test("THE CREATE PATH keeps its own intent, and its own words", () => {
   assert.match(panel, /Start a Sendset/, "the create experience does not name itself");
   assert.ok(!/Choose one or more Library items|library-categories|library-labels/.test(panel),
     "organizing controls leaked into the create experience");
-  assert.match(panel, /createFromLibrary\(chosen\)/, "creating from the selection is gone");
+  // ONE CREATE, TWO PLACES TO REACH IT. The request lives in createSendset; the
+  // panel and the tray both call that, so a phone user finishing at the bottom
+  // of the tray and a desktop user in the panel take the same action — not two
+  // workflows that could drift.
+  const ws = bodyOf("src/components/library/library-workspace.tsx");
+  const fn = ws.slice(ws.indexOf("async function createSendset"), ws.indexOf("async function createSendset") + 500);
+  assert.match(fn, /createFromLibrary\(chosen\)/, "creating from the selection is gone");
+  assert.match(panel, /onClick=\{createSendset\}/, "the panel no longer creates from the selection");
   assert.match(panel, /disabled=\{busy \|\| chosen\.length === 0\}/,
     "Create can fire with nothing selected");
+  const tray = ws.slice(ws.indexOf("<FlowGuideTray"), ws.indexOf("</aside>"));
+  assert.match(tray, /footer=\{chosen\.length > 0 &&/, "the tray offers Create with nothing in it");
+  assert.match(tray, /onClick=\{createSendset\}/, "the tray's Create is a second, different action");
+  assert.equal((ws.match(/createFromLibrary\(/g) ?? []).length, 1,
+    "createFromLibrary is called from more than one place — two creates can drift");
 });
 
 test("LEAVING either experience drops the selection and writes nothing", () => {
@@ -393,7 +405,9 @@ test("CREATE keeps Cancel, because it genuinely stages a choice", () => {
   const panel = createPanel();
   assert.match(panel, />\s*Cancel\s*</, "the create panel lost its Cancel");
   assert.ok(!/>\s*Done\s*</.test(panel), "the create panel says Done, but nothing is saved yet");
-  assert.match(panel, /createFromLibrary\(chosen\)/, "the create panel does not defer its write");
+  // The write is deferred to Create — the panel reaches it through the shared
+  // handler rather than making it itself.
+  assert.match(panel, /onClick=\{createSendset\}/, "the create panel does not defer its write");
 });
 
 test("a successful organize LEAVES THE PANEL OPEN to keep working", () => {
