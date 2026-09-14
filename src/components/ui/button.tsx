@@ -13,7 +13,7 @@
 import type { ButtonHTMLAttributes, ReactNode } from "react";
 
 export type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
-export type ButtonSize = "sm" | "md";
+export type ButtonSize = "sm" | "md" | "icon";
 
 /** Secondary carries a ground rather than a border, which is the whole move:
  *  a filled-but-quiet surface separates from the page without adding another
@@ -37,6 +37,13 @@ const VARIANT: Record<ButtonVariant, string> = {
 const SIZE: Record<ButtonSize, string> = {
   sm: "h-10 sm:h-8 px-3.5 sm:px-3 text-meta gap-1.5",
   md: "h-12 sm:h-10 px-4.5 sm:px-4 text-body gap-2",
+  /* SQUARE `sm`, for a control that is only a glyph — a remove ×, a collapse
+   * chevron, a drag handle. Before this existed those were raw <button>s sized
+   * by their character, so the editor's item-level actions were 15 to 24px on a
+   * phone. Overriding `sm`'s horizontal padding from outside does not work
+   * reliably: two utilities for one property resolve by stylesheet order, not
+   * by the order they are written. So the shape lives here. */
+  icon: "h-10 w-10 sm:h-8 sm:w-8 text-body",
 };
 
 /* SOME ACTIONS ARE NAVIGATION. "Print / Save as PDF" opens a route, so it has

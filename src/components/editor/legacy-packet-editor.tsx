@@ -1,6 +1,6 @@
 "use client";
 import { INPUT_SHELL } from "@/components/ui/field";
-import { Button } from "@/components/ui/button";
+import { Button, buttonClass } from "@/components/ui/button";
 
 import { useEffect, useState, useCallback, useRef, type ReactNode } from "react";
 import ImageUploadField from "./image-upload-field";
@@ -1233,7 +1233,9 @@ export function LegacyPacketEditor() {
 
       {/* Deliberate conversion control — only for owned DRAFT legacy packets. */}
       {packet.status === "draft" && (
-        <div className="mb-4 flex items-center justify-between gap-3 p-3 rounded-[var(--radius-control)] border border-line bg-ground-2">
+        // Stacked on a phone: beside its button the explanation wrapped to six
+        // lines in a column a third of the screen wide.
+        <div className="mb-4 flex flex-col items-start gap-3 p-3 rounded-[var(--radius-control)] border border-line bg-ground-2 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0">
             <p className="text-body font-medium text-ink">Composition: sections</p>
             <p className="text-meta text-ink-2">Switch to the flat block editor to freely order headings and items.</p>
@@ -1309,7 +1311,7 @@ export function LegacyPacketEditor() {
           value={packet.clientTitle}
           onChange={(e) => updatePacketField("clientTitle", e.target.value)}
           placeholder="Senior Living Communities"
-          className="w-full text-body font-semibold text-ink bg-transparent border-none outline-none placeholder:text-ink-3/45"
+          className={`${INPUT_SHELL} font-semibold`}
         />
         <p className="text-meta text-ink-2">Leave blank and your client sees no title at all.</p>
 
@@ -1318,7 +1320,8 @@ export function LegacyPacketEditor() {
           value={packet.clientName}
           onChange={(e) => updatePacketField("clientName", e.target.value)}
           placeholder="Prepared for (optional)"
-          className="w-full mt-4 text-body text-ink-2 bg-transparent border-none outline-none placeholder:text-ink-3/45"
+          aria-label="Prepared for (optional)"
+          className={`${INPUT_SHELL} mt-4`}
         />
       </div>
 
@@ -1415,45 +1418,47 @@ export function LegacyPacketEditor() {
             {(handle) => (
               <>
             {/* Section header */}
-            <div className="flex items-start justify-between gap-2 mb-3">
-              <button
+            {/* On a phone Delete takes its own line, right-aligned, so the
+                title field is not squeezed between two controls; from `sm` it
+                sits at the end of the row as it did. */}
+            <div className="flex flex-wrap items-start gap-2 mb-3 sm:flex-nowrap">
+              <Button
                 type="button"
+                variant="ghost"
+                size="icon"
                 {...handle.attributes}
                 {...handle.listeners}
                 aria-label="Drag to reorder section"
-                className="text-ink-3 hover:text-ink cursor-grab active:cursor-grabbing flex-shrink-0 touch-none -ml-1 mt-1 p-1"
+                className={`${HANDLE} -ml-2`}
               >
-                <svg className="w-4 h-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                  <circle cx="7" cy="4" r="1.5" />
-                  <circle cx="13" cy="4" r="1.5" />
-                  <circle cx="7" cy="10" r="1.5" />
-                  <circle cx="13" cy="10" r="1.5" />
-                  <circle cx="7" cy="16" r="1.5" />
-                  <circle cx="13" cy="16" r="1.5" />
-                </svg>
-              </button>
-              <div className="flex-1">
+                <DragDots />
+              </Button>
+              <div className="min-w-0 flex-1 basis-[calc(100%-3rem)] space-y-1.5 sm:basis-auto">
                 <input
                   type="text"
                   value={section.title}
                   onChange={(e) => updateSection(section.id, "title", e.target.value)}
                   placeholder="Section title"
-                  className="w-full text-title font-bold text-ink bg-transparent border-none outline-none placeholder:text-ink-3/45"
+                  aria-label="Section title"
+                  className={`${shellAt("text-title")} font-bold`}
                 />
                 <input
                   type="text"
                   value={section.description}
                   onChange={(e) => updateSection(section.id, "description", e.target.value)}
                   placeholder="Section description (optional)"
-                  className="w-full mt-0.5 text-body text-ink-2 bg-transparent border-none outline-none placeholder:text-ink-3/45"
+                  aria-label="Section description"
+                  className={INPUT_SHELL}
                 />
               </div>
-              <button
+              <Button
+                variant="danger"
+                size="sm"
                 onClick={() => deleteSection(section.id)}
-                className="text-body text-red-400 hover:text-red-600 mt-1 flex-shrink-0"
+                className="ml-auto sm:ml-0"
               >
                 Delete
-              </button>
+              </Button>
             </div>
 
             {/* Items */}
@@ -1765,42 +1770,44 @@ export function LegacyPacketEditor() {
               Links (optional)
             </label>
             {(packet.customIdentity?.links.length ?? 0) > 0 && (
-              <div className="space-y-2 mb-2">
+              <div className="space-y-3 mb-2 sm:space-y-2">
                 {packet.customIdentity!.links.map((link, index) => (
-                  <div key={index} className="flex items-center gap-2">
-                    <input
-                      type="text"
-                      value={link.label}
-                      onChange={(e) => updateCustomLink(index, "label", e.target.value)}
-                      placeholder="Label (e.g. Facebook)"
-                      className={`${INPUT_SHELL} w-36 flex-shrink-0`}
-                    />
-                    <input
-                      type="url"
-                      value={link.url}
-                      onChange={(e) => updateCustomLink(index, "url", e.target.value)}
-                      placeholder="https://..."
-                      className={`${INPUT_SHELL} min-w-0 flex-1`}
-                    />
-                    <button
+                  // Stacked on a phone: a fixed 144px label beside the URL left
+                  // the URL itself about 100px at 320px.
+                  <div key={index} className="flex items-center gap-1.5 sm:gap-2">
+                    <div className="flex min-w-0 flex-1 flex-col gap-1.5 sm:flex-row sm:gap-2">
+                      <input
+                        type="text"
+                        value={link.label}
+                        onChange={(e) => updateCustomLink(index, "label", e.target.value)}
+                        placeholder="Label (e.g. Facebook)"
+                        className={`${INPUT_SHELL} min-w-0 sm:w-36 sm:flex-none`}
+                      />
+                      <input
+                        type="url"
+                        value={link.url}
+                        onChange={(e) => updateCustomLink(index, "url", e.target.value)}
+                        placeholder="https://..."
+                        className={`${INPUT_SHELL} min-w-0 sm:flex-1`}
+                      />
+                    </div>
+                    <Button
                       type="button"
+                      variant="danger"
+                      size="icon"
                       onClick={() => removeCustomLink(index)}
                       aria-label="Remove link"
-                      className="text-ink-2 hover:text-red-600 px-1 flex-shrink-0"
+                      className="-mr-2"
                     >
                       ×
-                    </button>
+                    </Button>
                   </div>
                 ))}
               </div>
             )}
-            <button
-              type="button"
-              onClick={addCustomLink}
-              className="text-body text-mark hover:text-mark/80 font-medium"
-            >
+            <Button type="button" variant="ghost" size="sm" onClick={addCustomLink} className="-ml-3.5 sm:-ml-3">
               + Add link
-            </button>
+            </Button>
           </div>
         </div>
       )}
@@ -1909,6 +1916,41 @@ type SectionHandleProps = {
   listeners: ReturnType<typeof useSortable>["listeners"];
 };
 
+// ============================================================
+// Phone-width editing
+//
+// This editor was converted to the creator design system at the level of its
+// chrome — Preview, Publish, Add Section — and never inside an item, where the
+// actual editing happens. On an iPhone that meant a page 504px wide in a 375px
+// viewport: every detail's value, every remove button and the whole "Move to"
+// control sat off the right edge, and the controls that were on screen were 15
+// to 24px targets. The helpers below are the whole fix's vocabulary; nothing
+// about ordering, saving, provenance or review changes.
+// ============================================================
+
+/** INPUT_SHELL at a different type step. The shell fixes its size at text-body,
+ *  and two font-size utilities on one element resolve by stylesheet order rather
+ *  than by which was written last — so the step is swapped, not stacked. */
+const shellAt = (step: string) => INPUT_SHELL.replace("text-body", step);
+
+/** A drag handle is a real control with a real target. It keeps `touch-none`,
+ *  which is what lets the pointer sensor read a finger drag as a drag instead of
+ *  a page scroll. */
+const HANDLE = "touch-none cursor-grab active:cursor-grabbing";
+
+function DragDots({ small = false }: { small?: boolean }) {
+  return (
+    <svg className={small ? "w-3.5 h-3.5" : "w-4 h-4"} viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+      <circle cx="7" cy="4" r="1.5" />
+      <circle cx="13" cy="4" r="1.5" />
+      <circle cx="7" cy="10" r="1.5" />
+      <circle cx="13" cy="10" r="1.5" />
+      <circle cx="7" cy="16" r="1.5" />
+      <circle cx="13" cy="16" r="1.5" />
+    </svg>
+  );
+}
+
 function SortableSection({
   id,
   children,
@@ -1925,7 +1967,7 @@ function SortableSection({
     opacity: isDragging ? 0.5 : 1,
   };
   return (
-    <div ref={setNodeRef} style={style} className="mb-8 border border-line rounded-[var(--radius-panel)] p-4">
+    <div ref={setNodeRef} style={style} className="mb-8 border border-line rounded-[var(--radius-panel)] p-3 sm:p-4">
       {children({ attributes, listeners })}
     </div>
   );
@@ -2016,44 +2058,50 @@ function SortableDetailRow({
   const named = detail.label.trim() || detail.value.trim();
 
   return (
-    <div ref={setNodeRef} style={style} className="flex items-center gap-2 mb-1.5">
-      <button
+    // LABEL ABOVE VALUE ON A PHONE, side by side from `sm` up. Two fields in a
+    // row were each about 145px at 375px once the handle and the remove button
+    // had their share — and before `min-w-0` they could not shrink at all, since
+    // an <input>'s intrinsic width is about twenty characters, which is what
+    // pushed every value off the screen. Stacked, each gets the full column.
+    // The handle and the remove button flank the PAIR, so a detail still reads
+    // and moves as one row.
+    <div ref={setNodeRef} style={style} className="flex items-center gap-1.5 mb-3 sm:gap-2 sm:mb-1.5">
+      <Button
         type="button"
+        variant="ghost"
+        size="icon"
         {...attributes}
         {...listeners}
         aria-label={named ? `Reorder detail: ${named}` : "Reorder detail"}
-        className="text-ink-3/45 hover:text-ink-2 cursor-grab active:cursor-grabbing flex-shrink-0 touch-none p-1 -ml-1"
+        className={`${HANDLE} -ml-2`}
       >
-        <svg className="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-          <circle cx="7" cy="4" r="1.5" />
-          <circle cx="13" cy="4" r="1.5" />
-          <circle cx="7" cy="10" r="1.5" />
-          <circle cx="13" cy="10" r="1.5" />
-          <circle cx="7" cy="16" r="1.5" />
-          <circle cx="13" cy="16" r="1.5" />
-        </svg>
-      </button>
-      <input
-        type="text"
-        value={detail.label}
-        onChange={(e) => onUpdateDetail(itemId, detail.id, "label", e.target.value)}
-        placeholder="Label"
-        className="flex-1 px-2.5 py-1.5 rounded border border-line text-body focus:outline-none focus:ring-2 focus:ring-mark/15 placeholder:text-ink-3/45"
-      />
-      <input
-        type="text"
-        value={detail.value}
-        onChange={(e) => onUpdateDetail(itemId, detail.id, "value", e.target.value)}
-        placeholder="Value"
-        className="flex-1 px-2.5 py-1.5 rounded border border-line text-body focus:outline-none focus:ring-2 focus:ring-mark/15 placeholder:text-ink-3/45"
-      />
-      <button
+        <DragDots small />
+      </Button>
+      <div className="flex min-w-0 flex-1 flex-col gap-1.5 sm:flex-row sm:gap-2">
+        <input
+          type="text"
+          value={detail.label}
+          onChange={(e) => onUpdateDetail(itemId, detail.id, "label", e.target.value)}
+          placeholder="Label"
+          className={`${INPUT_SHELL} min-w-0 sm:flex-1`}
+        />
+        <input
+          type="text"
+          value={detail.value}
+          onChange={(e) => onUpdateDetail(itemId, detail.id, "value", e.target.value)}
+          placeholder="Value"
+          className={`${INPUT_SHELL} min-w-0 sm:flex-1`}
+        />
+      </div>
+      <Button
+        variant="danger"
+        size="icon"
         onClick={() => onRemoveDetail(itemId, detail.id)}
-        className="text-body text-red-400 hover:text-red-600 px-1"
         aria-label={named ? `Remove detail: ${named}` : "Remove detail"}
+        className="-mr-2"
       >
         ×
-      </button>
+      </Button>
     </div>
   );
 }
@@ -2128,32 +2176,32 @@ function ItemEditor({
 
   return (
     <div ref={setNodeRef} style={style} className="border border-line rounded-[var(--radius-control)] p-3 bg-ground">
-      <div className="flex items-start justify-between gap-2">
-        <button
+      {/* TWO LINES ON A PHONE, ONE FROM `sm` UP. The title, the move control,
+          collapse and delete shared a single row, and the actions were
+          flex-shrink-0 — so at 375px the title got what was left and the actions
+          were pushed past the edge of the screen. On a phone the actions take
+          their own line under the title; from `sm` the row is the row it was. */}
+      <div className="flex flex-wrap items-center gap-2 sm:flex-nowrap">
+        <Button
           type="button"
+          variant="ghost"
+          size="icon"
           {...attributes}
           {...listeners}
           aria-label="Drag to reorder"
-          className="text-ink-3 hover:text-ink cursor-grab active:cursor-grabbing flex-shrink-0 touch-none -ml-1 p-1"
+          className={`${HANDLE} -ml-2`}
         >
-          <svg className="w-4 h-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-            <circle cx="7" cy="4" r="1.5" />
-            <circle cx="13" cy="4" r="1.5" />
-            <circle cx="7" cy="10" r="1.5" />
-            <circle cx="13" cy="10" r="1.5" />
-            <circle cx="7" cy="16" r="1.5" />
-            <circle cx="13" cy="16" r="1.5" />
-          </svg>
-        </button>
+          <DragDots />
+        </Button>
         <input
           type="text"
           value={item.title}
           onChange={(e) => onUpdateField(item.id, "title", e.target.value)}
           placeholder={titleLabelFor(item)}
           aria-label={titleLabelFor(item)}
-          className="flex-1 font-medium text-body text-ink bg-transparent border-none outline-none placeholder:text-ink-3/45"
+          className={`${INPUT_SHELL} min-w-0 flex-1 font-medium`}
         />
-        <div className="flex items-center gap-1 flex-shrink-0">
+        <div className="flex w-full items-center justify-end gap-1 sm:w-auto sm:flex-none">
           {otherSections.length > 0 && (
             <select
               value=""
@@ -2161,7 +2209,7 @@ function ItemEditor({
                 if (e.target.value) onMove(item.id, e.target.value);
               }}
               aria-label="Move to section"
-              className="text-body text-ink-2 border border-line rounded px-1 py-0.5 bg-ground max-w-[8rem] focus:outline-none focus:ring-2 focus:ring-mark/15"
+              className={`${INPUT_SHELL} min-w-0 flex-1 sm:w-auto sm:max-w-[8rem] sm:flex-none`}
             >
               <option value="">Move to…</option>
               {otherSections.map((s) => (
@@ -2171,18 +2219,24 @@ function ItemEditor({
               ))}
             </select>
           )}
-          <button
+          <Button
+            variant="ghost"
+            size="icon"
             onClick={() => setExpanded(!expanded)}
-            className="text-body text-ink-2 hover:text-ink px-1"
+            aria-expanded={expanded}
+            aria-label={expanded ? "Collapse item" : "Expand item"}
           >
             {expanded ? "▾" : "▸"}
-          </button>
-          <button
+          </Button>
+          <Button
+            variant="danger"
+            size="icon"
             onClick={() => onDelete(item.id)}
-            className="text-body text-red-400 hover:text-red-600 px-1"
+            aria-label="Delete item"
+            className="-mr-2"
           >
             ×
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -2205,7 +2259,7 @@ function ItemEditor({
               value={item.address}
               onChange={(e) => onUpdateField(item.id, "address", e.target.value)}
               placeholder="Address (auto-links to Google Maps)"
-              className={`${INPUT_SHELL} flex-1`}
+              className={`${INPUT_SHELL} min-w-0 flex-1`}
             />
           </div>
 
@@ -2222,9 +2276,9 @@ function ItemEditor({
           <div>
             <div className="flex items-center justify-between mb-1">
               <span className="text-meta font-medium text-ink-2 uppercase tracking-wide">Details</span>
-              <button onClick={() => onAddDetail(item.id)} className="text-body text-mark hover:text-mark/80">
+              <Button variant="ghost" size="sm" onClick={() => onAddDetail(item.id)} aria-label="Add detail" className="-mr-2">
                 + Add
-              </button>
+              </Button>
             </div>
             <DetailRows
               item={item}
@@ -2238,32 +2292,38 @@ function ItemEditor({
           <div>
             <div className="flex items-center justify-between mb-1">
               <span className="text-meta font-medium text-ink-2 uppercase tracking-wide">Links</span>
-              <button onClick={() => onAddLink(item.id)} className="text-body text-mark hover:text-mark/80">
+              <Button variant="ghost" size="sm" onClick={() => onAddLink(item.id)} aria-label="Add link" className="-mr-2">
                 + Add
-              </button>
+              </Button>
             </div>
             {item.links.map((link) => (
-              <div key={link.id} className="flex gap-2 mb-1.5">
-                <input
-                  type="url"
-                  value={link.url}
-                  onChange={(e) => onUpdateLink(item.id, link.id, "url", e.target.value)}
-                  placeholder="https://..."
-                  className="flex-[2] px-2.5 py-1.5 rounded border border-line text-body focus:outline-none focus:ring-2 focus:ring-mark/15 placeholder:text-ink-3/45"
-                />
-                <input
-                  type="text"
-                  value={link.label}
-                  onChange={(e) => onUpdateLink(item.id, link.id, "label", e.target.value)}
-                  placeholder="Label"
-                  className="flex-1 px-2.5 py-1.5 rounded border border-line text-body focus:outline-none focus:ring-2 focus:ring-mark/15 placeholder:text-ink-3/45"
-                />
-                <button
+              // URL above label on a phone, for the reason detail rows stack.
+              <div key={link.id} className="flex items-center gap-1.5 mb-3 sm:gap-2 sm:mb-1.5">
+                <div className="flex min-w-0 flex-1 flex-col gap-1.5 sm:flex-row sm:gap-2">
+                  <input
+                    type="url"
+                    value={link.url}
+                    onChange={(e) => onUpdateLink(item.id, link.id, "url", e.target.value)}
+                    placeholder="https://..."
+                    className={`${INPUT_SHELL} min-w-0 sm:flex-[2]`}
+                  />
+                  <input
+                    type="text"
+                    value={link.label}
+                    onChange={(e) => onUpdateLink(item.id, link.id, "label", e.target.value)}
+                    placeholder="Label"
+                    className={`${INPUT_SHELL} min-w-0 sm:flex-1`}
+                  />
+                </div>
+                <Button
+                  variant="danger"
+                  size="icon"
                   onClick={() => onRemoveLink(item.id, link.id)}
-                  className="text-body text-red-400 hover:text-red-600 px-1"
+                  aria-label="Remove link"
+                  className="-mr-2"
                 >
                   ×
-                </button>
+                </Button>
               </div>
             ))}
           </div>
@@ -2272,17 +2332,15 @@ function ItemEditor({
           <div>
             <div className="flex items-center justify-between mb-1">
               <span className="text-meta font-medium text-ink-2 uppercase tracking-wide">Photos</span>
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-1 -mr-2">
                 {/* THE ACTION, NOT A STEP TOWARDS IT. Upload was previously
                     reachable only by pressing "+ Add" first and then noticing a
                     small button beside the URL field it produced — so the thing
                     most people want was two moves behind the thing most people
                     do not. Pasting a URL stays, one button along. */}
                 <label
-                  className={`text-body ${
-                    newPhotoUploading === item.id
-                      ? "text-ink-2 pointer-events-none"
-                      : "text-mark hover:text-mark/80 cursor-pointer"}`}
+                  className={buttonClass("ghost", "sm",
+                    newPhotoUploading === item.id ? "pointer-events-none opacity-60" : "cursor-pointer")}
                 >
                   {newPhotoUploading === item.id ? "Uploading…" : "Upload"}
                   <input
@@ -2298,14 +2356,17 @@ function ItemEditor({
                     }}
                   />
                 </label>
-                <button onClick={() => onAddPhoto(item.id)} className="text-body text-mark hover:text-mark/80">
+                <Button variant="ghost" size="sm" onClick={() => onAddPhoto(item.id)}>
                   + Add URL
-                </button>
+                </Button>
               </div>
             </div>
             {/* Thumbnail grid for photos that have URLs */}
             {item.photos.some((p) => p.url && p.url.startsWith("http")) && (
-              <div className="flex flex-wrap gap-2 mb-2">
+              // Wider gaps where the pointer is coarse: each thumbnail's remove
+              // button overhangs its corner there, and at the desktop gap the
+              // first one sat on the edge of the next photograph.
+              <div className="flex flex-wrap gap-2 mb-2 pointer-coarse:gap-4 pointer-coarse:pt-1">
                 {item.photos
                   .filter((p) => p.url && p.url.startsWith("http"))
                   .map((photo) => (
@@ -2315,9 +2376,16 @@ function ItemEditor({
                         alt=""
                         className="w-16 h-16 rounded-[var(--radius-control)] object-cover border border-line"
                       />
+                      {/* A HOVER-ONLY CONTROL DOES NOT EXIST ON A PHONE. This was
+                          opacity-0 until hovered, so on a touch screen a photo
+                          could not be removed at all. Where the pointer is coarse
+                          it is always visible and a finger-sized target; where
+                          there is a mouse it keeps its hover reveal. */}
                       <button
                         onClick={() => onRemovePhoto(item.id, photo.id)}
-                        className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-red-500 text-white text-meta flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                        aria-label="Remove photo"
+                        className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-red-500 text-white text-meta flex items-center justify-center opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity
+                                   pointer-coarse:-top-2.5 pointer-coarse:-right-2.5 pointer-coarse:h-8 pointer-coarse:w-8 pointer-coarse:opacity-100"
                       >
                         ×
                       </button>
@@ -2336,14 +2404,14 @@ function ItemEditor({
                     onChange={(e) => onUpdatePhoto(item.id, photo.id, e.target.value)}
                     placeholder="Paste image URL..."
                     autoFocus
-                    className="flex-1 px-2.5 py-1.5 rounded border border-line text-body focus:outline-none focus:ring-2 focus:ring-mark/15 placeholder:text-ink-3/45"
+                    className={`${INPUT_SHELL} min-w-0 flex-1`}
                   />
                   {/* Upload sits BESIDE the URL field, not instead of it. A
                       professional who already keeps images somewhere should not
                       have to re-upload them to keep working. */}
                   <label
-                    className={`shrink-0 px-2.5 py-1.5 rounded border border-line text-body cursor-pointer
-                                hover:bg-ground-2 ${photoUploading === photo.id ? "opacity-60 pointer-events-none" : ""}`}
+                    className={buttonClass("secondary", "sm",
+                      photoUploading === photo.id ? "pointer-events-none opacity-60" : "cursor-pointer")}
                   >
                     {photoUploading === photo.id ? "Uploading…" : "Upload"}
                     <input
@@ -2359,12 +2427,15 @@ function ItemEditor({
                       }}
                     />
                   </label>
-                  <button
+                  <Button
+                    variant="danger"
+                    size="icon"
                     onClick={() => onRemovePhoto(item.id, photo.id)}
-                    className="text-body text-red-400 hover:text-red-600 px-1"
+                    aria-label="Remove photo"
+                    className="-mr-2"
                   >
                     ×
-                  </button>
+                  </Button>
                 </div>
               ))}
             {photoError && <p className="text-body text-red-600 mt-1">{photoError}</p>}
@@ -2416,28 +2487,26 @@ function ItemEditor({
           <div>
             <div className="flex items-center justify-between">
               <span className="text-meta font-medium text-ink-2">Contacts (people)</span>
-              <button
-                onClick={() => onAddContact(item.id)}
-                className="text-body text-mark hover:text-mark/80 font-medium"
-              >
+              <Button variant="ghost" size="sm" onClick={() => onAddContact(item.id)} className="-mr-2">
                 + Add contact
-              </button>
+              </Button>
             </div>
             <div className="mt-2 space-y-2">
               {item.contacts.map((c, ci) => {
-                const cInput = "px-2.5 py-1.5 rounded border border-line text-body focus:outline-none focus:ring-2 focus:ring-mark/15 placeholder:text-ink-3/45";
+                const cInput = `${INPUT_SHELL} min-w-0`;
                 return (
                   <div key={c.id} className="rounded-[var(--radius-control)] border border-line p-2">
                     <div className="flex items-center justify-between mb-1.5">
                       <span className="text-meta font-medium text-ink-2">Contact {ci + 1}</span>
-                      <button onClick={() => onRemoveContact(item.id, c.id)} className="text-meta text-red-400 hover:text-red-600 font-medium">Remove</button>
+                      <Button variant="danger" size="sm" onClick={() => onRemoveContact(item.id, c.id)}
+                        aria-label={`Remove contact ${ci + 1}`} className="-mr-2">Remove</Button>
                     </div>
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                       <input type="text" value={c.name} onChange={(e) => onUpdateContact(item.id, c.id, "name", e.target.value)} placeholder="Name" className={cInput} />
                       <input type="text" value={c.role} onChange={(e) => onUpdateContact(item.id, c.id, "role", e.target.value)} placeholder="Role (optional)" className={cInput} />
                       <input type="tel" value={c.phone} onChange={(e) => onUpdateContact(item.id, c.id, "phone", e.target.value)} placeholder="Phone" className={cInput} />
                       <input type="email" value={c.email} onChange={(e) => onUpdateContact(item.id, c.id, "email", e.target.value)} placeholder="Email" className={cInput} />
-                      <input type="url" value={c.website} onChange={(e) => onUpdateContact(item.id, c.id, "website", e.target.value)} placeholder="Website (this person's own)" className={`${cInput} col-span-2`} />
+                      <input type="url" value={c.website} onChange={(e) => onUpdateContact(item.id, c.id, "website", e.target.value)} placeholder="Website (this person's own)" className={`${cInput} sm:col-span-2`} />
                     </div>
                   </div>
                 );

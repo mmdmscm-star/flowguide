@@ -95,9 +95,15 @@ test("'Save to Library' is a button, not the muted ancestry treatment", () => {
   const quietEnd = ancestry.indexOf("</div>");
   assert.doesNotMatch(ancestry.slice(0, quietEnd), /Save to Library/,
     "the save branch must not sit inside the muted ancestry container");
+  // THE CONTROL, NOT ITS CLASS LIST. This pinned `rounded-lg border` as a
+  // stand-in for "renders as a real control" — the hand-rolled look of a 30px
+  // button that a phone could barely hit. It is the shared Button now, which is
+  // a stronger statement of the same thing.
   const save = ACTIONS.slice(ACTIONS.indexOf(") : ("));
-  assert.match(save, /rounded-lg border/,
+  assert.match(save, /<Button variant="secondary"[^>]*onClick=\{\(\) => saveToLibrary\(\)\}/,
     "the only way to fill an empty Library must render as a real control");
+  assert.doesNotMatch(save.slice(0, save.indexOf("Save to Library")), /underline/,
+    "saving has been styled as the quiet ancestry link instead of a button");
 });
 
 // ---------------------------------------------------------------------------

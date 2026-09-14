@@ -1,4 +1,5 @@
 "use client";
+import { Button } from "@/components/ui/button";
 import { useState } from "react";
 import { SaveBackDialog } from "@/components/library/save-back-dialog";
 
@@ -63,27 +64,27 @@ export function ItemLibraryActions({
       {libraryItemId ? (
         // CONTEXT. Quiet: an item inserted from the Library is an ordinary item
         // once it is here, and its ancestry should not compete with its content.
-        <div className="flex items-center gap-2 text-xs text-muted">
+        // Still quiet — ancestry should not compete with the content — but on
+        // the creator scale rather than 12px, and "Update saved version" is a
+        // control with a thumb-sized target rather than an underlined word.
+        <div className="flex flex-wrap items-center gap-x-1 text-meta text-ink-3">
           <span>From your Library</span>
           <span aria-hidden>·</span>
-          <button onClick={() => setDialog(true)} disabled={busy}
-            className="underline underline-offset-2 hover:text-foreground disabled:opacity-60">
+          <Button variant="ghost" size="sm" onClick={() => setDialog(true)} disabled={busy}>
             Update saved version
-          </button>
+          </Button>
         </div>
       ) : (
-        // ACTION. Reads as a button, because it is one.
-        <button onClick={() => saveToLibrary()} disabled={busy}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-white px-2.5 py-1
-                     text-sm font-medium text-foreground hover:border-accent hover:text-accent
-                     disabled:opacity-60">
+        // ACTION. Reads as a button, because it is one — the shared one, which
+        // on a phone is a finger-sized target rather than the 30px it was.
+        <Button variant="secondary" size="sm" onClick={() => saveToLibrary()} disabled={busy}>
           <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
             <path d="M6 4h12a1 1 0 011 1v15l-7-4-7 4V5a1 1 0 011-1z" />
           </svg>
           {busy ? "Saving…" : "Save to Library"}
-        </button>
+        </Button>
       )}
-      {error && <p className="mt-1 text-sm text-red-700">{error}</p>}
+      {error && <p className="mt-1 text-meta text-red-700">{error}</p>}
 
       {dialog && libraryItemId && (
         <SaveBackDialog
