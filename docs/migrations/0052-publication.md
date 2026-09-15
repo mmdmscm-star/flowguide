@@ -1,7 +1,7 @@
 # 0052 — atomic publication
 
-Written and tested; **not applied, not deployed.** The route still publishes the
-old way; see "Deployment sequence".
+**Applied 2026-09-15.** The publish route now uses it (route switch); readers still
+render live rows, and there is no single-door trigger (0053) or backfill (0054) yet.
 
 ## What it adds
 
@@ -70,3 +70,20 @@ old way; see "Deployment sequence".
 4. 0054: `backfill_packet_publication`, then the backfill run.
 5. Reader switch; then the status ⇔ publication invariant; then loosening the
    draft-only edit guards.
+
+## Route switch
+
+`POST /api/packets/:id/publish` now: reads `packet_publish_token` → runs every
+existing gate in its original order with its original responses (import gate,
+title, structure, identity readiness, ownership with 503/decline/blocking) →
+builds the snapshot with `buildPublicationSnapshot` (the same assembly as
+`getPublishedPacket`, reading strictly) → calls `publish_packet`. Refusals map
+to: `changed` → 409 "This Sendset changed while publishing. Try again.";
+`import_blocks` → the import gate's own response; `title_required` → the
+existing 400; `PT404` → 404; anything else → 500 `publish_failed`, logged.
+Unpublish calls `unpublish_packet`. No TypeScript writes a packet status.
+
+Before deploying, for every published Sendset in production (read-only): the
+snapshot passed publish_packet's validation rules (32/32), and equalled the live
+render for all 23 with a stored identity snapshot (the other 9 predate snapshots
+and render the live profile).

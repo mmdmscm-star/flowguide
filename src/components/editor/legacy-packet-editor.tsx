@@ -1130,11 +1130,18 @@ export function LegacyPacketEditor() {
 
   async function handleUnpublish() {
     if (!confirm("Unpublish this Sendset? The link will stop working.")) return;
-    await fetch(`/api/packets/${packetId}/publish`, {
+    const res = await fetch(`/api/packets/${packetId}/publish`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "unpublish" }),
     });
+    // The link is still live if this failed, so the editor must not say otherwise.
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setPublishError(data.message || data.error || "Couldn't unpublish this Sendset. Please try again.");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
     setPacket((prev) => prev ? { ...prev, status: "draft" } : prev);
   }
 

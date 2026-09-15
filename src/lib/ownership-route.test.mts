@@ -31,13 +31,17 @@ function sourceFiles(dir = join(ROOT, "src")): string[] {
 // ---------------------------------------------------------------------------
 // The gate
 // ---------------------------------------------------------------------------
-test("the ownership check runs BEFORE the update that publishes", () => {
+test("the ownership check runs BEFORE the call that publishes", () => {
   const src = read(PUBLISH_ROUTE);
+  const token = src.indexOf('rpc("packet_publish_token"');
   const check = src.indexOf("loadPacketOwnership(");
-  const update = src.indexOf('status: "published"');
+  const update = src.indexOf('rpc("publish_packet"');
   assert.ok(check > 0, "the publish route must recompute ownership");
   assert.ok(update > 0, "the publish route must be the thing that publishes");
   assert.ok(check < update, "a gate after the write is not a gate");
+  // 0052: the token is read BEFORE the gate, so publish_packet can refuse
+  // anything that changed after the gate looked.
+  assert.ok(token > 0 && token < check, "the publish token must be read before the ownership check");
 });
 
 test("a throw in the check publishes nothing and blames nobody", () => {
@@ -62,7 +66,7 @@ test("an unavailable check is neither a pass nor an accusation", () => {
   // masquerade as a successful clean check.
   const src = read(PUBLISH_ROUTE);
   const guard = src.indexOf("ownership.unavailable");
-  const update = src.indexOf('status: "published"');
+  const update = src.indexOf('rpc("publish_packet"');
   assert.ok(guard > 0, "the publish route must inspect the unavailable state");
   assert.ok(guard < update, "and do so before publishing");
 
@@ -92,12 +96,15 @@ test("publishing has exactly one door, and it is the publish route", () => {
     const rel = f.slice(ROOT.length + 1);
     return rel.startsWith("src/app/api/") || rel.startsWith("src/lib/");
   });
-  const writers = server.filter((f) => /status:\s*["']published["']/.test(readFileSync(f, "utf8")));
-  assert.deepEqual(
-    writers.map((f) => f.slice(ROOT.length + 1)),
-    [PUBLISH_ROUTE],
-    "a second writer of status='published' would bypass the ownership gate entirely",
-  );
+  const rel = (f: string) => f.slice(ROOT.length + 1);
+  // 0052: no TypeScript writes a status at all. publish_packet and
+  // unpublish_packet own every change, and only the publish route calls them.
+  const writers = server.filter((f) => /status:\s*["'](published|draft)["']/.test(readFileSync(f, "utf8")));
+  assert.deepEqual(writers.map(rel), [], "server code writes a packet status directly");
+  for (const fn of ["publish_packet", "unpublish_packet", "packet_publish_token"]) {
+    const callers = server.filter((f) => readFileSync(f, "utf8").includes(`rpc("${fn}"`));
+    assert.deepEqual(callers.map(rel), [PUBLISH_ROUTE], `${fn} is reachable from somewhere other than the publish route`);
+  }
 });
 
 test("only publish_packet publishes from the database, and only after binding the gates' verdict", () => {

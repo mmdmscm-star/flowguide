@@ -38,7 +38,8 @@ export async function POST(_request: Request, context: Context) {
       packet_type: original.packet_type || "general",
       map_url: original.map_url || "",
       raw_input: "",
-      status: "draft",
+      // No status: a new row is a draft by the column default, and status
+      // changes belong to publish_packet / unpublish_packet alone (0052).
       viewed: false,
       // Carry the packet's identity choice to the copy. The snapshot is not
       // copied — a duplicate is a fresh draft that re-snapshots at publish.

@@ -66,9 +66,9 @@ test("publishing refuses a pending run, and refuses when it cannot check", () =>
   const gate = code.indexOf(".or(BLOCKING_RUN_FILTER)");
   const unavailable = code.indexOf('"import_check_unavailable"');
   const finishing = code.indexOf('"import_finishing"');
-  const update = code.indexOf('status: "published"');
+  const update = code.indexOf('rpc("publish_packet"');
   assert.ok(gate > 0 && unavailable > gate && finishing > gate, "the gate must read errors and name the pending case");
-  assert.ok(finishing < update && unavailable < update, "both refusals come before the publishing write");
+  assert.ok(update > 0 && finishing < update && unavailable < update, "both refusals come before the publishing call");
   assert.match(code.slice(unavailable, unavailable + 200), /status: 503/);
   assert.match(code,
     /const \{ data: activeRun, error: activeRunErr \}[\s\S]{0,400}\.or\(BLOCKING_RUN_FILTER\)[\s\S]{0,80}\.maybeSingle\(\);\s*if \(activeRunErr\) \{[\s\S]{0,200}"import_check_unavailable"/,

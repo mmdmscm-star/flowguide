@@ -550,9 +550,11 @@ test("PREVIEW RENDERS THE COMPOSITION THE RECIPIENT PAGE RENDERS", () => {
   assert.match(preview, branch, "Preview still renders sections for a block packet");
 
   const q = codeOf("src/lib/queries.ts");
-  assert.match(q, /if \(packet\.composition_mode === "blocks"\) \{[\s\S]{0,400}buildBlockPacket\(supabase, packet, profile\)/,
+  assert.match(q, /if \(packet\.composition_mode === "blocks"\) \{[\s\S]{0,400}buildBlockPacket\(supabase, packet, profile(, strict)?\)/,
     "the editor path never loads blocks, so Preview's branch can never fire");
-  assert.equal((q.match(/buildBlockPacket\(supabase, packet, profile\)/g) ?? []).length, 2,
+  // The published path passes `strict` (0052: the publication snapshot reads
+  // through the same assembly and must not freeze a failed read).
+  assert.equal((q.match(/buildBlockPacket\(supabase, packet, profile(, strict)?\)/g) ?? []).length, 2,
     "the published and editor paths do not share one block assembly");
 
   // Same control, same size — and now the same treatment.

@@ -55,8 +55,8 @@ export function resolveProfessional(
 // Uses server client to bypass RLS for profile reads while
 // still filtering to published packets only.
 // ============================================================
-export async function getPublishedPacket(slug: string): Promise<Packet | null> {
-  const supabase = createServerClient();
+export async function getPublishedPacket(slug: string, db: Db = createServerClient()): Promise<Packet | null> {
+  const supabase = db;
 
   // Fetch the packet
   const { data: packet, error: packetError } = await supabase
@@ -74,17 +74,7 @@ export async function getPublishedPacket(slug: string): Promise<Packet | null> {
   let profile: any = null;
   const snapshot = packet.professional_snapshot;
   if (snapshot && typeof snapshot === "object" && Object.keys(snapshot).length > 0) {
-    profile = {
-      name: snapshot.name || "",
-      email: snapshot.email || "",
-      phone: snapshot.phone || "",
-      business_name: snapshot.businessName || "",
-      logo_url: snapshot.logoUrl || "",
-      headshot_url: snapshot.headshotUrl || "",
-      footer_label: snapshot.footerLabel ?? "Your Advisor",
-      website_url: snapshot.websiteUrl || "",
-      links: snapshot.links || [],
-    };
+    profile = profileFromSnapshot(snapshot);
   } else if (snapshot === null) {
     // No snapshot — legacy packet, fall back to live profile
     const { data: liveProfile } = await supabase
@@ -96,36 +86,79 @@ export async function getPublishedPacket(slug: string): Promise<Packet | null> {
   }
   // If snapshot is {} (empty object), packet was published without branding — profile stays null
 
+  return assemblePacket(supabase, packet, profile, false);
+}
+
+type Db = ReturnType<typeof createServerClient>;
+
+// A FAILED READ IS NOT AN EMPTY ONE — WHEN THE RESULT IS BEING FROZEN.
+//
+// The live recipient page has always read `data || []`, and it keeps doing so:
+// a hiccup there costs one page view. A publication snapshot is different. It is
+// stored and served later, so a failed read that assembled "no photos" would
+// freeze that absence into what every recipient sees. The snapshot builder
+// therefore reads strictly and throws instead.
+function rowsOf<T>(res: { data: T[] | null; error: { message: string } | null }, strict: boolean, what: string): T[] {
+  if (strict && res.error) throw new Error(`publication snapshot could not read ${what}: ${res.error.message}`);
+  return res.data || [];
+}
+
+// The frozen professional_snapshot (camelCase) as the profile row shape the
+// assembly expects. `{}` means "published without branding" and yields null.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function profileFromSnapshot(snapshot: any): any {
+  if (!snapshot || typeof snapshot !== "object" || Object.keys(snapshot).length === 0) return null;
+  return {
+    name: snapshot.name || "",
+    email: snapshot.email || "",
+    phone: snapshot.phone || "",
+    business_name: snapshot.businessName || "",
+    logo_url: snapshot.logoUrl || "",
+    headshot_url: snapshot.headshotUrl || "",
+    footer_label: snapshot.footerLabel ?? "Your Advisor",
+    website_url: snapshot.websiteUrl || "",
+    links: snapshot.links || [],
+  };
+}
+
+// ONE ASSEMBLY for both the live recipient page and the frozen publication, so
+// the copy publish_packet stores is, by construction, what the page renders.
+async function assemblePacket(
+  supabase: Db,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  packet: any,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  profile: any,
+  strict: boolean
+): Promise<Packet> {
   // Branch on composition mode. Block-mode packets present an ordered block body
   // (packet_blocks) instead of sections; legacy packets continue through the
   // exact section/item assembly below, unchanged. The packet shell and the
   // resolved professional identity (from the frozen snapshot) are shared by both.
-  // (A block packet cannot actually be published yet — the draft-only DB trigger
-  // blocks it — but the production read path understands one if it exists.)
   if (packet.composition_mode === "blocks") {
-    return buildBlockPacket(supabase, packet, profile);
+    return buildBlockPacket(supabase, packet, profile, strict);
   }
 
   // Fetch sections ordered by sort_order
-  const { data: sections } = await supabase
+  const sections = rowsOf(await supabase
     .from("sections")
     .select("*")
     .eq("packet_id", packet.id)
-    .order("sort_order");
+    .order("sort_order"), strict, "sections");
 
-  if (!sections || sections.length === 0) {
+  if (sections.length === 0) {
     return buildPacket(packet, profile, []);
   }
 
   // Fetch all items for all sections
   const sectionIds = sections.map((s) => s.id);
-  const { data: items } = await supabase
+  const items = rowsOf(await supabase
     .from("items")
     .select("*")
     .in("section_id", sectionIds)
-    .order("sort_order");
+    .order("sort_order"), strict, "items");
 
-  if (!items || items.length === 0) {
+  if (items.length === 0) {
     return buildPacket(
       packet,
       profile,
@@ -142,10 +175,10 @@ export async function getPublishedPacket(slug: string): Promise<Packet | null> {
     supabase.from("item_contacts").select("*").in("item_id", itemIds).order("sort_order"),
   ]);
 
-  const photos = photosRes.data || [];
-  const links = linksRes.data || [];
-  const details = detailsRes.data || [];
-  const contacts = contactsRes.data || [];
+  const photos = rowsOf(photosRes, strict, "photos");
+  const links = rowsOf(linksRes, strict, "links");
+  const details = rowsOf(detailsRes, strict, "details");
+  const contacts = rowsOf(contactsRes, strict, "contacts");
 
   // Assemble items with their sub-fields
   const assembledItems = items.map((item) => {
@@ -195,6 +228,31 @@ export async function getPublishedPacket(slug: string): Promise<Packet | null> {
   }));
 
   return buildPacket(packet, profile, assembledSections);
+}
+
+// ============================================================
+// SERVER: The recipient-safe copy publish_packet freezes (0052)
+// ============================================================
+// Built from the Sendset's working rows by id — whatever its status — through
+// the same assembly getPublishedPacket uses, with the identity the publish
+// route is about to store in professional_snapshot. The internal `title` is
+// dropped (it is never shown to a recipient, and packet_publications refuses
+// it); private notes never enter the assembly at all.
+export const PUBLICATION_FORMAT_VERSION = 1;
+export type PublicationSnapshot = Omit<Packet, "title">;
+
+export async function buildPublicationSnapshot(
+  db: Db,
+  packetId: string,
+  professionalSnapshot: Record<string, unknown>
+): Promise<PublicationSnapshot> {
+  const { data: packet, error } = await db.from("packets").select("*").eq("id", packetId).single();
+  if (error || !packet) throw new Error(`publication snapshot could not read the Sendset: ${error?.message ?? "not found"}`);
+  const built = await assemblePacket(db, packet, profileFromSnapshot(professionalSnapshot), true);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { title: _internalName, ...recipient } = built;
+  // Exactly the JSON that will be stored: undefined fields are absent, not null.
+  return JSON.parse(JSON.stringify(recipient)) as PublicationSnapshot;
 }
 
 // Map a snapshot/profile row (snake_case) to the ProfessionalContact shape the
@@ -254,19 +312,19 @@ async function buildBlockPacket(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   packet: any,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  profile: any
+  profile: any,
+  strict = false
 ): Promise<Packet> {
-  const { data: rows } = await supabase
+  const blockRows = rowsOf(await supabase
     .from("packet_blocks")
     .select("id, position, block_type, item_id, heading_text, heading_subtext")
     .eq("packet_id", packet.id)
-    .order("position");
+    .order("position"), strict, "blocks");
 
-  const blockRows = rows || [];
   const itemIds = blockRows
     .filter((r) => r.block_type === "item" && r.item_id)
     .map((r) => r.item_id as string);
-  const itemsById = await assembleItemsByIds(supabase, itemIds);
+  const itemsById = await assembleItemsByIds(supabase, itemIds, "recipient", strict);
 
   const blocks: PacketBlock[] = [];
   for (const r of blockRows) {
@@ -328,7 +386,8 @@ export type Audience = "recipient" | "professional";
 export async function assembleItemsByIds(
   supabase: ReturnType<typeof createServerClient>,
   itemIds: string[],
-  audience: Audience = "recipient"
+  audience: Audience = "recipient",
+  strict = false
 ): Promise<Record<string, Item>> {
   if (itemIds.length === 0) return {};
   const [itemsRes, photosRes, linksRes, detailsRes, contactsRes] = await Promise.all([
@@ -338,13 +397,13 @@ export async function assembleItemsByIds(
     supabase.from("item_details").select("*").in("item_id", itemIds).order("sort_order"),
     supabase.from("item_contacts").select("*").in("item_id", itemIds).order("sort_order"),
   ]);
-  const photos = photosRes.data || [];
-  const links = linksRes.data || [];
-  const details = detailsRes.data || [];
-  const contacts = contactsRes.data || [];
+  const photos = rowsOf(photosRes, strict, "photos");
+  const links = rowsOf(linksRes, strict, "links");
+  const details = rowsOf(detailsRes, strict, "details");
+  const contacts = rowsOf(contactsRes, strict, "contacts");
 
   const map: Record<string, Item> = {};
-  for (const it of itemsRes.data || []) {
+  for (const it of rowsOf(itemsRes, strict, "items")) {
     const itemPhotos = photos.filter((p) => p.item_id === it.id).map((p) => p.url);
     const itemLinks: ItemLink[] = links
       .filter((l) => l.item_id === it.id)

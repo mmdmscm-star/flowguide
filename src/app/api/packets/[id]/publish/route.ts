@@ -4,8 +4,65 @@ import { createServerClient } from "@/lib/supabase";
 import { loadPacketOwnership } from "@/lib/ownership-service";
 import { identityGap, IDENTITY_GAP_MESSAGE } from "@/lib/professional-identity";
 import { BLOCKING_RUN_FILTER } from "@/lib/import-blocking";
+import { buildPublicationSnapshot, PUBLICATION_FORMAT_VERSION } from "@/lib/queries";
 
 type Context = { params: Promise<{ id: string }> };
+type Db = ReturnType<typeof createServerClient>;
+
+// THE MESSAGE FOR A PUBLISH THAT LOST A RACE. publish_packet refuses when
+// anything the gates read changed after the route read its token.
+export const CHANGED_WHILE_PUBLISHING = "This Sendset changed while publishing. Try again.";
+
+// The import gate, as one function: it runs before the other gates, and again
+// to explain a refusal publish_packet makes when an import started blocking in
+// between. Same codes, same sentences, either way.
+async function importGate(supabase: Db, packetId: string, userId: string): Promise<NextResponse | null> {
+  // Reject publishing while an import is in progress (server-side, not just the
+  // UI). The DB trigger (migration 0012) is the hard guard; this returns a clear
+  // message before hitting it.
+  // needs_review MUST be in this list. The trigger (0013) blocks publishing on
+  // it, so leaving it out doesn't allow the publish — it just replaces this
+  // sentence with raw Postgres text and gives the professional nothing to do.
+  //
+  // A finalized run whose review is still PENDING blocks too (0051): its
+  // content is applied but nobody has decided whether it needs review yet.
+  // The filter is the one shared definition in lib/import-blocking.
+  //
+  // A FAILED READ REFUSES. This query used to ignore its error, so a
+  // database hiccup read as "no import in the way" and let the publish on.
+  const { data: activeRun, error: activeRunErr } = await supabase
+    .from("ingestion_runs")
+    .select("id, status, review")
+    .eq("packet_id", packetId)
+    .eq("user_id", userId)
+    .or(BLOCKING_RUN_FILTER)
+    .maybeSingle();
+  if (activeRunErr) {
+    console.error("[publish] import gate could not be checked:", activeRunErr.message);
+    return NextResponse.json({ error: "import_check_unavailable", message: "Couldn't check this Sendset's imports. Try again in a moment." }, { status: 503 });
+  }
+  if (activeRun) {
+    const run = activeRun as { id: string; status: string; review?: { summary?: string; exit?: string } | null };
+    if (run.status === "finalized") {
+      return NextResponse.json({
+        error: "import_finishing",
+        runId: run.id,
+        message: "Sendset is still checking the import. Try again in a moment.",
+      }, { status: 409 });
+    }
+    if (run.status === "needs_review") {
+      const why = run.review?.summary?.trim();
+      const exit = run.review?.exit?.trim() || "Discard the import to clear this review.";
+      return NextResponse.json({
+        error: "import_needs_review",
+        runId: run.id,
+        message: `${why ? why + " " : ""}${exit}`,
+      }, { status: 409 });
+    }
+    return NextResponse.json({ error: "import_in_progress", message: "An import is still in progress. Finish or discard it before publishing." }, { status: 409 });
+  }
+  return null;
+}
 
 // POST /api/packets/:id/publish — publish or unpublish
 export async function POST(request: Request, context: Context) {
@@ -18,50 +75,22 @@ export async function POST(request: Request, context: Context) {
   const supabase = createServerClient();
 
   if (action === "publish") {
-    // Reject publishing while an import is in progress (server-side, not just the
-    // UI). The DB trigger (migration 0012) is the hard guard; this returns a clear
-    // message before hitting it.
-    // needs_review MUST be in this list. The trigger (0013) blocks publishing on
-    // it, so leaving it out doesn't allow the publish — it just replaces this
-    // sentence with raw Postgres text and gives the professional nothing to do.
-    //
-    // A finalized run whose review is still PENDING blocks too (0051): its
-    // content is applied but nobody has decided whether it needs review yet.
-    // The filter is the one shared definition in lib/import-blocking.
-    //
-    // A FAILED READ REFUSES. This query used to ignore its error, so a
-    // database hiccup read as "no import in the way" and let the publish on.
-    const { data: activeRun, error: activeRunErr } = await supabase
-      .from("ingestion_runs")
-      .select("id, status, review")
-      .eq("packet_id", id)
-      .eq("user_id", session.userId)
-      .or(BLOCKING_RUN_FILTER)
-      .maybeSingle();
-    if (activeRunErr) {
-      console.error("[publish] import gate could not be checked:", activeRunErr.message);
-      return NextResponse.json({ error: "import_check_unavailable", message: "Couldn't check this Sendset's imports. Try again in a moment." }, { status: 503 });
+    // THE TOKEN COMES FIRST. It records everything the gates below are about to
+    // read; publish_packet recomputes it under the Sendset's lock and refuses if
+    // anything changed in between, so the verdict of every gate is bound to what
+    // is actually published (0052).
+    const { data: publishToken, error: tokenErr } = await supabase.rpc("packet_publish_token", {
+      p_owner: session.userId,
+      p_packet_id: id,
+    });
+    if (tokenErr) {
+      console.error("[publish] could not read the publish token:", tokenErr.message);
+      return NextResponse.json({ error: "publish_unavailable", message: "Couldn't start publishing. Try again in a moment." }, { status: 503 });
     }
-    if (activeRun) {
-      const run = activeRun as { id: string; status: string; review?: { summary?: string; exit?: string } | null };
-      if (run.status === "finalized") {
-        return NextResponse.json({
-          error: "import_finishing",
-          runId: run.id,
-          message: "Sendset is still checking the import. Try again in a moment.",
-        }, { status: 409 });
-      }
-      if (run.status === "needs_review") {
-        const why = run.review?.summary?.trim();
-        const exit = run.review?.exit?.trim() || "Discard the import to clear this review.";
-        return NextResponse.json({
-          error: "import_needs_review",
-          runId: run.id,
-          message: `${why ? why + " " : ""}${exit}`,
-        }, { status: 409 });
-      }
-      return NextResponse.json({ error: "import_in_progress", message: "An import is still in progress. Finish or discard it before publishing." }, { status: 409 });
-    }
+    if (!publishToken) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+    const importRefusal = await importGate(supabase, id, session.userId);
+    if (importRefusal) return importRefusal;
 
     // Validate the packet has required content
     const { data: packet } = await supabase
@@ -231,11 +260,12 @@ export async function POST(request: Request, context: Context) {
 
     // ---- Media ownership gate. RECOMPUTED, never read from a stored finding.
     //
-    // This is the last check before the single UPDATE that publishes, and this
-    // route is the only writer of status='published' in server code — asserted
-    // by ownership-route.test.mts, not assumed. It cannot live in the DB
-    // trigger: the check needs detectSourceRecords and segmentHash, which are
-    // TypeScript.
+    // This is the last check before publish_packet, and this route is the only
+    // caller of publish_packet in server code — asserted by
+    // ownership-route.test.mts, not assumed. It cannot live in the database: the
+    // check needs detectSourceRecords and segmentHash, which are TypeScript. What
+    // the database does instead is refuse to publish anything but the inputs this
+    // check read, via the token read at the top of this handler.
     //
     // THREE OUTCOMES, AND THEY ARE NOT INTERCHANGEABLE:
     //
@@ -293,36 +323,65 @@ export async function POST(request: Request, context: Context) {
       }, { status: 409 });
     }
 
-    const { error } = await supabase
-      .from("packets")
-      .update({
-        status: "published",
-        published_at: new Date().toISOString(),
-        professional_snapshot: professionalSnapshot,
-      })
-      .eq("id", id)
-      .eq("user_id", session.userId);
+    // ---- The frozen copy, then the one atomic write.
+    //
+    // Built from the working rows through the same assembly the recipient page
+    // uses, with the identity being frozen into professional_snapshot. A failed
+    // read throws rather than freezing an absence.
+    let snapshot;
+    try {
+      snapshot = await buildPublicationSnapshot(supabase, id, professionalSnapshot);
+    } catch (e) {
+      console.error("[publish] could not build the publication snapshot", { packetId: id, error: e });
+      return NextResponse.json({ error: "publish_unavailable", message: "Couldn't prepare this Sendset for publishing. Try again in a moment." }, { status: 503 });
+    }
 
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    const { data: published, error: publishErr } = await supabase.rpc("publish_packet", {
+      p_owner: session.userId,
+      p_packet_id: id,
+      p_expected_token: publishToken,
+      p_format_version: PUBLICATION_FORMAT_VERSION,
+      p_content: snapshot,
+      p_professional_snapshot: professionalSnapshot,
+    });
 
-    // Get the slug for the response
-    const { data: updated } = await supabase
-      .from("packets")
-      .select("slug")
-      .eq("id", id)
-      .single();
+    if (publishErr) {
+      // Every refusal leaves the existing publication exactly as it was. Map each
+      // one deliberately; the database's own words never reach the professional.
+      const detail = (publishErr as { details?: string | null }).details;
+      if (publishErr.code === "PT409" && detail === "changed") {
+        return NextResponse.json({ error: "changed_while_publishing", message: CHANGED_WHILE_PUBLISHING }, { status: 409 });
+      }
+      if (publishErr.code === "PT409" && detail === "import_blocks") {
+        const refusal = await importGate(supabase, id, session.userId);
+        return refusal ?? NextResponse.json({ error: "import_in_progress", message: "An import is still in progress. Finish or discard it before publishing." }, { status: 409 });
+      }
+      if (publishErr.code === "PT400" && detail === "title_required") {
+        return NextResponse.json({ error: "Packet needs a title" }, { status: 400 });
+      }
+      if (publishErr.code === "PT404") {
+        return NextResponse.json({ error: "Not found" }, { status: 404 });
+      }
+      // invalid_snapshot is our defect, not the professional's; anything else is
+      // unexpected. Neither publishes, and both are logged in full.
+      console.error("[publish] publish_packet refused", { packetId: id, code: publishErr.code, detail, message: publishErr.message });
+      return NextResponse.json({ error: "publish_failed", message: "Couldn't publish this Sendset. Please try again." }, { status: 500 });
+    }
 
-    return NextResponse.json({ ok: true, slug: updated?.slug });
+    return NextResponse.json({ ok: true, slug: (published as { slug?: string } | null)?.slug });
   }
 
   if (action === "unpublish") {
-    const { error } = await supabase
-      .from("packets")
-      .update({ status: "draft" })
-      .eq("id", id)
-      .eq("user_id", session.userId);
-
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    // The frozen copy goes with the status, under the Sendset's lock (0052).
+    const { error: unpublishErr } = await supabase.rpc("unpublish_packet", {
+      p_owner: session.userId,
+      p_packet_id: id,
+    });
+    if (unpublishErr) {
+      if (unpublishErr.code === "PT404") return NextResponse.json({ error: "Not found" }, { status: 404 });
+      console.error("[unpublish] unpublish_packet failed", { packetId: id, code: unpublishErr.code, message: unpublishErr.message });
+      return NextResponse.json({ error: "unpublish_failed", message: "Couldn't unpublish this Sendset. Please try again." }, { status: 500 });
+    }
 
     return NextResponse.json({ ok: true });
   }
