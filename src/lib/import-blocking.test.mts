@@ -47,7 +47,7 @@ test("an undecided review is a finalized run with no verdict yet", () => {
 test("the PostgREST filter says the same thing as runBlocksPublishing", () => {
   assert.deepEqual([...BLOCKING_RUN_STATUSES], ["active", "finalizing", "needs_review"]);
   assert.equal(BLOCKING_RUN_FILTER,
-    "status.in.(active,finalizing,needs_review),and(status.eq.finalized,review->>pending.eq.true)");
+    "status.in.(active,finalizing,needs_review),and(status.eq.finalized,review->pending.eq.true)");
 });
 
 test("every packet-side lookup uses the one definition, not a copied status list", () => {

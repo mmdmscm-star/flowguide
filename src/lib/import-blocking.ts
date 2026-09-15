@@ -22,7 +22,7 @@ export const BLOCKING_RUN_STATUSES = ["active", "finalizing", "needs_review"] as
 
 /** A PostgREST `or` filter selecting exactly the runs that block publishing. */
 export const BLOCKING_RUN_FILTER =
-  `status.in.(${BLOCKING_RUN_STATUSES.join(",")}),and(status.eq.finalized,review->>pending.eq.true)`;
+  `status.in.(${BLOCKING_RUN_STATUSES.join(",")}),and(status.eq.finalized,review->pending.eq.true)`;
 
 export type RunReviewState = { status?: string | null; review?: unknown };
 
