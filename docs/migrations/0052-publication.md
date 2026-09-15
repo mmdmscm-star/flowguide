@@ -1,7 +1,8 @@
 # 0052 — atomic publication
 
-**Applied 2026-09-15.** The publish route now uses it (route switch); readers still
-render live rows, and there is no single-door trigger (0053) or backfill (0054) yet.
+**Applied 2026-09-15.** Used by the publish route; 0053 added the single-door
+trigger, 0054 the backfill, and readers serve the publication since the reader
+switch (see `reader-switch.md`).
 
 ## What it adds
 

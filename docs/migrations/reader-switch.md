@@ -1,8 +1,11 @@
 # Reader switch — recipients read the frozen publication
 
-**Prepared on branch `reader-switch`; not merged, not deployed. Backfill APPLIED
-2026-09-15 22:11Z: 33 published → 33 publications, all equal to the live render by
-value; manifest at `~/.sendset-backfill/0054-manifest-2026-09-15.json`.**
+**DEPLOYED 2026-09-15 22:19Z** (`main` 3a74df9). Pre-merge verification: 33/33
+publications equal to the live render, 0 missing. Post-deploy: 0 fallback log
+lines; page, print and email smoke-tested; the professional's signed-in test
+(edit → Changes not published → public/print/email unchanged → Republish → same
+URL updated → Published) passed. Backfill applied 22:11Z; manifest at
+`~/.sendset-backfill/0054-manifest-2026-09-15.json`.
 
 Decisions (2026-09-15): keep the logged fallback for the initial rollout; the 4
 old-card Sendsets correctly show "Changes not published"; the 9 live-profile

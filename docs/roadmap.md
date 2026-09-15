@@ -29,39 +29,57 @@ must obey.
 
 ---
 
-## Published snapshots — creator states and public unavailable page (logged 2026-09-15)
+## Published snapshots — stable links, frozen publication, Republish (SHIPPED 2026-09-15)
 
-Status of the track: 0050–0052 applied; the publish route writes
-`packet_publications` through `publish_packet` (cb1114e). **Readers still render
-live rows**, so today an edit to a published Sendset (e.g. its personal note)
-reaches recipients immediately. That changes at the reader switch, and these two
-items belong with it.
+**Complete.** Migrations 0050–0054 applied; reader switch deployed (3a74df9);
+production backfill complete (every published Sendset has a publication row);
+the professional's signed-in test passed. Details: `docs/migrations/0050`–`0054`
+notes and `docs/migrations/reader-switch.md`.
 
-### 1. Creator publish states — ship WITH the reader switch, not after
+**Production behaviour:**
 
-Once recipients read the frozen copy, an edit no longer reaches them until
-Republish. Switching readers without saying so would make edits silently
-invisible. The creator experience must distinguish:
+- A Sendset's public URL (`https://sendset.io/p/<slug>`) is stable: editing and
+  republishing never change it.
+- Creator edits autosave to the working version (no manual Save button).
+- Recipients see the last deliberately published snapshot
+  (`packet_publications`), never unpublished edits. The public page, the print
+  page and the email version all read that frozen publication.
+- For a published Sendset the editor shows **Saved · Changes not published** when
+  the snapshot a Republish would store differs *by value* from the stored one —
+  never from revision counters or byte order. Legacy editor: **Republish** in the
+  bottom bar, staying in the editor. Block editor: status plus a link to Preview.
+  Preview share step: "You have unpublished changes. This preview shows your
+  current draft; email and print use the last published version until you
+  republish." with Republish.
+- **Republish** atomically replaces the publication behind the same URL
+  (`publish_packet`, token-bound to the gates).
+- **Unpublish** deletes the publication and takes the URL offline; publishing again
+  restores the same URL.
+- Unavailable page: "This Sendset is no longer available." / "If you were expecting
+  to see it, contact the person who shared the link." (real 404, reveals nothing).
 
-- **Saved** — working edits are autosaved (unchanged; no manual Save button).
-- **Published** — recipients are seeing this version.
-- After changing a published Sendset: **Saved · Changes not published**, with an
-  obvious **Republish** action.
+**Parked, deliberately — not done:**
 
-"Changes not published" must be EXACT, not the conservative revision counters
-(`draft_rev` / `identity_rev` over-count — see 0050's header). Compare the stored
-publication with the snapshot a republish would produce now (same builder,
-same identity resolution), so it never shows when republishing would change
-nothing.
-
-### 2. Public unavailable page — Sendset terminology, neutral wording
-
-`src/app/p/[slug]/not-found.tsx` says "Packet not found" and "This link doesn't
-match any packet." for every non-published slug, including a Sendset that was
-intentionally unpublished. It should use Sendset terminology and a neutral
-message such as **"This Sendset is no longer available."** Keep it generic: it
-must still reveal nothing about whether a Sendset ever existed at that link, and
-it keeps the real 404.
+1. **Temporary reader fallback.** A published Sendset with no publication renders
+   live rows and logs `[publication-reader] published Sendset has no publication`.
+   Inert since the backfill; remove after a clean period.
+2. **Status ⇔ publication invariant** in the database (a published Sendset must have
+   a row, a row only for a published Sendset). Holds today by construction
+   (publish/unpublish/0053), not by constraint. Would pair with (1).
+3. **Published-edit guards stay draft-only:** block structure, photo-ownership
+   resolution (so a Republish refused for ownership needs an unpublish to fix),
+   imports into published Sendsets, composition conversion.
+4. **No dashboard "Changes not published" indicator** (v1 decision). A profile
+   edit marks every default-identity published Sendset as changed; this is visible
+   only when each is opened.
+5. **The owner's bar on the public page** does not mention unpublished changes.
+6. **`source_draft_rev` / `source_identity_rev`** are recorded but unused (staleness
+   is the exact comparison); `packets.professional_snapshot` is still written but
+   no recipient reads it.
+7. **No `/q/` redirect layer.** Earns its complexity only with QR-specific
+   analytics, independent revocation or destination rotation.
+8. **View analytics** remain on hold (decisions recorded earlier: page opens incl.
+   repeats; duplicates start at 0; unpublish/republish preserve; no Last viewed).
 
 ---
 

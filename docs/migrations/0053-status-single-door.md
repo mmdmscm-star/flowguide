@@ -1,6 +1,6 @@
 # 0053 — the status single door
 
-**Written and tested; not applied.**
+**Applied 2026-09-15** (history recorded; production check: direct status writes refused, both doors work).
 
 Only `publish_packet` and `unpublish_packet` (0052) may change
 `packets.status`. A BEFORE INSERT OR UPDATE OF status trigger refuses any status

@@ -103,6 +103,11 @@ from Remote, in order — never run one without this check.
   their postconditions. Every other version from 0039 to 0050 was established
   from direct catalog evidence or from a later migration's md5 guard on it.
 
+- **0051–0054 (2026-09-15)** were applied with this process and recorded one at a
+  time; `migration list` matches through 0054. 0054's first attempt stopped at the
+  baseline step during Supabase scheduled maintenance (503) and was resumed from
+  step 1 afterwards.
+
 ## Fallback: the SQL Editor
 
 If the CLI path is unavailable, paste the exact file into the Supabase SQL

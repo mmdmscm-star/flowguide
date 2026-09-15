@@ -1,6 +1,6 @@
 # 0054 — publication backfill
 
-**Written and tested; not applied. No production publication rows written.**
+**Applied 2026-09-15 (21:40Z). Backfill complete (22:11Z):** 31/31 stored; 33 published → 33 publications, all equal to the live render by value; manifest `~/.sendset-backfill/0054-manifest-2026-09-15.json` (local, outside the repo).
 
 Sendsets published before the publish route switched to `publish_packet` have no
 `packet_publications` row. 0054 adds the one narrow door that stores a frozen
