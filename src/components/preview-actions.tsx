@@ -5,6 +5,7 @@ import OwnershipResolution, { type OwnershipState } from "./OwnershipResolution"
 import { Button, buttonClass } from "./ui/button";
 import ClientMessagePanel from "./client-message-panel";
 import EmailVersionPanel from "./email-version-panel";
+import QrCodePanel from "./qr-code-panel";
 import { publicSendsetUrl } from "@/lib/public-url";
 import { usePublicationState } from "@/components/editor/publication-state";
 
@@ -42,6 +43,7 @@ export function PreviewActions({ packetId, slug, initialStatus, title, clientNam
   // The email version is fetched on demand and never stored: a saved copy is a
   // second source of truth that goes stale when the packet changes.
   const [emailDoc, setEmailDoc] = useState<{ html: string; text: string } | null>(null);
+  const [showQr, setShowQr] = useState(false);
   const [emailBusy, setEmailBusy] = useState(false);
   const [emailError, setEmailError] = useState("");
   const [resolved, setResolved] = useState(false);
@@ -259,6 +261,8 @@ export function PreviewActions({ packetId, slug, initialStatus, title, clientNam
           <div className="p-4">
             {emailDoc ? (
               <EmailVersionPanel html={emailDoc.html} text={emailDoc.text} onClose={() => setEmailDoc(null)} />
+            ) : showQr ? (
+              <QrCodePanel slug={slug} onClose={() => setShowQr(false)} />
             ) : (
               <div className="flex flex-wrap items-center gap-2">
                 <Button variant="secondary" size="md" onClick={createEmailVersion} disabled={emailBusy}>
@@ -274,6 +278,9 @@ export function PreviewActions({ packetId, slug, initialStatus, title, clientNam
                 >
                   Print / Save as PDF
                 </a>
+                <Button variant="secondary" size="md" onClick={() => setShowQr(true)}>
+                  QR code
+                </Button>
               </div>
             )}
             {emailError && <p role="alert" className="mt-2 text-meta text-red-700">{emailError}</p>}
