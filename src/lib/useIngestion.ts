@@ -3,6 +3,7 @@ import type { ReviewDisposition } from "./review-units.ts";
 import { useCallback, useRef, useState } from "react";
 import { classifyChunkResponse, CHUNK_NETWORK_FAILURE, type ChunkOutcome } from "./chunk-outcome.ts";
 import type { ReviewFailure } from "./review-units.ts";
+import { isReviewPending } from "./import-blocking.ts";
 
 // Client orchestrator for a persisted, resumable ingestion run. Drives chunks
 // sequentially against the persisted plan, shows real progress (completed
@@ -93,9 +94,14 @@ export function useIngestion(packetId: string, opts?: {
       if (cancelled.current) return;
       const { data: st } = await getJSON(`/api/ingest/${runId}`);
       if (!st?.run) { setState((s) => ({ ...s, phase: "error", error: "Lost track of the import." })); return; }
-      const run = st.run as { status: string; totalChunks: number; review?: { ok?: boolean; summary?: string; exit?: string; failures?: ReviewFailure[] } };
+      const run = st.run as { status: string; totalChunks: number; review?: { ok?: boolean; pending?: boolean; summary?: string; exit?: string; failures?: ReviewFailure[] } };
       const leaves = (st.chunks || []) as Array<{ ordinal: number; status: string }>;
-      if (run.status === "finalized") { setState((s) => ({ ...s, phase: "done", done: run.totalChunks, total: run.totalChunks })); opts?.onComplete?.(); return; }
+      // A finalized run is done only once its review is DECIDED. A pending one
+      // (0051) has its content applied but its check unrecorded — so it goes
+      // back through finalize, which returns `reused` and re-runs the check.
+      // That replay is the recovery path; showing "Done" here would leave a
+      // blocked Sendset with nothing to press.
+      if (run.status === "finalized" && !isReviewPending(run.review)) { setState((s) => ({ ...s, phase: "done", done: run.totalChunks, total: run.totalChunks })); opts?.onComplete?.(); return; }
       // needs_review is non-terminal and BLOCKS PUBLISHING. Treating it as
       // "finalized" here (or letting it fall through to the processing path)
       // is what left a professional with a blocked packet and no way out.

@@ -9,6 +9,7 @@ import { describeReviewExit, discardWouldDeletePacket } from "@/lib/review-exit"
 import { checkRunOutcome } from "@/lib/run-guards";
 import { attachItems, unitId, type ReviewFailure } from "@/lib/review-units";
 import { buildOmission } from "@/lib/omitted-source";
+import { isReviewUndecided, type RunReviewState } from "@/lib/import-blocking";
 
 export const maxDuration = 60;
 type Context = { params: Promise<{ runId: string }> };
@@ -218,30 +219,40 @@ export async function POST(_request: Request, context: Context) {
 
   if (packetId) {
     try {
-      const { data: packet } = await supabase
-        .from("packets").select("raw_input, status, origin_ingestion_run_id").eq("id", packetId).maybeSingle();
+      // A READ THAT FAILS IS NOT AN EMPTY RESULT. Every query below feeds the
+      // verdict, and reading an error as "no rows" would decide a run is clean
+      // because the database could not be asked. So each one throws instead,
+      // which lands in the fail-closed catch at the end of this block.
+      const must = <T,>(res: { data: T; error: { message: string } | null }, what: string): T => {
+        if (res.error) throw new Error(`${what}: ${res.error.message}`);
+        return res.data;
+      };
+      const packet = must(await supabase
+        .from("packets").select("raw_input, status, origin_ingestion_run_id").eq("id", packetId).maybeSingle(), "packet");
       const pk = packet as { raw_input?: string; status?: string; origin_ingestion_run_id?: string | null } | null;
       const source = pk?.raw_input ?? "";
 
-      const { data: sections } = await supabase.from("sections").select("id").eq("packet_id", packetId);
+      const sections = must(await supabase.from("sections").select("id").eq("packet_id", packetId), "sections");
       const sectionIds = (sections ?? []).map((s: { id: string }) => s.id);
       const stored: StoredMedia[] = [];
       let itemCount = 0;
       if (sectionIds.length > 0) {
-        const { data: items } = await supabase.from("items").select("id").in("section_id", sectionIds);
+        const items = must(await supabase.from("items").select("id").in("section_id", sectionIds), "items");
         const itemIds = (items ?? []).map((i: { id: string }) => i.id);
         itemCount = itemIds.length;
         if (itemIds.length > 0) {
-          const { data: photos } = await supabase
-            .from("item_photos").select("item_id, url").in("item_id", itemIds);
+          const photos = must(await supabase
+            .from("item_photos").select("item_id, url").in("item_id", itemIds), "photos");
           for (const p of (photos ?? []) as Array<{ item_id: string; url: string }>) {
             stored.push({ url: p.url, itemId: p.item_id });
           }
         }
       }
 
-      const { count: blockCount } = await supabase
+      const blocksRes = await supabase
         .from("packet_blocks").select("id", { count: "exact", head: true }).eq("packet_id", packetId);
+      if (blocksRes.error) throw new Error(`blocks: ${blocksRes.error.message}`);
+      const blockCount = blocksRes.count;
       const isEmpty = sectionIds.length === 0 && stored.length === 0 && (blockCount ?? 0) === 0 && itemCount === 0;
 
       const ledger = buildMediaLedger({ source, stored });
@@ -260,8 +271,8 @@ export async function POST(_request: Request, context: Context) {
       // derivation: two chunks reporting the same excerpt on the same record
       // collapse to the one decision they always were.
       const byId = new Map<string, ReviewFailure>();
-      const { data: chunkRows } = await supabase
-        .from("ingestion_chunks").select("review_units").eq("run_id", runId);
+      const chunkRows = must(await supabase
+        .from("ingestion_chunks").select("review_units").eq("run_id", runId), "review units");
       for (const c of (chunkRows ?? []) as Array<{ review_units?: ReviewFailure[] | null }>) {
         for (const u of c.review_units ?? []) if (u?.id && !byId.has(u.id)) byId.set(u.id, u);
       }
@@ -273,8 +284,8 @@ export async function POST(_request: Request, context: Context) {
       // happened to sort first.
       const byTitle = new Map<string, string[]>();
       if (sectionIds.length > 0) {
-        const { data: titled } = await supabase
-          .from("items").select("id, title").in("section_id", sectionIds);
+        const titled = must(await supabase
+          .from("items").select("id, title").in("section_id", sectionIds), "item titles");
         for (const it of (titled ?? []) as Array<{ id: string; title: string | null }>) {
           const k = String(it.title ?? "");
           if (!k) continue;
@@ -361,29 +372,52 @@ export async function POST(_request: Request, context: Context) {
       // and skipping it there would leave the run finalized with unresolved
       // work and publishing open. So ask the state instead - only a run that
       // has been AFFIRMATIVELY cleared is left alone.
-      const { data: nowRow } = await supabase
-        .from("ingestion_runs").select("status, review").eq("id", runId).maybeSingle();
-      const cleared = (nowRow as { status?: string; review?: { ok?: boolean } } | null);
+      const cleared = must(await supabase
+        .from("ingestion_runs").select("status, review").eq("id", runId).maybeSingle(), "run state") as { status?: string; review?: { ok?: boolean } } | null;
       const alreadyDecided = cleared?.status === "finalized" && cleared?.review?.ok === true;
 
       if (!ok && alreadyDecided) {
         console.warn("[finalize] replay on an already-cleared run; leaving review alone", { runId, packetId });
-      } else if (!ok) {
-        console.error("[finalize] run needs review", { runId, packetId, failures });
-        // Persisting the review state needs migration 0013 (the `needs_review`
-        // status and the `review` column). Until it is applied this write fails
-        // harmlessly and the failure still reaches the caller and the logs —
-        // deliberately tolerant, so a clean run never depends on the migration.
-        const { error: reviewErr } = await supabase
+      } else if (isReviewUndecided(cleared as RunReviewState | null)) {
+        // THE VERDICT REPLACES THE PENDING MARKER — BOTH VERDICTS, AND ONLY THEN.
+        //
+        // 0051 has finalize_ingestion_run commit `review = {pending: true}` with
+        // `finalized`, so the run blocks publishing until this write lands. A
+        // clean run is recorded too (it used to write nothing, which is what left
+        // a gap). The write is conditional on the review still being undecided —
+        // the pending marker, or the `{}` every run held before 0051 — so a
+        // replay can never overwrite a decision someone else already made.
+        if (!ok) console.error("[finalize] run needs review", { runId, packetId, failures });
+        const verdict = ok ? { review } : { status: "needs_review", review };
+        const { data: written, error: reviewErr } = await supabase
           .from("ingestion_runs")
-          .update({ status: "needs_review", review })
+          .update(verdict)
           .eq("id", runId)
-          .eq("user_id", session.userId);
-        if (reviewErr) console.error("[finalize] could not persist needs_review:", reviewErr.message);
+          .eq("user_id", session.userId)
+          .eq("status", "finalized")
+          .is("review->ok", null)
+          .select("id");
+        if (reviewErr) throw new Error(`record review: ${reviewErr.message}`);
+        if (!written?.length) {
+          // Zero rows: something decided it between the read and the write.
+          // That is fine only if it really is decided now.
+          const after = must(await supabase
+            .from("ingestion_runs").select("status, review").eq("id", runId).maybeSingle(), "run state") as RunReviewState | null;
+          if (isReviewUndecided(after)) throw new Error("record review: the verdict did not land");
+        }
       }
     } catch (e) {
-      // Accounting must never destroy an otherwise successful import.
-      console.error("[finalize] media accounting threw:", e);
+      // FAIL CLOSED. The import's content is already applied and stays applied;
+      // what is refused is the claim that it was checked. With 0051 the run is
+      // left pending, so publishing stays blocked, and the replay path — the
+      // client calls finalize again, which returns `reused` and re-runs this
+      // block — retries the check. A deterministic failure here leaves the run
+      // pending until the fault is fixed; see docs/migrations/0051-review-pending.md.
+      console.error("[finalize] review accounting failed:", e);
+      return NextResponse.json({
+        error: "review_not_recorded",
+        message: "Sendset couldn't finish checking this import, so it can't be published yet. Try again in a moment.",
+      }, { status: 503 });
     }
   }
 

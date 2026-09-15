@@ -3,6 +3,7 @@ import { getSession } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase";
 import { loadPacketOwnership } from "@/lib/ownership-service";
 import { identityGap, IDENTITY_GAP_MESSAGE } from "@/lib/professional-identity";
+import { BLOCKING_RUN_FILTER } from "@/lib/import-blocking";
 
 type Context = { params: Promise<{ id: string }> };
 
@@ -23,15 +24,33 @@ export async function POST(request: Request, context: Context) {
     // needs_review MUST be in this list. The trigger (0013) blocks publishing on
     // it, so leaving it out doesn't allow the publish — it just replaces this
     // sentence with raw Postgres text and gives the professional nothing to do.
-    const { data: activeRun } = await supabase
+    //
+    // A finalized run whose review is still PENDING blocks too (0051): its
+    // content is applied but nobody has decided whether it needs review yet.
+    // The filter is the one shared definition in lib/import-blocking.
+    //
+    // A FAILED READ REFUSES. This query used to ignore its error, so a
+    // database hiccup read as "no import in the way" and let the publish on.
+    const { data: activeRun, error: activeRunErr } = await supabase
       .from("ingestion_runs")
       .select("id, status, review")
       .eq("packet_id", id)
       .eq("user_id", session.userId)
-      .in("status", ["active", "finalizing", "needs_review"])
+      .or(BLOCKING_RUN_FILTER)
       .maybeSingle();
+    if (activeRunErr) {
+      console.error("[publish] import gate could not be checked:", activeRunErr.message);
+      return NextResponse.json({ error: "import_check_unavailable", message: "Couldn't check this Sendset's imports. Try again in a moment." }, { status: 503 });
+    }
     if (activeRun) {
       const run = activeRun as { id: string; status: string; review?: { summary?: string; exit?: string } | null };
+      if (run.status === "finalized") {
+        return NextResponse.json({
+          error: "import_finishing",
+          runId: run.id,
+          message: "Sendset is still checking the import. Try again in a moment.",
+        }, { status: 409 });
+      }
       if (run.status === "needs_review") {
         const why = run.review?.summary?.trim();
         const exit = run.review?.exit?.trim() || "Discard the import to clear this review.";

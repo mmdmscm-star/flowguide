@@ -3,6 +3,7 @@ import { getSession } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase";
 import { buildRunChunks, SEGMENTER_VERSION, EntryPoint } from "@/lib/ingestion";
 import { segmentHash } from "@/lib/segmentation";
+import { BLOCKING_RUN_FILTER } from "@/lib/import-blocking";
 
 export const maxDuration = 60;
 type Context = { params: Promise<{ id: string }> };
@@ -20,8 +21,10 @@ export async function GET(_request: Request, context: Context) {
     .eq("packet_id", id)
     .eq("user_id", session.userId)
     // needs_review is NON-TERMINAL: it holds the packet's one run slot and
-    // blocks publishing, so the editor must reconnect to it on reload.
-    .in("status", ["active", "finalizing", "needs_review"])
+    // blocks publishing, so the editor must reconnect to it on reload. So does
+    // a finalized run whose review is still pending (0051) — reconnecting is
+    // what lets the client re-run the check that will release it.
+    .or(BLOCKING_RUN_FILTER)
     .maybeSingle();
   return NextResponse.json({ activeRun: data ? { runId: data.id, status: data.status, totalChunks: data.total_chunks, completedChunks: data.completed_chunks } : null });
 }
@@ -78,7 +81,7 @@ export async function POST(request: Request, context: Context) {
     .select("id")
     .eq("packet_id", id)
     .eq("user_id", session.userId)
-    .in("status", ["active", "finalizing", "needs_review"])
+    .or(BLOCKING_RUN_FILTER)
     .maybeSingle();
   if (existing) {
     return NextResponse.json({ error: "run_active", runId: existing.id, message: "An import is already in progress for this packet." }, { status: 409 });
