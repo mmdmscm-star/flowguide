@@ -37,6 +37,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { moveDetail, detailsPayload } from "@/lib/detail-order";
 import { publicSendsetUrl } from "@/lib/public-url";
+import { PublishControls, usePublishTransitions, UNPUBLISH_CONFIRM, type PublishOutcome } from "@/components/editor/publish-controls";
 
 // ============================================================
 // Types for editor state
@@ -1066,11 +1067,13 @@ export function LegacyPacketEditor() {
   // ============================================================
   // Publish
   // ============================================================
-  async function publishPacket(skipProfileCheck: boolean) {
+  // Returns whether the editor is leaving ("navigating") or staying ("stayed"),
+  // so the bottom bar knows whether to release its Publishing… state.
+  async function publishPacket(skipProfileCheck: boolean): Promise<PublishOutcome> {
     if (importRunId) {
       setPublishError("An import is still in progress. Finish or discard it before publishing.");
       window.scrollTo({ top: 0, behavior: "smooth" });
-      return;
+      return "stayed";
     }
     setPublishError("");
     const res = await fetch(`/api/packets/${packetId}/publish`, {
@@ -1085,9 +1088,9 @@ export function LegacyPacketEditor() {
           "This Sendset does not include professional contact information. You can still publish it, but the contact footer will not appear."
         );
         if (proceed) {
-          publishPacket(true);
+          return publishPacket(true);
         }
-        return;
+        return "stayed";
       }
       // PHOTO OWNERSHIP HAS A HOME, AND IT IS NOT HERE.
       //
@@ -1101,7 +1104,7 @@ export function LegacyPacketEditor() {
       // The reason travels in the URL, so the arrival explains itself.
       if (res.status === 409 && data.error === "ownership_unresolved") {
         router.push(`/preview/${packetId}?resolve=photos`);
-        return;
+        return "navigating";
       }
       // Everything else stays here and says so. `ownership_unavailable` is a
       // 503 meaning the CHECK could not run — there is no panel to draw for it
@@ -1109,9 +1112,11 @@ export function LegacyPacketEditor() {
       const errMsg = data.message || data.error || "Could not publish";
       setPublishError(errMsg);
       window.scrollTo({ top: 0, behavior: "smooth" });
-      return;
+      return "stayed";
     }
-    setPacket((prev) => prev ? { ...prev, status: "published" } : prev);
+    // NO LOCAL FLIP TO "published". Setting it here re-rendered the bar with
+    // Unpublish in the slot Publish had just left, under a pointer that may
+    // still be clicking, before the navigation below took effect.
     // ONE POST-PUBLISH EXPERIENCE, AND IT IS THE GOOD ONE.
     //
     // This used to open a dialog holding the link and nothing else, while
@@ -1126,10 +1131,12 @@ export function LegacyPacketEditor() {
     // directly on the share step rather than on a page offering to publish
     // something already published.
     router.push(`/preview/${packetId}`);
+    return "navigating";
   }
 
-  async function handleUnpublish() {
-    if (!confirm("Unpublish this Sendset? The link will stop working.")) return;
+  // The request only. Asking first, and refusing a second start, belong to
+  // usePublishTransitions.
+  async function unpublishPacket(): Promise<boolean> {
     const res = await fetch(`/api/packets/${packetId}/publish`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1140,10 +1147,17 @@ export function LegacyPacketEditor() {
       const data = await res.json().catch(() => ({}));
       setPublishError(data.message || data.error || "Couldn't unpublish this Sendset. Please try again.");
       window.scrollTo({ top: 0, behavior: "smooth" });
-      return;
+      return false;
     }
     setPacket((prev) => prev ? { ...prev, status: "draft" } : prev);
+    return true;
   }
+
+  const publishTransitions = usePublishTransitions({
+    publish: () => publishPacket(false),
+    unpublish: unpublishPacket,
+    confirmUnpublish: () => confirm(UNPUBLISH_CONFIRM),
+  });
 
   function copyPacketLink() {
     if (!packet) return;
@@ -1891,21 +1905,14 @@ export function LegacyPacketEditor() {
             Preview
           </Button>
           <div className="flex items-center gap-2">
-            {packet.status === "published" && (
-              <>
-                <Button variant="secondary" size="md" onClick={copyPacketLink}>
-                  {copiedLink ? "Copied!" : "Copy link"}
-                </Button>
-                <Button variant="danger" size="md" onClick={handleUnpublish}>
-                  Unpublish
-                </Button>
-              </>
-            )}
-            {packet.status === "draft" && (
-              <Button variant="primary" size="md" onClick={() => publishPacket(false)}>
-                Publish
-              </Button>
-            )}
+            <PublishControls
+              status={packet.status}
+              phase={publishTransitions.phase}
+              copiedLink={copiedLink}
+              onPublish={publishTransitions.startPublish}
+              onUnpublish={publishTransitions.startUnpublish}
+              onCopyLink={copyPacketLink}
+            />
           </div>
         </div>
       </div>

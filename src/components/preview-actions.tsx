@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import OwnershipResolution, { type OwnershipState } from "./OwnershipResolution";
 import { Button, buttonClass } from "./ui/button";
 import ClientMessagePanel from "./client-message-panel";
@@ -24,6 +24,9 @@ type Props = {
 export function PreviewActions({ packetId, slug, initialStatus, title, clientName, professionalName, resolveOwnership }: Props) {
   const [status, setStatus] = useState(initialStatus);
   const [publishing, setPublishing] = useState(false);
+  // The disabled state arrives on the next render; this refuses a second click
+  // that lands before it does.
+  const publishInFlight = useRef(false);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
   const [copyFailed, setCopyFailed] = useState(false);
@@ -84,6 +87,16 @@ export function PreviewActions({ packetId, slug, initialStatus, title, clientNam
     })();
     return () => { cancelled = true; };
   }, [resolveOwnership, fetchOwnership]);
+
+  async function startPublish() {
+    if (publishInFlight.current) return;
+    publishInFlight.current = true;
+    try {
+      await publishPacket(false);
+    } finally {
+      publishInFlight.current = false;
+    }
+  }
 
   async function publishPacket(skipProfileCheck: boolean) {
     setError("");
@@ -302,7 +315,7 @@ export function PreviewActions({ packetId, slug, initialStatus, title, clientNam
       {error && <p role="alert" className="mt-4 text-meta text-red-700">{error}</p>}
 
       <div className="mt-5 flex flex-wrap items-center gap-2">
-        <Button variant="primary" size="md" onClick={() => publishPacket(false)} disabled={publishing}>
+        <Button variant="primary" size="md" onClick={startPublish} disabled={publishing}>
           {publishing ? "Publishing…" : "Publish"}
         </Button>
         <a href={`/edit/${packetId}`} className={buttonClass("ghost", "md")}>

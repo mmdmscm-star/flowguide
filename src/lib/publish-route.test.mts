@@ -216,7 +216,7 @@ test("unpublish goes through unpublish_packet and nothing writes a status", () =
 
 test("the editor does not claim an unpublish that failed", () => {
   const editor = codeOf("src/components/editor/legacy-packet-editor.tsx");
-  const fn = editor.slice(editor.indexOf("async function handleUnpublish()"), editor.indexOf("async function handleUnpublish()") + 900);
+  const fn = editor.slice(editor.indexOf("async function unpublishPacket()"), editor.indexOf("async function unpublishPacket()") + 900);
   const guard = fn.indexOf("if (!res.ok)");
   const flip = fn.indexOf('status: "draft"');
   assert.ok(guard > 0 && flip > guard, "the local status must only change after a successful response");

@@ -105,7 +105,8 @@ test("A BLOCKED PUBLISH LEAVES THE EDITOR FOR THE PLACE THAT CAN FIX IT", () => 
   assert.match(branch, /router\.push\(`\/preview\/\$\{packetId\}\?resolve=photos`\)/,
     "a blocked publish does not hand over to the share step with its reason");
   // It must LEAVE, not navigate and also set the banner it replaced.
-  assert.match(branch, /return;/, "the blocked-publish branch falls through to the banner");
+  // (It returns "navigating" now, so the bottom bar stays inert while it leaves.)
+  assert.match(branch, /return( "navigating")?;/, "the blocked-publish branch falls through to the banner");
 });
 
 test("...AND THE GENERIC BANNER NO LONGER SPEAKS FOR IT", () => {
