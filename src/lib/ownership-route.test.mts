@@ -100,26 +100,52 @@ test("publishing has exactly one door, and it is the publish route", () => {
   );
 });
 
-test("no RPC publishes a packet behind the route's back", () => {
-  // The gate cannot live in the database — it needs detectSourceRecords and
-  // segmentHash, which are TypeScript — so a SECURITY DEFINER function that set
-  // status='published' would be unreachable by it, and unreviewable from src/.
+test("only publish_packet publishes from the database, and only after binding the gates' verdict", () => {
+  // THE PRINCIPLE, not the old literal. The gate is TypeScript (it needs
+  // detectSourceRecords and segmentHash), so a database function can never run
+  // it. What it CAN do is refuse to publish anything other than what the gate
+  // checked: 0052's publish_packet locks the Sendset, recomputes the publish
+  // token and compares it with the one the route read before its gates — and
+  // only then assigns status = 'published', in the same transaction as the
+  // frozen copy. That one function is allowed. Any other assignment is not.
   //
-  // Only ASSIGNMENTS count. block_publish_during_ingest (0012) READS
-  // new.status = 'published' to decide whether to raise, which is the trigger
+  // Only ASSIGNMENTS count. block_publish_during_ingest READS
+  // new.status = 'published' to decide whether to raise, which is a trigger
   // doing its job, not a second door.
   const dir = join(ROOT, "supabase/migrations");
+  const PUBLISHER = "0052_publication_infrastructure.sql";
+  let publisherSeen = false;
   for (const name of readdirSync(dir).filter((n) => n.endsWith(".sql"))) {
-    const sql = readFileSync(join(dir, name), "utf8")
+    let sql = readFileSync(join(dir, name), "utf8")
       .split("\n").filter((l) => !l.trim().startsWith("--")).join("\n");
+    if (name === PUBLISHER) {
+      const start = sql.indexOf("create function public.publish_packet(");
+      const bodyStart = sql.indexOf("as $$", start);
+      const end = sql.indexOf("$$;", bodyStart);
+      assert.ok(start >= 0 && bodyStart > start && end > bodyStart, "0052 must define publish_packet");
+      const body = sql.slice(bodyStart, end);
+      const lock = body.search(/from public\.packets where id = p_packet_id for update/);
+      const recompute = body.indexOf("v_token := public.packet_publish_token(p_owner, p_packet_id);");
+      const compare = body.indexOf("if v_token is distinct from p_expected_token then");
+      const firstWrite = body.search(/\b(insert into|update|delete from)\s+public\./i);
+      const assign = body.search(/update public\.packets\s+set status = 'published'/);
+      assert.ok(lock >= 0 && lock < recompute && recompute < compare, "publish_packet must lock, then recompute, then compare");
+      assert.ok(firstWrite > compare, "publish_packet writes nothing before the token comparison");
+      assert.ok(assign > compare, "the status assignment comes after the comparison");
+      assert.match(sql, /grant execute on function public\.publish_packet\(uuid, uuid, jsonb, smallint, jsonb, jsonb\) to service_role;/);
+      assert.doesNotMatch(sql, /grant execute on function public\.publish_packet\([^)]*\) to [^;]*(anon|authenticated|public)/i);
+      sql = sql.slice(0, start) + sql.slice(end + 3);    // the one allowed door is checked; scan the rest
+      publisherSeen = true;
+    }
     for (const stmt of sql.split(";")) {
       if (!/update\s+(public\.)?packets\b/i.test(stmt)) continue;
       assert.doesNotMatch(
         stmt, /\bset\b[\s\S]*\bstatus\s*=\s*'published'/i,
-        `${name} must not publish a packet from inside the database`,
+        `${name} publishes a packet outside publish_packet`,
       );
     }
   }
+  assert.ok(publisherSeen, `${PUBLISHER} was not found, so the one allowed door was never checked`);
 });
 
 // ---------------------------------------------------------------------------
