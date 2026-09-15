@@ -53,3 +53,26 @@ import."
 What recovers it: fixing the fault and letting the client replay finalize.
 There is no user-facing exit until that happens. A manual operator exit, if one
 is ever needed, is a separate reviewed change — not a quiet edit to `review`.
+
+## Verification before applying
+
+- **Unit/source tests** (`src/lib/import-blocking.test.mts`): which runs block,
+  what counts as undecided, the route's conditional verdict write, fail-closed
+  paths, the client replay, and that the SQL helper, index and CHECK in 0051
+  compare the marker exactly as the PostgREST filter does. 14 mutants of the
+  route/client code, all caught.
+- **Real PostgreSQL 17** (`scripts/pg-harness/test-0051.mjs`, schema replayed
+  from the migrations; see `scripts/pg-harness/README.md`):
+  - a real `finalize_ingestion_run` commits `{pending: true}`; publishing is
+    refused until the route's verdict is recorded; a second import cannot start;
+    replays neither re-mark nor overwrite a decision; a run finalized before 0051
+    does not block;
+  - **before 0051**, the gap is real: straight after finalize, publishing
+    succeeds with no verdict recorded;
+  - **two connections**: with finalize in flight, publish waits on its lock
+    (observed in `pg_stat_activity`). Before 0051 it then goes through; after
+    0051 it sees the marker and is refused. With the clean verdict written but
+    uncommitted, publish is still refused, and succeeds once it commits;
+  - the rollback refuses while a run is pending, then restores the exact 0034 /
+    0013 / 0020 definitions, and 0051 re-applies;
+  - 10 mutants of the migration abort and leave nothing.

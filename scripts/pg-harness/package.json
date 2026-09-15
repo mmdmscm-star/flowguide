@@ -1,0 +1,9 @@
+{
+  "name": "sendset-pg-harness",
+  "private": true,
+  "description": "Disposable local PostgreSQL tests. Never connects to production.",
+  "type": "module",
+  "dependencies": {
+    "pg": "^8.23.0"
+  }
+}

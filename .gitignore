@@ -66,3 +66,6 @@ supabase/.branches/
 
 # Marketing capture intermediates — the committed assets live in public/
 scripts/marketing/.work/
+
+# local PostgreSQL harness client (scripts/pg-harness)
+/scripts/pg-harness/node_modules

@@ -111,3 +111,17 @@ test("the client treats a pending run as unfinished and replays finalize", () =>
   assert.match(code, /if \(run\.status === "finalized" && !isReviewPending\(run\.review\)\) \{[^}]*phase: "done"/,
     "a pending run must not be reported Done");
 });
+
+test("the SQL definition (0051) and the PostgREST filter name the same runs", () => {
+  const sql = readFileSync("supabase/migrations/0051_finalize_review_pending.sql", "utf8");
+  const fn = sql.slice(sql.indexOf("create function public.packet_has_blocking_run"), sql.indexOf("comment on function public.packet_has_blocking_run"));
+  const statuses = fn.match(/r\.status in \(([^)]*)\)/)?.[1].split(",").map((x) => x.trim().replace(/'/g, ""));
+  assert.deepEqual(statuses, [...BLOCKING_RUN_STATUSES], "the blocking status lists differ");
+  assert.match(fn, /r\.status = 'finalized' and r\.review -> 'pending' = 'true'::jsonb/,
+    "the SQL pending clause must compare JSON, as the filter does");
+  assert.match(BLOCKING_RUN_FILTER, /and\(status\.eq\.finalized,review->pending\.eq\.true\)$/);
+  // The index and the CHECK use the same JSON comparison.
+  const index = sql.slice(sql.indexOf("create unique index idx_ingestion_runs_one_active_packet"));
+  assert.match(index.slice(0, 400), /status = 'finalized' and review -> 'pending' = 'true'::jsonb/);
+  assert.match(sql, /check \(not \(review \? 'pending'\) or \(review -> 'pending' = 'true'::jsonb and status = 'finalized'\)\)/);
+});

@@ -219,8 +219,11 @@ test("0025 changes nothing about what the re-issued functions DO", () => {
     // statement. finalize and discard were deliberately left alone both times:
     // since 0026 they stamp evidence_purge_after and clear nothing, so there
     // was nothing in them to change.
+    // 0051 re-issued finalize once more, to set review = {pending: true} in the
+    // UPDATE that sets `finalized`; that migration proves the fragment is its
+    // only change by reproducing 0034's body without it.
     const expectFile =
-      name === "finalize_ingestion_run" ? "0034_structural_rev.sql"
+      name === "finalize_ingestion_run" ? "0051_finalize_review_pending.sql"
       : name === "discard_ingestion_run" ? "0026_packet_evidence_retention.sql"
       : "0048_ingestion_run_source_images_expand.sql";
     assert.equal(now!.file, expectFile, `${name} last re-issued by ${now!.file}`);
