@@ -29,6 +29,42 @@ must obey.
 
 ---
 
+## Published snapshots — creator states and public unavailable page (logged 2026-09-15)
+
+Status of the track: 0050–0052 applied; the publish route writes
+`packet_publications` through `publish_packet` (cb1114e). **Readers still render
+live rows**, so today an edit to a published Sendset (e.g. its personal note)
+reaches recipients immediately. That changes at the reader switch, and these two
+items belong with it.
+
+### 1. Creator publish states — ship WITH the reader switch, not after
+
+Once recipients read the frozen copy, an edit no longer reaches them until
+Republish. Switching readers without saying so would make edits silently
+invisible. The creator experience must distinguish:
+
+- **Saved** — working edits are autosaved (unchanged; no manual Save button).
+- **Published** — recipients are seeing this version.
+- After changing a published Sendset: **Saved · Changes not published**, with an
+  obvious **Republish** action.
+
+"Changes not published" must be EXACT, not the conservative revision counters
+(`draft_rev` / `identity_rev` over-count — see 0050's header). Compare the stored
+publication with the snapshot a republish would produce now (same builder,
+same identity resolution), so it never shows when republishing would change
+nothing.
+
+### 2. Public unavailable page — Sendset terminology, neutral wording
+
+`src/app/p/[slug]/not-found.tsx` says "Packet not found" and "This link doesn't
+match any packet." for every non-published slug, including a Sendset that was
+intentionally unpublished. It should use Sendset terminology and a neutral
+message such as **"This Sendset is no longer available."** Keep it generic: it
+must still reveal nothing about whether a Sendset ever existed at that link, and
+it keeps the real 404.
+
+---
+
 ## Street View Fallback Investigation
 
 **Status:** Validated concept, pending real-world validation.
