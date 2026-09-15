@@ -1,7 +1,13 @@
 # Reader switch — recipients read the frozen publication
 
-**Prepared on branch `reader-switch`; not merged, not deployed. The backfill has
-not run.**
+**Prepared on branch `reader-switch`; not merged, not deployed. Backfill APPLIED
+2026-09-15 22:11Z: 33 published → 33 publications, all equal to the live render by
+value; manifest at `~/.sendset-backfill/0054-manifest-2026-09-15.json`.**
+
+Decisions (2026-09-15): keep the logged fallback for the initial rollout; the 4
+old-card Sendsets correctly show "Changes not published"; the 9 live-profile
+Sendsets stay frozen at backfill (profile edits need Republish); Republish stays
+in the editor; photo-ownership restriction unchanged; no dashboard indicator in v1.
 
 ## What changes
 
@@ -26,8 +32,11 @@ not run.**
   "Saved · Changes not published"; bottom bar adds a primary **Republish**
   (stays in the editor; "Republishing…" → inert "Republished" for 1.5 s). Block
   editor pill says it and links to Preview; published block structure stays
-  locked. Preview share step: notice + Republish; style choices re-check.
-- Public 404: "This Sendset is no longer available."
+  locked. Preview share step, when changes exist: "You have unpublished changes.
+  This preview shows your current draft; email and print use the last published
+  version until you republish." + Republish; style choices re-check.
+- Public 404: "This Sendset is no longer available." / "If you were expecting to
+  see it, contact the person who shared the link."
 - Identity rule extracted to `lib/publish-identity.ts` (publish route and state
   check share it). No migration. Draft-only guards untouched.
 

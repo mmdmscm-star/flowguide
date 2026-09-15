@@ -214,7 +214,7 @@ export function PreviewActions({ packetId, slug, initialStatus, title, clientNam
         {publication.view === "changed" && (
           <div role="status" className="mt-4 flex flex-col items-start gap-3 rounded-[var(--radius-control)] border border-amber-200 bg-amber-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-meta text-amber-900">
-              <strong className="font-medium">Changes not published.</strong> Your client still sees the last version you published. The preview below shows your changes.
+              <strong className="font-medium">You have unpublished changes.</strong> This preview shows your current draft; email and print use the last published version until you republish.
             </p>
             <Button variant="primary" size="md" onClick={startPublish} disabled={publishing}>
               {publishing ? "Republishing…" : "Republish"}

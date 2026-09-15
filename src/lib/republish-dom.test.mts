@@ -239,7 +239,7 @@ test("block editor: the pill says it and points to Preview; published structure 
 
 test("Preview: Republish beside the draft it would publish; style choices ask again", () => {
   const a = code("src/components/preview-actions.tsx");
-  assert.match(a, /publication\.view === "changed" &&[\s\S]{0,600}Changes not published\.[\s\S]{0,400}onClick=\{startPublish\}[\s\S]{0,120}Republish/);
+  assert.match(a, /publication\.view === "changed" &&[\s\S]{0,600}You have unpublished changes\.<\/strong> This preview shows your current draft; email and print use the last published version until you republish\.[\s\S]{0,400}onClick=\{startPublish\}[\s\S]{0,120}Republish/);
   assert.match(code("src/components/preview-surface.tsx"), /saveSucceeded\(s, request\.seq\)\); notifyDraftSaved\(packetId\);/);
 });
 
@@ -252,6 +252,7 @@ test("the draft-only guards are untouched", () => {
 test("the unavailable page speaks of a Sendset, neutrally", () => {
   const nf = readFileSync("src/app/p/[slug]/not-found.tsx", "utf8");
   assert.match(nf, />This Sendset is no longer available\.</);
+  assert.match(nf, /If you were expecting to see it, contact the person who shared the link\./);
   const visible = nf.replace(/\/\/[^\n]*/g, "").match(/>[^<>{}]+</g)?.join(" ") ?? "";
   assert.doesNotMatch(visible, /packet/i, "the public 404 still says 'packet'");
   assert.doesNotMatch(visible, /not found/i);
