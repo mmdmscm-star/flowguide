@@ -258,10 +258,12 @@ test("NO GEOCODING, NO COORDINATES, NO PROVIDER ACCOUNT, NO EMBEDDED MAP", () =>
 
 test("NO SCHEMA MIGRATION WAS INTRODUCED", () => {
   // The field already existed. A migration here would mean the slice changed
-  // what a packet IS, which it does not.
+  // what a packet IS, which it does not. The pin moves only when a migration is
+  // deliberately added: 0050 (draft revisions + publication table) is the
+  // published-snapshot track, not this slice.
   const migrations = readdirSync("supabase/migrations").filter((f) => f.endsWith(".sql")).sort();
   const highest = migrations[migrations.length - 1];
-  assert.equal(highest, "0049_packet_style_treatment.sql",
+  assert.equal(highest, "0050_packet_publications.sql",
     `a migration was added: ${highest}`);
 });
 
