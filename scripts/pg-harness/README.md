@@ -53,6 +53,7 @@ different source text there.
 ```bash
 scripts/pg-harness/harness.sh replay pre0051 0050 && node scripts/pg-harness/test-0051.mjs
 scripts/pg-harness/harness.sh replay pre0052 0051 && node scripts/pg-harness/test-0052.mjs
+scripts/pg-harness/harness.sh replay pre0053 0052 && node scripts/pg-harness/test-0053.mjs
 ```
 
 Each test file clones its template (the schema just before that migration),

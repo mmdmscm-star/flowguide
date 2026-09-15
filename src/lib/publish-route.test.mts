@@ -224,7 +224,7 @@ test("the editor does not claim an unpublish that failed", () => {
 
 test("readers still render live rows; nothing reads packet_publications yet", () => {
   const files: string[] = [];
-  const walk = (d: string) => { for (const e of readdirSync(d)) { const p = join(d, e); if (statSync(p).isDirectory()) walk(p); else if (/\.(ts|tsx)$/.test(p) && !/\.test\./.test(p)) files.push(p); } };
+  const walk = (d: string) => { for (const e of readdirSync(d)) { const p = join(d, e); if (statSync(p).isDirectory()) walk(p); else if (/\.(ts|tsx)$/.test(p) && !/\.test\./.test(p) && !/ \d+\.[a-z]+$/.test(p)) files.push(p); } };
   walk("src");
   const readers = files.filter((f) => /packet_publications/.test(codeOf(f)));
   assert.deepEqual(readers, [], "a reader was switched to packet_publications before the backfill");

@@ -24,7 +24,8 @@ function sourceFiles(dir = join(ROOT, "src")): string[] {
   return readdirSync(dir).flatMap((name) => {
     const full = join(dir, name);
     if (statSync(full).isDirectory()) return sourceFiles(full);
-    return /\.(ts|tsx|mts)$/.test(name) && !name.includes(".test.") ? [full] : [];
+    // iCloud conflict copies ("route 2.ts") are gitignored and never built, so they are not source.
+    return /\.(ts|tsx|mts)$/.test(name) && !name.includes(".test.") && !/ \d+\.[a-z]+$/.test(name) ? [full] : [];
   });
 }
 
@@ -153,6 +154,27 @@ test("only publish_packet publishes from the database, and only after binding th
     }
   }
   assert.ok(publisherSeen, `${PUBLISHER} was not found, so the one allowed door was never checked`);
+});
+
+test("the database refuses every status change except through the two doors (0053)", () => {
+  // The route rule above is about today's source. 0053 makes the database refuse
+  // a status change that publish_packet / unpublish_packet did not authorise for
+  // that exact Sendset — both directions, and inserts that are not drafts.
+  const door = read("supabase/migrations/0053_packet_status_single_door.sql");
+  assert.match(door, /create trigger trg_packet_status_single_door\s+before insert or update of status on public\.packets/);
+  assert.equal((door.match(/current_setting\('app\.publication_authorized_packet', true\) is distinct from new\.id::text/g) ?? []).length, 2,
+    "both the insert and the update branch must bind the authorisation to this Sendset's id");
+  assert.match(door, /if tg_op = 'INSERT' then\s+if new\.status is distinct from 'draft'/);
+  assert.match(door, /elsif new\.status is distinct from old\.status/, "only publishing, not unpublishing, would be guarded");
+  const doors = read("supabase/migrations/0052_publication_infrastructure.sql");
+  for (const fn of ["publish_packet", "unpublish_packet"]) {
+    const start = doors.indexOf(`create function public.${fn}(`);
+    const body = doors.slice(start, doors.indexOf("$$;", doors.indexOf("as $$", start)));
+    const set = body.indexOf("perform set_config('app.publication_authorized_packet', p_packet_id::text, true);");
+    const write = body.search(/update public\.packets\s+set status/);
+    const clear = body.indexOf("perform set_config('app.publication_authorized_packet', '', true);");
+    assert.ok(set > 0 && set < write && write < clear, `${fn} must authorise, write the status, then clear the authorisation`);
+  }
 });
 
 // ---------------------------------------------------------------------------

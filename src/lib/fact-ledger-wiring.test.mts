@@ -42,7 +42,7 @@ function appFiles(dir: string, acc: string[] = []): string[] {
   for (const e of readdirSync(dir)) {
     const p = join(dir, e);
     if (statSync(p).isDirectory()) appFiles(p, acc);
-    else if (/\.(ts|tsx)$/.test(p) && !/\.test\./.test(p)) acc.push(p);
+    else if (/\.(ts|tsx)$/.test(p) && !/\.test\./.test(p) && !/ \d+\.[a-z]+$/.test(p)) acc.push(p);
   }
   return acc;
 }
