@@ -7,6 +7,7 @@ import { INPUT_SHELL } from "@/components/ui/field";
 import { useEffect, useState, useCallback } from "react";
 import { deleteConfirmMessage, deletePacketRequest } from "@/lib/delete-packet";
 import { publicSendsetUrl } from "@/lib/public-url";
+import QrCodePanel from "@/components/qr-code-panel";
 import { useRouter } from "next/navigation";
 import { filterPackets, isPublished, type StatusFilter } from "@/lib/packet-filter";
 
@@ -31,6 +32,10 @@ export default function DashboardWorkspace() {
   const [loading, setLoading] = useState(true);
   const [userEmail, setUserEmail] = useState("");
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  // THE QR CODE OF AN ALREADY-PUBLISHED SENDSET, without going back through
+  // publishing. The same panel as the share step, generated in the browser from
+  // the slug: opening it reads nothing and writes nothing. One open at a time.
+  const [qrId, setQrId] = useState<string | null>(null);
   const [duplicatingId, setDuplicatingId] = useState<string | null>(null);
   const [showNewMenu, setShowNewMenu] = useState(false);
   // FINDING, not fetching. The list is already fully loaded, so filtering it
@@ -388,6 +393,11 @@ export default function DashboardWorkspace() {
                         title="Anyone with this link can open the packet — no sign-in required.">
                         {copiedId === packet.id ? "Copied!" : "Copy link"}
                       </Button>
+                      <Button variant="ghost" size="sm"
+                        aria-expanded={qrId === packet.id}
+                        onClick={() => setQrId(qrId === packet.id ? null : packet.id)}>
+                        QR code
+                      </Button>
                     </>
                   )}
                   <Button variant="ghost" size="sm"
@@ -409,6 +419,11 @@ export default function DashboardWorkspace() {
                   Link copied. Anyone with this link can view and forward the
                   packet. No sign-in is required.
                 </p>
+              )}
+              {packet.status === "published" && qrId === packet.id && (
+                <div className="mt-3 rounded-[var(--radius-control)] border border-line bg-ground p-3 sm:p-4">
+                  <QrCodePanel slug={packet.slug} onClose={() => setQrId(null)} />
+                </div>
               )}
             </div>
           ))}
