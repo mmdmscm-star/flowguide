@@ -66,7 +66,8 @@ export default function QrCodePanel({ slug, onClose }: { slug: string; onClose: 
           link as above. It keeps working when you edit and republish; unpublishing turns it off.
         </p>
         <div className="mt-3 flex flex-wrap items-center gap-2">
-          <Button variant="secondary" size="md" onClick={downloadPng}>Download PNG</Button>
+          {/* PNG is the everyday file; SVG is for print shops and signage. */}
+          <Button variant="primary" size="md" onClick={downloadPng}>Download PNG</Button>
           <Button variant="secondary" size="md" onClick={downloadSvg}>Download SVG</Button>
           <Button variant="ghost" size="md" onClick={onClose}>Done</Button>
         </div>

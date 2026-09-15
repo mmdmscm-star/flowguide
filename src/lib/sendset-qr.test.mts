@@ -151,6 +151,9 @@ test("Download SVG saves the same drawing; Download PNG says so when the browser
   assert.match(h.host.querySelector('[role="alert"]')?.textContent ?? "", /couldn.t create the PNG/);
   await click(h.button("Done"));
   assert.equal(h.closed(), 1);
+  const src = readFileSync("src/components/qr-code-panel.tsx", "utf8");
+  assert.match(src, /variant="primary" size="md" onClick=\{downloadPng\}>Download PNG/, "PNG is the obvious download");
+  assert.match(src, /variant="secondary" size="md" onClick=\{downloadSvg\}>Download SVG/);
   h.root.unmount();
 });
 
