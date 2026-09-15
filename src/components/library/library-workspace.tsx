@@ -882,9 +882,12 @@ export default function LibraryWorkspace() {
         {selecting && !organizing && (
           <div className="mb-5 rounded-[var(--radius-panel)] bg-mark-soft p-4">
             <p className="text-sm font-medium text-foreground">Start a Sendset</p>
+            {/* LAYOUT-NEUTRAL. This said "drag items across" and "the order on
+                the right" — true beside a desktop tray, and wrong on a phone,
+                where the tray is below the list and the drag goes down. */}
             <p className="mt-1 text-sm text-muted">
-              Drag items across, or press Add. The order on the right is the order your
-              client will read them in.
+              Drag items into this Sendset, or press Add. The order you choose is the
+              order they&rsquo;ll appear.
             </p>
             {/* CANCEL IS CORRECT HERE, and stays. Nothing is written until
                 Create FlowGuide: the selection is a staged choice, so there is
