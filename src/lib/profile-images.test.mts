@@ -65,7 +65,9 @@ test("SNAPSHOT: publishing freezes the CURRENT profile into the packet", () => {
   // professional later updates their logo. If this stops being a snapshot, the
   // upload feature silently starts rewriting delivered packets.
   assert.match(publish, /professional_snapshot: professionalSnapshot/);
-  assert.match(publish, /from\("professional_profiles"\)[\s\S]{0,200}logo_url, headshot_url/);
+  assert.match(publish, /from\("professional_profiles"\)[\s\S]{0,200}\.select\(PUBLISH_PROFILE_COLUMNS\)/);
+  assert.match(readFileSync("src/lib/publish-identity.ts", "utf8"), /PUBLISH_PROFILE_COLUMNS =\s*"[^"]*logo_url, headshot_url/);
+  assert.match(readFileSync("src/lib/publish-identity.ts", "utf8"), /logoUrl: profile\?\.logo_url \|\| ""/);
   // ...and the recipient read path prefers the snapshot over the live profile.
   const queries = readFileSync("src/lib/queries.ts", "utf8");
   assert.match(queries, /snapshot\.logoUrl \|\| ""/);

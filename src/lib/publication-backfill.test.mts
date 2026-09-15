@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { backfillOne, canonicalJson, identityForLiveRender, listCandidates, rollbackSql } from "../../scripts/publication-backfill/lib.ts";
-import { getPublishedPacket } from "./queries.ts";
+import { getLiveRowsPublishedPacket } from "./queries.ts";
 
 type Row = Record<string, unknown>;
 type Call = { kind: "rpc" | "from"; name: string; args?: Row };
@@ -103,7 +103,7 @@ test("apply: the token is read before anything the copy is built from, and hande
   assert.deepEqual(call.args!.p_expected_token, TOKEN);
   assert.equal(call.args!.p_format_version, 1);
   // The copy is the live page minus the internal title, with the live profile's card.
-  const live = await getPublishedPacket("harbor-7k2", fakeDb(tables(), () => ({})) as never);
+  const live = await getLiveRowsPublishedPacket("harbor-7k2", fakeDb(tables(), () => ({})) as never);
   const { title: _t, ...recipient } = live as unknown as Row;
   void _t;
   assert.equal(canonicalJson(call.args!.p_content), canonicalJson(JSON.parse(JSON.stringify(recipient))));

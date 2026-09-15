@@ -51,15 +51,18 @@ export function resolveProfessional(
 }
 
 // ============================================================
-// SERVER: Fetch a published packet by slug (recipient view)
-// Uses server client to bypass RLS for profile reads while
-// still filtering to published packets only.
+// SERVER: The published Sendset a recipient sees — web, print and email
 // ============================================================
+// THE FROZEN PUBLICATION, NOT THE WORKING ROWS. Since the reader switch the
+// live rows are the professional's draft: editing a published Sendset changes
+// nothing a recipient sees until Republish freezes a new copy (publish_packet,
+// 0052). Every recipient renderer loads through here, so the page, the printed
+// copy and the email version always show the same publication.
+//
+// The internal title is never part of a publication, so it is blank here on
+// every path: a recipient's Packet does not carry it.
 export async function getPublishedPacket(slug: string, db: Db = createServerClient()): Promise<Packet | null> {
-  const supabase = db;
-
-  // Fetch the packet
-  const { data: packet, error: packetError } = await supabase
+  const { data: packet, error: packetError } = await db
     .from("packets")
     .select("*")
     .eq("slug", slug)
@@ -68,6 +71,64 @@ export async function getPublishedPacket(slug: string, db: Db = createServerClie
 
   if (packetError || !packet) return null;
 
+  // A failed read or an unknown format THROWS: rendering the working rows
+  // instead would show a recipient changes that were never published.
+  const publication = await readPublication(db, packet.id);
+  if (publication) return recipientPacket(publication.content);
+
+  // TEMPORARY ROLLOUT FALLBACK — a published Sendset with no publication row.
+  //
+  // That is exactly the state of every Sendset published before 0052 until the
+  // 0054 backfill has stored its copy, and for those the live rows ARE what was
+  // published. After a complete backfill it cannot arise (publish_packet writes
+  // the copy with the status, unpublish_packet deletes both, 0053 refuses any
+  // other status change), so this logging is an alarm: it should never fire.
+  // Removed once production has run clean on publications alone.
+  console.error("[publication-reader] published Sendset has no publication; rendering live rows", { packetId: packet.id });
+  const live = await assemblePublishedFromLiveRows(db, packet);
+  return { ...live, title: "" };
+}
+
+/** Where a published Sendset's frozen copy is read. Throws on a failed read or an unknown format. */
+export async function readPublication(db: Db, packetId: string): Promise<{ formatVersion: number; content: PublicationSnapshot } | null> {
+  const { data, error } = await db
+    .from("packet_publications")
+    .select("format_version, content")
+    .eq("packet_id", packetId)
+    .maybeSingle();
+  if (error) throw new Error(`publication could not be read: ${error.message}`);
+  if (!data) return null;
+  const row = data as { format_version: number; content: PublicationSnapshot };
+  if (row.format_version !== PUBLICATION_FORMAT_VERSION) {
+    throw new Error(`publication format ${row.format_version} is not one this reader renders`);
+  }
+  return { formatVersion: row.format_version, content: row.content };
+}
+
+function recipientPacket(content: PublicationSnapshot): Packet {
+  return { ...content, title: "" };
+}
+
+// ============================================================
+// SERVER: The published Sendset assembled from its WORKING rows
+// ============================================================
+// What recipients saw before the reader switch. Kept for the rollout fallback
+// above and for the backfill, which must freeze exactly this. Not a recipient
+// reader: after the switch the working rows may hold unpublished changes.
+export async function getLiveRowsPublishedPacket(slug: string, db: Db = createServerClient()): Promise<Packet | null> {
+  const { data: packet, error: packetError } = await db
+    .from("packets")
+    .select("*")
+    .eq("slug", slug)
+    .eq("status", "published")
+    .single();
+
+  if (packetError || !packet) return null;
+  return assemblePublishedFromLiveRows(db, packet);
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function assemblePublishedFromLiveRows(supabase: Db, packet: any): Promise<Packet> {
   // Use snapshotted profile when present, fall back to live profile for
   // packets published before the snapshot feature (snapshot is null)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

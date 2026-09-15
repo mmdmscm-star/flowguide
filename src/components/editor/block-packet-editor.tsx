@@ -27,6 +27,7 @@ import { BlockItemEditor } from "@/components/editor/block-item-editor";
 import { CompositionModeControl } from "@/components/editor/composition-mode-control";
 import OwnershipDecisions from "@/components/OwnershipDecisions";
 import { SerialMutations, type MutationResult } from "@/lib/serial-mutation";
+import { usePublicationState } from "@/components/editor/publication-state";
 
 // ============================================================
 // R2-A persistent block-composition editor.
@@ -450,11 +451,19 @@ export function BlockPacketEditor({
   const headingCount = blocks.filter((b) => b.kind !== "item").length;
   const itemCount = blocks.filter((b) => b.kind === "item").length;
 
+  // A published block Sendset keeps its structure locked, but its client title,
+  // map link and style still save — and since the reader switch they reach
+  // recipients only on Republish. Asked again after each of those saves.
+  const publication = usePublicationState(packetId, status, `${saving}|${titleSaved}|${mapSaved}`);
+  const unpublishedChanges = status === "published" && publication.view === "changed";
+
   const statusPill = saving
     ? { text: "Saving…", cls: "bg-amber-100 text-amber-800" }
     : errorMsg
       ? { text: "Save failed — reverted", cls: "bg-red-100 text-red-700" }
-      : { text: "All changes saved", cls: "bg-ground-3 text-ink-2" };
+      : unpublishedChanges
+        ? { text: "Saved · Changes not published", cls: "bg-amber-50 text-amber-800" }
+        : { text: "All changes saved", cls: "bg-ground-3 text-ink-2" };
 
   return (
     <div className="min-h-screen bg-canvas">
@@ -469,8 +478,16 @@ export function BlockPacketEditor({
               tabs. */}
           <CreatorNav
             pinned={
-              <span className={`whitespace-nowrap rounded-full px-2 py-0.5 text-micro font-medium ${statusPill.cls}`}>
-                {statusPill.text}
+              <span className="flex items-center gap-2 whitespace-nowrap">
+                <span className={`whitespace-nowrap rounded-full px-2 py-0.5 text-micro font-medium ${statusPill.cls}`}>
+                  {statusPill.text}
+                </span>
+                {/* Republish lives on Preview, beside the Sendset it will publish. */}
+                {unpublishedChanges && !saving && !errorMsg && (
+                  <a href={`/preview/${packetId}`} className="text-meta font-medium text-ink underline underline-offset-2">
+                    Review and republish
+                  </a>
+                )}
               </span>
             }
           />

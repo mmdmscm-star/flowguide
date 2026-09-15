@@ -123,10 +123,15 @@ test("PER-PACKET IDENTITY SEMANTICS ARE UNTOUCHED", () => {
   assert.match(legacy, /identityMode === "custom"/, "the custom identity branch was removed");
   assert.match(legacy, /identityMode === "default"/, "the default-profile branch was removed");
 
+  // The identity rule moved out of the route into lib/publish-identity, where
+  // the publication state check shares it. The route must still use it, with
+  // the professional's skip choice, and the rule must keep every mode.
   const publish = codeOf("src/app/api/packets/[id]/publish/route.ts");
+  assert.match(publish, /resolvePublishIdentity\(packet, profile, !!skipProfileCheck\)/, "publish no longer resolves identity through the shared rule");
+  const rule = codeOf("src/lib/publish-identity.ts");
   for (const mode of [/mode === "none"/, /mode === "custom"/]) {
-    assert.match(publish, mode, `publish lost an identity mode: ${mode}`);
+    assert.match(rule, mode, `publish lost an identity mode: ${mode}`);
   }
   // skipProfileCheck must still publish with an empty snapshot, unchanged.
-  assert.match(publish, /skipProfileCheck \? \{\} :/, "skip-profile publishing behaviour changed");
+  assert.match(rule, /skipProfileCheck \? \{\} :/, "skip-profile publishing behaviour changed");
 });

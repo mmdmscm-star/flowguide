@@ -6,6 +6,7 @@ import { Button, buttonClass } from "./ui/button";
 import ClientMessagePanel from "./client-message-panel";
 import EmailVersionPanel from "./email-version-panel";
 import { publicSendsetUrl } from "@/lib/public-url";
+import { usePublicationState } from "@/components/editor/publication-state";
 
 type Props = {
   packetId: string;
@@ -24,6 +25,10 @@ type Props = {
 export function PreviewActions({ packetId, slug, initialStatus, title, clientName, professionalName, resolveOwnership }: Props) {
   const [status, setStatus] = useState(initialStatus);
   const [publishing, setPublishing] = useState(false);
+  // Preview renders the WORKING draft. On a published Sendset that can differ
+  // from what recipients see — after an edit, or a style chosen just below — and
+  // this says so exactly, with Republish beside the version it would publish.
+  const publication = usePublicationState(packetId, status, null);
   // The disabled state arrives on the next render; this refuses a second click
   // that lands before it does.
   const publishInFlight = useRef(false);
@@ -136,6 +141,7 @@ export function PreviewActions({ packetId, slug, initialStatus, title, clientNam
         return;
       }
       setStatus("published");
+      publication.refresh(0);
     } finally {
       setPublishing(false);
     }
@@ -204,6 +210,18 @@ export function PreviewActions({ packetId, slug, initialStatus, title, clientNam
           Anyone with the link can open this Sendset — no sign-in required. Share
           it only with people you want to see it.
         </p>
+
+        {publication.view === "changed" && (
+          <div role="status" className="mt-4 flex flex-col items-start gap-3 rounded-[var(--radius-control)] border border-amber-200 bg-amber-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-meta text-amber-900">
+              <strong className="font-medium">Changes not published.</strong> Your client still sees the last version you published. The preview below shows your changes.
+            </p>
+            <Button variant="primary" size="md" onClick={startPublish} disabled={publishing}>
+              {publishing ? "Republishing…" : "Republish"}
+            </Button>
+          </div>
+        )}
+        {error && <p role="alert" className="mt-2 text-meta text-red-700">{error}</p>}
 
         {/* The message CONTAINS the link, so it takes precedence and
             "Copy link only" is the quieter action beside it. The link

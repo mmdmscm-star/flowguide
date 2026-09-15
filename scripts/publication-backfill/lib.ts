@@ -7,7 +7,8 @@
 //   1. read packet_backfill_token (BEFORE anything the copy is built from);
 //   2. build the copy with the publish builder, using the identity the live page
 //      shows (the stored snapshot, or the live profile when that is null);
-//   3. render the live page with getPublishedPacket and REFUSE unless the copy
+//   3. render the live rows the way the page did before the reader switch
+//      (getLiveRowsPublishedPacket) and REFUSE unless the copy
 //      equals it by value;
 //   4. (apply only) call backfill_packet_publication with the token from step 1,
 //      so anything that changed during steps 2–3 makes the database refuse;
@@ -16,26 +17,18 @@
 // Comparisons are by VALUE (canonicalJson), never bytes: jsonb reorders keys.
 // The manifest digest is the database's sha256 of the STORED jsonb text, which
 // does not depend on the key order the copy was sent in.
-import { buildPublicationSnapshot, getPublishedPacket, PUBLICATION_FORMAT_VERSION } from "../../src/lib/queries.ts";
+import { buildPublicationSnapshot, getLiveRowsPublishedPacket, PUBLICATION_FORMAT_VERSION } from "../../src/lib/queries.ts";
+import { canonicalJson } from "../../src/lib/canonical-json.ts";
+
+export { canonicalJson };
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Db = any;
 type Json = null | boolean | number | string | Json[] | { [k: string]: Json };
 
-/** Key-order-independent JSON text: object keys sorted at every depth; array order kept. */
-export function canonicalJson(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map((v) => canonicalJson(v === undefined ? null : v)).join(",")}]`;
-  if (value && typeof value === "object") {
-    const o = value as Record<string, unknown>;
-    return `{${Object.keys(o).filter((k) => o[k] !== undefined).sort()
-      .map((k) => `${JSON.stringify(k)}:${canonicalJson(o[k])}`).join(",")}}`;
-  }
-  return JSON.stringify(value);
-}
-
 /**
  * The professional_snapshot to hand the builder so the frozen card is the one the
- * live page shows. Mirrors getPublishedPacket: a stored snapshot is used as is;
+ * live page shows. Mirrors getLiveRowsPublishedPacket: a stored snapshot is used as is;
  * a null one means the page shows the live account profile, in the shape the
  * publish route stores it. Step 3 is the proof — any mismatch is refused.
  */
@@ -98,7 +91,7 @@ export async function backfillOne(db: Db, packetId: string, { apply }: { apply: 
   }
 
   // 3. Exactly what the page renders today, or nothing.
-  const live = await getPublishedPacket(pk.data.slug, db);
+  const live = await getLiveRowsPublishedPacket(pk.data.slug, db);
   if (!live) return { packetId, outcome: "refused", reason: "live_page_missing" };
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { title: _internal, ...recipient } = live as unknown as Record<string, unknown>;

@@ -15,26 +15,36 @@
 //     left, so the opposite action never appears under the pointer;
 //   * Unpublish asks first, shows "Unpublishing…", and after it succeeds holds
 //     a disabled "Unpublished" briefly before Publish can be pressed again —
-//     the same rule in the other direction.
+//     the same rule in the other direction;
+//   * Republish (a published Sendset whose draft differs from its publication)
+//     stays in the editor, and after it succeeds holds a disabled "Republished"
+//     for the same interval — otherwise, once the draft matches again, Copy link
+//     and Unpublish would slide into the slot under the pointer.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
+import type { PublicationView } from "@/components/editor/publication-state";
 
 export const UNPUBLISH_CONFIRM =
   "Unpublish this Sendset? Its shared link will stop working until you publish it again.";
 
-/** How long a finished unpublish stays inert before Publish can be pressed. */
+/** How long a finished unpublish (or republish) stays inert before the bar re-arms. */
 export const REARM_AFTER_UNPUBLISH_MS = 1500;
 
-export type PublishPhase = "idle" | "publishing" | "published" | "unpublishing" | "unpublished";
+export type PublishPhase = "idle" | "publishing" | "published" | "unpublishing" | "unpublished" | "republishing" | "republished";
 
 /** What a publish attempt did: left the editor (success, or a detour to resolve
  *  photos), or stayed (refused, cancelled, failed) and may be tried again. */
 export type PublishOutcome = "navigating" | "stayed";
 
+/** What a republish did: froze a new copy and stayed, left the editor (a detour
+ *  to resolve photos), or stayed without publishing. */
+export type RepublishOutcome = "republished" | "navigating" | "stayed";
+
 export function usePublishTransitions({
-  publish, unpublish, confirmUnpublish,
+  publish, unpublish, confirmUnpublish, republish,
 }: {
   publish: () => Promise<PublishOutcome>;
+  republish?: () => Promise<RepublishOutcome>;
   /** Resolves true when the Sendset is now a draft. */
   unpublish: () => Promise<boolean>;
   confirmUnpublish: () => boolean;
@@ -87,7 +97,30 @@ export function usePublishTransitions({
     }
   }, [unpublish, confirmUnpublish]);
 
-  return { phase, startPublish, startUnpublish };
+  const startRepublish = useCallback(async () => {
+    if (inFlight.current || !republish) return;
+    inFlight.current = true;
+    setPhase("republishing");
+    let outcome: RepublishOutcome = "stayed";
+    try {
+      outcome = await republish();
+    } finally {
+      if (outcome === "navigating") {
+        setPhase("published");
+      } else if (outcome === "republished") {
+        setPhase("republished");
+        rearm.current = setTimeout(() => {
+          inFlight.current = false;
+          setPhase("idle");
+        }, REARM_AFTER_UNPUBLISH_MS);
+      } else {
+        inFlight.current = false;
+        setPhase("idle");
+      }
+    }
+  }, [republish]);
+
+  return { phase, startPublish, startUnpublish, startRepublish };
 }
 
 const BUSY_LABEL: Record<Exclude<PublishPhase, "idle">, string> = {
@@ -95,10 +128,12 @@ const BUSY_LABEL: Record<Exclude<PublishPhase, "idle">, string> = {
   published: "Published",
   unpublishing: "Unpublishing…",
   unpublished: "Unpublished",
+  republishing: "Republishing…",
+  republished: "Republished",
 };
 
 export function PublishControls({
-  status, phase, copiedLink, onPublish, onUnpublish, onCopyLink,
+  status, phase, copiedLink, onPublish, onUnpublish, onCopyLink, publication = "unknown", onRepublish,
 }: {
   status: string;
   phase: PublishPhase;
@@ -106,13 +141,16 @@ export function PublishControls({
   onPublish: () => void;
   onUnpublish: () => void;
   onCopyLink: () => void;
+  /** Whether the saved draft differs from what recipients see. */
+  publication?: PublicationView;
+  onRepublish?: () => void;
 }) {
   // A transition in flight, or just finished, owns the slot: one disabled,
   // announced control where the action was — never its opposite.
   if (phase !== "idle") {
     return (
-      <Button variant={phase === "publishing" || phase === "published" ? "primary" : "danger"} size="md"
-        disabled aria-busy={phase === "publishing" || phase === "unpublishing"} aria-live="polite">
+      <Button variant={phase === "unpublishing" || phase === "unpublished" ? "danger" : "primary"} size="md"
+        disabled aria-busy={phase === "publishing" || phase === "unpublishing" || phase === "republishing"} aria-live="polite">
         {BUSY_LABEL[phase]}
       </Button>
     );
@@ -120,6 +158,13 @@ export function PublishControls({
   if (status === "published") {
     return (
       <>
+        {/* The one action that makes the saved changes reach recipients, first
+            and primary while there is something to publish. */}
+        {publication === "changed" && onRepublish && (
+          <Button variant="primary" size="md" onClick={onRepublish}>
+            Republish
+          </Button>
+        )}
         <Button variant="secondary" size="md" onClick={onCopyLink}>
           {copiedLink ? "Copied!" : "Copy link"}
         </Button>

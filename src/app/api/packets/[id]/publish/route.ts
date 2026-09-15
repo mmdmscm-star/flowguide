@@ -5,6 +5,7 @@ import { loadPacketOwnership } from "@/lib/ownership-service";
 import { identityGap, IDENTITY_GAP_MESSAGE } from "@/lib/professional-identity";
 import { BLOCKING_RUN_FILTER } from "@/lib/import-blocking";
 import { buildPublicationSnapshot, PUBLICATION_FORMAT_VERSION } from "@/lib/queries";
+import { resolvePublishIdentity, PUBLISH_PROFILE_COLUMNS } from "@/lib/publish-identity";
 
 type Context = { params: Promise<{ id: string }> };
 type Db = ReturnType<typeof createServerClient>;
@@ -197,48 +198,18 @@ export async function POST(request: Request, context: Context) {
     // no branding, 'custom' snapshots the packet-specific identity. Whatever we
     // resolve is frozen into professional_snapshot, so the recipient render path
     // stays a single source: it always reads the snapshot.
-    const mode: string = packet.identity_mode || "default";
-
-    let professionalSnapshot: Record<string, unknown>;
-    let contact: { name?: string; email?: string; phone?: string } | null = null;
-
-    if (mode === "none") {
-      professionalSnapshot = {};
-    } else if (mode === "custom") {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const c = (packet.custom_identity || {}) as Record<string, any>;
-      professionalSnapshot = {
-        name: c.name || "",
-        email: c.email || "",
-        phone: c.phone || "",
-        businessName: c.businessName || "",
-        logoUrl: c.logoUrl || "",
-        headshotUrl: c.headshotUrl || "",
-        footerLabel: c.footerLabel || "",
-        websiteUrl: c.websiteUrl || "",
-        links: Array.isArray(c.links) ? c.links : [],
-      };
-      contact = { name: c.name, email: c.email, phone: c.phone };
-    } else {
-      const { data: profile } = await supabase
+    // The rule lives in lib/publish-identity, shared with the publication state
+    // check, so "what publish freezes" and "what a republish would freeze" are
+    // one answer. The profile is read only when the identity comes from it.
+    let profile = null;
+    if ((packet.identity_mode || "default") === "default") {
+      ({ data: profile } = await supabase
         .from("professional_profiles")
-        .select("name, email, phone, business_name, logo_url, headshot_url, footer_label, website_url, links")
+        .select(PUBLISH_PROFILE_COLUMNS)
         .eq("user_id", session.userId)
-        .single();
-      // Preserve existing behavior: skipping the check publishes with no branding.
-      professionalSnapshot = skipProfileCheck ? {} : {
-        name: profile?.name || "",
-        email: profile?.email || "",
-        phone: profile?.phone || "",
-        businessName: profile?.business_name || "",
-        logoUrl: profile?.logo_url || "",
-        headshotUrl: profile?.headshot_url || "",
-        footerLabel: profile?.footer_label ?? "Your Advisor",
-        websiteUrl: profile?.website_url || "",
-        links: profile?.links || [],
-      };
-      contact = { name: profile?.name, email: profile?.email, phone: profile?.phone };
+        .single());
     }
+    const { professionalSnapshot, contact } = resolvePublishIdentity(packet, profile, !!skipProfileCheck);
 
     // Validate contact info unless the user chose to skip (or the packet
     // intentionally has no identity). Applies to whichever identity is presented.

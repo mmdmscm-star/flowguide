@@ -37,7 +37,8 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { moveDetail, detailsPayload } from "@/lib/detail-order";
 import { publicSendsetUrl } from "@/lib/public-url";
-import { PublishControls, usePublishTransitions, UNPUBLISH_CONFIRM, type PublishOutcome } from "@/components/editor/publish-controls";
+import { PublishControls, usePublishTransitions, UNPUBLISH_CONFIRM, type PublishOutcome, type RepublishOutcome } from "@/components/editor/publish-controls";
+import { saveLabel, usePublicationState } from "@/components/editor/publication-state";
 
 // ============================================================
 // Types for editor state
@@ -1153,10 +1154,44 @@ export function LegacyPacketEditor() {
     return true;
   }
 
+  // REPUBLISH: the same endpoint and gates as Publish, but the link already
+  // exists, so a success stays here and re-checks instead of opening the share
+  // step again. Refusals behave exactly as they do for Publish.
+  async function republishPacket(skipProfileCheck: boolean): Promise<RepublishOutcome> {
+    setPublishError("");
+    const res = await fetch(`/api/packets/${packetId}/publish`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "publish", skipProfileCheck }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      if (res.status === 422 && (data.error === "no_profile" || data.error === "no_contact")) {
+        const proceed = confirm(
+          "This Sendset does not include professional contact information. You can still publish it, but the contact footer will not appear."
+        );
+        return proceed ? republishPacket(true) : "stayed";
+      }
+      // Photo ownership is resolved on Preview through draft-only actions, so a
+      // published Sendset cannot be sent there to fix it. The refusal's own
+      // sentence is shown here instead; the recipients' copy is untouched.
+      setPublishError(data.message || data.error || "Could not republish");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return "stayed";
+    }
+    publication.refresh(0);
+    return "republished";
+  }
+
+  // Every save asks again whether the draft still matches what recipients see.
+  // The check waits for the save to settle, so "Saving…" then "Saved" asks once.
+  const publication = usePublicationState(packetId, packet?.status ?? "draft", saveStatus);
+
   const publishTransitions = usePublishTransitions({
     publish: () => publishPacket(false),
     unpublish: unpublishPacket,
     confirmUnpublish: () => confirm(UNPUBLISH_CONFIRM),
+    republish: () => republishPacket(false),
   });
 
   function copyPacketLink() {
@@ -1229,7 +1264,7 @@ export function LegacyPacketEditor() {
             pinned={
               <span className="flex items-center gap-2 whitespace-nowrap">
                 <span className="text-meta text-ink-3" role="status">
-                  {saveStatus === "saving" ? "Saving…" : saveStatus === "error" ? "Save failed" : "Saved"}
+                  {saveLabel(saveStatus, packet.status, publication.view)}
                 </span>
                 <span className={`rounded-full px-2 py-0.5 text-micro font-medium ${
                   packet.status === "published"
@@ -1912,6 +1947,8 @@ export function LegacyPacketEditor() {
               onPublish={publishTransitions.startPublish}
               onUnpublish={publishTransitions.startUnpublish}
               onCopyLink={copyPacketLink}
+              publication={publication.view}
+              onRepublish={publishTransitions.startRepublish}
             />
           </div>
         </div>

@@ -222,15 +222,20 @@ test("the editor does not claim an unpublish that failed", () => {
   assert.ok(guard > 0 && flip > guard, "the local status must only change after a successful response");
 });
 
-test("readers still render live rows; nothing reads packet_publications yet", () => {
+test("the recipient reader is the published row's frozen publication (reader switch)", () => {
+  // Was: "nothing reads packet_publications yet" — the guard that kept readers
+  // on live rows until the backfill existed. The switch replaces it with the
+  // rule it was protecting: recipients get the publication, and only a
+  // PUBLISHED Sendset's. Equivalence and fallback: publication-reader.test.
   const files: string[] = [];
   const walk = (d: string) => { for (const e of readdirSync(d)) { const p = join(d, e); if (statSync(p).isDirectory()) walk(p); else if (/\.(ts|tsx)$/.test(p) && !/\.test\./.test(p) && !/ \d+\.[a-z]+$/.test(p)) files.push(p); } };
   walk("src");
   const readers = files.filter((f) => /packet_publications/.test(codeOf(f)));
-  assert.deepEqual(readers, [], "a reader was switched to packet_publications before the backfill");
+  assert.deepEqual(readers, [join("src", "lib", "queries.ts")], "packet_publications is read outside the one reader");
   const q = codeOf("src/lib/queries.ts");
-  const reader = q.slice(q.indexOf("export async function getPublishedPacket"), q.indexOf("type Db ="));
-  assert.match(reader, /\.eq\("slug", slug\)\s*\.eq\("status", "published"\)/, "getPublishedPacket stopped reading the live published row");
+  const reader = q.slice(q.indexOf("export async function getPublishedPacket"), q.indexOf("export async function readPublication"));
+  assert.match(reader, /\.eq\("slug", slug\)\s*\.eq\("status", "published"\)/, "getPublishedPacket stopped requiring a published row");
+  assert.match(reader, /const publication = await readPublication\(db, packet\.id\);\s*if \(publication\) return recipientPacket\(publication\.content\);/, "getPublishedPacket does not serve the publication");
   for (const f of ["src/app/p/[slug]/page.tsx", "src/app/p/[slug]/print/page.tsx", "src/app/api/packets/[id]/email/route.ts"]) {
     assert.match(codeOf(f), /getPublishedPacket\(/, `${f} no longer renders through getPublishedPacket`);
   }

@@ -1,5 +1,6 @@
 "use client";
 
+import { notifyDraftSaved } from "@/components/editor/publication-state";
 import { useCallback, useState } from "react";
 import { CreatorNav } from "@/components/nav/creator-nav";
 import { TREATMENTS, treatmentByName, webVars } from "@/lib/style/treatment";
@@ -71,7 +72,7 @@ export function PreviewSurface({
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ styleTreatment: request.name }),
           });
-          if (res.ok) { setSel((s) => saveSucceeded(s, request.seq)); return; }
+          if (res.ok) { setSel((s) => saveSucceeded(s, request.seq)); notifyDraftSaved(packetId); return; }
         } catch { /* falls through to the same rollback */ }
         setSel((s) => saveFailed(s, request.seq));
       })();
