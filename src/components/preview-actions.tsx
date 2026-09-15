@@ -5,6 +5,7 @@ import OwnershipResolution, { type OwnershipState } from "./OwnershipResolution"
 import { Button, buttonClass } from "./ui/button";
 import ClientMessagePanel from "./client-message-panel";
 import EmailVersionPanel from "./email-version-panel";
+import { publicSendsetUrl } from "@/lib/public-url";
 
 type Props = {
   packetId: string;
@@ -128,9 +129,8 @@ export function PreviewActions({ packetId, slug, initialStatus, title, clientNam
   }
 
   // ONE definition, used by the link copy and by the message, so the two can
-  // never disagree about where the packet lives. Empty during SSR; the panel
-  // only renders after publish, which is client-side.
-  const shareUrl = typeof window === "undefined" ? `/p/${slug}` : `${window.location.origin}/p/${slug}`;
+  // never disagree about where the packet lives.
+  const shareUrl = publicSendsetUrl(slug);
 
   async function createEmailVersion() {
     setEmailBusy(true);

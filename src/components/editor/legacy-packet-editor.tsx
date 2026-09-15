@@ -36,6 +36,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { moveDetail, detailsPayload } from "@/lib/detail-order";
+import { publicSendsetUrl } from "@/lib/public-url";
 
 // ============================================================
 // Types for editor state
@@ -1139,7 +1140,7 @@ export function LegacyPacketEditor() {
 
   function copyPacketLink() {
     if (!packet) return;
-    navigator.clipboard.writeText(`${window.location.origin}/p/${packet.slug}`);
+    navigator.clipboard.writeText(publicSendsetUrl(packet.slug));
     setCopiedLink(true);
     setTimeout(() => setCopiedLink(false), 2000);
   }

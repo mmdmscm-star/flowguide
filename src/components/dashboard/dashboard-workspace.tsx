@@ -6,6 +6,7 @@ import { INPUT_SHELL } from "@/components/ui/field";
 
 import { useEffect, useState, useCallback } from "react";
 import { deleteConfirmMessage, deletePacketRequest } from "@/lib/delete-packet";
+import { publicSendsetUrl } from "@/lib/public-url";
 import { useRouter } from "next/navigation";
 import { filterPackets, isPublished, type StatusFilter } from "@/lib/packet-filter";
 
@@ -116,7 +117,7 @@ export default function DashboardWorkspace() {
   }
 
   async function copyLink(slug: string, id: string) {
-    const url = `${window.location.origin}/p/${slug}`;
+    const url = publicSendsetUrl(slug);
     await navigator.clipboard.writeText(url);
     setCopiedId(id);
     // Long enough to read the sharing warning shown below the packet's actions.

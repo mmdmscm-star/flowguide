@@ -27,7 +27,7 @@ test("Copy Link still works, and from the same URL the message uses", () => {
   const p = read("src/components/preview-actions.tsx");
   // One definition of the share URL. Two would let the button and the message
   // disagree about where the packet lives.
-  assert.equal((p.match(/\$\{window\.location\.origin\}\/p\/\$\{slug\}/g) ?? []).length, 1);
+  assert.equal((p.match(/publicSendsetUrl\(slug\)/g) ?? []).length, 1);
   assert.match(p, /function copyLink\(\)[\s\S]{0,200}navigator\.clipboard\.writeText\(shareUrl\)/);
   assert.match(p, /setCopied\(true\)/);
   assert.match(p, /setTimeout\(\(\) => setCopied\(false\), 2000\)/);

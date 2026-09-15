@@ -3,6 +3,7 @@ import { getSession } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase";
 import { getPublishedPacket } from "@/lib/queries";
 import { renderPacketEmail, renderPacketEmailText } from "@/lib/email-render";
+import { publicSendsetUrl } from "@/lib/public-url";
 
 type Context = { params: Promise<{ id: string }> };
 
@@ -50,8 +51,7 @@ export async function GET(_request: Request, context: Context) {
   const packet = await getPublishedPacket(row.slug);
   if (!packet) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  const origin = new URL(_request.url).origin;
-  const liveUrl = `${origin}/p/${row.slug}`;
+  const liveUrl = publicSendsetUrl(row.slug);
 
   return NextResponse.json({
     ok: true,
