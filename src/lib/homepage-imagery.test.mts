@@ -146,8 +146,9 @@ test("NOTHING COMES BETWEEN THE VISITOR AND THE ACTIONS", () => {
   const header = PAGE.slice(PAGE.indexOf("<header"), PAGE.indexOf("</header>"));
   assert.ok(!/<img|<picture|\/marketing\//.test(header),
     "the hero has a picture again, which a visitor must scroll past to act");
-  assert.match(header, /Start your first Sendset/, "the hero lost its primary action");
+  assert.match(header, /Request early access/, "the hero lost its primary action");
   assert.match(header, /See a real Sendset/, "the hero lost its way into a real one");
+  assert.match(header, /href="\/login"/, "the hero lost the way in for people who already have an account");
   // And the examples follow immediately, before any explanation of them.
   const afterHeader = PAGE.slice(PAGE.indexOf("</header>"));
   assert.ok(afterHeader.indexOf("FEATURED.map") < afterHeader.indexOf("Three steps"),

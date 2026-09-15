@@ -106,13 +106,18 @@ export default function Home() {
         </p>
         <div className="mt-9 flex flex-wrap items-center gap-x-6 gap-y-3">
           <Link
-            href="/login"
+            href="/early-access"
             className="inline-flex items-center rounded-lg bg-accent px-6 py-3 text-base font-medium text-white transition-colors hover:bg-accent-hover focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2"
           >
-            Start your first Sendset
+            Request early access
           </Link>
           <Link href="/p/demo" className="text-base font-medium text-accent underline-offset-4 hover:underline">
             See a real Sendset
+          </Link>
+          {/* Early access gates NEW accounts only; anyone who has one signs in
+              as before, so the way in stays on the page. */}
+          <Link href="/login" className="text-base font-medium text-muted underline-offset-4 hover:underline">
+            Sign in
           </Link>
         </div>
       </header>
@@ -365,13 +370,16 @@ export default function Home() {
         </p>
         <div className="mt-7 flex flex-wrap items-center gap-x-6 gap-y-3">
           <Link
-            href="/login"
+            href="/early-access"
             className="inline-flex items-center rounded-lg bg-accent px-6 py-3 text-base font-medium text-white transition-colors hover:bg-accent-hover focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2"
           >
-            Start your first Sendset
+            Request early access
           </Link>
           <Link href="/p/harbor-house" className="text-base font-medium text-accent underline-offset-4 hover:underline">
             Or look at a finished one first
+          </Link>
+          <Link href="/login" className="text-base font-medium text-muted underline-offset-4 hover:underline">
+            Sign in
           </Link>
         </div>
         {/* The honest substitute for social proof we do not have. */}

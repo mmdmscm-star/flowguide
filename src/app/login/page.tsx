@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
@@ -20,6 +21,7 @@ function LoginForm() {
     "invalid-link": "This link has already been used. Request a new one.",
     expired: "This link has expired. Request a new one.",
     "create-failed": "Something went wrong. Please try again.",
+    "signup-expired": "Your sign-in link expired before you entered an invite code. Enter your email to get a new one.",
   };
 
   async function handleSubmit(e: React.FormEvent) {
@@ -114,6 +116,16 @@ function LoginForm() {
             {loading ? "Sending..." : "Send me a sign-in link"}
           </button>
         </form>
+
+        {/* New professionals need an invite code (early access). Existing
+            accounts sign in above with no extra step. */}
+        <p className="mt-6 text-center text-sm text-muted">
+          New to Sendset?{" "}
+          <Link href="/early-access" className="font-medium text-accent underline-offset-4 hover:underline">
+            Request early access.
+          </Link>
+        </p>
+
       </div>
     </main>
   );

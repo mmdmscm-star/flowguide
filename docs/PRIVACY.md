@@ -35,6 +35,35 @@ This enforcement is per-request in code. It should be aligned with the
 account-level settings in the OpenRouter dashboard (logging disabled, ZDR/data
 policy). See the checkpoint report for the exact dashboard locations to verify.
 
+## Early-access requests (0055)
+
+The public form at `/early-access` stores exactly what it asks for — name, email
+and "what would you like to use Sendset for?" — in `public.early_access_requests`,
+plus the time it arrived. No IP address, no user agent, no cookie, no analytics
+identifier, and no account: the form creates nothing a person can sign in to.
+
+- **Retention: 90 days.** A pg_cron job (`sendset-purge-early-access-requests`,
+  scheduled by 0055) deletes rows older than that every night. Reviewing a
+  request is reading it and, if it is a yes, creating an invite; nothing is
+  copied into a second system.
+- The table is reachable only by the service role (RLS on, no policies, no
+  grants for `anon`/`authenticated`), and requests cannot be edited — only read
+  and deleted.
+- One best-effort notification is emailed to the owner (via Resend) when a
+  request arrives; it carries the three fields the person submitted. Saving the
+  request never depends on that email, and no email is ever sent to the person
+  who submitted the form, so the form cannot be used to send mail to anyone.
+- Log lines about a failed notification carry the failure's name only, never the
+  request's contents.
+
+## Invite codes (0055)
+
+Invite codes are 100-bit random strings. Only their SHA-256 is stored; the code
+itself exists in the terminal that created it and in the box the invited person
+types it into. It is never in a URL, a log line, an analytics event or a table,
+so a leaked database holds nothing that can create an account. Each code creates
+one account and is then spent; an unused code can be revoked.
+
 ## Open tradeoff: `raw_input` retention
 
 `packets.raw_input` stores the professional's original pasted source text

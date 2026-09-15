@@ -303,11 +303,16 @@ test("the trust-model claim is about REVIEW, not about the model", () => {
 });
 
 test("both CTAs, pointing where they should", () => {
+  // Early access (0055): a new professional cannot create an account without an
+  // invite code, so the primary action asks for one instead of opening a signup
+  // that would refuse them. The demo and sign-in both stay one click away.
   const src = codeOf(LANDING);
   assert.match(src, /See a real Sendset/);
-  assert.match(src, /Start your first Sendset/);
+  assert.match(src, /Request early access/);
+  assert.doesNotMatch(src, /Start your first Sendset/, "the old open-signup call to action is back");
   assert.ok(src.includes('href="/p/demo"'), "the primary CTA does not reach the demo");
-  assert.ok(src.includes('href="/login"'), "the secondary CTA does not reach sign-in");
+  assert.ok(src.includes('href="/early-access"'), "the primary CTA does not reach the request form");
+  assert.ok(src.includes('href="/login"'), "existing users lost their way in");
   // No social proof we do not have.
   assert.doesNotMatch(src, /trusted by|customers|testimonial|thousands of/i,
     "the page claims social proof that does not exist");

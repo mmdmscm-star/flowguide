@@ -5,6 +5,12 @@ import { createServerClient } from "./supabase";
 // name is a silent drift hazard: rename one and the other keeps "working" by
 // always finding nothing.
 export const SESSION_COOKIE = "flowguide_session";
+// Set when a VERIFIED magic link belongs to an email with no account yet: it
+// carries that link's token to /join, where an invite code turns it into an
+// account. httpOnly, so the page never reads it; it is proof of the email, not
+// of an account, and grants nothing on its own.
+export const SIGNUP_COOKIE = "flowguide_signup";
+export const SIGNUP_WINDOW_MINUTES = 30;
 const SESSION_DURATION_DAYS = 30;
 
 export async function getSession(): Promise<{ userId: string } | null> {

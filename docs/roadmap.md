@@ -83,6 +83,37 @@ notes and `docs/migrations/reader-switch.md`.
 
 ---
 
+## Early access — invite-code signup gate (written, not applied 2026-09-15)
+
+0055 plus the app change on branch `early-access`. New accounts need a single-use
+invite code; existing accounts sign in exactly as before; the homepage, demos and
+published Sendsets stay public. `/api/auth/verify` no longer creates accounts —
+`redeem_invite` does, in one transaction with the invite.
+
+### Configuration cleanup — turn off Supabase Auth signups
+
+Separate from the gate, and **not** relied on by it. Sendset does not use Supabase
+Auth: it has its own magic-link sessions, and production has 0 rows in
+`auth.users` with nothing linking them to `public.users`. But the project still
+reports `disable_signup: false` with the email provider enabled, so anyone with
+the public anon key can create a GoTrue user and make the project send a
+confirmation email. That account reaches nothing in Sendset (`anon` and
+`authenticated` hold no privileges on any app table), so this is unsolicited mail
+and clutter rather than access.
+
+**Do:** Supabase dashboard → Authentication → Sign In / Providers → turn off
+"Allow new users to sign up". Re-check with
+`curl "$NEXT_PUBLIC_SUPABASE_URL/auth/v1/settings" -H "apikey: $ANON"`, which
+should then report `disable_signup: true`.
+
+**Also noticed while tracing, both harmless today, worth tidying with the next
+security pass:** `library_import_proposals` grants `anon`/`authenticated` full
+table privileges (RLS is on with no policies and the table is empty, so nothing
+is reachable), and four functions are executable by everyone (three trigger
+functions and one pure validator).
+
+---
+
 ## Street View Fallback Investigation
 
 **Status:** Validated concept, pending real-world validation.

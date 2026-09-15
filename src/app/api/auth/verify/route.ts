@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase";
-import { createSession } from "@/lib/auth";
+import { createSession, SIGNUP_COOKIE, SIGNUP_WINDOW_MINUTES } from "@/lib/auth";
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
@@ -32,37 +32,43 @@ export async function GET(request: Request) {
     return NextResponse.redirect(`${appUrl}/login?error=expired`);
   }
 
-  // Mark magic link as used
-  await supabase.from("magic_links").update({ used: true }).eq("id", magicLink.id);
-
-  // Find or create user
-  let { data: user } = await supabase
+  const { data: user } = await supabase
     .from("users")
     .select("id")
     .eq("email", magicLink.email)
     .single();
 
+  // NO ACCOUNT YET: THIS ROUTE NO LONGER CREATES ONE.
+  //
+  // Sendset is in early access, so an account costs an invite code (0055). The
+  // link is left UNUSED and its token travels in an httpOnly cookie to /join,
+  // which asks for the code; redeem_invite then creates the account and
+  // consumes the invite in one transaction. Anyone who never enters a code
+  // simply has no account, and the link expires on its own.
   if (!user) {
-    const { data: newUser, error } = await supabase
-      .from("users")
-      .insert({ email: magicLink.email })
-      .select()
-      .single();
-
-    if (error || !newUser) {
-      return NextResponse.redirect(`${appUrl}/login?error=create-failed`);
+    const response = NextResponse.redirect(`${appUrl}/join`);
+    // Enough time to fetch the code from another window, never longer than an
+    // hour after the link was sent.
+    const cap = new Date(new Date(magicLink.created_at).getTime() + 60 * 60 * 1000);
+    const wanted = new Date(Date.now() + SIGNUP_WINDOW_MINUTES * 60 * 1000);
+    const until = new Date(Math.min(cap.getTime(), wanted.getTime()));
+    if (until > new Date(magicLink.expires_at)) {
+      await supabase.from("magic_links").update({ expires_at: until.toISOString() }).eq("id", magicLink.id);
     }
-    user = newUser;
-
-    // Create empty professional profile for new users
-    await supabase.from("professional_profiles").insert({
-      user_id: newUser.id,
-      email: magicLink.email,
+    response.cookies.set(SIGNUP_COOKIE, token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      path: "/",
+      expires: until,
     });
+    return response;
   }
 
-  // Create session
-  await createSession(user!.id);
+  // Existing account: unchanged. The link is spent here.
+  await supabase.from("magic_links").update({ used: true }).eq("id", magicLink.id);
+
+  await createSession(user.id);
 
   return NextResponse.redirect(`${appUrl}/dashboard`);
 }
