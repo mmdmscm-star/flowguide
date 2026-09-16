@@ -84,7 +84,7 @@ test("the product names itself where the product is meant", () => {
   assert.match(layout, /title: "Sendset"/, "the page title");
   assert.match(layout, /siteName: "Sendset"/, "the OG site name");
   // THE RECIPIENT CARD NAMES THE PRODUCT WITHOUT BEING TITLED BY IT. Its title
-  // is now the sender — "Ramona Maurer shared this with you" — so the product's
+  // is now the sender — "Ramona Maurer shared a Sendset with you" — so the product's
   // own name lives in the site name and in the line under it, which is where a
   // client should meet it: after the person they already know.
   const recipient = codeOf("src/lib/recipient-metadata.ts");
