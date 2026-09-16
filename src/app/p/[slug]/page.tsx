@@ -7,6 +7,7 @@ import { PersonalNote } from "@/components/personal-note";
 import { SectionGroup } from "@/components/section-group";
 import { PacketBlockBody } from "@/components/packet-block-body";
 import { ProfessionalFooter } from "@/components/professional-footer";
+import { SendsetSignature } from "@/components/sendset-signature";
 import type { Packet } from "@/lib/types";
 import { ownedPacketId } from "@/lib/packet-owner";
 import { OwnerBar } from "@/components/nav/owner-bar";
@@ -142,9 +143,7 @@ export default async function PacketPage({ params }: Props) {
           <ProfessionalFooter professional={packet.professional} />
         )}
 
-        <p className="text-center text-xs mt-4" style={{ color: "var(--sg-faint)" }}>
-          Powered by Sendset
-        </p>
+        <SendsetSignature />
       </main>
     </>
   );

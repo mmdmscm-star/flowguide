@@ -92,9 +92,38 @@ test("the product names itself where the product is meant", () => {
   assert.match(recipient, /RECIPIENT_DESCRIPTION = "View on Sendset\."/, "the recipient card");
   assert.match(recipient, /RECIPIENT_TITLE_ANONYMOUS = "A Sendset has been shared with you"/,
     "an unsigned Sendset still names the product");
-  for (const f of ["src/app/p/[slug]/page.tsx", "src/app/preview/[id]/page.tsx",
-                   "src/components/print/print-packet.tsx"])
-    assert.match(codeOf(f), /Powered by Sendset\b/, `${f} does not name the product`);
+  // THE SIGNATURE AT THE FOOT OF A SENDSET. It was the same sentence written
+  // out in three files; the two WEB views now share one component, so the name
+  // is asserted where it is actually written rather than three times over. The
+  // printed copy keeps its own text-only tail: paper has no link to follow and
+  // no reason to spend ink on a mark.
+  assert.match(codeOf("src/components/sendset-signature.tsx"), /Made with Sendset\b/,
+    "the recipient signature does not name the product");
+  for (const f of ["src/app/p/[slug]/page.tsx", "src/app/preview/[id]/page.tsx"])
+    assert.match(codeOf(f), /<SendsetSignature \/>/, `${f} does not sign off as Sendset`);
+  assert.match(codeOf("src/components/print/print-packet.tsx"), /Powered by Sendset\b/,
+    "the printed copy does not name the product");
+});
+
+test("the signature is MEANT TO BE SEEN, and it is a link", () => {
+  // The line it replaced was `faint`, which on the default treatment is grey at
+  // 40% opacity — a mark you notice only if you already knew it was there. The
+  // point of the change was that a client can read it, so the token is asserted
+  // rather than left to whoever edits this next. `subtle` is the same token the
+  // rest of the page uses for supporting text, and measures 8.2:1 against the
+  // page on the default treatment.
+  const sig = codeOf("src/components/sendset-signature.tsx");
+  assert.match(sig, /var\(--sg-subtle\)/, "the signature is drawn in a quieter token again");
+  assert.ok(!/--sg-faint/.test(sig), "the signature went back to the washed-out token");
+  // A LINK, to one place, and not a button.
+  assert.match(sig, /href="https:\/\/sendset\.io"/, "the signature leads nowhere");
+  assert.ok(!/bg-accent|sg-btn|rounded-full|font-semibold/.test(sig),
+    "the signature acquired button styling");
+  assert.ok(!/Create your own|Try Sendset|Get started/i.test(sig),
+    "the signature became an advertisement");
+  // NOT ICON-ONLY: words a screen reader can read, and a decorative mark.
+  assert.match(sig, /alt=""/, "the mark is described, so the link is announced twice");
+  assert.match(sig, /Made with Sendset/, "the link has no text of its own");
   assert.match(codeOf("src/app/api/auth/send-magic-link/route.ts"),
     /subject: "Sign in to Sendset"/, "the sign-in email subject");
 });

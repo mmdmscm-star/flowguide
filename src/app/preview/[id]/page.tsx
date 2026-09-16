@@ -5,6 +5,7 @@ import { PacketHeader } from "@/components/packet-header";
 import { PersonalNote } from "@/components/personal-note";
 import { SectionGroup } from "@/components/section-group";
 import { ProfessionalFooter } from "@/components/professional-footer";
+import { SendsetSignature } from "@/components/sendset-signature";
 import { PacketBlockBody } from "@/components/packet-block-body";
 import { PreviewActions } from "@/components/preview-actions";
 import { PreviewSurface } from "@/components/preview-surface";
@@ -110,9 +111,7 @@ export default async function PreviewPage({ params, searchParams }: Props) {
         <ProfessionalFooter professional={packet.professional} />
       )}
 
-      <p className="text-center text-xs mt-4" style={{ color: "var(--sg-faint)" }}>
-        Powered by Sendset
-      </p>
+      <SendsetSignature />
     </PreviewSurface>
   );
 }
