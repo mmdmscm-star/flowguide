@@ -93,9 +93,38 @@ export default function Home() {
     <main className="mx-auto max-w-3xl px-6 pb-24">
       {/* ---- 1. What it is ------------------------------------------------ */}
       <header className="pt-20 pb-12 sm:pt-28">
-        <p className="text-sm font-semibold tracking-[0.14em] uppercase text-muted">
-          Sendset
-        </p>
+        {/* THE BRAND, as the supplied artwork rather than a letterspaced word.
+            The name used to be set in the page's own type because there was no
+            logo; there is one now, and approximating it in CSS when the file
+            exists is how two versions of a mark start to differ.
+
+            The SAME FILE the link-preview card uses, served from /public. It is
+            the only image here that is not a photograph of the product, and it
+            reserves its own space: 1800x430 in the source, so the intrinsic
+            size below holds its aspect exactly and nothing reflows as it loads.
+
+            Sized like a header, not a hero — 24px on a phone, 30px above it,
+            against a 34px headline.
+
+            A PLAIN IMAGE ELEMENT, and the lint rule is silenced ON PURPOSE. next/image
+            exists to resize and re-encode raster files; this is 5KB of vector
+            with nothing to optimise, and routing it through the optimiser would
+            mean turning on `dangerouslyAllowSVG`, which lets ANY svg the app
+            renders through that pipeline. That is a security setting to trade
+            away for a logo. The page's other images escape the rule only
+            because they sit inside a picture element, which it exempts.
+
+            (Written without angle-bracketed tag names on purpose: the guards in
+            homepage-imagery.test.mts scan this file as text, so a tag named in
+            a comment reads to them as a tag on the page.) */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src="/brand/sendset-logo-horizontal.svg"
+          alt="Sendset"
+          width={126}
+          height={30}
+          className="h-6 w-auto sm:h-[30px]"
+        />
         <h1 className="mt-5 text-[2.1rem] leading-[1.12] sm:text-[2.6rem] font-bold tracking-tight text-foreground text-balance">
           Turn what you have into something worth opening.
         </h1>

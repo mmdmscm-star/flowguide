@@ -295,11 +295,13 @@ async function main() {
 
     // ---- the two compositions -----------------------------------------------
     const b64 = (f) => `data:image/png;base64,${readFileSync(join(WORK, f)).toString("base64")}`;
-    /** A brand asset, read from THIS script's directory rather than the capture
-     *  workspace: it is checked in, not screenshotted. Inlined so the headless
-     *  page needs no server to fetch it. */
+    /** A brand asset from public/, not the capture workspace: it is checked in,
+     *  not screenshotted. ONE COPY, and it lives where the site can serve it —
+     *  the homepage header wears the same file, and a second copy beside this
+     *  script would be a logo that could drift from the logo. Inlined so the
+     *  headless page needs no server to fetch it. */
     const svg64 = (f) =>
-      `data:image/svg+xml;base64,${readFileSync(join(HERE, f)).toString("base64")}`;
+      `data:image/svg+xml;base64,${readFileSync(join(ROOT, "public", f)).toString("base64")}`;
 
     // COMPOSED AT ITS DISPLAY SIZE, TWICE.
     //

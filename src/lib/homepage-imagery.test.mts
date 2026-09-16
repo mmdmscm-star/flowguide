@@ -85,10 +85,28 @@ test("NOTHING MOVES WHILE THEY LOAD", () => {
   // Every <img> states its intrinsic size, so the space is reserved before the
   // bytes arrive. The composite additionally pins an aspect ratio at each
   // width, because <picture> swaps between two shapes at the breakpoint.
-  const imgs = [...PAGE.matchAll(/<img\b[\s\S]*?\/>/g)].map((m) => m[0]);
-  for (const img of imgs) {
+  const all = [...PAGE.matchAll(/<img\b[\s\S]*?\/>/g)].map((m) => m[0]);
+
+  // THE BRAND MARK IS A THIRD KIND OF PICTURE, counted apart from the other
+  // two. It is not a photograph of the product and not a card's thumbnail: it
+  // is the product's name, which used to be set in type here. So it is held to
+  // its own rules — one of it, its intrinsic size stated, and its alt is the
+  // name rather than a description of a logo — and excluded from the counts
+  // below, which are about how many PHOTOGRAPHS the page carries.
+  const brand = all.filter((i) => /\/brand\//.test(i));
+  assert.equal(brand.length, 1, "the homepage brand mark was duplicated or removed");
+  assert.match(brand[0], /src="\/brand\/sendset-logo-horizontal\.svg"/,
+    "the header no longer wears the supplied lockup");
+  assert.match(brand[0], /alt="Sendset"/, "the brand mark is unnamed for a screen reader");
+  assert.ok(!/sizes="/.test(brand[0]),
+    "the lockup declares sizes without a srcset to choose from");
+
+  const imgs = all.filter((i) => !/\/brand\//.test(i));
+  for (const img of [...imgs, ...brand]) {
     assert.match(img, /width=\{\d+\}/, "an image has no intrinsic width");
     assert.match(img, /height=\{\d+\}/, "an image has no intrinsic height");
+  }
+  for (const img of imgs) {
     assert.match(img, /sizes="/, "an image has no sizes, so srcset picks blind");
   }
 
@@ -152,8 +170,21 @@ test("NOTHING COMES BETWEEN THE VISITOR AND THE ACTIONS", () => {
   // sit immediately below it and do that job better than a photograph of one —
   // so the rule is simply that the header has no image in it at all.
   const header = PAGE.slice(PAGE.indexOf("<header"), PAGE.indexOf("</header>"));
-  assert.ok(!/<img|<picture|\/marketing\//.test(header),
+  assert.ok(!/<picture|\/marketing\//.test(header),
     "the hero has a picture again, which a visitor must scroll past to act");
+  // THE BRAND MARK IS THE ONE IMAGE ALLOWED HERE, and only while it stays the
+  // size of a header. The rule was "no <img> in the hero" when the only thing
+  // that could appear was a product shot; a lockup where the name already sat
+  // is not that. So the shape of the rule changes and its force does not: any
+  // other image fails, and so does this one the moment it grows into a graphic
+  // a visitor has to scroll past.
+  const headerImgs = [...header.matchAll(/<img\b[\s\S]*?\/>/g)].map((m) => m[0]);
+  assert.equal(headerImgs.length, 1, "the hero gained a second image");
+  assert.match(headerImgs[0], /src="\/brand\/sendset-logo-horizontal\.svg"/,
+    "the hero's image is not the brand lockup");
+  const tall = Number(headerImgs[0].match(/height=\{(\d+)\}/)?.[1]);
+  assert.ok(tall > 0 && tall <= 40,
+    `the lockup is ${tall}px tall — that is a hero graphic, not a header mark`);
   assert.match(header, /Request an invite/, "the hero lost its primary action");
   assert.match(header, /See a real Sendset/, "the hero lost its way into a real one");
   assert.match(header, /href="\/login"/, "the hero lost the way in for people who already have an account");
@@ -167,7 +198,16 @@ test("NO STOCK PHOTOGRAPHY, NO ICON SET, NO ILLUSTRATION, NO MOTION", () => {
   // The page's argument is that a well-made thing respects its reader. Every
   // image on it is a photograph of this product; nothing is decorative.
   for (const src of ASSETS) assert.match(src, /^\/marketing\//);
-  assert.ok(!/<svg|\.svg"/.test(PAGE), "an icon or illustration appeared");
+  // NO ICON SET, NO ILLUSTRATION — and the carve-out is ONE named file, not a
+  // relaxation of the rule. The ban exists because a page of drawn icons is the
+  // easy way to make a product page look like every other product page; the
+  // brand's own mark is the one drawing that is not decoration. Anything else
+  // vector, including a second file under /brand/, still fails.
+  const LOCKUP = "/brand/sendset-logo-horizontal.svg";
+  assert.ok(!/<svg/.test(PAGE), "an inline icon or illustration appeared");
+  const vectors = [...PAGE.matchAll(/"([^"]*\.svg)"/g)].map((m) => m[1]);
+  assert.deepEqual(vectors, [LOCKUP],
+    `a vector other than the brand lockup appeared: ${vectors.join(", ")}`);
   // NO IMAGE URL IS WRITTEN ON THIS PAGE except the captures. The example cards
   // do show a photograph that is not of the product — but it is one from inside
   // the Sendset that card opens, read out of that fixture at render time. That
