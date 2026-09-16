@@ -53,11 +53,6 @@ const SECTION_SCHEMA = `{
       "links": [{"url":"string","label":"string or null"}], "photos": ["string"],
       "contacts": [{"name":"string or null","role":"string or null","phone":"string or null","email":"string or null","website":"string or null"}] } ] } ] }`;
 
-const TYPE_GUIDANCE: Record<string, string> = {
-  "senior-placement": `Senior living context: community names -> item titles; full addresses; monthly cost, care level, memory care, pet policy as details; tour notes -> notes; contacts (admissions/directors) with phones/emails/websites.`,
-  "real-estate": `Real-estate context: property address -> address; price, sq ft, beds/baths, lot, HOA, year as details; agent/listing contacts; listing URLs.`,
-  general: "",
-};
 
 // The escape hatch. A segment can be the TAIL of an entry that began in an
 // earlier segment — a run of photos with no identifying text of its own. With no
@@ -94,12 +89,10 @@ const LOSSLESS_RULES = `LOSSLESS ORGANIZATION - this applies to the whole source
 - You may reorganize how information is presented and grouped. You may not reduce how much factual content is present.`;
 
 // organize LEAD chunk: also captures a packet title + optional client name.
-export function organizeLeadPrompt(packetType: string): string {
-  const g = TYPE_GUIDANCE[packetType] || "";
+export function organizeLeadPrompt(): string {
   return `You organize raw text into a structured recommendation packet. Structure ONLY the provided segment.
 Extract a short packet title, an optional clientName if a client/recipient is named, and sections of items.
 - ${ITEM_FIELDS}
-${g ? "\n" + g + "\n" : ""}
 ${URL_RULES}
 
 Rules: preserve ALL specifics (addresses, phones, prices, hours, names); do not invent; full street addresses -> address; keep every person + their own phone/email; keep titles < 60 chars; a label for every link.
@@ -115,11 +108,9 @@ ${LOSSLESS_RULES}`;
 }
 
 // organize non-lead + all append chunks: sections only (appended to the packet).
-export function sectionsPrompt(packetType: string): string {
-  const g = TYPE_GUIDANCE[packetType] || "";
+export function sectionsPrompt(): string {
   return `You organize raw text into structured recommendation sections+items. Structure ONLY the provided segment; it will be appended to an existing packet — do not repeat existing content.
 - ${ITEM_FIELDS}
-${g ? "\n" + g + "\n" : ""}
 ${URL_RULES}
 
 Rules: preserve ALL specifics; do not invent; full addresses -> address; keep every person + their own phone/email; titles < 60 chars; a label for every link.

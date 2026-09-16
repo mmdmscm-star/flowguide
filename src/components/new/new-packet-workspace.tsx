@@ -31,11 +31,6 @@ interface SourceImage {
   error?: string;
 }
 
-const PACKET_TYPES = [
-  { value: "senior-placement", label: "Senior placement" },
-  { value: "real-estate", label: "Real estate" },
-  { value: "general", label: "General" },
-];
 
 export default function NewPacketWorkspace() {
   const router = useRouter();
@@ -86,7 +81,6 @@ export default function NewPacketWorkspace() {
   // Cleared whenever they type, because once the box has been edited by hand
   // the text is no longer the file we were told about.
   const [delimiterHint, setDelimiterHint] = useState<string | null>(null);
-  const [packetType, setPacketType] = useState("general");
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState("");
   // Stable idempotency key for the Organize POST, generated once per source. A
@@ -389,7 +383,7 @@ export default function NewPacketWorkspace() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          rawText: source, packetType, requestKey: requestKeyRef.current,
+          rawText: source, requestKey: requestKeyRef.current,
           ...(delimiterHint ? { delimiterHint } : {}),
           // Present only for a picture, so every other path stays a text run.
           // BOTH SHAPES, one deploy apart: the singular column is what already-
@@ -425,7 +419,7 @@ export default function NewPacketWorkspace() {
     const res = await fetch("/api/packets", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title: "", packetType }),
+      body: JSON.stringify({ title: "" }),
     });
     if (res.status === 401) { router.push("/login"); return; }
     const { packet } = await res.json();
@@ -502,34 +496,6 @@ export default function NewPacketWorkspace() {
         }}
         className={`mt-7 overflow-hidden rounded-[var(--radius-panel)] border bg-ground transition-shadow duration-200 focus-within:border-mark/40 focus-within:shadow-[0_0_0_3px_rgb(37_99_235_/_0.08)] ${
           dragging ? "border-mark shadow-[0_0_0_3px_rgb(37_99_235_/_0.16)]" : "border-line"}`}>
-        {/* Packet type lives here as document metadata rather than a mode
-            switch. Still visible, still one tap to change — it was previously
-            the loudest element on a page whose subject is the paste area. */}
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-line bg-ground-2 px-4 py-2.5">
-          <span className="text-meta text-ink-2">Packet type</span>
-          <div className="flex flex-wrap gap-1">
-            {PACKET_TYPES.map((type) => {
-              const active = packetType === type.value;
-              return (
-                <button
-                  key={type.value}
-                  onClick={() => setPacketType(type.value)}
-                  aria-pressed={active}
-                  disabled={processing}
-                  className={`flex h-10 flex-none items-center rounded-full px-3.5 text-meta font-medium
-                              transition-colors disabled:opacity-50 sm:h-auto sm:rounded-md sm:px-2.5 sm:py-1 ${
-                    active
-                      ? "bg-ground text-ink ring-1 ring-border"
-                      : "text-ink-2 hover:text-ink"
-                  }`}
-                >
-                  {type.label}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
         {/* text-body is 16px — below 16 iOS Safari auto-zooms the page on focus,
             which is a real bug on the authoring surface of a product whose
             recipient reading tier was deliberately raised for older eyes. */}

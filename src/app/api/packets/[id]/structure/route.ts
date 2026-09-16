@@ -47,49 +47,6 @@ General rules:
 - If the input mentions a client or recipient by name, extract it as clientName
 - Always provide a label for every link`;
 
-// ============================================================
-// Packet-type-specific guidance
-// ============================================================
-const TYPE_GUIDANCE: Record<string, string> = {
-  "senior-placement": `
-ADDITIONAL CONTEXT: This input is about senior living recommendations for a family.
-
-Look specifically for:
-- Community names (these become item titles)
-- Full street addresses for each community
-- Monthly pricing (extract as a detail: "Monthly Cost" → "$X,XXX")
-- Care levels: independent living, assisted living, memory care, continuing care (extract as detail: "Care Level" → "...")
-- Memory care availability (extract as detail: "Memory Care" → "Yes/No/Available")
-- Pet policies (extract as detail: "Pet Policy" → "...")
-- Tour notes or impressions (put in notes field)
-- Family preferences or requirements (put in the description or notes)
-- Contact people at each community (admissions directors, etc.)
-- Phone numbers, emails, websites for each community
-- Any image/photo URLs
-
-Group communities in one section (e.g. "Recommended Communities") and support services (attorneys, care managers, movers) in a separate section (e.g. "Support Services").
-
-For support services, extract: business name, contact person, specialty, hourly rates or fees, phone, email, website.`,
-
-  "real-estate": `
-ADDITIONAL CONTEXT: This input is about real estate listings or property recommendations.
-
-Look specifically for:
-- Property addresses (extract as the address field)
-- Listing prices (extract as detail: "Price" → "$XXX,XXX")
-- Square footage (extract as detail: "Sq Ft" → "X,XXX")
-- Bedrooms and bathrooms (extract as details)
-- Lot size, HOA fees, year built (extract as details)
-- Agent or listing contacts
-- Open house dates (extract as detail)
-- MLS numbers (extract as detail)
-- Property websites or listing URLs
-- Any image/photo URLs
-
-Group properties by type or area if the input suggests natural groupings.`,
-
-  "general": "",
-};
 
 // ============================================================
 // JSON schema for AI output
@@ -168,7 +125,7 @@ export async function POST(request: Request, context: Context) {
 
   const { id } = await context.params;
   const body = await request.json();
-  const { rawText, packetType } = body;
+  const { rawText } = body;
 
   if (!rawText || typeof rawText !== "string" || rawText.trim().length < 10) {
     return NextResponse.json({ error: "Please paste more text to organize." }, { status: 400 });
@@ -206,10 +163,9 @@ export async function POST(request: Request, context: Context) {
   // what was pasted.
   await supabase.from("packets").update({ raw_input: trimmed }).eq("id", id);
 
-  // Build the prompt with type-specific guidance
-  const typeKey = packetType || "general";
-  const guidance = TYPE_GUIDANCE[typeKey] || "";
-  const systemPrompt = BASE_PROMPT + (guidance ? "\n" + guidance : "") + "\n" + OUTPUT_SCHEMA;
+  // One prompt for every Sendset: the vertical packet types this route used to
+  // branch on are retired (see docs/roadmap.md).
+  const systemPrompt = BASE_PROMPT + "\n" + OUTPUT_SCHEMA;
 
   // Call Claude via OpenRouter
   const apiKey = process.env.OPENROUTER_API_KEY;

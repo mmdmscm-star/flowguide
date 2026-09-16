@@ -81,7 +81,6 @@ export type ProcessOutcome =
 // under the route's 60s limit. Truncation (finish_reason=length) => split.
 export async function processSegment(opts: {
   entryPoint: EntryPoint;
-  packetType: string;
   isLead: boolean;
   segmentText: string;
   apiKey: string;
@@ -91,12 +90,12 @@ export async function processSegment(opts: {
    *  no-op rather than a change nobody measured. */
   grouping?: Grouping | null;
 }): Promise<ProcessOutcome> {
-  const { entryPoint, packetType, isLead, segmentText, apiKey, grouping } = opts;
+  const { entryPoint, isLead, segmentText, apiKey, grouping } = opts;
 
   let systemPrompt: string;
   if (entryPoint === "section_append" || entryPoint === "library_import") systemPrompt = itemsOnlyPrompt();
-  else if (entryPoint === "organize" && isLead) systemPrompt = organizeLeadPrompt(packetType);
-  else systemPrompt = sectionsPrompt(packetType);
+  else if (entryPoint === "organize" && isLead) systemPrompt = organizeLeadPrompt();
+  else systemPrompt = sectionsPrompt();
   systemPrompt += groupingPromptRule(grouping);
 
   // The model sees the chunk's own text and nothing else (see the note above).

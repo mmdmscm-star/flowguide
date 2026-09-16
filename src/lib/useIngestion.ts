@@ -41,7 +41,7 @@ export interface IngestState {
   resolving: string;
 }
 
-interface StartArgs { entryPoint: "organize" | "append" | "section_append"; rawText: string; targetSectionId?: string | null; packetType?: string }
+interface StartArgs { entryPoint: "organize" | "append" | "section_append"; rawText: string; targetSectionId?: string | null }
 
 const CHUNK_CLIENT_TIMEOUT_MS = 70000; // backstop past the 60s function limit
 const RETRY_BACKOFF_MS = 6000;         // wait before reclaiming a stuck/processing chunk

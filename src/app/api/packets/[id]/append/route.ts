@@ -41,41 +41,6 @@ General rules:
 - Keep titles concise (under 60 characters)
 - Always provide a label for every link`;
 
-const TYPE_GUIDANCE: Record<string, string> = {
-  "senior-placement": `
-ADDITIONAL CONTEXT: This input is about senior living recommendations for a family.
-
-Look specifically for:
-- Community names (these become item titles)
-- Full street addresses for each community
-- Monthly pricing (extract as a detail: "Monthly Cost" → "$X,XXX")
-- Care levels: independent living, assisted living, memory care, continuing care (extract as detail: "Care Level" → "...")
-- Memory care availability (extract as detail: "Memory Care" → "Yes/No/Available")
-- Pet policies (extract as detail: "Pet Policy" → "...")
-- Tour notes or impressions (put in notes field)
-- Family preferences or requirements (put in the description or notes)
-- Contact people at each community (admissions directors, etc.)
-- Phone numbers, emails, websites for each community
-- Any image/photo URLs
-
-Group communities in one section (e.g. "Additional Communities") and support services in a separate section.`,
-
-  "real-estate": `
-ADDITIONAL CONTEXT: This input is about real estate listings or property recommendations.
-
-Look specifically for:
-- Property addresses (extract as the address field)
-- Listing prices (extract as detail: "Price" → "$XXX,XXX")
-- Square footage, bedrooms, bathrooms (extract as details)
-- Lot size, HOA fees, year built (extract as details)
-- Agent or listing contacts
-- Property websites or listing URLs
-- Any image/photo URLs
-
-Group properties by type or area if the input suggests natural groupings.`,
-
-  "general": "",
-};
 
 const OUTPUT_SCHEMA = `
 Respond with ONLY valid JSON matching this exact schema (no markdown, no explanation):
@@ -160,7 +125,7 @@ export async function POST(request: Request, context: Context) {
 
   const { data: packet } = await supabase
     .from("packets")
-    .select("id, packet_type, raw_input")
+    .select("id, raw_input")
     .eq("id", id)
     .eq("user_id", session.userId)
     .single();
@@ -180,9 +145,9 @@ export async function POST(request: Request, context: Context) {
     : 0;
 
   // Build prompt
-  const typeKey = packet.packet_type || "general";
-  const guidance = TYPE_GUIDANCE[typeKey] || "";
-  const systemPrompt = BASE_PROMPT + (guidance ? "\n" + guidance : "") + "\n" + OUTPUT_SCHEMA;
+  // One prompt for every Sendset: the vertical packet types this route used to
+  // branch on are retired (see docs/roadmap.md).
+  const systemPrompt = BASE_PROMPT + "\n" + OUTPUT_SCHEMA;
 
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) {

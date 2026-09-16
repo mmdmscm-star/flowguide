@@ -12,14 +12,17 @@ const INGEST_MAX_CHARS = 200000;
 // POST /api/ingest/organize — Initial Organize with AI. Creates the draft packet,
 // the ingestion run, the persisted chunk plan, and the packet-origin marker in
 // ONE database transaction (create_organize_run), so a partial failure cannot
-// leave an unexplained empty draft. Body: { rawText, packetType }.
+// leave an unexplained empty draft. Body: { rawText }.
+//
+// The packet type the picker used to send is retired: every Sendset is created
+// under the one general path, and the column keeps its 'general' default for
+// the rows that still carry an older value.
 export async function POST(request: Request) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await request.json();
   const rawText = typeof body.rawText === "string" ? body.rawText.trim() : "";
-  const packetType = typeof body.packetType === "string" ? body.packetType : "general";
   // Only the two delimiters a file extension can actually declare. Anything
   // else is ignored rather than trusted: the hint's whole value is that it is a
   // fact about the file the professional chose, not a parameter to be believed.
@@ -67,7 +70,7 @@ export async function POST(request: Request) {
   const chunks = buildRunChunks(rawText);
   const { data, error } = await supabase.rpc("create_organize_run", {
     p_owner: session.userId,
-    p_packet_type: packetType,
+    p_packet_type: "general",
     p_slug: generateSlug(),
     p_source_text: rawText,
     p_source_hash: segmentHash(rawText),

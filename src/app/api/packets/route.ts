@@ -26,7 +26,7 @@ export async function POST(request: Request) {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await request.json();
-  const { title, clientName, packetType } = body;
+  const { title, clientName } = body;
 
   const supabase = createServerClient();
 
@@ -51,7 +51,9 @@ export async function POST(request: Request) {
       slug,
       title: title || "",
       client_name: clientName || "",
-      packet_type: packetType || "general",
+      // The vertical packet types are retired: every new Sendset is general,
+      // and the column keeps its default for rows created before that.
+      packet_type: "general",
     })
     .select()
     .single();

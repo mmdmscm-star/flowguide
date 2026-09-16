@@ -151,10 +151,16 @@ test("the UI never sends a bare close — both endings state what they discard",
 // ---------------------------------------------------------------------------
 // The shared packet path stays guarded
 // ---------------------------------------------------------------------------
-test("the chunk route skips the packet lookup for a library run", () => {
+test("the chunk route looks no packet up at all — least of all for a library run", () => {
+  // It used to read packets.packet_type to pick a prompt, guarded so a library
+  // run (which has no packet) skipped the lookup. Packet types are retired, so
+  // the lookup is gone for every run: the guard's intent, held more simply.
   const CHUNK = read("src/app/api/ingest/[runId]/chunks/[ordinal]/route.ts");
-  assert.match(CHUNK, /run\.destination === "library"/);
+  assert.doesNotMatch(CHUNK, /from\("packets"\)/, "the chunk route queries packets again");
+  assert.doesNotMatch(CHUNK, /packet_type/, "the chunk route reads a packet type again");
+  // The run still carries its destination, which downstream staging needs.
   assert.match(CHUNK, /select\("id, user_id, packet_id, destination/);
+  assert.match(CHUNK, /destination: run\.destination as string \| null/);
 });
 
 test("packet finalize refuses a library run with a readable message", () => {

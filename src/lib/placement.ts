@@ -68,7 +68,7 @@ function matchIn(hay: string, value: string, kind: string): boolean {
 // ai-prompts.ts. Nothing here is my opinion about where a fact ought to go —
 // if a rule is not stated to the model, a fact is NEEDS_JUDGEMENT, not wrong.
 //
-//   ITEM_FIELDS   URL_RULES   TYPE_GUIDANCE["senior-placement"]
+//   ITEM_FIELDS   URL_RULES
 //   "full street addresses -> address"        (packet prompts only)
 //   "monthly cost, care level, memory care, pet policy as details"  (packet only)
 //   "tour notes -> notes"                                            (packet only)
@@ -93,9 +93,10 @@ export function intendedField(opts: { label?: string; value: string }): Rule | n
   const label = (opts.label ?? "").toLowerCase();
   if (!label) return null;
 
-  // TYPE_GUIDANCE, senior placement. STATED ONLY IN THE PACKET PROMPTS — the
-  // Library import prompt carries none of it, which is the asymmetry this
-  // investigation is testing.
+  // STATED ONLY IN THE PACKET PROMPTS — the Library import prompt carries none
+  // of it, which is the asymmetry this investigation is testing. (The senior
+  // placement guidance these lines once quoted was retired with packet types;
+  // the pricing and notes rules below are still stated in the packet prompts.)
   if (/\b(cost|fee|rate|price|pricing|deposit|monthly|per month)\b/.test(label))
     return { id: "guidance:cost", expect: "details", statedIn: "packet-only" };
   if (/\b(care|memory care|level)\b/.test(label))

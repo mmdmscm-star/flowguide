@@ -33,7 +33,7 @@ export async function GET(_request: Request, context: Context) {
 const INGEST_MAX_CHARS = 200000;
 
 // POST /api/packets/:id/ingest — create a persisted, resumable ingestion run.
-// Body: { entryPoint: 'organize'|'append'|'section_append', targetSectionId?, rawText, packetType? }
+// Body: { entryPoint: 'organize'|'append'|'section_append', targetSectionId?, rawText }
 export async function POST(request: Request, context: Context) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

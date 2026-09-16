@@ -156,12 +156,6 @@ export async function POST(_request: Request, context: Context) {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) return NextResponse.json({ error: "AI service not configured" }, { status: 500 });
 
-  // DESTINATION-GUARDED. A library run has no packet, and the items-only prompt
-  // it uses takes no packet type — so this lookup is skipped entirely rather
-  // than issued with a null id and quietly returning nothing.
-  const { data: packet } = run.destination === "library"
-    ? { data: null }
-    : await supabase.from("packets").select("packet_type").eq("id", run.packet_id).maybeSingle();
   const isLead = entryPoint === "organize" && sourceStart === 0;
 
   // Acceptance-test fault injection. Inert unless FLOWGUIDE_TEST_FAULT_FILE is
@@ -192,7 +186,6 @@ export async function POST(_request: Request, context: Context) {
   } else {
     outcome = await processSegment({
       entryPoint,
-      packetType: packet?.packet_type || "general",
       isLead,
       segmentText,
       apiKey,
