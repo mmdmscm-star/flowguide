@@ -62,37 +62,52 @@ const RECIPIENT_OG_IMAGE: PreviewImage = { url: "/og-recipient.png", width: 1200
 // TEMPORARY — A DEMO-ONLY IMAGE EXPERIMENT. DELETE THIS WHOLE BLOCK when the
 // recipient card is decided.
 //
-// A real-device iMessage test showed the 1200x630 card REPEATING THE MESSAGE:
-// it says "A Sendset has been shared with you" in large type, directly above
-// metadata that now says a better version of the same thing. The card should
-// carry no message at all — the text does that.
+// ROUND 2 — ASPECT RATIO, not artwork size. Round 1 answered its question and
+// was replaced: A (1200x630) felt best because a LANDSCAPE card makes the whole
+// iMessage preview shorter, C's icon-only artwork was the quietest, and D
+// proved that shrinking the pixels alone does nothing — a 300x300 card is still
+// rendered as a square, and a square is tall.
 //
-// Four candidates, one per public demo, so a person can text all four to
-// themselves in one sitting and compare on the actual device rather than
-// across four deploys. They vary only in SIZE and COMPOSITION: whether a
-// smaller or square image makes iMessage render a compact preview instead of a
-// large one is not documented anywhere I can verify, so it is being measured
-// rather than assumed. twitter:card is deliberately NOT varied — it is the
-// other lever, and changing both at once would tell us nothing about either.
+// So these four hold the artwork roughly still and vary the SHAPE:
+//
+//   E  1200x630  icon only              the best shape from round 1, quietest art
+//   F  1200x400  icon only              shorter still
+//   G  1200x300  icon + wordmark        a band; the shortest that can be branded
+//   H  no og:image at all               the control
+//
+// H IS SAFE ONLY BECAUSE IT IS A DEMO. With no og:image some platforms fall
+// back to scraping the page for a picture, and on a real Sendset those
+// candidates are the professional's headshot, their logo and the client's own
+// item photographs. On a demo the page's images are the demo's own invented
+// interiors, so the fallback can be WATCHED rather than feared — which is the
+// point of running it as a control. It must never reach a real link.
+//
+// twitter:card is still NOT varied, for the same reason as round 1: it is the
+// other lever. Note that summary_large_image with no image is self-
+// contradictory for X, which is a known cost of H and irrelevant to iMessage,
+// the surface being measured.
 //
 // DEMOS ONLY. Every real Sendset stays on /og-recipient.png: nobody's client
 // link is an experiment, and a preview already cached by a messaging app
 // cannot be withdrawn.
-export const DEMO_EXPERIMENT: Record<string, PreviewImage> = {
-  "demo":          { url: "/og-exp-a-1200x630.png", width: 1200, height: 630 },
-  "harbor-house":  { url: "/og-exp-b-600-lockup.png", width: 600, height: 600 },
-  "month-one":     { url: "/og-exp-c-600-icon.png", width: 600, height: 600 },
-  "red-awning":    { url: "/og-exp-d-300-icon.png", width: 300, height: 300 },
+export const DEMO_EXPERIMENT: Record<string, PreviewImage | null> = {
+  "demo":          { url: "/og-exp-e-1200x630-icon.png", width: 1200, height: 630 },
+  "harbor-house":  { url: "/og-exp-f-1200x400-icon.png", width: 1200, height: 400 },
+  "month-one":     { url: "/og-exp-g-1200x300-lockup.png", width: 1200, height: 300 },
+  "red-awning":    null,
 };
 
 /** The card for a slug: a demo's experimental one, or the neutral default.
- *  Returns the default for every slug that is not in the experiment, so a
- *  real Sendset cannot reach an experimental image by any path.
+ *  `null` means the demo deliberately declares no image at all.
+ *
+ *  Returns the default for every slug that is not in the experiment, so a real
+ *  Sendset can reach neither an experimental image nor the no-image control by
+ *  any path.
  *
  *  `Object.hasOwn`, not a plain lookup: a slug of "constructor" or "toString"
  *  finds Object.prototype's member, which is truthy, and a function would then
  *  be spread into og:image. Slugs are attacker-supplied path segments. */
-export function previewImageFor(slug?: string): PreviewImage {
+export function previewImageFor(slug?: string): PreviewImage | null {
   return slug && Object.hasOwn(DEMO_EXPERIMENT, slug) ? DEMO_EXPERIMENT[slug] : RECIPIENT_OG_IMAGE;
 }
 
@@ -126,13 +141,15 @@ export function recipientMetadata(
       description: RECIPIENT_DESCRIPTION,
       siteName: "Sendset",
       type: "website",
-      images: [{ url: image.url, width: image.width, height: image.height, alt: "Sendset" }],
+      // OMITTED, not empty, when a demo declares no image: `images: []` still
+      // emits nothing but reads as an oversight rather than the control it is.
+      ...(image ? { images: [{ url: image.url, width: image.width, height: image.height, alt: "Sendset" }] } : {}),
     },
     twitter: {
       card: "summary_large_image",
       title,
       description: RECIPIENT_DESCRIPTION,
-      images: [image.url],
+      ...(image ? { images: [image.url] } : {}),
     },
   };
 }

@@ -380,21 +380,58 @@ test("each demo carries its own candidate, at the size it declares", () => {
   // card out wrongly — which is the very thing being measured, so a mismatch
   // would corrupt the experiment rather than break it visibly.
   for (const [slug, expected] of Object.entries(DEMO_EXPERIMENT_SLUGS)) {
-    const og = recipientMetadata(null, slug).openGraph as Record<string, unknown>;
-    const image = (og.images as Record<string, unknown>[])[0];
-    assert.equal(image.url, expected.url, `${slug} carries the wrong candidate`);
-    const file = join(ROOT, "public", expected.url.replace(/^\//, ""));
-    const real = pngSize(file);
-    assert.deepEqual(real, { width: expected.width, height: expected.height },
-      `${expected.url} is ${real.width}x${real.height} but declares ${expected.width}x${expected.height}`);
-    assert.equal(image.width, expected.width);
-    assert.equal(image.height, expected.height);
-    // The text still does the talking, on a demo as much as anywhere.
     const m = recipientMetadata(null, slug);
+    const og = m.openGraph as Record<string, unknown>;
+    if (expected === null) {
+      // The CONTROL: no image at all, and omitted rather than emptied.
+      assert.ok(!("images" in og), `${slug} is the no-image control but declares og:image`);
+      assert.ok(!("images" in (m.twitter as Record<string, unknown>)),
+        `${slug} is the no-image control but declares twitter:image`);
+    } else {
+      const image = (og.images as Record<string, unknown>[])[0];
+      assert.equal(image.url, expected.url, `${slug} carries the wrong candidate`);
+      const real = pngSize(join(ROOT, "public", expected.url.replace(/^\//, "")));
+      assert.deepEqual(real, { width: expected.width, height: expected.height },
+        `${expected.url} is ${real.width}x${real.height} but declares ${expected.width}x${expected.height}`);
+      assert.equal(image.width, expected.width);
+      assert.equal(image.height, expected.height);
+    }
+    // The text does the talking, on a demo as much as anywhere — and an
+    // anonymous demo says exactly this.
     assert.equal(m.title, "A Sendset has been shared with you");
     assert.equal(m.description, RECIPIENT_DESCRIPTION);
     assert.equal((m.twitter as Record<string, unknown>).card, "summary_large_image",
       "the card type was varied — the experiment is meant to isolate the image");
+  }
+});
+
+test("EXACTLY ONE demo runs the no-image control, and no real link can", () => {
+  // The control is the riskiest arm: with no og:image some platforms scrape the
+  // page for a picture. On a demo the candidates are the demo's own invented
+  // interiors. On a real Sendset they would be the professional's headshot,
+  // their logo, and the client's item photographs.
+  const withoutImage = Object.entries(DEMO_EXPERIMENT_SLUGS)
+    .filter(([, v]) => v === null).map(([k]) => k);
+  assert.deepEqual(withoutImage, ["red-awning"],
+    "the no-image control moved or spread — it must be one named demo");
+  for (const slug of ["r6cdwbk3", "32f35aj3l7dt0e7d8jl1zz", "red-awning-2", "", "constructor"]) {
+    const og = recipientMetadata({ name: "Ramona Maurer" }, slug).openGraph as Record<string, unknown>;
+    assert.ok(Array.isArray(og.images) && og.images.length === 1,
+      `${slug} lost its image — page photos, headshots and logos become scrapeable`);
+  }
+});
+
+test("the aspect ratios under test are actually DIFFERENT", () => {
+  // The round-1 finding was that pixel size alone changes nothing and shape is
+  // what matters. An experiment whose arms share a shape would repeat round 1
+  // and read as a null result.
+  const shapes = Object.values(DEMO_EXPERIMENT_SLUGS)
+    .filter((v): v is NonNullable<typeof v> => v !== null)
+    .map((v) => (v.width / v.height).toFixed(2));
+  assert.equal(new Set(shapes).size, shapes.length,
+    `two candidates share an aspect ratio: ${shapes.join(", ")}`);
+  for (const v of Object.values(DEMO_EXPERIMENT_SLUGS)) {
+    if (v) assert.ok(v.width > v.height, `${v.url} is not landscape — round 1 settled that squares are too tall`);
   }
 });
 
