@@ -120,9 +120,14 @@ export function PreviewActions({ packetId, slug, initialStatus, title, clientNam
    *  or mid-import, is refused for that next, exactly as it would have been.
    *  Nothing here can skip a blocker, because nothing here publishes.
    *
-   *  The publish route mints its own token per request (packet_publish_token),
-   *  so the freshly saved name is inside the token the database then re-checks
-   *  under the row lock. Saving first cannot race the publish that follows. */
+   *  THESE ARE TWO SEPARATE REQUESTS, and the pair is NOT atomic: anything can
+   *  happen between them. What makes that acceptable is that the publish is not
+   *  trusting this screen. It reads the Sendset's current state itself, mints
+   *  its own token (packet_publish_token) from what it read, and publish_packet
+   *  re-validates under the row lock — including the name. So a publish that
+   *  follows a save is checked against whatever is true when it runs, and a
+   *  Sendset that changed in between is refused exactly as it would be for any
+   *  other publish. */
   async function saveNameAndPublish() {
     const trimmed = name.trim();
     if (!trimmed || publishInFlight.current) return;

@@ -157,9 +157,11 @@ test("EVERY OTHER BLOCKER STILL BLOCKS, and still says why", () => {
   }
   assert.match(PREVIEW, /setError\(data\.message \|\| data\.error \|\| "Could not publish"\)/,
     "an unnamed refusal would lose the server's explanation");
-  // And the publish route still mints its own token per request, which is what
-  // makes save-then-publish safe: the name is inside the token the database
-  // re-checks under the row lock.
+  // And the publish route still reads the Sendset's state itself and mints its
+  // own token per request. That is what makes save-then-publish acceptable —
+  // NOT that the two requests are atomic, which they are not. The publish
+  // validates whatever is true when it runs, under the row lock, rather than
+  // trusting anything the share step believed a moment earlier.
   assert.match(PUBLISH_ROUTE, /rpc\("packet_publish_token"/);
   assert.match(PUBLISH_ROUTE, /p_expected_token: publishToken/);
   assert.ok(!/p_expected_token/.test(PREVIEW), "the client now carries a publish token");
