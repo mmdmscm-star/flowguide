@@ -106,18 +106,25 @@ test("an impatient double submit sends one redemption", async () => {
   };
 });
 
-test("the request form sends name, email and use case, then thanks the person", async () => {
-  reply = { ok: true, body: { ok: true, message: "Thank you — your request is in. I read these myself and will be in touch." } };
+test("the request form sends name, email and use case, then confirms without promising an email now", async () => {
+  reply = { ok: true, body: { ok: true, message: "Request received. We'll be in touch if an invite becomes available." } };
   const { host, root } = await mount(EarlyAccessForm);
+  assert.match(host.querySelector("button[type=submit]")!.textContent!, /^Request an invite$/);
+  assert.match(host.textContent!, /No email is sent now\. We\u2019ll only be in touch if an invite becomes available\./);
   await type(host.querySelector("#ea-name")!, "Jane Doe");
-  await type(host.querySelector("#ea-email")!, "jane@example.com");
+  await type(host.querySelector("#ea-email")!, " Jane@example.com ");
   await type(host.querySelector("#ea-use")!, "Sending venue options to families.");
   await submit(host);
   assert.equal(calls.length, 1);
   assert.equal(calls[0].url, "/api/early-access");
-  assert.deepEqual(calls[0].body, { name: "Jane Doe", email: "jane@example.com", useCase: "Sending venue options to families.", website: "" });
-  assert.match(host.textContent!, /Thank you — your request is in\./);
+  // An email input trims for us; the server lowercases and trims again.
+  assert.deepEqual(calls[0].body, { name: "Jane Doe", email: "Jane@example.com", useCase: "Sending venue options to families.", website: "" });
+  assert.match(host.querySelector("h2")!.textContent!, /^Request received$/);
+  // The address it was actually sent with, not whatever the box holds now.
+  assert.match(host.textContent!, /We\u2019ll contact you at Jane@example\.com if an invite becomes available\. There\u2019s nothing else you need to do\./);
   assert.equal(host.querySelector("form"), null, "the form is replaced by the answer");
+  const links = [...host.querySelectorAll("a")].map((a) => `${a.textContent} → ${a.getAttribute("href")}`);
+  assert.deepEqual(links, ["Sign in → /login", "Continue with email → /login"], "both ways in must survive the confirmation");
   root.unmount();
 });
 
@@ -133,13 +140,13 @@ test("the honeypot is hidden from people and from assistive technology", async (
 });
 
 test("a refused request keeps what was typed and says why", async () => {
-  reply = { ok: false, body: { error: "rate_limited", message: "You've already sent a request — I have it, and I'll be in touch." } };
+  reply = { ok: false, body: { error: "rate_limited", message: "Too many requests just now. Please try again a little later." } };
   const { host, root } = await mount(EarlyAccessForm);
   await type(host.querySelector("#ea-name")!, "Jane");
   await type(host.querySelector("#ea-email")!, "jane@example.com");
   await type(host.querySelector("#ea-use")!, "Venues");
   await submit(host);
-  assert.match(alertText(host), /already sent a request/);
+  assert.match(alertText(host), /Too many requests just now/);
   assert.equal((host.querySelector("#ea-use") as HTMLTextAreaElement).value, "Venues", "the answer they wrote was thrown away");
   root.unmount();
 });

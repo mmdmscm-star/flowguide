@@ -7,6 +7,9 @@ const FIELD = "w-full rounded-lg border border-border bg-white px-3.5 py-2.5 tex
 
 export function EarlyAccessForm() {
   const [form, setForm] = useState({ name: "", email: "", useCase: "", website: "" });
+  // The address the request was actually sent with, so the confirmation names
+  // what was submitted rather than whatever the box holds afterwards.
+  const [sentTo, setSentTo] = useState("");
   const [state, setState] = useState<"idle" | "sending" | "sent">("idle");
   const [error, setError] = useState("");
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
@@ -29,6 +32,7 @@ export function EarlyAccessForm() {
         setState("idle");
         return;
       }
+      setSentTo(form.email.trim());
       setState("sent");
     } catch {
       setError("Something went wrong. Please try again.");
@@ -39,12 +43,20 @@ export function EarlyAccessForm() {
   if (state === "sent") {
     return (
       <div>
-        <p className="text-base text-foreground">
-          Thank you — your request is in. I read these myself and will be in touch.
+        <h2 className="text-lg font-semibold text-foreground">Request received</h2>
+        {/* Says plainly that nothing arrives now: the only email is an invite,
+            and only if one becomes available. */}
+        <p className="mt-2 text-base text-muted">
+          We&rsquo;ll contact you at <span className="font-medium text-foreground">{sentTo}</span>{" "}
+          if an invite becomes available. There&rsquo;s nothing else you need to do.
         </p>
         <p className="mt-6 text-sm text-muted">
           Already have an account?{" "}
           <Link href="/login" className="font-medium text-accent underline-offset-4 hover:underline">Sign in</Link>
+        </p>
+        <p className="mt-2 text-sm text-muted">
+          Already have an invite code?{" "}
+          <Link href="/login" className="font-medium text-accent underline-offset-4 hover:underline">Continue with email</Link>
         </p>
       </div>
     );
@@ -72,12 +84,20 @@ export function EarlyAccessForm() {
 
       <button type="submit" disabled={state === "sending"}
         className="mt-6 w-full rounded-lg bg-accent px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-60">
-        {state === "sending" ? "Sending…" : "Request early access"}
+        {state === "sending" ? "Sending…" : "Request an invite"}
       </button>
+
+      <p className="mt-3 text-center text-sm text-muted">
+        No email is sent now. We&rsquo;ll only be in touch if an invite becomes available.
+      </p>
 
       <p className="mt-6 text-center text-sm text-muted">
         Already have an account?{" "}
         <Link href="/login" className="font-medium text-accent underline-offset-4 hover:underline">Sign in</Link>
+      </p>
+      <p className="mt-2 text-center text-sm text-muted">
+        Already have an invite code?{" "}
+        <Link href="/login" className="font-medium text-accent underline-offset-4 hover:underline">Continue with email</Link>
       </p>
     </form>
   );

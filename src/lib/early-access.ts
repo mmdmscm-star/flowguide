@@ -11,14 +11,14 @@
 export type EarlyAccessInput = { name?: unknown; email?: unknown; useCase?: unknown; website?: unknown };
 export type EarlyAccessRequest = { name: string; email: string; useCase: string };
 export type EarlyAccessOutcome =
-  | { status: 200; stored: boolean }
+  | { status: 200; stored: boolean; replaced?: number }
   | { status: 400; error: "invalid"; message: string }
   | { status: 429; error: "rate_limited"; message: string }
   | { status: 503; error: "unavailable"; message: string };
 
 export const MAX_PER_EMAIL_PER_DAY = 3;
 export const MAX_PER_HOUR = 30;
-export const THANKS = "Thank you — your request is in. I read these myself and will be in touch.";
+export const THANKS = "Request received. We'll be in touch if an invite becomes available.";
 
 const text = (v: unknown) => (typeof v === "string" ? v.trim() : "");
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -49,9 +49,19 @@ export function notificationEmail(r: EarlyAccessRequest): { subject: string; htm
 type Db = any;
 
 /**
- * Store one request. A honeypot hit is answered exactly like a real submission
- * and stored nowhere. Limits are per email per day and overall per hour — small
- * enough to be a speed bump, not an anti-abuse system.
+ * Store one request — ONE ROW PER EMAIL.
+ *
+ * Someone who submits twice (a reload, a second thought, a better answer) is not
+ * two requests to review. The newest submission replaces the older ones for that
+ * email: the row is inserted first, then earlier rows for the same address are
+ * removed, so a failure part-way leaves a request on file rather than none. The
+ * table has no unique index and the service role cannot UPDATE it, so this is
+ * the local way to keep review clean; two submissions landing in the same
+ * instant could still leave two rows, which review can read as one.
+ *
+ * A honeypot hit is answered exactly like a real submission and stored nowhere.
+ * Someone who keeps resubmitting past the daily limit is told the same thing as
+ * everyone else — their request is on file — and nothing is written.
  */
 export async function storeEarlyAccessRequest(db: Db, input: EarlyAccessInput): Promise<EarlyAccessOutcome> {
   if (text(input.website)) return { status: 200, stored: false };   // a person never sees this field
@@ -64,7 +74,8 @@ export async function storeEarlyAccessRequest(db: Db, input: EarlyAccessInput): 
     .eq("email", value.email).gte("created_at", since(24 * 60 * 60 * 1000));
   if (mine.error) return { status: 503, error: "unavailable", message: "Something went wrong. Please try again in a moment." };
   if ((mine.count ?? 0) >= MAX_PER_EMAIL_PER_DAY) {
-    return { status: 429, error: "rate_limited", message: "You've already sent a request — I have it, and I'll be in touch." };
+    // Their request is already on file: the honest answer is the ordinary one.
+    return { status: 200, stored: false };
   }
   const all = await db.from("early_access_requests").select("id", { count: "exact", head: true })
     .gte("created_at", since(60 * 60 * 1000));
@@ -72,8 +83,13 @@ export async function storeEarlyAccessRequest(db: Db, input: EarlyAccessInput): 
   if ((all.count ?? 0) >= MAX_PER_HOUR) {
     return { status: 429, error: "rate_limited", message: "Too many requests just now. Please try again a little later." };
   }
+  const now = new Date().toISOString();
 
   const { error } = await db.from("early_access_requests").insert({ name: value.name, email: value.email, use_case: value.useCase });
   if (error) return { status: 503, error: "unavailable", message: "Something went wrong. Please try again in a moment." };
-  return { status: 200, stored: true };
+
+  // Now the older ones. A failure here costs a duplicate in review, never the request.
+  const older = await db.from("early_access_requests").delete().eq("email", value.email).lt("created_at", now).select("id");
+  const replaced = older.error ? 0 : (older.data?.length ?? 0);
+  return { status: 200, stored: true, replaced };
 }

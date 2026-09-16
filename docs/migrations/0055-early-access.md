@@ -36,6 +36,15 @@ after it was sent), sets the httpOnly `flowguide_signup` cookie and redirects to
 code from the request body, calls `redeem_invite` and starts the session.
 `/early-access` stores one request row, then best-effort notifies the owner.
 
+## One row per email
+
+The request form is idempotent for review: a new submission is inserted, then
+earlier rows for the same address are deleted, so the newest answer is the one
+on file. The table has no unique index and the service role cannot UPDATE it, so
+this is done in `storeEarlyAccessRequest` — insert first, tidy after, so a
+failure leaves a request rather than none. Past the daily limit nothing is
+written and the person is told the ordinary thing: their request is on file.
+
 ## Using it
 
 ```bash

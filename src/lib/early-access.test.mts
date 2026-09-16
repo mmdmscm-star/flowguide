@@ -46,23 +46,39 @@ test("only the hash leaves this file, and it is the hash of the normalised code"
 
 // ---------------------------------------------------------------------------
 type Row = Record<string, unknown>;
-function fakeDb(rows: Row[] = [], { failCount = false, failInsert = false } = {}) {
+function fakeDb(rows: Row[] = [], { failCount = false, failInsert = false, failDelete = false } = {}) {
   const inserted: Row[] = [];
   const counted: { email?: string; since?: string }[] = [];
+  const store = [...rows];
   const db = {
-    inserted, counted,
+    inserted, counted, store,
     from() {
-      let filtered = [...rows];
+      let filtered = [...store];
       let email: string | undefined;
+      let deleting = false;
       const q = {
-        select: (_cols: string, opts?: { count?: string; head?: boolean }) => { void opts; return q; },
+        select: (_cols?: string, opts?: { count?: string; head?: boolean }) => {
+          void opts;
+          if (!deleting) return q;
+          if (failDelete) return Promise.resolve({ data: null, error: { message: "down" } });
+          const gone = filtered;
+          for (const r of gone) store.splice(store.indexOf(r), 1);
+          return Promise.resolve({ data: gone.map((_, i) => ({ id: `gone-${i}` })), error: null });
+        },
+        delete: () => { deleting = true; return q; },
         eq: (col: string, v: string) => { if (col === "email") { email = v; filtered = filtered.filter((r) => r.email === v); } return q; },
+        lt: (col: string, v: string) => { filtered = filtered.filter((r) => String(r[col]) < v); return q; },
         gte: (col: string, v: string) => {
           filtered = filtered.filter((r) => String(r[col]) >= v);
           counted.push({ email, since: v });
           return Promise.resolve(failCount ? { count: null, error: { message: "down" } } : { count: filtered.length, error: null });
         },
-        insert: async (row: Row) => { if (failInsert) return { error: { message: "down" } }; inserted.push(row); return { error: null }; },
+        insert: async (row: Row) => {
+          if (failInsert) return { error: { message: "down" } };
+          inserted.push(row);
+          store.push({ ...row, created_at: new Date().toISOString() });
+          return { error: null };
+        },
       };
       return q;
     },
@@ -74,8 +90,25 @@ const ago = (ms: number) => new Date(Date.now() - ms).toISOString();
 
 test("a good request is stored once, trimmed, with the email lowercased", async () => {
   const db = fakeDb();
-  assert.deepEqual(await storeEarlyAccessRequest(db as never, REQUEST), { status: 200, stored: true });
+  assert.deepEqual(await storeEarlyAccessRequest(db as never, REQUEST), { status: 200, stored: true, replaced: 0 });
   assert.deepEqual(db.inserted, [{ name: "Jane Doe", email: "jane@example.com", use_case: "Sending venue options to families." }]);
+});
+
+test("submitting again replaces the earlier request: one row per email to review", async () => {
+  const db = fakeDb([{ email: "jane@example.com", use_case: "First answer", created_at: ago(60_000) }]);
+  const out = await storeEarlyAccessRequest(db as never, { ...REQUEST, useCase: "A better answer" });
+  assert.deepEqual(out, { status: 200, stored: true, replaced: 1 });
+  assert.deepEqual(db.store.map((r) => r.use_case), ["A better answer"], "review is left with one row, the newest");
+  // Somebody else's request is untouched.
+  const shared = fakeDb([{ email: "other@example.com", use_case: "Theirs", created_at: ago(60_000) }]);
+  await storeEarlyAccessRequest(shared as never, REQUEST);
+  assert.deepEqual(shared.store.map((r) => r.email).sort(), ["jane@example.com", "other@example.com"]);
+});
+
+test("if the tidy-up fails, the request still stands", async () => {
+  const db = fakeDb([{ email: "jane@example.com", use_case: "First", created_at: ago(60_000) }], { failDelete: true });
+  assert.deepEqual(await storeEarlyAccessRequest(db as never, REQUEST), { status: 200, stored: true, replaced: 0 });
+  assert.equal(db.inserted.length, 1, "the new request was written before the old ones were removed");
 });
 
 test("what the form refuses, and in the person's words", async () => {
@@ -100,15 +133,19 @@ test("what the form refuses, and in the person's words", async () => {
 test("the honeypot is answered like any request and stored nowhere", async () => {
   const db = fakeDb();
   assert.deepEqual(await storeEarlyAccessRequest(db as never, { ...REQUEST, website: "https://spam.example" }), { status: 200, stored: false });
+  void MAX_PER_EMAIL_PER_DAY;
   assert.deepEqual(db.inserted, []);
   assert.deepEqual(db.counted, [], "a bot's submission should not even cost a query");
 });
 
 test("small limits: per email per day, and overall per hour", async () => {
+  // Past the daily limit the person is told the ordinary thing — their request
+  // IS on file — and nothing more is written.
   const mine = Array.from({ length: MAX_PER_EMAIL_PER_DAY }, () => ({ email: "jane@example.com", created_at: ago(60_000) }));
-  const perEmail = await storeEarlyAccessRequest(fakeDb(mine) as never, REQUEST);
-  assert.equal(perEmail.status, 429);
-  assert.match((perEmail as { message: string }).message, /already sent a request/);
+  const db = fakeDb(mine);
+  assert.deepEqual(await storeEarlyAccessRequest(db as never, REQUEST), { status: 200, stored: false });
+  assert.deepEqual(db.inserted, []);
+  assert.equal(db.store.length, MAX_PER_EMAIL_PER_DAY, "an extra submission must not delete what is on file");
 
   const others = Array.from({ length: MAX_PER_HOUR }, (_, i) => ({ email: `p${i}@example.com`, created_at: ago(60_000) }));
   const perHour = await storeEarlyAccessRequest(fakeDb(others) as never, REQUEST);
@@ -116,7 +153,7 @@ test("small limits: per email per day, and overall per hour", async () => {
   assert.match((perHour as { message: string }).message, /try again a little later/);
 
   const stale = Array.from({ length: MAX_PER_HOUR }, (_, i) => ({ email: `p${i}@example.com`, created_at: ago(2 * 60 * 60 * 1000) }));
-  assert.deepEqual(await storeEarlyAccessRequest(fakeDb(stale) as never, REQUEST), { status: 200, stored: true }, "yesterday's requests still count against today");
+  assert.deepEqual(await storeEarlyAccessRequest(fakeDb(stale) as never, REQUEST), { status: 200, stored: true, replaced: 0 }, "yesterday's requests still count against today");
 });
 
 test("a database that cannot answer says so instead of pretending", async () => {
@@ -194,10 +231,27 @@ test("the early-access route stores first and notifies best-effort", () => {
   assert.match(route, /return NextResponse\.json\(\{ ok: true, message: THANKS \}\);\s*\}\s*$/, "the answer is the same whether or not the note was sent");
 });
 
+test("the request page speaks for the product, and says no email is coming now", () => {
+  const page = read("src/app/early-access/page.tsx");
+  const form = read("src/components/early-access-form.tsx");
+  assert.match(page, />Request an invite</);
+  assert.match(page, /Sendset is currently in early access\. Tell us a little about how you&rsquo;d\s+use it, and we&rsquo;ll review your request\./);
+  assert.match(form, /\{state === "sending" \? "Sending…" : "Request an invite"\}/);
+  assert.match(form, /<h2 [^>]*>Request received<\/h2>/);
+  assert.match(form, /We&rsquo;ll contact you at <span[^>]*>\{sentTo\}<\/span>\{" "\}\s+if an invite becomes available\. There&rsquo;s nothing else you need to do\./);
+  assert.match(form, /No email is sent now\. We&rsquo;ll only be in touch if an invite becomes available\./);
+  assert.equal((form.match(/Already have an account\?/g) ?? []).length, 2, "the sign-in path must be on the form and on the confirmation");
+  assert.equal((form.match(/Already have an invite code\?\{" "\}\s+<Link href="\/login"[^>]*>Continue with email<\/Link>/g) ?? []).length, 2,
+    "someone holding a code needs the way in, before and after submitting");
+  // First-person singular is gone from this surface.
+  for (const banned of [/\bI&rsquo;m\b/, /\bI read these\b/, /\bI&rsquo;ll be in touch\b/, /\bI have it\b/]) {
+    assert.doesNotMatch(page + form + read("src/lib/early-access.ts"), banned, `first-person copy remains: ${banned}`);
+  }
+});
+
 test("the copy says what it should, and the ways in are where they should be", () => {
   assert.match(read("src/app/join/page.tsx"), /Sendset is currently in early access\. Enter your invite code to continue\./);
   assert.match(read("src/components/join-form.tsx"), /Don&rsquo;t have a code\?\{" "\}[\s\S]{0,200}Request early access\./);
-  assert.match(read("src/app/early-access/page.tsx"), /I&rsquo;m opening Sendset gradually while I work closely with the first users\./);
   const home = read("src/app/page.tsx");
   assert.equal((home.match(/Request early access/g) ?? []).length, 2, "both homepage actions should lead to early access");
   assert.equal((home.match(/href="\/early-access"/g) ?? []).length, 2);
