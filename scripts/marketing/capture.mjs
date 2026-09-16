@@ -295,6 +295,11 @@ async function main() {
 
     // ---- the two compositions -----------------------------------------------
     const b64 = (f) => `data:image/png;base64,${readFileSync(join(WORK, f)).toString("base64")}`;
+    /** A brand asset, read from THIS script's directory rather than the capture
+     *  workspace: it is checked in, not screenshotted. Inlined so the headless
+     *  page needs no server to fetch it. */
+    const svg64 = (f) =>
+      `data:image/svg+xml;base64,${readFileSync(join(HERE, f)).toString("base64")}`;
 
     // COMPOSED AT ITS DISPLAY SIZE, TWICE.
     //
@@ -355,14 +360,26 @@ async function main() {
     });
 
     // The link-preview card. Big type, one artifact, nothing to squint at.
+    //
+    // THE HEADLINE IS THE HOMEPAGE'S OWN. It used to say "One guide your client
+    // can actually use." — written before the object had a name, and left
+    // behind when the page stopped saying "guide", because a sentence inside a
+    // JPEG is invisible to the test that forbids the word everywhere else.
+    // Whoever changes the h1 on the landing page should run this again.
+    //
+    // THE MARK IS THE SUPPLIED ARTWORK, not a letterspaced word. It replaces a
+    // typographic "SENDSET" that predated the logo; it is inlined from the SVG
+    // file rather than redrawn, and it is the only place the capture uses a
+    // brand asset.
     writeFileSync(join(WORK, "og.html"), composition({
       css, width: 1200, height: 630,
       body: `<div style="position:relative;width:1200px;height:630px;overflow:hidden">
         <div style="position:absolute;left:0;top:0;bottom:0;width:14px;background:var(--color-accent)"></div>
-        <div style="padding:96px 0 0 84px;max-width:620px">
-          <p style="margin:0 0 26px;font-size:22px;font-weight:600;letter-spacing:.18em;color:var(--color-muted)">SENDSET</p>
-          <p style="margin:0;font-size:56px;line-height:1.12;font-weight:700;letter-spacing:-.02em;color:var(--color-foreground)">
-            One guide your client<br>can actually use.</p>
+        <div style="padding:104px 0 0 84px;max-width:620px">
+          <img src="${svg64("brand/sendset-logo-horizontal.svg")}" alt="Sendset"
+               style="display:block;height:44px;width:auto;margin:0 0 30px">
+          <p style="margin:0;font-size:46px;line-height:1.14;font-weight:700;letter-spacing:-.02em;color:var(--color-foreground)">
+            Turn what you have into<br>something worth opening.</p>
           <p style="margin:28px 0 0;font-size:25px;line-height:1.45;color:var(--color-muted)">
             Link, message, email or print &mdash; built once.</p>
         </div>
