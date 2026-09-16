@@ -18,12 +18,31 @@ import type { Metadata } from "next";
 // So `openGraph` and `twitter` are declared here IN FULL. Declaring them
 // partially would re-inherit the rest.
 //
-// WHAT THE PREVIEW SAYS IS NOW THE SENDER'S NAME, AND NOTHING ELSE ABOUT THE
-// SENDSET. "A Sendset has been shared with you" is safe but anonymous: a
-// client who gets a link from an advisor they already know has no reason to
-// trust it more than any other link in a text message. The sender is the one
-// fact that helps and costs nothing — the professional already signs the page,
-// already chose to send it, and the recipient already knows who they are.
+// THE PREVIEW SAYS WHO SENT IT, AND NOTHING ELSE ABOUT THE SENDSET. "A Sendset
+// has been shared with you" is safe but anonymous: a client who gets a link
+// from an advisor they already know has no reason to trust it more than any
+// other link in a text message. The sender is the one fact that helps and
+// costs nothing — the professional already signs the page, already chose to
+// send it, and the recipient already knows who they are.
+//
+// A DISPLAY IDENTITY, NOT A VERIFIED ONE. The name is whatever the
+// professional typed into their own profile. Nothing here may say or imply
+// that it has been checked, because it has not been.
+//
+// THERE IS NO IMAGE, and that is the decision three rounds of real-device
+// testing arrived at. The card used to be 1200x630 and it REPEATED THE
+// MESSAGE, saying "A Sendset has been shared with you" in large type directly
+// above metadata that said a better version of the same thing. Shrinking it
+// did nothing: a square is tall whatever its pixel count. Declaring no image
+// at all is what produced the small, quiet preview — iMessage and WhatsApp
+// both fall back to the site icon, and NEITHER scraped the page for a
+// photograph, which was the risk that kept an explicit image here for so long.
+// In WhatsApp the explicit-image arm was actively worse: a slivered crop that
+// recreated the intrusiveness the whole exercise was removing.
+//
+// `twitter:card` is `summary`, not `summary_large_image`: a large-image card
+// with no image is self-contradictory, and `summary` is the compact form that
+// matches what is actually declared.
 //
 // WHAT MAY NEVER REACH A PREVIEW, and the reason it is a TYPE and not a habit:
 // this module accepts `SenderIdentity` and nothing else. A client title, a
@@ -34,13 +53,8 @@ import type { Metadata } from "next";
 // thread after the Sendset is unpublished. `robots: noindex` does not govern
 // unfurl bots.
 //
-// THE IMAGE IS STILL ONE STATIC NEUTRAL ASSET. Per-Sendset cards are
-// deliberately not built — a generated image is a way to bake private content
-// into a cache we cannot retract. Removing the image entirely was considered
-// and refused: several platforms fall back to scraping the page for a picture
-// when og:image is absent, and the candidates on a recipient page are the
-// professional's headshot, their logo and the client's own item photographs.
-// An explicit neutral card is the only answer that stays OURS.
+// NO PER-SENDSET IMAGE ROUTE, still and separately. A generated card is a way
+// to bake private content into a cache we cannot retract.
 //
 // `og:url` is deliberately absent. Emitting the Sendset URL would be redundant
 // (it is the link being shared) and emitting anything else would be wrong —
@@ -55,123 +69,18 @@ export type SenderIdentity = { name?: string; businessName?: string };
 export const RECIPIENT_DESCRIPTION = "View on Sendset.";
 export const RECIPIENT_TITLE_ANONYMOUS = "A Sendset has been shared with you";
 
-export type PreviewImage = { url: string; width: number; height: number };
-const RECIPIENT_OG_IMAGE: PreviewImage = { url: "/og-recipient.png", width: 1200, height: 630 };
-
-// ---------------------------------------------------------------------------
-// TEMPORARY — A DEMO-ONLY IMAGE EXPERIMENT. DELETE THIS WHOLE BLOCK when the
-// recipient card is decided.
-//
-// ROUND 3 — SENDER-NAME LENGTH, against the shape that won.
-//
-// Rounds 1 and 2 settled the image: a square is tall whatever its pixel count,
-// landscape is shorter, and NO image at all is shortest. The compact no-image
-// preview is the preferred direction, so the remaining unknown is the only
-// thing left in it that varies — the length of the sender's name.
-//
-// Three demos, all emitting the same H-shape (no og:image, no twitter:image),
-// differing ONLY in how long the title is:
-//
-//   /p/demo          short      "Ramona shared a Sendset with you"
-//   /p/harbor-house  long       a double-barrelled full name
-//   /p/month-one     very long  a title + double-barrelled surname
-//
-// What is being read off the phone: whether the title wraps to two or three
-// lines, whether iMessage truncates it, and whether the compact preview still
-// feels small when the name is long.
-//
-// EVERY NAME HERE IS INVENTED, and the first draft was not: it used a real
-// public figure as the long sample. These pages are publicly reachable, and
-// one of them then said a named living person had shared something they had
-// never seen. A length fixture needs a plausible shape, not a real person.
-//
-// THE TITLE HERE IS A FIXTURE, NOT THE PRODUCT'S WORDING. Real Sendsets still
-// say "<sender> shared this with you" through recipientTitle; nothing about
-// sender-name logic changes, and no first-name-only rule exists. These strings
-// exist to stress a layout, and they leave when the experiment does.
-//
-// /p/red-awning drops out of the experiment and returns to the normal card, so
-// exactly three URLs are under test.
-//
-// ROUND 2 — ASPECT RATIO, not artwork size. Round 1 answered its question and
-// was replaced: A (1200x630) felt best because a LANDSCAPE card makes the whole
-// iMessage preview shorter, C's icon-only artwork was the quietest, and D
-// proved that shrinking the pixels alone does nothing — a 300x300 card is still
-// rendered as a square, and a square is tall.
-//
-// So these four hold the artwork roughly still and vary the SHAPE:
-//
-//   E  1200x630  icon only              the best shape from round 1, quietest art
-//   F  1200x400  icon only              shorter still
-//   G  1200x300  icon + wordmark        a band; the shortest that can be branded
-//   H  no og:image at all               the control
-//
-// H IS SAFE ONLY BECAUSE IT IS A DEMO. With no og:image some platforms fall
-// back to scraping the page for a picture, and on a real Sendset those
-// candidates are the professional's headshot, their logo and the client's own
-// item photographs. On a demo the page's images are the demo's own invented
-// interiors, so the fallback can be WATCHED rather than feared — which is the
-// point of running it as a control. It must never reach a real link.
-//
-// twitter:card is still NOT varied, for the same reason as round 1: it is the
-// other lever. Note that summary_large_image with no image is self-
-// contradictory for X, which is a known cost of H and irrelevant to iMessage,
-// the surface being measured.
-//
-// DEMOS ONLY. Every real Sendset stays on /og-recipient.png: nobody's client
-// link is an experiment, and a preview already cached by a messaging app
-// cannot be withdrawn.
-/** One arm: the card (null = declare none) and, for round 3, the title fixture
- *  that stands in for a sender of that length. */
-export type DemoPreview = { image: PreviewImage | null; title?: string };
-
-export const DEMO_EXPERIMENT: Record<string, DemoPreview> = {
-  "demo": { image: null, title: "Ramona shared a Sendset with you" },
-  "harbor-house": { image: null, title: "Marcus Thorneberry-Diaz shared a Sendset with you" },
-  "month-one": { image: null, title: "Dr. Annabelle Fitzwilliam-Castellanos shared a Sendset with you" },
-};
-
-/** The card for a slug: a demo's experimental one, or the neutral default.
- *  `null` means the demo deliberately declares no image at all.
- *
- *  Returns the default for every slug that is not in the experiment, so a real
- *  Sendset can reach neither an experimental image nor the no-image control by
- *  any path.
- *
- *  `Object.hasOwn`, not a plain lookup: a slug of "constructor" or "toString"
- *  finds Object.prototype's member, which is truthy, and a function would then
- *  be spread into og:image. Slugs are attacker-supplied path segments. */
-export function demoPreviewFor(slug?: string): DemoPreview | null {
-  return slug && Object.hasOwn(DEMO_EXPERIMENT, slug) ? DEMO_EXPERIMENT[slug] : null;
-}
-
-export function previewImageFor(slug?: string): PreviewImage | null {
-  const arm = demoPreviewFor(slug);
-  return arm ? arm.image : RECIPIENT_OG_IMAGE;
-}
-
 /** A person's name first, their business second, and an unsigned Sendset last.
  *
  *  The fallback is not decoration: 8 of the 33 Sendsets published before this
- *  was written carry neither name nor business name, so the anonymous title is
- *  a live path, not a defensive one. */
+ *  was written chose "No sender" in the editor, so the anonymous title is a
+ *  deliberate choice being honoured, not missing data being papered over. */
 export function recipientTitle(sender: SenderIdentity | null | undefined): string {
   const who = sender?.name?.trim() || sender?.businessName?.trim() || "";
-  return who ? `${who} shared this with you` : RECIPIENT_TITLE_ANONYMOUS;
+  return who ? `${who} shared a Sendset with you` : RECIPIENT_TITLE_ANONYMOUS;
 }
 
-export function recipientMetadata(
-  sender: SenderIdentity | null | undefined,
-  /** The slug, used ONLY to pick the card — never to say anything about the
-   *  Sendset. It selects from a fixed map of demo slugs and falls back to the
-   *  neutral image, so it cannot put a slug into a tag. */
-  slug?: string,
-): Metadata {
-  // A demo's title fixture, else the product's real wording. The override is
-  // reachable only from the fixed demo map, so no Sendset can be given a title
-  // that did not come from recipientTitle.
-  const title = demoPreviewFor(slug)?.title ?? recipientTitle(sender);
-  const image = previewImageFor(slug);
+export function recipientMetadata(sender: SenderIdentity | null | undefined): Metadata {
+  const title = recipientTitle(sender);
   return {
     title,
     description: RECIPIENT_DESCRIPTION,
@@ -183,15 +92,11 @@ export function recipientMetadata(
       description: RECIPIENT_DESCRIPTION,
       siteName: "Sendset",
       type: "website",
-      // OMITTED, not empty, when a demo declares no image: `images: []` still
-      // emits nothing but reads as an oversight rather than the control it is.
-      ...(image ? { images: [{ url: image.url, width: image.width, height: image.height, alt: "Sendset" }] } : {}),
     },
     twitter: {
-      card: "summary_large_image",
+      card: "summary",
       title,
       description: RECIPIENT_DESCRIPTION,
-      ...(image ? { images: [image.url] } : {}),
     },
   };
 }

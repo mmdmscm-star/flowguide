@@ -45,9 +45,17 @@ test("EVERY FILE THE PAGE ASKS FOR EXISTS", () => {
   assert.ok(!/["']\/og\.png["']/.test(layout),
     "metadata still points at the compatibility asset rather than /og.jpg");
   assert.match(layout, /["']\/og\.jpg["']/, "metadata does not point at the new card");
-  // The RECIPIENT card — a different asset with a different job — is untouched.
+  // THE RECIPIENT CARD IS NOW A COMPATIBILITY ASSET, exactly like /og.png
+  // above it. Recipient links declare no og:image at all — real-device testing
+  // showed the small, imageless preview is the right one — but every messaging
+  // app that unfurled a Sendset before that change is holding this URL and will
+  // not re-crawl on our schedule. Deleting the file turns those previews, in
+  // threads already sent to clients, into a broken image. So it stays: served,
+  // and referenced by nothing.
   assert.ok(existsSync(join(ROOT, "public/og-recipient.png")),
-    "the neutral recipient card was deleted; a private link would inherit the marketing one");
+    "the superseded recipient card was deleted; previews already sent to clients would break");
+  assert.ok(!/og-recipient/.test(raw("src/lib/recipient-metadata.ts")),
+    "recipient metadata points at an image again");
 });
 
 test("THE PAGE CAN AFFORD THEM", () => {

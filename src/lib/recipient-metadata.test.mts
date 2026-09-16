@@ -1,13 +1,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { recipientMetadata, recipientTitle, RECIPIENT_DESCRIPTION,
-         DEMO_EXPERIMENT as DEMO_EXPERIMENT_SLUGS } from "./recipient-metadata.ts";
-import { PUBLIC_DEMOS } from "./public-demos.ts";
+import { readFileSync, readdirSync } from "node:fs";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+import { recipientMetadata, recipientTitle, RECIPIENT_DESCRIPTION } from "./recipient-metadata.ts";
 import { buildPublicationSnapshot, publishedSenderIdentity } from "./queries.ts";
 import { resolvePublishIdentity } from "./publish-identity.ts";
 
 const codeOf = (p: string) => readFileSync(p, "utf8");
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const RECIPIENT_ROUTES = ["src/app/p/[slug]/page.tsx", "src/app/p/[slug]/print/page.tsx"];
 
 /** The exact strings that reached a client's text message. Kept verbatim even
@@ -56,12 +57,12 @@ const PRIVATE = {
 // ---------------------------------------------------------------------------
 
 test("the sender's name leads, their business is the fallback, and neither is required", () => {
-  assert.equal(recipientTitle({ name: "Ramona Maurer" }), "Ramona Maurer shared this with you");
+  assert.equal(recipientTitle({ name: "Ramona Maurer" }), "Ramona Maurer shared a Sendset with you");
   assert.equal(recipientTitle({ businessName: "Harbor House Advisors" }),
-    "Harbor House Advisors shared this with you");
+    "Harbor House Advisors shared a Sendset with you");
   // A name WINS over a business name; both present must not concatenate.
   assert.equal(recipientTitle({ name: "Ramona Maurer", businessName: "Harbor House Advisors" }),
-    "Ramona Maurer shared this with you");
+    "Ramona Maurer shared a Sendset with you");
   assert.equal(recipientTitle(null), "A Sendset has been shared with you");
   assert.equal(recipientTitle({}), "A Sendset has been shared with you");
   assert.equal(RECIPIENT_DESCRIPTION, "View on Sendset.");
@@ -70,7 +71,7 @@ test("the sender's name leads, their business is the fallback, and neither is re
 test("an unsigned Sendset is ANONYMOUS, not blank", () => {
   // 8 of the 33 publications live when this was written carry neither field,
   // so whitespace and empty strings are a real path, not a hypothetical. The
-  // failure being guarded is " shared this with you".
+  // failure being guarded is " shared a Sendset with you".
   for (const sender of [{ name: "" }, { name: "   " }, { businessName: " " },
                         { name: "  ", businessName: "" }, undefined]) {
     assert.equal(recipientTitle(sender), "A Sendset has been shared with you",
@@ -83,9 +84,9 @@ test("the title is carried into BOTH cards, not just the document", () => {
   const m = recipientMetadata({ name: "Ramona Maurer" });
   const og = m.openGraph as Record<string, unknown>;
   const tw = m.twitter as Record<string, unknown>;
-  assert.equal(m.title, "Ramona Maurer shared this with you");
-  assert.equal(og.title, "Ramona Maurer shared this with you");
-  assert.equal(tw.title, "Ramona Maurer shared this with you");
+  assert.equal(m.title, "Ramona Maurer shared a Sendset with you");
+  assert.equal(og.title, "Ramona Maurer shared a Sendset with you");
+  assert.equal(tw.title, "Ramona Maurer shared a Sendset with you");
   assert.equal(og.description, RECIPIENT_DESCRIPTION);
   assert.equal(tw.description, RECIPIENT_DESCRIPTION);
 });
@@ -111,7 +112,7 @@ test("NOTHING PRIVATE REACHES A PREVIEW, even when a caller hands it over", () =
   }
   // And the one thing that SHOULD be there still is — otherwise this test
   // passes on a builder that emits nothing at all.
-  assert.ok(serialized.includes("Ramona Maurer shared this with you"),
+  assert.ok(serialized.includes("Ramona Maurer shared a Sendset with you"),
     "the sender's name is missing; this test would pass on an empty object");
 });
 
@@ -254,21 +255,21 @@ test("every Sender choice resolves into the title the professional asked for", a
 
   const cases: { choice: string; packet: Row; profile: unknown; skip?: boolean; title: string }[] = [
     { choice: "My default profile", packet: { id: "p1", identity_mode: "default" },
-      profile: PROFILE, title: "Ramona Maurer shared this with you" },
+      profile: PROFILE, title: "Ramona Maurer shared a Sendset with you" },
     { choice: "No sender", packet: { id: "p1", identity_mode: "none" },
       profile: PROFILE, title: "A Sendset has been shared with you" },
     { choice: "Custom organization", packet: { id: "p1", identity_mode: "custom", custom_identity: CUSTOM },
-      profile: PROFILE, title: "Mona Okafor shared this with you" },
+      profile: PROFILE, title: "Mona Okafor shared a Sendset with you" },
     // A custom sender is free to be an organisation and no person at all.
     { choice: "Custom, business only",
       packet: { id: "p1", identity_mode: "custom", custom_identity: { businessName: "Okafor Placement Partners" } },
-      profile: PROFILE, title: "Okafor Placement Partners shared this with you" },
+      profile: PROFILE, title: "Okafor Placement Partners shared a Sendset with you" },
     // "Publish anyway" stores {} — the same empty identity as No sender.
     { choice: "default, published anyway", packet: { id: "p1", identity_mode: "default" },
       profile: null, skip: true, title: "A Sendset has been shared with you" },
     // An absent column is the default mode, not an unhandled case.
     { choice: "identity_mode never set", packet: { id: "p1" },
-      profile: PROFILE, title: "Ramona Maurer shared this with you" },
+      profile: PROFILE, title: "Ramona Maurer shared a Sendset with you" },
   ];
 
   for (const { choice, packet, profile, skip, title } of cases) {
@@ -322,87 +323,72 @@ test("OPENGRAPH AND TWITTER ARE DECLARED IN FULL — the actual bug was their ab
   assert.equal(og.type, "website");
 });
 
-test("the preview image is the NEUTRAL STATIC one, never the marketing card", () => {
-  // Deliberately not removed and deliberately not generated. Several unfurlers
-  // fall back to scraping the page for a picture when og:image is absent, and
-  // the candidates on a recipient page are the professional's headshot, their
-  // logo and the client's own item photographs.
-  for (const sender of [null, { name: "Ramona Maurer" }]) {
-    const s = JSON.stringify(recipientMetadata(sender));
-    assert.match(s, /og-recipient\.png/, "the recipient image is not used");
-    assert.ok(!/"[^"]*\/og\.(png|jpg)"/.test(s), "the marketing card is still referenced");
-    const tw = recipientMetadata(sender).twitter as Record<string, unknown>;
-    assert.equal(tw.card, "summary_large_image",
-      "the card type no longer matches the image that is actually declared");
-  }
-});
-
-// ---------------------------------------------------------------------------
-// THE DEMO-ONLY CARD EXPERIMENT — DELETE THIS SECTION with the experiment.
-// ---------------------------------------------------------------------------
-
-test("the experiment reaches DEMOS AND NOTHING ELSE", () => {
-  // The whole safety property. A real Sendset drawn into the experiment would
-  // put an untested card into a messaging app's cache, on a link somebody
-  // already sent to a client, with no way to withdraw it.
-  const demoSlugs = PUBLIC_DEMOS.map((d) => d.slug);
-  for (const slug of Object.keys(DEMO_EXPERIMENT_SLUGS)) {
-    assert.ok(demoSlugs.includes(slug), `${slug} is in the experiment but is not a public demo`);
-  }
-  // Real slugs, including ones that resemble a demo's name.
-  for (const slug of ["r6cdwbk3", "32f35aj3l7dt0e7d8jl1zz", "demo-2", "harbor-house-2",
-                      "", "constructor", "__proto__", "toString"]) {
-    const og = recipientMetadata({ name: "Ramona Maurer" }, slug).openGraph as Record<string, unknown>;
-    const image = (og.images as Record<string, unknown>[])[0];
-    assert.equal(image.url, "/og-recipient.png", `${slug} was given an experimental card`);
-    assert.equal(image.width, 1200);
-    assert.equal(image.height, 630);
-  }
-  // And with no slug at all.
-  const none = recipientMetadata(null).openGraph as Record<string, unknown>;
-  assert.equal((none.images as Record<string, unknown>[])[0].url, "/og-recipient.png");
-});
-
-test("the three arms differ ONLY in title length", () => {
-  // Round 3's variable. Every arm must emit the same H-shape — no og:image, no
-  // twitter:image — or a wrapping difference could be the card's doing rather
-  // than the name's.
-  const arms = Object.entries(DEMO_EXPERIMENT_SLUGS);
-  assert.equal(arms.length, 3, "the experiment is meant to be exactly three URLs");
-  const lengths = new Set<number>();
-  for (const [slug, arm] of arms) {
-    assert.equal(arm.image, null, `${slug} declares a card — the shape is supposed to be held still`);
-    const m = recipientMetadata(null, slug);
-    const og = m.openGraph as Record<string, unknown>;
-    assert.ok(!("images" in og), `${slug} emits og:image`);
-    assert.ok(!("images" in (m.twitter as Record<string, unknown>)), `${slug} emits twitter:image`);
+test("A RECIPIENT PREVIEW DECLARES NO IMAGE AT ALL", () => {
+  // The permanent shape, arrived at on real devices across three rounds. An
+  // image made the preview large and repeated the message; removing it made
+  // iMessage and WhatsApp fall back to the site icon, small and quiet, and
+  // NEITHER scraped the page for a photograph.
+  //
+  // Asserted over the whole serialized object, not field by field: og:image,
+  // its width, height and alt, and twitter:image must ALL be gone, and a check
+  // that names them one at a time is a check that forgets the fourth.
+  for (const sender of [null, { name: "Ramona Maurer" }, { businessName: "Harbor House Advisors" }]) {
+    const m = recipientMetadata(sender);
+    const s = JSON.stringify(m);
+    assert.ok(!/image/i.test(s), `a recipient preview declares an image: ${s}`);
+    assert.ok(!/\.(png|jpg|jpeg|webp|svg)/i.test(s), "an image file is referenced");
+    assert.ok(!("images" in (m.openGraph as Record<string, unknown>)), "og:image survives");
+    assert.ok(!("images" in (m.twitter as Record<string, unknown>)), "twitter:image survives");
+    // And the thing that SHOULD still be there is, so this cannot pass on an
+    // empty object.
     assert.equal(m.description, RECIPIENT_DESCRIPTION);
-    assert.equal(m.title, arm.title);
-    assert.equal((m.openGraph as Record<string, unknown>).title, arm.title);
-    assert.equal((m.twitter as Record<string, unknown>).title, arm.title);
-    assert.match(String(arm.title), /shared a Sendset with you$/, `${slug}'s fixture is off-pattern`);
-    lengths.add(String(arm.title).length);
   }
-  assert.equal(lengths.size, 3, `two arms are the same length: ${[...lengths].join(", ")}`);
-  // Short really is short and long really is long, or the test is measuring
-  // three indistinguishable strings.
-  const sorted = [...lengths].sort((a, b) => a - b);
-  assert.ok(sorted[2] - sorted[0] >= 25,
-    `the longest fixture is only ${sorted[2] - sorted[0]} characters longer than the shortest`);
 });
 
-test("a real Sendset's title still comes from recipientTitle, never a fixture", () => {
-  // The fixtures are stress strings for a layout. If one could reach a real
-  // link it would tell a client something untrue about who sent it.
-  const fixtures = Object.values(DEMO_EXPERIMENT_SLUGS).map((a) => a.title);
-  for (const slug of ["r6cdwbk3", "32f35aj3l7dt0e7d8jl1zz", "demo-2", "", "constructor"]) {
-    const m = recipientMetadata({ name: "Ramona Maurer" }, slug);
-    assert.equal(m.title, "Ramona Maurer shared this with you", `${slug} was given a fixture title`);
-    assert.ok(!fixtures.includes(String(m.title)));
-    assert.ok(!String(m.title).includes("shared a Sendset with you"),
-      "the experiment's wording reached a real Sendset");
+test("the card type MATCHES the absence of an image", () => {
+  // summary_large_image with no image is self-contradictory: it asks for the
+  // big treatment and supplies nothing to fill it.
+  for (const sender of [null, { name: "Ramona Maurer" }]) {
+    const tw = recipientMetadata(sender).twitter as Record<string, unknown>;
+    assert.equal(tw.card, "summary", "the card type still asks for a large image");
   }
 });
+
+test("EVERY SENDSET TAKES ONE PATH — no demo, no slug, no exceptions", () => {
+  // The demo experiment is over. recipientMetadata takes a sender and nothing
+  // else, so there is no argument through which a slug — or a per-Sendset
+  // fixture — could reach a preview again.
+  assert.equal(recipientMetadata.length, 1, "recipientMetadata takes more than a sender");
+  const src = codeOf("src/lib/recipient-metadata.ts");
+  for (const gone of ["DEMO_EXPERIMENT", "previewImageFor", "demoPreviewFor", "og-exp-",
+                      "PreviewImage", "og-recipient"]) {
+    assert.ok(!src.includes(gone), `the experiment left ${gone} behind`);
+  }
+  for (const route of RECIPIENT_ROUTES) {
+    assert.match(codeOf(route), /return recipientMetadata\(sender\);/,
+      `${route} still passes something other than the sender`);
+  }
+  // No experimental asset is still shipped.
+  assert.deepEqual(readdirSync(join(ROOT, "public")).filter((f) => f.startsWith("og-exp")), [],
+    "an experimental card is still in public/");
+});
+
+test("NOTHING CLAIMS THE SENDER IS VERIFIED", () => {
+  // The name is whatever the professional typed into their own profile. A
+  // preview that called it verified would be making a promise the product
+  // does not keep, on the surface a stranger trusts most.
+  const strings = [recipientTitle({ name: "Ramona Maurer" }), recipientTitle(null),
+                   RECIPIENT_DESCRIPTION, JSON.stringify(recipientMetadata({ name: "Ramona Maurer" }))];
+  for (const s of strings) {
+    for (const word of ["verified", "verify", "authentic", "confirmed", "official",
+                        "trusted", "secure", "guaranteed"]) {
+      assert.ok(!s.toLowerCase().includes(word), `a preview implies verification: "${word}"`);
+    }
+  }
+});
+
+
+
 
 
 
