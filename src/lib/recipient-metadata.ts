@@ -54,7 +54,47 @@ export type SenderIdentity = { name?: string; businessName?: string };
 
 export const RECIPIENT_DESCRIPTION = "View on Sendset.";
 export const RECIPIENT_TITLE_ANONYMOUS = "A Sendset has been shared with you";
-const RECIPIENT_OG_IMAGE = "/og-recipient.png";
+
+export type PreviewImage = { url: string; width: number; height: number };
+const RECIPIENT_OG_IMAGE: PreviewImage = { url: "/og-recipient.png", width: 1200, height: 630 };
+
+// ---------------------------------------------------------------------------
+// TEMPORARY — A DEMO-ONLY IMAGE EXPERIMENT. DELETE THIS WHOLE BLOCK when the
+// recipient card is decided.
+//
+// A real-device iMessage test showed the 1200x630 card REPEATING THE MESSAGE:
+// it says "A Sendset has been shared with you" in large type, directly above
+// metadata that now says a better version of the same thing. The card should
+// carry no message at all — the text does that.
+//
+// Four candidates, one per public demo, so a person can text all four to
+// themselves in one sitting and compare on the actual device rather than
+// across four deploys. They vary only in SIZE and COMPOSITION: whether a
+// smaller or square image makes iMessage render a compact preview instead of a
+// large one is not documented anywhere I can verify, so it is being measured
+// rather than assumed. twitter:card is deliberately NOT varied — it is the
+// other lever, and changing both at once would tell us nothing about either.
+//
+// DEMOS ONLY. Every real Sendset stays on /og-recipient.png: nobody's client
+// link is an experiment, and a preview already cached by a messaging app
+// cannot be withdrawn.
+export const DEMO_EXPERIMENT: Record<string, PreviewImage> = {
+  "demo":          { url: "/og-exp-a-1200x630.png", width: 1200, height: 630 },
+  "harbor-house":  { url: "/og-exp-b-600-lockup.png", width: 600, height: 600 },
+  "month-one":     { url: "/og-exp-c-600-icon.png", width: 600, height: 600 },
+  "red-awning":    { url: "/og-exp-d-300-icon.png", width: 300, height: 300 },
+};
+
+/** The card for a slug: a demo's experimental one, or the neutral default.
+ *  Returns the default for every slug that is not in the experiment, so a
+ *  real Sendset cannot reach an experimental image by any path.
+ *
+ *  `Object.hasOwn`, not a plain lookup: a slug of "constructor" or "toString"
+ *  finds Object.prototype's member, which is truthy, and a function would then
+ *  be spread into og:image. Slugs are attacker-supplied path segments. */
+export function previewImageFor(slug?: string): PreviewImage {
+  return slug && Object.hasOwn(DEMO_EXPERIMENT, slug) ? DEMO_EXPERIMENT[slug] : RECIPIENT_OG_IMAGE;
+}
 
 /** A person's name first, their business second, and an unsigned Sendset last.
  *
@@ -66,8 +106,15 @@ export function recipientTitle(sender: SenderIdentity | null | undefined): strin
   return who ? `${who} shared this with you` : RECIPIENT_TITLE_ANONYMOUS;
 }
 
-export function recipientMetadata(sender: SenderIdentity | null | undefined): Metadata {
+export function recipientMetadata(
+  sender: SenderIdentity | null | undefined,
+  /** The slug, used ONLY to pick the card — never to say anything about the
+   *  Sendset. It selects from a fixed map of demo slugs and falls back to the
+   *  neutral image, so it cannot put a slug into a tag. */
+  slug?: string,
+): Metadata {
   const title = recipientTitle(sender);
+  const image = previewImageFor(slug);
   return {
     title,
     description: RECIPIENT_DESCRIPTION,
@@ -79,13 +126,13 @@ export function recipientMetadata(sender: SenderIdentity | null | undefined): Me
       description: RECIPIENT_DESCRIPTION,
       siteName: "Sendset",
       type: "website",
-      images: [{ url: RECIPIENT_OG_IMAGE, width: 1200, height: 630, alt: "Sendset" }],
+      images: [{ url: image.url, width: image.width, height: image.height, alt: "Sendset" }],
     },
     twitter: {
       card: "summary_large_image",
       title,
       description: RECIPIENT_DESCRIPTION,
-      images: [RECIPIENT_OG_IMAGE],
+      images: [image.url],
     },
   };
 }

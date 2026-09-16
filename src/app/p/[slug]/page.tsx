@@ -55,7 +55,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const sender = isSupabaseConfigured && !publicDemo(slug)
     ? await publishedSenderIdentity(slug)
     : null;
-  return recipientMetadata(sender);
+  return recipientMetadata(sender, slug);
 }
 
 export default async function PacketPage({ params }: Props) {

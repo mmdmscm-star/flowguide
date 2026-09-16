@@ -1,11 +1,25 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { recipientMetadata, recipientTitle, RECIPIENT_DESCRIPTION } from "./recipient-metadata.ts";
+import { recipientMetadata, recipientTitle, RECIPIENT_DESCRIPTION,
+         DEMO_EXPERIMENT as DEMO_EXPERIMENT_SLUGS } from "./recipient-metadata.ts";
+import { PUBLIC_DEMOS } from "./public-demos.ts";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import { buildPublicationSnapshot, publishedSenderIdentity } from "./queries.ts";
 import { resolvePublishIdentity } from "./publish-identity.ts";
 
 const codeOf = (p: string) => readFileSync(p, "utf8");
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
+
+/** A PNG's real dimensions, straight out of its IHDR. Asserted against what the
+ *  metadata DECLARES: a card whose declared size disagrees with the file is
+ *  laid out wrongly by unfurlers, which is the exact variable under test. */
+function pngSize(file: string): { width: number; height: number } {
+  const b = readFileSync(file);
+  assert.equal(b.readUInt32BE(12), 0x49484452, `${file} is not a PNG`);
+  return { width: b.readUInt32BE(16), height: b.readUInt32BE(20) };
+}
 const RECIPIENT_ROUTES = ["src/app/p/[slug]/page.tsx", "src/app/p/[slug]/print/page.tsx"];
 
 /** The exact strings that reached a client's text message. Kept verbatim even
@@ -332,6 +346,55 @@ test("the preview image is the NEUTRAL STATIC one, never the marketing card", ()
     const tw = recipientMetadata(sender).twitter as Record<string, unknown>;
     assert.equal(tw.card, "summary_large_image",
       "the card type no longer matches the image that is actually declared");
+  }
+});
+
+// ---------------------------------------------------------------------------
+// THE DEMO-ONLY CARD EXPERIMENT — DELETE THIS SECTION with the experiment.
+// ---------------------------------------------------------------------------
+
+test("the experiment reaches DEMOS AND NOTHING ELSE", () => {
+  // The whole safety property. A real Sendset drawn into the experiment would
+  // put an untested card into a messaging app's cache, on a link somebody
+  // already sent to a client, with no way to withdraw it.
+  const demoSlugs = PUBLIC_DEMOS.map((d) => d.slug);
+  for (const slug of Object.keys(DEMO_EXPERIMENT_SLUGS)) {
+    assert.ok(demoSlugs.includes(slug), `${slug} is in the experiment but is not a public demo`);
+  }
+  // Real slugs, including ones that resemble a demo's name.
+  for (const slug of ["r6cdwbk3", "32f35aj3l7dt0e7d8jl1zz", "demo-2", "harbor-house-2",
+                      "", "constructor", "__proto__", "toString"]) {
+    const og = recipientMetadata({ name: "Ramona Maurer" }, slug).openGraph as Record<string, unknown>;
+    const image = (og.images as Record<string, unknown>[])[0];
+    assert.equal(image.url, "/og-recipient.png", `${slug} was given an experimental card`);
+    assert.equal(image.width, 1200);
+    assert.equal(image.height, 630);
+  }
+  // And with no slug at all.
+  const none = recipientMetadata(null).openGraph as Record<string, unknown>;
+  assert.equal((none.images as Record<string, unknown>[])[0].url, "/og-recipient.png");
+});
+
+test("each demo carries its own candidate, at the size it declares", () => {
+  // A declared width that disagrees with the file makes an unfurler lay the
+  // card out wrongly — which is the very thing being measured, so a mismatch
+  // would corrupt the experiment rather than break it visibly.
+  for (const [slug, expected] of Object.entries(DEMO_EXPERIMENT_SLUGS)) {
+    const og = recipientMetadata(null, slug).openGraph as Record<string, unknown>;
+    const image = (og.images as Record<string, unknown>[])[0];
+    assert.equal(image.url, expected.url, `${slug} carries the wrong candidate`);
+    const file = join(ROOT, "public", expected.url.replace(/^\//, ""));
+    const real = pngSize(file);
+    assert.deepEqual(real, { width: expected.width, height: expected.height },
+      `${expected.url} is ${real.width}x${real.height} but declares ${expected.width}x${expected.height}`);
+    assert.equal(image.width, expected.width);
+    assert.equal(image.height, expected.height);
+    // The text still does the talking, on a demo as much as anywhere.
+    const m = recipientMetadata(null, slug);
+    assert.equal(m.title, "A Sendset has been shared with you");
+    assert.equal(m.description, RECIPIENT_DESCRIPTION);
+    assert.equal((m.twitter as Record<string, unknown>).card, "summary_large_image",
+      "the card type was varied — the experiment is meant to isolate the image");
   }
 });
 

@@ -43,7 +43,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const sender = isSupabaseConfigured && !publicDemo(slug)
     ? await publishedSenderIdentity(slug)
     : null;
-  return recipientMetadata(sender);
+  return recipientMetadata(sender, slug);
 }
 
 async function resolvePacket(slug: string): Promise<Packet | null> {
