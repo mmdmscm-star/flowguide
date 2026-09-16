@@ -1,5 +1,6 @@
 import { createPublicClient, createServerClient } from "./supabase";
 import type { Packet, PacketBlock, Section, Item, ItemDetail, ItemLink, ItemContact, ProfessionalContact } from "./types";
+import type { SenderIdentity } from "./recipient-metadata";
 
 // ============================================================
 // Resolve which identity a packet presents in the editor/preview,
@@ -88,6 +89,51 @@ export async function getPublishedPacket(slug: string, db: Db = createServerClie
   const live = await assemblePublishedFromLiveRows(db, packet);
   return { ...live, title: "" };
 }
+
+/** WHO SENT IT, and deliberately nothing else.
+ *
+ *  For the link preview on /p/[slug] and its print route. It reads the SAME
+ *  frozen publication the recipient sees, so the name in an unfurl is the name
+ *  on the page — a Republish that changes an advisor's details changes both
+ *  together, and neither can show an identity that was never published.
+ *
+ *  NARROW ON PURPOSE, twice over. It asks Postgres for one jsonb path rather
+ *  than the whole snapshot (571 bytes at most, against 37KB for the largest
+ *  publication), and it returns two fields out of the nine that path holds, so
+ *  an email address or a phone number is not sitting in the caller's hand
+ *  waiting to be put in a meta tag. A preview may know who sent a Sendset; it
+ *  may not know anything else about it. See recipient-metadata.ts.
+ *
+ *  Returns null for a missing or unpublished slug — the caller renders the
+ *  anonymous title, and the page itself 404s a moment later. */
+export async function publishedSenderIdentity(
+  slug: string,
+  db: Db = createServerClient()
+): Promise<SenderIdentity | null> {
+  const { data: packet } = await db
+    .from("packets")
+    .select("id")
+    .eq("slug", slug)
+    .eq("status", "published")
+    .maybeSingle();
+  if (!packet) return null;
+
+  const { data, error } = await db
+    .from("packet_publications")
+    .select("professional:content->professional")
+    .eq("packet_id", packet.id)
+    .maybeSingle();
+  // A PREVIEW IS NOT WORTH A 500. getPublishedPacket throws on a failed read
+  // because rendering the wrong thing to a recipient is worse than an error;
+  // here the fallback is an anonymous title on a page that still renders.
+  if (error || !data) return null;
+
+  const p = (data as { professional?: Record<string, unknown> }).professional;
+  return { name: str(p?.name), businessName: str(p?.businessName) };
+}
+
+const str = (v: unknown): string | undefined =>
+  typeof v === "string" && v.trim() ? v : undefined;
 
 /** Where a published Sendset's frozen copy is read. Throws on a failed read or an unknown format. */
 export async function readPublication(db: Db, packetId: string): Promise<{ formatVersion: number; content: PublicationSnapshot } | null> {

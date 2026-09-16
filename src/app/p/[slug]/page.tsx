@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { isPublicDemo, publicDemo } from "@/lib/public-demos";
-import { getPublishedPacket, markPacketViewed } from "@/lib/queries";
+import { getPublishedPacket, markPacketViewed, publishedSenderIdentity } from "@/lib/queries";
 import { PacketHeader } from "@/components/packet-header";
 import { PersonalNote } from "@/components/personal-note";
 import { SectionGroup } from "@/components/section-group";
@@ -40,12 +40,23 @@ async function resolvePacket(slug: string): Promise<Packet | null> {
   return null;
 }
 
-// Recipient packet pages are private-by-link and may contain a client's name and
-// a personal note. The metadata is a shared CONSTANT — see recipient-metadata.ts
-// for why it takes no packet and why openGraph/twitter are declared there in
-// full rather than partially. Setting title and description here without
-// openGraph is what let the marketing card unfurl on a client's text message.
-export const metadata: Metadata = recipientMetadata;
+// Recipient pages are private-by-link and may contain a client's name and a
+// personal note. NONE of that reaches the preview: this hands the shared
+// builder a SenderIdentity — a name and a business name — which is the only
+// shape it accepts. See recipient-metadata.ts for why openGraph and twitter
+// are declared there in full rather than partially; setting title and
+// description here without them is what let the marketing card unfurl on a
+// client's text message.
+//
+// A demo has no publication row, so it takes the anonymous title. That is
+// correct: nobody shared it with anybody.
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const { slug } = await params;
+  const sender = isSupabaseConfigured && !publicDemo(slug)
+    ? await publishedSenderIdentity(slug)
+    : null;
+  return recipientMetadata(sender);
+}
 
 export default async function PacketPage({ params }: Props) {
   const { slug } = await params;

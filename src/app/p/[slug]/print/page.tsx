@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { publicDemo } from "@/lib/public-demos";
 import { publicSendsetUrl } from "@/lib/public-url";
-import { getPublishedPacket } from "@/lib/queries";
+import { getPublishedPacket, publishedSenderIdentity } from "@/lib/queries";
 import { PrintPacket } from "@/components/print/print-packet";
 import PrintToolbar from "@/components/print/print-toolbar";
 import type { Packet } from "@/lib/types";
@@ -33,10 +33,18 @@ type Props = { params: Promise<{ slug: string }> };
 const isSupabaseConfigured =
   !!process.env.NEXT_PUBLIC_SUPABASE_URL && !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-// The SAME constant the live recipient page uses. This URL is shareable and
-// carries a client's name and a personal note, so it inherited the marketing
-// OpenGraph card for exactly the same reason /p/[slug] did.
-export const metadata: Metadata = recipientMetadata;
+// The SAME builder the live recipient page uses, given the same sender. This
+// URL is shareable and carries a client's name and a personal note, so it
+// inherited the marketing OpenGraph card for exactly the same reason /p/[slug]
+// did — and it must not drift from the live page's preview now that the
+// preview says something.
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const { slug } = await params;
+  const sender = isSupabaseConfigured && !publicDemo(slug)
+    ? await publishedSenderIdentity(slug)
+    : null;
+  return recipientMetadata(sender);
+}
 
 async function resolvePacket(slug: string): Promise<Packet | null> {
   const demo = publicDemo(slug);

@@ -58,14 +58,18 @@ test("the packet comes from the SAME source as the live page", () => {
 });
 
 test("the print URL is private-by-link, like the page it prints", () => {
-  // The route now shares ONE metadata constant with /p/[slug] — the two were
+  // The route shares ONE metadata BUILDER with /p/[slug] — the two were
   // drifting, and the live page's marketing-OG leak was present here too. So
   // follow the indirection rather than grepping this file for `index: false`:
-  // assert the route uses the shared object, and that the object is noindex.
+  // assert the route uses the shared builder, and that what it builds is
+  // noindex. (It was a shared constant until the preview began naming the
+  // sender; the property that matters is the sharing, not the constness.)
   const src = codeOf(ROUTE);
-  assert.match(src, /export const metadata: Metadata = recipientMetadata;/,
+  assert.match(src, /export async function generateMetadata/,
+    "the print route no longer builds metadata");
+  assert.match(src, /return recipientMetadata\(/,
     "the print route does not use the shared recipient metadata");
-  const r = recipientMetadata.robots as { index?: boolean; follow?: boolean };
+  const r = recipientMetadata(null).robots as { index?: boolean; follow?: boolean };
   assert.equal(r?.index, false, "the print route is indexable");
   assert.equal(r?.follow, false, "the print route is followable");
 });

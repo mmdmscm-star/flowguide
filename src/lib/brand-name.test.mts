@@ -83,8 +83,15 @@ test("the product names itself where the product is meant", () => {
   const layout = codeOf("src/app/layout.tsx");
   assert.match(layout, /title: "Sendset"/, "the page title");
   assert.match(layout, /siteName: "Sendset"/, "the OG site name");
-  assert.match(codeOf("src/lib/recipient-metadata.ts"),
-    /RECIPIENT_TITLE = "Sendset"/, "the recipient card");
+  // THE RECIPIENT CARD NAMES THE PRODUCT WITHOUT BEING TITLED BY IT. Its title
+  // is now the sender — "Ramona Maurer shared this with you" — so the product's
+  // own name lives in the site name and in the line under it, which is where a
+  // client should meet it: after the person they already know.
+  const recipient = codeOf("src/lib/recipient-metadata.ts");
+  assert.match(recipient, /siteName: "Sendset"/, "the recipient card's site name");
+  assert.match(recipient, /RECIPIENT_DESCRIPTION = "View on Sendset\."/, "the recipient card");
+  assert.match(recipient, /RECIPIENT_TITLE_ANONYMOUS = "A Sendset has been shared with you"/,
+    "an unsigned Sendset still names the product");
   for (const f of ["src/app/p/[slug]/page.tsx", "src/app/preview/[id]/page.tsx",
                    "src/components/print/print-packet.tsx"])
     assert.match(codeOf(f), /Powered by Sendset\b/, `${f} does not name the product`);
