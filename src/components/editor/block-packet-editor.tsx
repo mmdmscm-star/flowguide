@@ -511,7 +511,7 @@ export function BlockPacketEditor({
             type="text"
             value={clientTitle}
             onChange={(e) => updateClientTitle(e.target.value)}
-            placeholder="Senior Living Communities"
+            placeholder="Add a title your client will see (optional)"
             className="w-full text-body font-semibold text-ink bg-transparent border-none outline-none placeholder:text-ink-3/45"
           />
           <p className="text-meta text-ink-2">

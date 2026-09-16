@@ -1367,7 +1367,7 @@ export function LegacyPacketEditor() {
           type="text"
           value={packet.clientTitle}
           onChange={(e) => updatePacketField("clientTitle", e.target.value)}
-          placeholder="Senior Living Communities"
+          placeholder="Add a title your client will see (optional)"
           className={`${INPUT_SHELL} font-semibold`}
         />
         <p className="text-meta text-ink-2">Leave blank and your client sees no title at all.</p>

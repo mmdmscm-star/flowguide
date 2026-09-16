@@ -1,6 +1,7 @@
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync, statSync } from "node:fs";
+import { join } from "node:path";
 import { JSDOM } from "jsdom";
 import { renderPacketEmail, renderPacketEmailText } from "./email-render.ts";
 import { buildClientMessage } from "./client-message.ts";
@@ -40,6 +41,31 @@ const bodyOf = (p: string) => codeOf(p).replace(/\/\*[\s\S]*?\*\//g, "").replace
 // ---------------------------------------------------------------------------
 // EMAIL — HTML and plain text
 // ---------------------------------------------------------------------------
+test("the client-facing title starts blank, with a neutral placeholder", () => {
+  // It was ghost text reading "Senior Living Communities" — a domain this
+  // product does not name on any surface, and an example a professional in
+  // another line of work has to read past. The field has always STORED nothing
+  // (client_title defaults to '' since 0037, and both editors bind straight to
+  // the saved value), so this is the placeholder alone.
+  const NEUTRAL = "Add a title your client will see (optional)";
+  for (const editor of ["src/components/editor/legacy-packet-editor.tsx", "src/components/editor/block-packet-editor.tsx"]) {
+    const src = readFileSync(editor, "utf8");
+    assert.ok(src.includes(`placeholder="${NEUTRAL}"`), `${editor} lost the neutral placeholder`);
+    assert.ok(src.includes("Title your client sees"), `${editor} lost the field's label`);
+    assert.ok(src.includes("Leave blank and your client sees no title at all."), `${editor} lost the optional-title explanation`);
+  }
+  // The value shown is the saved one: nothing is prefilled into the field.
+  assert.match(readFileSync("src/components/editor/legacy-packet-editor.tsx", "utf8"), /value=\{packet\.clientTitle\}/);
+  assert.match(readFileSync("src/components/editor/block-packet-editor.tsx", "utf8"), /value=\{clientTitle\}/);
+
+  // And the phrase is nowhere in what ships: not a placeholder, not an example,
+  // not a default. (This file's own fixture is test data, not product copy.)
+  const files: string[] = [];
+  const walk = (d: string) => { for (const e of readdirSync(d)) { const p = join(d, e); if (statSync(p).isDirectory()) walk(p); else if (/\.(ts|tsx)$/.test(p) && !/\.test\./.test(p) && !/ \d+\.[a-z]+$/.test(p)) files.push(p); } };
+  walk("src");
+  assert.deepEqual(files.filter((f) => readFileSync(f, "utf8").includes("Senior Living Communities")), []);
+});
+
 test("EMAIL, no client title: no heading, and the internal name does not appear", () => {
   const html = renderPacketEmail(NO_CLIENT_TITLE, { liveUrl: LIVE });
   assert.ok(!html.includes(INTERNAL), "the internal Sendset name reached the client's email");
