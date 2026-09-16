@@ -103,8 +103,12 @@ export default function Home() {
             reserves its own space: 1800x430 in the source, so the intrinsic
             size below holds its aspect exactly and nothing reflows as it loads.
 
-            Sized like a header, not a hero — 24px on a phone, 30px above it,
-            against a 34px headline.
+            Sized like a header, not a hero — 28px on a phone, 36px above it,
+            against a 41px headline. It was 24/30 first and read as an eyebrow:
+            a line of small type that happened to be a picture, rather than the
+            product introducing itself. Still well under the 40px the guard in
+            homepage-imagery.test.mts allows, which is where "header mark" ends
+            and "graphic a visitor scrolls past" begins.
 
             A PLAIN IMAGE ELEMENT, and the lint rule is silenced ON PURPOSE. next/image
             exists to resize and re-encode raster files; this is 5KB of vector
@@ -121,9 +125,9 @@ export default function Home() {
         <img
           src="/brand/sendset-logo-horizontal.svg"
           alt="Sendset"
-          width={126}
-          height={30}
-          className="h-6 w-auto sm:h-[30px]"
+          width={151}
+          height={36}
+          className="h-7 w-auto sm:h-9"
         />
         <h1 className="mt-5 text-[2.1rem] leading-[1.12] sm:text-[2.6rem] font-bold tracking-tight text-foreground text-balance">
           Turn what you have into something worth opening.
