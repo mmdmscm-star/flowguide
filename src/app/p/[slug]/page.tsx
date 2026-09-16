@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { isPublicDemo, publicDemo } from "@/lib/public-demos";
-import { getPublishedPacket, markPacketViewed, publishedSenderIdentity } from "@/lib/queries";
+import { getPublishedPacket, publishedSenderIdentity } from "@/lib/queries";
 import { PacketHeader } from "@/components/packet-header";
 import { PersonalNote } from "@/components/personal-note";
 import { SectionGroup } from "@/components/section-group";
@@ -11,6 +11,7 @@ import { SendsetSignature } from "@/components/sendset-signature";
 import type { Packet } from "@/lib/types";
 import { ownedPacketId } from "@/lib/packet-owner";
 import { OwnerBar } from "@/components/nav/owner-bar";
+import { RecordView } from "@/components/record-view";
 import { recipientMetadata } from "@/lib/recipient-metadata";
 import { treatmentFor, webVars } from "@/lib/style/treatment";
 import { packetMapUrl } from "@/lib/maps-url";
@@ -79,19 +80,20 @@ export default async function PacketPage({ params }: Props) {
   // it the most permissive of the five renderers for a field nothing validates.
   const packetMap = packetMapUrl(packet.mapUrl);
 
-  // Track that this packet was opened (fire and forget).
+  // THIS GET WRITES NOTHING. It used to mark the Sendset viewed while
+  // rendering, which counted every server-side fetch of the URL — including the
+  // request a messaging app makes to build a link preview. The count is now
+  // asked for by the loaded page instead (RecordView below), so an ordinary
+  // unfurl fetch increments nothing.
   //
-  // NOT WHEN THE OWNER OPENS IT. `viewed` means "the client has seen this", and
-  // a professional checking their own link was silently setting it — which turns
-  // a genuinely useful signal into one that cannot be trusted. Only possible to
-  // fix now that the page knows who is looking; no backfill, since there is no
-  // way to tell which past views were the owner's.
-  if (!isPublicDemo(slug) && isSupabaseConfigured && !ownedId) {
-    markPacketViewed(slug).catch(() => {});
-  }
+  // NOT WHEN THE OWNER OPENS IT, still. A professional checking their own link
+  // is what made the old signal untrustworthy; `ownedId` decides that here, and
+  // the endpoint checks again for itself.
+  const countThisOpen = !isPublicDemo(slug) && isSupabaseConfigured && !ownedId;
 
   return (
     <>
+      {countThisOpen && <RecordView slug={slug} />}
       {ownedId && <OwnerBar packetId={ownedId} />}
       {/* THE TREATMENT, ON THE ELEMENT THAT WRAPS THE SENDSET. Every packet
           component below reads ink, rule, hierarchy and rhythm through these

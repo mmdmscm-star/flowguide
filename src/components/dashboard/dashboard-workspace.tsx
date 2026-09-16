@@ -17,9 +17,20 @@ interface PacketSummary {
   title: string;
   client_name: string;
   status: string;
-  viewed: boolean;
+  view_count: number;
   created_at: string;
   updated_at: string;
+}
+
+/** "0 views", "1 view", "12 views".
+ *
+ *  A COUNT OF PAGE OPENS, said plainly. It is not people, not recipients and
+ *  not unique anything — repeats count, and the professional's own opens are
+ *  excluded at the point of counting rather than described here. The number is
+ *  shown from zero: "no one has opened this yet" is a fact worth reading, and
+ *  the boolean it replaced said the same thing less usefully. */
+export function viewCountLabel(count: number): string {
+  return `${count} ${count === 1 ? "view" : "views"}`;
 }
 
 // The first-run identity prompt is NOT here. It lives in the server shell so it
@@ -350,7 +361,7 @@ export default function DashboardWorkspace() {
                   )}
                   {/* FOUR BORDERED PILLS IN A ROW WAS THE DENSEST THING ON THE
                       SCREEN, and three of the four were saying "ordinary".
-                      Draft and Not yet viewed are the resting states of every
+                      Draft and 0 views are the resting states of every
                       Sendset, so they are now quiet text on the meta line.
                       Colour is spent on the two facts that are actually events:
                       it went out, and someone opened it. Viewed is the one blue
@@ -368,11 +379,11 @@ export default function DashboardWorkspace() {
                     </span>
                     {packet.status === "published" && (
                       <span className={`rounded-full px-2 py-0.5 font-medium ${
-                        packet.viewed
+                        packet.view_count > 0
                           ? "bg-mark-soft text-mark"
                           : "bg-ground-3 text-ink-3"
                       }`}>
-                        {packet.viewed ? "Viewed" : "Not yet viewed"}
+                        {viewCountLabel(packet.view_count)}
                       </span>
                     )}
                   </div>

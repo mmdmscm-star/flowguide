@@ -68,7 +68,11 @@ test("THE RECIPIENT SURFACE IS THE ONE THIS FILE THINKS IT IS", () => {
   // Preview mounts one piece of CREATOR CHROME above the Sendset — the publish
   // banner. It is not part of what a client sees and wears no treatment, which
   // is exactly why it is named here rather than quietly skipped.
-  const CHROME = ["src/components/preview-actions.tsx"];
+  // RecordView is mounted by the recipient page and renders NOTHING — it asks
+  // the server to add one to a page-open count and returns null. It has no
+  // markup to wear a treatment, which is why it is named here rather than
+  // quietly skipped.
+  const CHROME = ["src/components/preview-actions.tsx", "src/components/record-view.tsx"];
   for (const f of mounted)
     assert.ok(PACKET_FILES.includes(f) || CHROME.includes(f),
       `${f} is mounted into a Sendset but not covered here`);

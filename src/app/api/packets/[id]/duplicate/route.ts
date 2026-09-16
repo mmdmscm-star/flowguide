@@ -40,7 +40,8 @@ export async function POST(_request: Request, context: Context) {
       raw_input: "",
       // No status: a new row is a draft by the column default, and status
       // changes belong to publish_packet / unpublish_packet alone (0052).
-      viewed: false,
+      // A copy has been opened by nobody. view_count starts at 0 by the column
+      // default (0057); the legacy `viewed` boolean is no longer written.
       // Carry the packet's identity choice to the copy. The snapshot is not
       // copied — a duplicate is a fresh draft that re-snapshots at publish.
       identity_mode: original.identity_mode || "default",

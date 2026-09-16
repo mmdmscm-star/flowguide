@@ -147,8 +147,18 @@ test("only publish_packet publishes from the database, and only after binding th
     }
     for (const stmt of sql.split(";")) {
       if (!/update\s+(public\.)?packets\b/i.test(stmt)) continue;
+      // THE ASSIGNMENT LIST ONLY — between `set` and `where`.
+      //
+      // Scanning the whole statement read `update packets set view_count = ...
+      // where status = 'published'` as a publish: the words appear in that
+      // order, but the second is a FILTER. A guard that cannot tell "make this
+      // published" from "only if it is published" would either block honest
+      // migrations or be silenced, and silenced is how it stops catching the
+      // thing it exists for. The rule is unchanged: no migration may assign
+      // status = 'published' outside publish_packet.
+      const assignments = stmt.slice(stmt.search(/\bset\b/i)).split(/\bwhere\b/i)[0];
       assert.doesNotMatch(
-        stmt, /\bset\b[\s\S]*\bstatus\s*=\s*'published'/i,
+        assignments, /\bstatus\s*=\s*'published'/i,
         `${name} publishes a packet outside publish_packet`,
       );
     }

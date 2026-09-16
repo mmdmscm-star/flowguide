@@ -68,9 +68,26 @@ test("the recipient packet shape still carries no owner identity", () => {
     "an owner id inside the object that renders a client-facing page is how it reaches the client");
 });
 
-test("the owner's own visit no longer marks the Sendset as seen by the client", () => {
-  assert.match(RECIPIENT, /isSupabaseConfigured && !ownedId\) \{\n\s*markPacketViewed/,
-    "`viewed` means the CLIENT opened it; the author checking their own link must not set it");
+test("the owner's own visit is not counted as a view", () => {
+  // The count answers "has my client opened this". A professional checking
+  // their own link is what made the boolean it replaced untrustworthy, so the
+  // page does not even mount the beacon for them.
+  assert.match(RECIPIENT, /const countThisOpen = !isPublicDemo\(slug\) && isSupabaseConfigured && !ownedId;/,
+    "the owner, a demo, or an unconfigured environment would now count a view");
+  assert.match(RECIPIENT, /\{countThisOpen && <RecordView slug=\{slug\} \/>\}/,
+    "the beacon is mounted unconditionally");
+});
+
+test("THE RECIPIENT GET WRITES NOTHING", () => {
+  // It used to mark the Sendset viewed while rendering, which counted every
+  // server-side fetch of the URL — including a messaging app building a link
+  // preview. A read path that writes is how that happens again.
+  assert.ok(!/markPacketViewed/.test(RECIPIENT), "the recipient page still writes while rendering");
+  assert.ok(!/markPacketViewed/.test(read("src/lib/queries.ts")),
+    "the view-marking write survives in the query layer");
+  for (const forbidden of [/\.update\(/, /\.insert\(/, /\.rpc\(/]) {
+    assert.doesNotMatch(RECIPIENT, forbidden, "the recipient page performs a write during render");
+  }
 });
 
 test("the generic creator nav is still never rendered on a recipient's page", () => {

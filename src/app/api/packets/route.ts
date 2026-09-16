@@ -11,7 +11,7 @@ export async function GET() {
   const supabase = createServerClient();
   const { data: packets, error } = await supabase
     .from("packets")
-    .select("id, slug, title, client_name, status, viewed, created_at, updated_at")
+    .select("id, slug, title, client_name, status, view_count, created_at, updated_at")
     .eq("user_id", session.userId)
     .order("updated_at", { ascending: false });
 

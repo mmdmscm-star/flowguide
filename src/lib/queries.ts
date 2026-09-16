@@ -546,18 +546,11 @@ export async function assembleItemsByIds(
   return map;
 }
 
-// ============================================================
-// SERVER: Mark a packet as viewed
-// ============================================================
-export async function markPacketViewed(slug: string): Promise<void> {
-  const supabase = createServerClient();
-  await supabase
-    .from("packets")
-    .update({ viewed: true })
-    .eq("slug", slug)
-    .eq("status", "published")
-    .eq("viewed", false);
-}
+// THE VIEW COUNT IS NOT WRITTEN FROM HERE. A page open is recorded by the
+// browser that opened it, through POST /api/p/[slug]/view and the
+// record_packet_view function (0057). Nothing on a read path may write it: a
+// GET that counted would count every server-side fetch of the URL, which is
+// what the old `viewed` boolean did.
 
 // ============================================================
 // SERVER: Fetch a packet by ID for the editor (any status)
