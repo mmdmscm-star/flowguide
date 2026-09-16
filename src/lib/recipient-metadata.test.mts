@@ -2,7 +2,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { recipientMetadata, recipientTitle, RECIPIENT_DESCRIPTION } from "./recipient-metadata.ts";
-import { publishedSenderIdentity } from "./queries.ts";
+import { buildPublicationSnapshot, publishedSenderIdentity } from "./queries.ts";
+import { resolvePublishIdentity } from "./publish-identity.ts";
 
 const codeOf = (p: string) => readFileSync(p, "utf8");
 const RECIPIENT_ROUTES = ["src/app/p/[slug]/page.tsx", "src/app/p/[slug]/print/page.tsx"];
@@ -221,6 +222,88 @@ test("the sender is read from ONE jsonb path, not the whole snapshot", () => {
 });
 
 // ---------------------------------------------------------------------------
+// THE PREVIEW OBEYS THE SENDER CHOICE ALREADY MADE FOR THE SENDSET
+//
+// The editor asks "Who is this Sendset from?" and offers three answers. The
+// preview does not get its own opinion: it reads whatever that choice froze
+// into the publication, so the name in an unfurl is the name in the footer.
+//
+// Exercised through the REAL chain — resolvePublishIdentity, then
+// buildPublicationSnapshot — rather than against a hand-written snapshot,
+// because the failure this guards against lives in the conversions between
+// them: custom_identity is camelCase, the assembly wants a snake_case profile
+// row, and the stored professional is camelCase again. A businessName dropped
+// in the middle would show a client one sender on the page and another in the
+// message that carried it.
+//
+// It matters most for CUSTOM, which no production Sendset uses yet: nothing
+// else in the suite would notice that branch breaking.
+// ---------------------------------------------------------------------------
+
+test("every Sender choice resolves into the title the professional asked for", async () => {
+  const PROFILE = {
+    name: "Ramona Maurer", business_name: "Harbor House Advisors",
+    email: "ramona@example.com", phone: "(555) 010-4194",
+  };
+  const CUSTOM = {
+    name: "Mona Okafor", businessName: "Okafor Placement Partners",
+    email: "mona@example.com",
+  };
+
+  const cases: { choice: string; packet: Row; profile: unknown; skip?: boolean; title: string }[] = [
+    { choice: "My default profile", packet: { id: "p1", identity_mode: "default" },
+      profile: PROFILE, title: "Ramona Maurer shared this with you" },
+    { choice: "No sender", packet: { id: "p1", identity_mode: "none" },
+      profile: PROFILE, title: "A Sendset has been shared with you" },
+    { choice: "Custom organization", packet: { id: "p1", identity_mode: "custom", custom_identity: CUSTOM },
+      profile: PROFILE, title: "Mona Okafor shared this with you" },
+    // A custom sender is free to be an organisation and no person at all.
+    { choice: "Custom, business only",
+      packet: { id: "p1", identity_mode: "custom", custom_identity: { businessName: "Okafor Placement Partners" } },
+      profile: PROFILE, title: "Okafor Placement Partners shared this with you" },
+    // "Publish anyway" stores {} — the same empty identity as No sender.
+    { choice: "default, published anyway", packet: { id: "p1", identity_mode: "default" },
+      profile: null, skip: true, title: "A Sendset has been shared with you" },
+    // An absent column is the default mode, not an unhandled case.
+    { choice: "identity_mode never set", packet: { id: "p1" },
+      profile: PROFILE, title: "Ramona Maurer shared this with you" },
+  ];
+
+  for (const { choice, packet, profile, skip, title } of cases) {
+    const { professionalSnapshot } = resolvePublishIdentity(packet as never, profile, !!skip);
+    const snapshot = await buildPublicationSnapshot(snapshotDb(packet) as never, "p1", professionalSnapshot);
+    const p = snapshot.professional as Record<string, unknown> | undefined;
+    // The same two fields publishedSenderIdentity would lift out of the stored row.
+    const sender = {
+      name: typeof p?.name === "string" && p.name.trim() ? p.name : undefined,
+      businessName: typeof p?.businessName === "string" && p.businessName.trim() ? p.businessName : undefined,
+    };
+    assert.equal(recipientTitle(sender), title, `"${choice}" produced the wrong preview title`);
+  }
+});
+
+test("NO SENDER MEANS NO SENDER, in the preview as much as in the footer", async () => {
+  // The strongest case, and the one with 8 live Sendsets behind it. Choosing
+  // "No sender — no name, logo, or contact footer" and then having the unfurl
+  // announce the sender by name would be the product contradicting a decision
+  // the professional made deliberately.
+  const packet = { id: "p1", identity_mode: "none" };
+  const { professionalSnapshot } = resolvePublishIdentity(packet as never, {
+    name: "Ramona Maurer", business_name: "Harbor House Advisors", email: "ramona@example.com",
+  }, false);
+  const snapshot = await buildPublicationSnapshot(snapshotDb(packet) as never, "p1", professionalSnapshot);
+  const serialized = JSON.stringify(recipientMetadata({
+    name: (snapshot.professional as Record<string, string>)?.name || undefined,
+    businessName: (snapshot.professional as Record<string, string>)?.businessName || undefined,
+  }));
+  for (const hidden of ["Ramona", "Maurer", "Harbor House"]) {
+    assert.ok(!serialized.includes(hidden),
+      `a Sendset published with NO sender named ${hidden} in its preview`);
+  }
+  assert.match(serialized, /A Sendset has been shared with you/);
+});
+
+// ---------------------------------------------------------------------------
 // THE SHAPE OF THE CARD, unchanged
 // ---------------------------------------------------------------------------
 
@@ -339,6 +422,25 @@ function fakeDb(tables: Record<string, Row[]>, failing: string[] = []) {
         maybeSingle: async () => fail
           ? { data: null, error: { message: `${table} unavailable` } }
           : { data: rows[0] ?? null, error: null },
+      };
+      return q;
+    },
+  };
+}
+
+/** Enough of the chain for buildPublicationSnapshot: the Sendset row itself,
+ *  and empty content tables. The identity is what is under test; sections,
+ *  items and their photos are read by the same assembly and are not. */
+function snapshotDb(packet: Row) {
+  return {
+    from(table: string) {
+      const rows: Row[] = table === "packets" ? [packet] : [];
+      const q: Record<string, unknown> = {
+        select: () => q, eq: () => q, in: () => q, order: () => q,
+        single: async () => ({ data: rows[0] ?? null, error: null }),
+        maybeSingle: async () => ({ data: rows[0] ?? null, error: null }),
+        then: (resolve: (v: unknown) => unknown) =>
+          Promise.resolve({ data: rows, error: null }).then(resolve),
       };
       return q;
     },
