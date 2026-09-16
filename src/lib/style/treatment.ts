@@ -104,7 +104,8 @@ export interface TreatmentColors {
   label: ByMedium;
   /** The smallest supporting text under a subheading. */
   subtle: ByMedium;
-  /** The quietest mark on the page — "Powered by Sendset", the printed tail. */
+  /** The quietest mark on the page. Was the Sendset signature, which now uses
+   *  `subtle` so a client can actually read it; still the printed tail. */
   faint: ByMedium;
   /** Hairlines: card borders, dividers, detail rows. */
   line: ByMedium;
@@ -277,7 +278,7 @@ export const DEFAULT_TREATMENT: TreatmentDefinition = {
     label:           { web: "oklch(44.6% 0.03 256.802)", print: "#5b6570", email: "#5b6570" },
     // text-gray-500 under a block subheading.
     subtle:          { web: "oklch(55.1% 0.027 264.364)", print: "#5b6570", email: "#5b6570" },
-    // text-muted/40 on "Powered by Sendset"; #8b949e on the printed tail.
+    // text-muted/40 where the signature used to sit; #8b949e on the printed tail.
     faint:           { web: "color-mix(in oklab, #6b7280 40%, transparent)", print: "#8b949e", email: "#8b949e" },
     line:            { web: "#e5e7eb", print: "#e3e6ea", email: "#e3e6ea" },
     rule:            { web: "#e5e7eb", print: "#d8dce1", email: "#e3e6ea" },

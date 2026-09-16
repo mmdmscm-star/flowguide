@@ -286,7 +286,10 @@ export function PrintPacket({ packet, liveUrl }: { packet: Packet; liveUrl: stri
         </div>
       )}
 
-      <p className="pg-tail">{readable(liveUrl)} · Powered by Sendset</p>
+      {/* The same words as the web signature, and deliberately nothing else:
+          no icon, because ink; no link, because paper. The URL beside it is the
+          thing a reader can actually act on. */}
+      <p className="pg-tail">{readable(liveUrl)} · Made with Sendset</p>
     </div>
   );
 }

@@ -101,8 +101,16 @@ test("the product names itself where the product is meant", () => {
     "the recipient signature does not name the product");
   for (const f of ["src/app/p/[slug]/page.tsx", "src/app/preview/[id]/page.tsx"])
     assert.match(codeOf(f), /<SendsetSignature \/>/, `${f} does not sign off as Sendset`);
-  assert.match(codeOf("src/components/print/print-packet.tsx"), /Powered by Sendset\b/,
+  // ONE SENTENCE ACROSS EVERY RENDERER THAT CARRIES ONE. The printed copy says
+  // the same four words as the web signature, text-only: no icon, because ink;
+  // no link, because paper. Email carries no signature at all and is not
+  // asserted here — a sender's own message is not a place for our mark.
+  assert.match(codeOf("src/components/print/print-packet.tsx"), /Made with Sendset\b/,
     "the printed copy does not name the product");
+  assert.ok(!/Powered by Sendset/.test(codeOf("src/components/print/print-packet.tsx")),
+    "the printed tail still uses the superseded wording");
+  assert.match(codeOf("src/app/api/auth/send-magic-link/route.ts"),
+    /subject: "Sign in to Sendset"/, "the sign-in email subject");
 });
 
 test("the signature is MEANT TO BE SEEN, and it is a link", () => {
@@ -124,8 +132,6 @@ test("the signature is MEANT TO BE SEEN, and it is a link", () => {
   // NOT ICON-ONLY: words a screen reader can read, and a decorative mark.
   assert.match(sig, /alt=""/, "the mark is described, so the link is announced twice");
   assert.match(sig, /Made with Sendset/, "the link has no text of its own");
-  assert.match(codeOf("src/app/api/auth/send-magic-link/route.ts"),
-    /subject: "Sign in to Sendset"/, "the sign-in email subject");
 });
 
 test("MANY take the plural, ONE does not", () => {

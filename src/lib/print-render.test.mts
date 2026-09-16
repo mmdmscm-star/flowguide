@@ -74,6 +74,21 @@ test("the print URL is private-by-link, like the page it prints", () => {
   assert.equal(r?.follow, false, "the print route is followable");
 });
 
+test("THE PRINTED SIGNATURE IS TEXT, and the URL beside it is the only address", () => {
+  // The web signature is an icon and a link because a reader can tap it. Paper
+  // can do neither: a mark costs ink and an anchor prints as underlined text
+  // that goes nowhere. So the printed tail says the same four words and stops —
+  // the live URL next to it is the thing a reader can actually type.
+  const src = codeOf(RENDERER);
+  const tail = src.slice(src.indexOf('className="pg-tail"'));
+  const line = tail.slice(0, tail.indexOf("</p>"));
+  assert.match(line, /Made with Sendset/, "the printed tail lost the signature");
+  assert.ok(!/Powered by Sendset/.test(src), "the printed tail keeps the superseded wording");
+  assert.ok(!/<a\b|href=/.test(line), "the printed signature became a link");
+  assert.ok(!/<img\b|\.svg/.test(line), "the printed signature spends ink on a mark");
+  assert.match(line, /readable\(liveUrl\)/, "the printed tail no longer shows the address");
+});
+
 test("only http(s) may be printed as a destination", () => {
   const src = codeOf(RENDERER);
   assert.match(src, /\^https\?:/, "the print renderer has no URL scheme guard");
