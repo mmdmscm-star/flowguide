@@ -182,8 +182,16 @@ test("NOTHING COMES BETWEEN THE VISITOR AND THE ACTIONS", () => {
   assert.equal(headerImgs.length, 1, "the hero gained a second image");
   assert.match(headerImgs[0], /src="\/brand\/sendset-logo-horizontal\.svg"/,
     "the hero's image is not the brand lockup");
+  //
+  // THE CEILING IS 56, AND IT IS NOT A DESIGN OPINION. 40 was written around a
+  // 30px mark and turned out to be a number that described the first attempt
+  // rather than the rule; the brand was approved at 48 after two rounds of
+  // looking at the rendered page. What the guard is for is the failure where a
+  // lockup grows until a visitor has to scroll past it to reach the actions —
+  // so the ceiling sits just above the approved size, leaving room to adjust
+  // without leaving room to turn this into a hero graphic.
   const tall = Number(headerImgs[0].match(/height=\{(\d+)\}/)?.[1]);
-  assert.ok(tall > 0 && tall <= 40,
+  assert.ok(tall > 0 && tall <= 56,
     `the lockup is ${tall}px tall — that is a hero graphic, not a header mark`);
   assert.match(header, /Request an invite/, "the hero lost its primary action");
   assert.match(header, /See a real Sendset/, "the hero lost its way into a real one");
