@@ -184,21 +184,36 @@ function sourceFiles(dir = "src", acc: string[] = []): string[] {
   return acc;
 }
 
-test("nothing in the app creates an account except redeem_invite", () => {
+test("nothing in the app creates an account except the invite functions", () => {
+  // 0056 added the second door: an invitation reserved for one address, claimed
+  // by the magic link sent to it. Both doors consume an invite; nothing else
+  // may write a users row.
   const writers = sourceFiles().filter((f) => /from\("users"\)[\s\S]{0,80}\.insert\(/.test(codeOf(f)));
   assert.deepEqual(writers, [], "an account is created outside the invite gate");
   const callers = sourceFiles().filter((f) => codeOf(f).includes('rpc("redeem_invite"'));
   assert.deepEqual(callers, [join("src", "app", "api", "auth", "redeem-invite", "route.ts")], "redeem_invite is reachable from more than one route");
+  const bound = sourceFiles().filter((f) => codeOf(f).includes('rpc("redeem_bound_invite"'));
+  assert.deepEqual(bound.sort(), [
+    join("src", "app", "api", "auth", "accept-invitation", "route.ts"),
+    join("src", "app", "api", "auth", "verify", "route.ts"),
+  ], "the invitation may only be claimed by accepting it or by signing in");
   const verify = codeOf("src/app/api/auth/verify/route.ts");
   assert.doesNotMatch(verify, /\.insert\(/, "verify still writes rows for a new email");
-  assert.match(verify, /if \(!user\) \{[\s\S]{0,900}redirect\(`\$\{appUrl\}\/join`\)/, "a new email is not sent to the invite page");
+  assert.match(verify, /if \(!user\) \{[\s\S]{0,2000}redirect\(`\$\{appUrl\}\/join`\)/, "a new email is not sent to the invite page");
   assert.match(verify, /cookies\.set\(SIGNUP_COOKIE, token, \{[\s\S]{0,200}httpOnly: true/, "the signup cookie must be httpOnly");
   assert.match(verify, /await createSession\(user\.id\)/, "an existing account must still sign in");
-  // Exactly one session is ever created here, and it belongs to an account
-  // that already existed: a new email leaves with a cookie and no session.
-  assert.equal((verify.match(/createSession\(/g) ?? []).length, 1, "verify creates a session somewhere else too");
-  assert.ok(verify.indexOf("await createSession(user.id)") > verify.indexOf(`redirect(\`\${appUrl}/join\`)`),
-    "a session is created before the new-email branch returns");
+  // Every session this route creates belongs to an account it just proved:
+  // one claimed through an invitation (0056), one that already existed. A new
+  // email with no invitation still leaves with a cookie and NO session.
+  assert.deepEqual(verify.match(/createSession\([\s\S]*?\);/g), [
+    "createSession((claimed as { userId: string }).userId);",
+    "createSession(user.id);",
+  ], "verify creates a session somewhere else too");
+  // Bounded by code, not by a comment: comments are stripped above.
+  const branchStart = verify.indexOf("if (!user) {");
+  const newEmailBranch = verify.slice(branchStart, verify.indexOf("return response;", branchStart));
+  const afterClaim = newEmailBranch.slice(newEmailBranch.indexOf(`redirect(\`\${appUrl}/join\`)`));
+  assert.doesNotMatch(afterClaim, /createSession/, "a session is created for an email with no invitation");
 });
 
 test("the invite code never reaches a URL, a log or the database in the clear", () => {

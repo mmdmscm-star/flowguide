@@ -46,6 +46,20 @@ export async function GET(request: Request) {
   // consumes the invite in one transaction. Anyone who never enters a code
   // simply has no account, and the link expires on its own.
   if (!user) {
+    // AN INVITATION NEEDS NO CODE. When an invite is reserved for this address
+    // (0056), the link that proved the address is enough: the account and the
+    // invitation are settled in one transaction. This is also what makes an
+    // expired invitation recoverable — an ordinary sign-in link lands here.
+    const { data: claimed, error: claimError } = await supabase.rpc("redeem_bound_invite", { p_magic_token: token });
+    if (!claimError && claimed) {
+      await createSession((claimed as { userId: string }).userId);
+      return NextResponse.redirect(`${appUrl}/dashboard`);
+    }
+    if (claimError && (claimError as { details?: string | null }).details !== "no_invitation") {
+      console.error("[verify] invitation claim refused", { sqlstate: claimError.code, detail: (claimError as { details?: string | null }).details });
+      return NextResponse.redirect(`${appUrl}/login?error=invalid-link`);
+    }
+
     const response = NextResponse.redirect(`${appUrl}/join`);
     // Enough time to fetch the code from another window, never longer than an
     // hour after the link was sent.

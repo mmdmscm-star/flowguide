@@ -34,6 +34,15 @@ const nextConfig: NextConfig = {
         source: "/p/:slug*",
         headers: [{ key: "Referrer-Policy", value: "no-referrer" }],
       },
+      {
+        // The invitation landing page carries a seven-day magic-link token in
+        // its URL. No Referer to anywhere, and nothing to index.
+        source: "/invited",
+        headers: [
+          { key: "Referrer-Policy", value: "no-referrer" },
+          { key: "X-Robots-Tag", value: "noindex, nofollow" },
+        ],
+      },
     ];
   },
 };

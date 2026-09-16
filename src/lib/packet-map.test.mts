@@ -262,10 +262,11 @@ test("NO SCHEMA MIGRATION WAS INTRODUCED", () => {
   // deliberately added: 0050 (draft revisions + publication table), 0051
   // (review-pending marker), 0052 (atomic publication), 0053 (the status
   // single door) and 0054 (publication backfill) belong to the published-snapshot
-  // track, and 0055 (early-access invites) to the access gate — not this slice.
+  // track, and 0055/0056 (early-access invites and invitations) to the access
+  // gate — not this slice.
   const migrations = readdirSync("supabase/migrations").filter((f) => f.endsWith(".sql")).sort();
   const highest = migrations[migrations.length - 1];
-  assert.equal(highest, "0055_early_access.sql",
+  assert.equal(highest, "0056_invitations.sql",
     `a migration was added: ${highest}`);
 });
 
