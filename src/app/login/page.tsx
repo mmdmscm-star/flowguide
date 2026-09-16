@@ -122,7 +122,7 @@ function LoginForm() {
         <p className="mt-6 text-center text-sm text-muted">
           New to Sendset?{" "}
           <Link href="/early-access" className="font-medium text-accent underline-offset-4 hover:underline">
-            Request early access.
+            Request an invite.
           </Link>
         </p>
 

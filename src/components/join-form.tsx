@@ -67,7 +67,7 @@ export function JoinForm() {
       <p className="mt-6 text-center text-sm text-muted">
         Don&rsquo;t have a code?{" "}
         <Link href="/early-access" className="font-medium text-accent underline-offset-4 hover:underline">
-          Request early access.
+          Request an invite.
         </Link>
       </p>
     </form>

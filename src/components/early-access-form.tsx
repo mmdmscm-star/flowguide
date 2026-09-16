@@ -88,7 +88,8 @@ export function EarlyAccessForm() {
       </button>
 
       <p className="mt-3 text-center text-sm text-muted">
-        No email is sent now. We&rsquo;ll only be in touch if an invite becomes available.
+        Submitting a request doesn&rsquo;t create an account. We&rsquo;ll email you if an
+        invite becomes available.
       </p>
 
       <p className="mt-6 text-center text-sm text-muted">

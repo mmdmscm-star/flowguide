@@ -110,7 +110,7 @@ test("the request form sends name, email and use case, then confirms without pro
   reply = { ok: true, body: { ok: true, message: "Request received. We'll be in touch if an invite becomes available." } };
   const { host, root } = await mount(EarlyAccessForm);
   assert.match(host.querySelector("button[type=submit]")!.textContent!, /^Request an invite$/);
-  assert.match(host.textContent!, /No email is sent now\. We\u2019ll only be in touch if an invite becomes available\./);
+  assert.match(host.textContent!, /Submitting a request doesn\u2019t create an account\. We\u2019ll email you if an invite becomes available\./);
   await type(host.querySelector("#ea-name")!, "Jane Doe");
   await type(host.querySelector("#ea-email")!, " Jane@example.com ");
   await type(host.querySelector("#ea-use")!, "Sending venue options to families.");

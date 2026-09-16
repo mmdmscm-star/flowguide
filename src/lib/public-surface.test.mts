@@ -308,8 +308,9 @@ test("both CTAs, pointing where they should", () => {
   // that would refuse them. The demo and sign-in both stay one click away.
   const src = codeOf(LANDING);
   assert.match(src, /See a real Sendset/);
-  assert.match(src, /Request early access/);
+  assert.match(src, /Request an invite/);
   assert.doesNotMatch(src, /Start your first Sendset/, "the old open-signup call to action is back");
+  assert.doesNotMatch(src, /Request early access/, "the action is requesting an invite, said the same way everywhere");
   assert.ok(src.includes('href="/p/demo"'), "the primary CTA does not reach the demo");
   assert.ok(src.includes('href="/early-access"'), "the primary CTA does not reach the request form");
   assert.ok(src.includes('href="/login"'), "existing users lost their way in");

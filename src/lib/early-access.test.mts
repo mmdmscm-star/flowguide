@@ -239,10 +239,14 @@ test("the request page speaks for the product, and says no email is coming now",
   assert.match(form, /\{state === "sending" \? "Sending…" : "Request an invite"\}/);
   assert.match(form, /<h2 [^>]*>Request received<\/h2>/);
   assert.match(form, /We&rsquo;ll contact you at <span[^>]*>\{sentTo\}<\/span>\{" "\}\s+if an invite becomes available\. There&rsquo;s nothing else you need to do\./);
-  assert.match(form, /No email is sent now\. We&rsquo;ll only be in touch if an invite becomes available\./);
+  assert.match(form, /Submitting a request doesn&rsquo;t create an account\. We&rsquo;ll email you if an\s+invite becomes available\./);
   assert.equal((form.match(/Already have an account\?/g) ?? []).length, 2, "the sign-in path must be on the form and on the confirmation");
   assert.equal((form.match(/Already have an invite code\?\{" "\}\s+<Link href="\/login"[^>]*>Continue with email<\/Link>/g) ?? []).length, 2,
     "someone holding a code needs the way in, before and after submitting");
+  // One name for the action, everywhere it appears.
+  for (const surface of ["src/app/page.tsx", "src/app/login/page.tsx", "src/components/join-form.tsx", "src/app/early-access/page.tsx", "src/components/early-access-form.tsx"]) {
+    assert.doesNotMatch(read(surface), /Request early access/, `${surface} still calls the action "Request early access"`);
+  }
   // First-person singular is gone from this surface.
   for (const banned of [/\bI&rsquo;m\b/, /\bI read these\b/, /\bI&rsquo;ll be in touch\b/, /\bI have it\b/]) {
     assert.doesNotMatch(page + form + read("src/lib/early-access.ts"), banned, `first-person copy remains: ${banned}`);
@@ -251,13 +255,13 @@ test("the request page speaks for the product, and says no email is coming now",
 
 test("the copy says what it should, and the ways in are where they should be", () => {
   assert.match(read("src/app/join/page.tsx"), /Sendset is currently in early access\. Enter your invite code to continue\./);
-  assert.match(read("src/components/join-form.tsx"), /Don&rsquo;t have a code\?\{" "\}[\s\S]{0,200}Request early access\./);
+  assert.match(read("src/components/join-form.tsx"), /Don&rsquo;t have a code\?\{" "\}[\s\S]{0,200}Request an invite\./);
   const home = read("src/app/page.tsx");
-  assert.equal((home.match(/Request early access/g) ?? []).length, 2, "both homepage actions should lead to early access");
+  assert.equal((home.match(/Request an invite/g) ?? []).length, 2, "both homepage actions should ask for an invite");
   assert.equal((home.match(/href="\/early-access"/g) ?? []).length, 2);
   assert.ok(home.includes('<Link href="/login" className="text-base font-medium text-muted underline-offset-4 hover:underline">'), "existing users lost their way in");
   assert.doesNotMatch(home, /Start your first Sendset/, "the old signup call to action is still there");
-  assert.match(read("src/app/login/page.tsx"), /New to Sendset\?\{" "\}[\s\S]{0,200}Request early access\./);
+  assert.match(read("src/app/login/page.tsx"), /New to Sendset\?\{" "\}[\s\S]{0,200}Request an invite\./);
   assert.match(read("src/app/login/page.tsx"), /"signup-expired": "Your sign-in link expired/);
   // The public Sendset pages and the demos stay public: nothing here touches them.
   assert.doesNotMatch(codeOf("src/app/p/[slug]/page.tsx"), /SIGNUP_COOKIE|invite/i);

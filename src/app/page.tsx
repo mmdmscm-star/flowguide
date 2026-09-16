@@ -109,7 +109,7 @@ export default function Home() {
             href="/early-access"
             className="inline-flex items-center rounded-lg bg-accent px-6 py-3 text-base font-medium text-white transition-colors hover:bg-accent-hover focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2"
           >
-            Request early access
+            Request an invite
           </Link>
           <Link href="/p/demo" className="text-base font-medium text-accent underline-offset-4 hover:underline">
             See a real Sendset
@@ -373,7 +373,7 @@ export default function Home() {
             href="/early-access"
             className="inline-flex items-center rounded-lg bg-accent px-6 py-3 text-base font-medium text-white transition-colors hover:bg-accent-hover focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2"
           >
-            Request early access
+            Request an invite
           </Link>
           <Link href="/p/harbor-house" className="text-base font-medium text-accent underline-offset-4 hover:underline">
             Or look at a finished one first
