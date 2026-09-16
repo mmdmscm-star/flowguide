@@ -29,6 +29,98 @@ must obey.
 
 ---
 
+## Recipient link preview — sender-first, and no image at all (SHIPPED 2026-09-16)
+
+**Complete.** A Sendset pasted into a text message used to unfurl as a large card
+saying "A Sendset has been shared with you" over a 1200×630 picture that said the
+same thing again. It is now four lines of text and no image.
+
+**What `/p/<slug>` and its print route emit:**
+
+```
+title / og:title / twitter:title   <Sender> shared a Sendset with you
+description                        View on Sendset.
+og:site_name                       Sendset
+og:type                            website
+twitter:card                       summary
+robots                             noindex, nofollow
+```
+
+No `og:image`, no width/height/alt, no `twitter:image`, no `og:url`. Commits
+`3274d4b` (sender-first text), `8737983` (sender-choice tests), `8bfbc8b`
+`8c7099e` (the image removed).
+
+**The sender is whatever the Sendset already froze** — the preview has no opinion
+of its own. Editor choice → publication → preview:
+
+| Sender choice | Preview title |
+|---|---|
+| My default profile | `<profile name>` shared a Sendset with you |
+| Custom organization | `<that Sendset's own name>` shared a Sendset with you |
+| No sender | A Sendset has been shared with you |
+
+Production holds 26 `default` (all named) and 8 `none` (all anonymous), so the
+anonymous line is a **deliberate choice being honoured**, not missing data. The
+`custom` branch has no production rows at all, which is why it is exercised
+through the real `resolvePublishIdentity` → `buildPublicationSnapshot` chain in
+tests rather than trusted.
+
+**Why no image — and why that was refused twice first.** Removing `og:image` is
+not "no picture": several platforms fall back to scraping the page, and the
+candidates on a recipient page are the professional's headshot, their logo and
+the client's own item photographs. That risk kept an explicit neutral card here
+until it was actually measured. Three rounds of real-device testing, run on the
+four public demos so no client URL was ever involved:
+
+1. **Size** (1200×630 / 600² / 300²) — a smaller card does not make a smaller
+   preview. A square is tall whatever its pixel count.
+2. **Shape** (1200×630 / 1200×400 / 1200×300 / none) — landscape is shorter, and
+   **no image is shortest**. The no-image arm was the control precisely because a
+   demo's photos are invented, so the scrape fallback could be watched safely.
+3. **Sender-name length** (32 / 49 / 63 characters) — long names wrap, and that
+   is fine.
+
+**Result:** iMessage and WhatsApp both fall back to the site icon, stay compact,
+and **neither scraped page imagery**. In WhatsApp the explicit-image arm was
+actively worse — a slivered crop that recreated the intrusiveness being removed.
+`twitter:card` is `summary` because `summary_large_image` with no image asks for
+a treatment it cannot fill.
+
+**The privacy boundary, which is the load-bearing part:**
+
+- `recipientMetadata()` accepts a `SenderIdentity` — a name and a business name —
+  and nothing else. A client title, client name, personal note, item or section
+  has **no parameter to arrive through**.
+- `publishedSenderIdentity(slug)` asks Postgres for one jsonb path
+  (`content->professional`) and returns two of the nine fields it holds, so the
+  professional's email and phone never reach the metadata layer.
+- The name is a **display identity, not a verified one** — a test forbids
+  "verified", "authentic", "confirmed", "official" and friends in any emitted
+  string.
+- **No per-Sendset image route**, still. A generated card bakes private content
+  into a cache we cannot retract.
+- `robots: noindex` does **not** govern unfurl bots. An unfurl leaves our control
+  completely: iMessage, Slack and WhatsApp keep what they fetched in the thread
+  after the Sendset is unpublished. That is why the boundary is a type rather
+  than a habit.
+
+**Deliberately not done:**
+
+1. **No first-name-only setting and no automatic shortening.** The sender
+   identity a professional already controls stays the single source of truth.
+2. **Nothing tells a professional their name appears in a text-message preview.**
+   The honest fix is a line of help text under the name field in Settings — a
+   line of copy, not a new setting. Not written.
+3. **Email is unchanged** and carries no signature.
+4. **The marketing card keeps its image** and `summary_large_image`. The two
+   surfaces are deliberately separate: `og-recipient.png` is retained but
+   referenced by nothing, for previews already cached by messaging apps.
+5. **Existing cached previews stay stale** — including in threads already sent —
+   until each platform re-crawls. Nothing can be done about that, and it is the
+   reason preview text should stay to slow-changing facts like a person's name.
+
+---
+
 ## Brand identity on the surfaces people see (SHIPPED 2026-09-15 → 2026-09-16)
 
 **Complete.** The product had no logo anywhere: the tab wore the `create-next-app`
