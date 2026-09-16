@@ -62,6 +62,32 @@ const RECIPIENT_OG_IMAGE: PreviewImage = { url: "/og-recipient.png", width: 1200
 // TEMPORARY — A DEMO-ONLY IMAGE EXPERIMENT. DELETE THIS WHOLE BLOCK when the
 // recipient card is decided.
 //
+// ROUND 3 — SENDER-NAME LENGTH, against the shape that won.
+//
+// Rounds 1 and 2 settled the image: a square is tall whatever its pixel count,
+// landscape is shorter, and NO image at all is shortest. The compact no-image
+// preview is the preferred direction, so the remaining unknown is the only
+// thing left in it that varies — the length of the sender's name.
+//
+// Three demos, all emitting the same H-shape (no og:image, no twitter:image),
+// differing ONLY in how long the title is:
+//
+//   /p/demo          short      "Ramona shared a Sendset with you"
+//   /p/harbor-house  long       a double-barrelled full name
+//   /p/month-one     very long  a title + double-barrelled surname
+//
+// What is being read off the phone: whether the title wraps to two or three
+// lines, whether iMessage truncates it, and whether the compact preview still
+// feels small when the name is long.
+//
+// THE TITLE HERE IS A FIXTURE, NOT THE PRODUCT'S WORDING. Real Sendsets still
+// say "<sender> shared this with you" through recipientTitle; nothing about
+// sender-name logic changes, and no first-name-only rule exists. These strings
+// exist to stress a layout, and they leave when the experiment does.
+//
+// /p/red-awning drops out of the experiment and returns to the normal card, so
+// exactly three URLs are under test.
+//
 // ROUND 2 — ASPECT RATIO, not artwork size. Round 1 answered its question and
 // was replaced: A (1200x630) felt best because a LANDSCAPE card makes the whole
 // iMessage preview shorter, C's icon-only artwork was the quietest, and D
@@ -90,11 +116,14 @@ const RECIPIENT_OG_IMAGE: PreviewImage = { url: "/og-recipient.png", width: 1200
 // DEMOS ONLY. Every real Sendset stays on /og-recipient.png: nobody's client
 // link is an experiment, and a preview already cached by a messaging app
 // cannot be withdrawn.
-export const DEMO_EXPERIMENT: Record<string, PreviewImage | null> = {
-  "demo":          { url: "/og-exp-e-1200x630-icon.png", width: 1200, height: 630 },
-  "harbor-house":  { url: "/og-exp-f-1200x400-icon.png", width: 1200, height: 400 },
-  "month-one":     { url: "/og-exp-g-1200x300-lockup.png", width: 1200, height: 300 },
-  "red-awning":    null,
+/** One arm: the card (null = declare none) and, for round 3, the title fixture
+ *  that stands in for a sender of that length. */
+export type DemoPreview = { image: PreviewImage | null; title?: string };
+
+export const DEMO_EXPERIMENT: Record<string, DemoPreview> = {
+  "demo": { image: null, title: "Ramona shared a Sendset with you" },
+  "harbor-house": { image: null, title: "Shai Gilgeous-Alexander shared a Sendset with you" },
+  "month-one": { image: null, title: "Dr. Annabelle Fitzwilliam-Castellanos shared a Sendset with you" },
 };
 
 /** The card for a slug: a demo's experimental one, or the neutral default.
@@ -107,8 +136,13 @@ export const DEMO_EXPERIMENT: Record<string, PreviewImage | null> = {
  *  `Object.hasOwn`, not a plain lookup: a slug of "constructor" or "toString"
  *  finds Object.prototype's member, which is truthy, and a function would then
  *  be spread into og:image. Slugs are attacker-supplied path segments. */
+export function demoPreviewFor(slug?: string): DemoPreview | null {
+  return slug && Object.hasOwn(DEMO_EXPERIMENT, slug) ? DEMO_EXPERIMENT[slug] : null;
+}
+
 export function previewImageFor(slug?: string): PreviewImage | null {
-  return slug && Object.hasOwn(DEMO_EXPERIMENT, slug) ? DEMO_EXPERIMENT[slug] : RECIPIENT_OG_IMAGE;
+  const arm = demoPreviewFor(slug);
+  return arm ? arm.image : RECIPIENT_OG_IMAGE;
 }
 
 /** A person's name first, their business second, and an unsigned Sendset last.
@@ -128,7 +162,10 @@ export function recipientMetadata(
    *  neutral image, so it cannot put a slug into a tag. */
   slug?: string,
 ): Metadata {
-  const title = recipientTitle(sender);
+  // A demo's title fixture, else the product's real wording. The override is
+  // reachable only from the fixed demo map, so no Sendset can be given a title
+  // that did not come from recipientTitle.
+  const title = demoPreviewFor(slug)?.title ?? recipientTitle(sender);
   const image = previewImageFor(slug);
   return {
     title,

@@ -4,22 +4,10 @@ import { readFileSync } from "node:fs";
 import { recipientMetadata, recipientTitle, RECIPIENT_DESCRIPTION,
          DEMO_EXPERIMENT as DEMO_EXPERIMENT_SLUGS } from "./recipient-metadata.ts";
 import { PUBLIC_DEMOS } from "./public-demos.ts";
-import { join, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
 import { buildPublicationSnapshot, publishedSenderIdentity } from "./queries.ts";
 import { resolvePublishIdentity } from "./publish-identity.ts";
 
 const codeOf = (p: string) => readFileSync(p, "utf8");
-const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
-
-/** A PNG's real dimensions, straight out of its IHDR. Asserted against what the
- *  metadata DECLARES: a card whose declared size disagrees with the file is
- *  laid out wrongly by unfurlers, which is the exact variable under test. */
-function pngSize(file: string): { width: number; height: number } {
-  const b = readFileSync(file);
-  assert.equal(b.readUInt32BE(12), 0x49484452, `${file} is not a PNG`);
-  return { width: b.readUInt32BE(16), height: b.readUInt32BE(20) };
-}
 const RECIPIENT_ROUTES = ["src/app/p/[slug]/page.tsx", "src/app/p/[slug]/print/page.tsx"];
 
 /** The exact strings that reached a client's text message. Kept verbatim even
@@ -375,65 +363,49 @@ test("the experiment reaches DEMOS AND NOTHING ELSE", () => {
   assert.equal((none.images as Record<string, unknown>[])[0].url, "/og-recipient.png");
 });
 
-test("each demo carries its own candidate, at the size it declares", () => {
-  // A declared width that disagrees with the file makes an unfurler lay the
-  // card out wrongly — which is the very thing being measured, so a mismatch
-  // would corrupt the experiment rather than break it visibly.
-  for (const [slug, expected] of Object.entries(DEMO_EXPERIMENT_SLUGS)) {
+test("the three arms differ ONLY in title length", () => {
+  // Round 3's variable. Every arm must emit the same H-shape — no og:image, no
+  // twitter:image — or a wrapping difference could be the card's doing rather
+  // than the name's.
+  const arms = Object.entries(DEMO_EXPERIMENT_SLUGS);
+  assert.equal(arms.length, 3, "the experiment is meant to be exactly three URLs");
+  const lengths = new Set<number>();
+  for (const [slug, arm] of arms) {
+    assert.equal(arm.image, null, `${slug} declares a card — the shape is supposed to be held still`);
     const m = recipientMetadata(null, slug);
     const og = m.openGraph as Record<string, unknown>;
-    if (expected === null) {
-      // The CONTROL: no image at all, and omitted rather than emptied.
-      assert.ok(!("images" in og), `${slug} is the no-image control but declares og:image`);
-      assert.ok(!("images" in (m.twitter as Record<string, unknown>)),
-        `${slug} is the no-image control but declares twitter:image`);
-    } else {
-      const image = (og.images as Record<string, unknown>[])[0];
-      assert.equal(image.url, expected.url, `${slug} carries the wrong candidate`);
-      const real = pngSize(join(ROOT, "public", expected.url.replace(/^\//, "")));
-      assert.deepEqual(real, { width: expected.width, height: expected.height },
-        `${expected.url} is ${real.width}x${real.height} but declares ${expected.width}x${expected.height}`);
-      assert.equal(image.width, expected.width);
-      assert.equal(image.height, expected.height);
-    }
-    // The text does the talking, on a demo as much as anywhere — and an
-    // anonymous demo says exactly this.
-    assert.equal(m.title, "A Sendset has been shared with you");
+    assert.ok(!("images" in og), `${slug} emits og:image`);
+    assert.ok(!("images" in (m.twitter as Record<string, unknown>)), `${slug} emits twitter:image`);
     assert.equal(m.description, RECIPIENT_DESCRIPTION);
-    assert.equal((m.twitter as Record<string, unknown>).card, "summary_large_image",
-      "the card type was varied — the experiment is meant to isolate the image");
+    assert.equal(m.title, arm.title);
+    assert.equal((m.openGraph as Record<string, unknown>).title, arm.title);
+    assert.equal((m.twitter as Record<string, unknown>).title, arm.title);
+    assert.match(String(arm.title), /shared a Sendset with you$/, `${slug}'s fixture is off-pattern`);
+    lengths.add(String(arm.title).length);
+  }
+  assert.equal(lengths.size, 3, `two arms are the same length: ${[...lengths].join(", ")}`);
+  // Short really is short and long really is long, or the test is measuring
+  // three indistinguishable strings.
+  const sorted = [...lengths].sort((a, b) => a - b);
+  assert.ok(sorted[2] - sorted[0] >= 25,
+    `the longest fixture is only ${sorted[2] - sorted[0]} characters longer than the shortest`);
+});
+
+test("a real Sendset's title still comes from recipientTitle, never a fixture", () => {
+  // The fixtures are stress strings for a layout. If one could reach a real
+  // link it would tell a client something untrue about who sent it.
+  const fixtures = Object.values(DEMO_EXPERIMENT_SLUGS).map((a) => a.title);
+  for (const slug of ["r6cdwbk3", "32f35aj3l7dt0e7d8jl1zz", "demo-2", "", "constructor"]) {
+    const m = recipientMetadata({ name: "Ramona Maurer" }, slug);
+    assert.equal(m.title, "Ramona Maurer shared this with you", `${slug} was given a fixture title`);
+    assert.ok(!fixtures.includes(String(m.title)));
+    assert.ok(!String(m.title).includes("shared a Sendset with you"),
+      "the experiment's wording reached a real Sendset");
   }
 });
 
-test("EXACTLY ONE demo runs the no-image control, and no real link can", () => {
-  // The control is the riskiest arm: with no og:image some platforms scrape the
-  // page for a picture. On a demo the candidates are the demo's own invented
-  // interiors. On a real Sendset they would be the professional's headshot,
-  // their logo, and the client's item photographs.
-  const withoutImage = Object.entries(DEMO_EXPERIMENT_SLUGS)
-    .filter(([, v]) => v === null).map(([k]) => k);
-  assert.deepEqual(withoutImage, ["red-awning"],
-    "the no-image control moved or spread — it must be one named demo");
-  for (const slug of ["r6cdwbk3", "32f35aj3l7dt0e7d8jl1zz", "red-awning-2", "", "constructor"]) {
-    const og = recipientMetadata({ name: "Ramona Maurer" }, slug).openGraph as Record<string, unknown>;
-    assert.ok(Array.isArray(og.images) && og.images.length === 1,
-      `${slug} lost its image — page photos, headshots and logos become scrapeable`);
-  }
-});
 
-test("the aspect ratios under test are actually DIFFERENT", () => {
-  // The round-1 finding was that pixel size alone changes nothing and shape is
-  // what matters. An experiment whose arms share a shape would repeat round 1
-  // and read as a null result.
-  const shapes = Object.values(DEMO_EXPERIMENT_SLUGS)
-    .filter((v): v is NonNullable<typeof v> => v !== null)
-    .map((v) => (v.width / v.height).toFixed(2));
-  assert.equal(new Set(shapes).size, shapes.length,
-    `two candidates share an aspect ratio: ${shapes.join(", ")}`);
-  for (const v of Object.values(DEMO_EXPERIMENT_SLUGS)) {
-    if (v) assert.ok(v.width > v.height, `${v.url} is not landscape — round 1 settled that squares are too tall`);
-  }
-});
+
 
 test("og:url is NOT inherited from the marketing homepage", () => {
   const og = recipientMetadata({ name: "Ramona Maurer" }).openGraph as Record<string, unknown>;
