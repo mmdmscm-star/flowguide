@@ -80,6 +80,11 @@ const RECIPIENT_OG_IMAGE: PreviewImage = { url: "/og-recipient.png", width: 1200
 // lines, whether iMessage truncates it, and whether the compact preview still
 // feels small when the name is long.
 //
+// EVERY NAME HERE IS INVENTED, and the first draft was not: it used a real
+// public figure as the long sample. These pages are publicly reachable, and
+// one of them then said a named living person had shared something they had
+// never seen. A length fixture needs a plausible shape, not a real person.
+//
 // THE TITLE HERE IS A FIXTURE, NOT THE PRODUCT'S WORDING. Real Sendsets still
 // say "<sender> shared this with you" through recipientTitle; nothing about
 // sender-name logic changes, and no first-name-only rule exists. These strings
@@ -122,7 +127,7 @@ export type DemoPreview = { image: PreviewImage | null; title?: string };
 
 export const DEMO_EXPERIMENT: Record<string, DemoPreview> = {
   "demo": { image: null, title: "Ramona shared a Sendset with you" },
-  "harbor-house": { image: null, title: "Shai Gilgeous-Alexander shared a Sendset with you" },
+  "harbor-house": { image: null, title: "Marcus Thorneberry-Diaz shared a Sendset with you" },
   "month-one": { image: null, title: "Dr. Annabelle Fitzwilliam-Castellanos shared a Sendset with you" },
 };
 
