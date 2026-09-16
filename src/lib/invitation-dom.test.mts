@@ -18,9 +18,12 @@ let reply: { ok: boolean; body: unknown } = { ok: true, body: {} };
 const ROUTER = { push: (to: string) => { pushed.push(to); }, replace: () => {}, refresh: () => {}, back: () => {}, forward: () => {}, prefetch: async () => {} };
 
 const ROWS = [
-  { id: "r1", name: "Jane Doe", email: "jane@example.com", use_case: "Venue lists", created_at: "2026-09-15T00:00:00Z", approved_at: null, invitation_sent_at: null },
-  { id: "r2", name: "Sam Ray", email: "sam@example.com", use_case: "Tours", created_at: "2026-09-14T00:00:00Z", approved_at: "2026-09-14T01:00:00Z", invitation_sent_at: "2026-09-14T01:00:01Z" },
+  { id: "r1", name: "Jane Doe", email: "jane@example.com", use_case: "Venue lists", created_at: "2026-09-15T00:00:00Z", approved_at: null, invitation_sent_at: null, hasAccount: false },
+  { id: "r2", name: "Sam Ray", email: "sam@example.com", use_case: "Tours", created_at: "2026-09-14T00:00:00Z", approved_at: "2026-09-14T01:00:00Z", invitation_sent_at: "2026-09-14T01:00:01Z", hasAccount: false },
 ];
+// Approved, but that address could already sign in: nothing was reserved, so
+// there is nothing to send.
+const HAS_ACCOUNT = { id: "r3", name: "Pat Lee", email: "pat@example.com", use_case: "Tours", created_at: "2026-09-13T00:00:00Z", approved_at: "2026-09-13T01:00:00Z", invitation_sent_at: null, hasAccount: true };
 
 before(async () => {
   dom = new JSDOM('<!doctype html><html><body><div id="root"></div></body></html>', { url: "https://sendset.io/invites", pretendToBeVisual: true });
@@ -88,6 +91,27 @@ test("an impatient double click approves once", async () => {
     calls.push({ url, body: init?.body ? JSON.parse(init.body) : undefined });
     return { ok: reply.ok, status: reply.ok ? 200 : 404, json: async () => reply.body };
   };
+});
+
+test("an approved request whose address already has an account offers nothing to send", async () => {
+  const { host, root } = await mount(React.createElement(InviteRequestList, { rows: [HAS_ACCOUNT] as never }));
+  assert.match(host.textContent!, /Already has an account/);
+  assert.equal(button(host, "Send again"), undefined, "an account holder was offered an invitation");
+  assert.equal(button(host, "Approve & send invite"), undefined);
+  assert.equal([...host.querySelectorAll("button")].length, 0, "an approved account holder needs no action at all");
+  assert.doesNotMatch(host.textContent!, /not sent|invitation sent/, "it must not claim anything about an invitation");
+  root.unmount();
+});
+
+test("approving an address that already has an account flips it to that state, with no action", async () => {
+  reply = { ok: true, body: { status: "has_account", message: "That address can already sign in — no invitation needed." } };
+  const pendingHolder = { ...HAS_ACCOUNT, id: "r4", approved_at: null, hasAccount: false };
+  const { host, root } = await mount(React.createElement(InviteRequestList, { rows: [pendingHolder] as never }));
+  await click(button(host, "Approve & send invite")!);
+  assert.match(host.textContent!, /Already has an account/);
+  assert.equal(button(host, "Send again"), undefined, "the answer said no invitation was needed, yet one is offered");
+  assert.match(host.querySelector('[role="status"]')!.textContent!, /can already sign in/);
+  root.unmount();
 });
 
 test("Send again sends again, and says so", async () => {

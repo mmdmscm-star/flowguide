@@ -14,6 +14,8 @@ export type RequestRow = {
   created_at: string;
   approved_at: string | null;
   invitation_sent_at: string | null;
+  /** This address can already sign in, so no invitation applies. */
+  hasAccount: boolean;
 };
 
 type Outcome = { message: string; ok: boolean };
@@ -22,6 +24,8 @@ export function InviteRequestList({ rows }: { rows: RequestRow[] }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [outcome, setOutcome] = useState<Record<string, Outcome>>({});
   const [done, setDone] = useState<Record<string, boolean>>({});
+  // Learned from an approval that found an existing account, without a reload.
+  const [existing, setExisting] = useState<Record<string, boolean>>({});
 
   async function act(id: string, what: "approve" | "resend") {
     if (busy) return;
@@ -35,6 +39,7 @@ export function InviteRequestList({ rows }: { rows: RequestRow[] }) {
       const data = await res.json().catch(() => ({}));
       setOutcome((o) => ({ ...o, [id]: { ok: res.ok, message: data.message || (res.ok ? "Done." : "That didn't work.") } }));
       if (res.ok) setDone((d) => ({ ...d, [id]: true }));
+      if (data.status === "has_account") setExisting((e) => ({ ...e, [id]: true }));
     } catch {
       setOutcome((o) => ({ ...o, [id]: { ok: false, message: "That didn't work." } }));
     } finally {
@@ -48,6 +53,8 @@ export function InviteRequestList({ rows }: { rows: RequestRow[] }) {
     <ul className="space-y-4">
       {rows.map((r) => {
         const approved = !!r.approved_at || done[r.id];
+        // An address that can already sign in has nothing to be invited to.
+        const hasAccount = r.hasAccount || existing[r.id];
         return (
           <li key={r.id} className="rounded-[var(--radius-panel)] border border-line bg-ground p-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
@@ -57,16 +64,21 @@ export function InviteRequestList({ rows }: { rows: RequestRow[] }) {
                 <p className="mt-1 text-micro text-ink-3">
                   {new Date(r.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
                   {r.approved_at ? " · approved" : ""}
-                  {r.invitation_sent_at ? " · invitation sent" : r.approved_at ? " · not sent" : ""}
+                  {hasAccount ? "" : r.invitation_sent_at ? " · invitation sent" : r.approved_at ? " · not sent" : ""}
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
+                {approved && hasAccount && (
+                  <span className="rounded-full bg-ground-3 px-2 py-0.5 text-micro font-medium text-ink-2">
+                    Already has an account
+                  </span>
+                )}
                 {!approved && (
                   <Button variant="primary" size="sm" disabled={busy === r.id} onClick={() => act(r.id, "approve")}>
                     {busy === r.id ? "Sending…" : "Approve & send invite"}
                   </Button>
                 )}
-                {approved && (
+                {approved && !hasAccount && (
                   <Button variant="secondary" size="sm" disabled={busy === r.id} onClick={() => act(r.id, "resend")}>
                     {busy === r.id ? "Sending…" : "Send again"}
                   </Button>

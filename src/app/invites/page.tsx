@@ -19,7 +19,19 @@ export default async function InvitesPage() {
     .from("early_access_requests")
     .select("id, name, email, use_case, created_at, approved_at, invitation_sent_at")
     .order("created_at", { ascending: false });
-  const rows = (data ?? []) as RequestRow[];
+  const requests = (data ?? []) as Omit<RequestRow, "hasAccount">[];
+
+  // WHICH OF THESE ADDRESSES CAN ALREADY SIGN IN.
+  //
+  // Such a request needs no invitation — approving one reserves nothing — so
+  // the list must not offer to send one. Reading it here keeps that state true
+  // after a reload, not only in the answer to a click.
+  const { data: existing } = await db
+    .from("users")
+    .select("email")
+    .in("email", requests.map((r) => r.email));
+  const withAccounts = new Set(((existing ?? []) as { email: string }[]).map((u) => u.email));
+  const rows: RequestRow[] = requests.map((r) => ({ ...r, hasAccount: withAccounts.has(r.email) }));
   const pending = rows.filter((r) => !r.approved_at);
 
   return (

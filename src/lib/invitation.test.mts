@@ -81,6 +81,19 @@ test("the founder surfaces check the server, and hide themselves from everyone e
   }
 });
 
+test("the founder page knows which addresses can already sign in", () => {
+  const page = codeOf("src/app/invites/page.tsx");
+  assert.match(page, /\.from\("users"\)\s*\.select\("email"\)\s*\.in\("email", requests\.map\(\(r\) => r\.email\)\)/,
+    "the page must look up which requested addresses already have accounts");
+  assert.match(page, /hasAccount: withAccounts\.has\(r\.email\)/);
+  const list = codeOf("src/components/invite-request-list.tsx");
+  assert.match(list, /const hasAccount = r\.hasAccount \|\| existing\[r\.id\];/);
+  assert.match(list, /\{approved && hasAccount && \([\s\S]{0,200}Already has an account/);
+  assert.match(list, /\{approved && !hasAccount && \([\s\S]{0,200}Send again/,
+    "Send again must be offered only where an invitation exists");
+  assert.match(list, /if \(data\.status === "has_account"\) setExisting/);
+});
+
 test("approving twice sends one invitation; sending again is its own action", () => {
   const approveFile = codeOf("src/app/api/invites/approve/route.ts");
   const approve = approveFile.slice(approveFile.indexOf("export async function POST"));
