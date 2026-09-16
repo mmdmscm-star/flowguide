@@ -770,7 +770,7 @@ export default function NewPacketWorkspace() {
               type="text"
               value={groupingTitle}
               onChange={(e) => setGroupingTitle(e.target.value)}
-              placeholder="e.g. Spring Lake Village"
+              placeholder="e.g. Harbor House Hotel"
               disabled={processing || readingImage}
               className="mt-1 w-full max-w-sm rounded-[var(--radius-control)] border border-line bg-ground px-3 py-2 text-body
                          text-ink outline-none focus:ring-2 focus:ring-mark/15 disabled:opacity-60"

@@ -192,7 +192,7 @@ export default function ImportProgress({
               {/* A KIND THAT HOLDS A WHOLE RUN'S MATERIAL NAMES ITSELF.
                   Most cards are one excerpt from one titled item and the title
                   says enough; this one is a list of lines from across a source,
-                  and "Spring Lake Village" alone would not say what happened.
+                  and "Harbor House Hotel" alone would not say what happened.
                   From the registry, never hardcoded here. */}
               {headlineFor(f) && (
                 <p className="text-body font-semibold text-amber-900">{headlineFor(f)}</p>
