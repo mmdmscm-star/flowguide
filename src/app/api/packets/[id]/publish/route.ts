@@ -65,6 +65,17 @@ async function importGate(supabase: Db, packetId: string, userId: string): Promi
   return null;
 }
 
+/** The private name a Sendset needs before it can be published.
+ *
+ *  A CODE AS WELL AS A SENTENCE. This used to be the bare string "Packet needs
+ *  a title", which Preview could only print — so the one blocker with a
+ *  one-field fix was the one that sent a professional back to the editor and
+ *  back again. `name_required` lets the share step offer the field instead.
+ *
+ *  The name is `packets.title`: internal, never shown to a recipient, and not
+ *  the optional client-facing heading (`client_title`). */
+const NAME_REQUIRED = "Give this Sendset a name to publish.";
+
 // POST /api/packets/:id/publish — publish or unpublish
 export async function POST(request: Request, context: Context) {
   const session = await getSession();
@@ -103,7 +114,7 @@ export async function POST(request: Request, context: Context) {
 
     if (!packet) return NextResponse.json({ error: "Not found" }, { status: 404 });
     if (!packet.title?.trim()) {
-      return NextResponse.json({ error: "Packet needs a title" }, { status: 400 });
+      return NextResponse.json({ error: "name_required", message: NAME_REQUIRED }, { status: 400 });
     }
 
     // Content validation branches on composition mode. Legacy packets keep the
@@ -265,7 +276,7 @@ export async function POST(request: Request, context: Context) {
       return NextResponse.json({
         error: "ownership_unavailable",
         retryable: true,
-        message: "Photo checks are temporarily unavailable, so this packet wasn't published. Try again in a moment.",
+        message: "Photo checks are temporarily unavailable, so this Sendset wasn't published. Try again in a moment.",
       }, { status: 503 });
     }
 
@@ -276,7 +287,7 @@ export async function POST(request: Request, context: Context) {
       return NextResponse.json({
         error: "ownership_unavailable",
         retryable: true,
-        message: "Photo checks are temporarily unavailable, so this packet wasn't published. Try again in a moment.",
+        message: "Photo checks are temporarily unavailable, so this Sendset wasn't published. Try again in a moment.",
       }, { status: 503 });
     }
 
@@ -328,7 +339,7 @@ export async function POST(request: Request, context: Context) {
         return refusal ?? NextResponse.json({ error: "import_in_progress", message: "An import is still in progress. Finish or discard it before publishing." }, { status: 409 });
       }
       if (publishErr.code === "PT400" && detail === "title_required") {
-        return NextResponse.json({ error: "Packet needs a title" }, { status: 400 });
+        return NextResponse.json({ error: "name_required", message: NAME_REQUIRED }, { status: 400 });
       }
       if (publishErr.code === "PT404") {
         return NextResponse.json({ error: "Not found" }, { status: 404 });

@@ -34,6 +34,13 @@ export function PreviewActions({ packetId, slug, initialStatus, title, clientNam
   // that lands before it does.
   const publishInFlight = useRef(false);
   const [error, setError] = useState("");
+  /** Set ONLY by a publish that was refused for a missing private name, the
+   *  same way the ownership panel is driven by its 409 rather than mounted
+   *  speculatively: a professional whose Sendset already has a name never sees
+   *  a naming field on the share step. */
+  const [needsName, setNeedsName] = useState(false);
+  const [name, setName] = useState("");
+  const [savingName, setSavingName] = useState(false);
   const [copied, setCopied] = useState(false);
   const [copyFailed, setCopyFailed] = useState(false);
   // Set only by a publish that was actually blocked on ownership. The panel is
@@ -105,6 +112,44 @@ export function PreviewActions({ packetId, slug, initialStatus, title, clientNam
     }
   }
 
+  /** Save the private name, then go back through the ordinary publish.
+   *
+   *  TWO STEPS ON PURPOSE, not a publish that also writes a name. The name is
+   *  saved by the same PATCH the editor uses, and then `publishPacket` runs
+   *  every gate again from the top — so a Sendset that is also missing items,
+   *  or mid-import, is refused for that next, exactly as it would have been.
+   *  Nothing here can skip a blocker, because nothing here publishes.
+   *
+   *  The publish route mints its own token per request (packet_publish_token),
+   *  so the freshly saved name is inside the token the database then re-checks
+   *  under the row lock. Saving first cannot race the publish that follows. */
+  async function saveNameAndPublish() {
+    const trimmed = name.trim();
+    if (!trimmed || publishInFlight.current) return;
+    publishInFlight.current = true;
+    setSavingName(true);
+    setError("");
+    try {
+      // ONLY `title`. The client-facing heading is a different field and is not
+      // this screen's business.
+      const res = await fetch(`/api/packets/${packetId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: trimmed }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setError(data.message || data.error || "Could not save the name. Try again.");
+        return;
+      }
+      setNeedsName(false);
+      await publishPacket(false);
+    } finally {
+      setSavingName(false);
+      publishInFlight.current = false;
+    }
+  }
+
   async function publishPacket(skipProfileCheck: boolean) {
     setError("");
     setPublishing(true);
@@ -123,6 +168,15 @@ export function PreviewActions({ packetId, slug, initialStatus, title, clientNam
           if (proceed) {
             await publishPacket(true);
           }
+          return;
+        }
+        // THE ONE BLOCKER WITH A ONE-FIELD FIX. Every other refusal needs the
+        // editor: an item without a title, a section without items, an import
+        // to finish. This one needs a word, and sending someone to the editor
+        // and back for a word is how a safety state turns into a dead end —
+        // the same reasoning as the ownership panel below.
+        if (res.status === 400 && data.error === "name_required") {
+          setNeedsName(true);
           return;
         }
         if (res.status === 409 && data.error === "ownership_unresolved") {
@@ -339,8 +393,55 @@ export function PreviewActions({ packetId, slug, initialStatus, title, clientNam
       )}
       {error && <p role="alert" className="mt-4 text-meta text-red-700">{error}</p>}
 
+      {/* THE BLOCK AND THE WAY OUT ARE THE SAME SCREEN, as with the ownership
+          panel above. Publish used to refuse here with "Packet needs a title"
+          and no field to type one into: back to the editor, name it, back to
+          Preview, publish. One word, four navigations.
+
+          NOT A GENERAL EDITOR. One field, the one that is blocking, and the
+          action that was already being attempted. Nothing else about the
+          Sendset can be changed from here. */}
+      {needsName && (
+        <div className="mt-5 rounded-[var(--radius-panel)] border border-line bg-ground p-4">
+          <h2 className="text-body font-medium text-ink">Give this Sendset a name to publish</h2>
+          <p className="mt-1 text-meta text-ink-2">
+            Only you see this. It helps you find this Sendset later.
+          </p>
+          {/* STACKED ON A PHONE. Side by side, the field and the button share
+              375px and the field wins about 165 of them — a name is typed into
+              a box too narrow to read it back. Above `sm` they sit on one row
+              as before. */}
+          <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-end">
+            <div className="min-w-0 sm:flex-1">
+              <label htmlFor="sendset-name" className="sr-only">Sendset name</label>
+              <input
+                id="sendset-name"
+                type="text"
+                value={name}
+                autoFocus
+                onChange={(e) => setName(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); saveNameAndPublish(); } }}
+                disabled={savingName || publishing}
+                className="w-full rounded-[var(--radius-control)] border border-line bg-ground px-3 py-2
+                           text-body text-ink outline-none focus:ring-2 focus:ring-mark/15 disabled:opacity-60"
+              />
+            </div>
+            {/* NO AUTO-GENERATED NAME, so the action stays inert until there is
+                one to save. A placeholder guess would be a name nobody chose. */}
+            <Button
+              variant="primary"
+              size="md"
+              onClick={saveNameAndPublish}
+              disabled={!name.trim() || savingName || publishing}
+            >
+              {savingName || publishing ? "Publishing…" : "Save & publish"}
+            </Button>
+          </div>
+        </div>
+      )}
+
       <div className="mt-5 flex flex-wrap items-center gap-2">
-        <Button variant="primary" size="md" onClick={startPublish} disabled={publishing}>
+        <Button variant="primary" size="md" onClick={startPublish} disabled={publishing || needsName}>
           {publishing ? "Publishing…" : "Publish"}
         </Button>
         <a href={`/edit/${packetId}`} className={buttonClass("ghost", "md")}>

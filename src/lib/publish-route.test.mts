@@ -163,7 +163,7 @@ test("publish: token, gates in their order, snapshot, then publish_packet", () =
   const order = [
     'rpc("packet_publish_token"',
     "await importGate(supabase, id, session.userId)",
-    '"Packet needs a title"',
+    'error: "name_required"',
     'composition_mode === "blocks"',
     "identityGap(contact)",
     "loadPacketOwnership(id, supabase)",
@@ -197,7 +197,16 @@ test("publish: database refusals are mapped deliberately", () => {
   assert.match(route, /export const CHANGED_WHILE_PUBLISHING = "This Sendset changed while publishing\. Try again\.";/);
   assert.match(errs, /detail === "import_blocks"\) \{\s*const refusal = await importGate\(supabase, id, session\.userId\);/,
     "a blocking import answers with the import gate's own response");
-  assert.match(errs, /detail === "title_required"\) \{\s*return NextResponse\.json\(\{ error: "Packet needs a title" \}, \{ status: 400 \}\)/);
+  // THE MISSING NAME IS A CODE, NOT A SENTENCE, because the share step offers
+  // the field instead of printing the refusal. Both refusals — the route's own
+  // check and the database's, which is the one that actually holds under the
+  // row lock — must answer with the same code, or Preview would show the field
+  // for one and a dead end for the other.
+  assert.match(errs, /detail === "title_required"\) \{\s*return NextResponse\.json\(\{ error: "name_required", message: NAME_REQUIRED \}, \{ status: 400 \}\)/);
+  assert.equal(route.match(/error: "name_required"/g)?.length, 2,
+    "the route and database refusals for a missing name have drifted apart");
+  assert.match(route, /const NAME_REQUIRED = "Give this Sendset a name to publish\.";/);
+  assert.ok(!/Packet needs a title/.test(route), "the old Packet wording survives in the publish route");
   assert.match(errs, /publishErr\.code === "PT404"\) \{\s*return NextResponse\.json\(\{ error: "Not found" \}, \{ status: 404 \}\)/);
   assert.match(errs, /error: "publish_failed", message: "Couldn't publish this Sendset\. Please try again\." \}, \{ status: 500 \}/);
   // Logged in full, never returned.
