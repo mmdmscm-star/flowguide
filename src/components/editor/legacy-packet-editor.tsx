@@ -5,6 +5,8 @@ import { Button, buttonClass } from "@/components/ui/button";
 import { useEffect, useState, useCallback, useRef, type ReactNode } from "react";
 import ImageUploadField from "./image-upload-field";
 import ProfessionalProfileFields from "./professional-profile-fields";
+import { RecipientResponsesSettings } from "./recipient-responses-settings";
+import { acceptsResponses } from "@/lib/response-actions";
 import DeletePacketAction from "./delete-packet-action";
 import { PHOTO_ACCEPT_ATTR } from "@/lib/photo-upload";
 import { packetMapUrl } from "@/lib/maps-url";
@@ -135,6 +137,9 @@ interface PacketData {
   identityMode: IdentityMode;
   customIdentity: EditorProfile | null;
   showQuickNav: boolean;
+  /** Whether the published page accepts responses (0058). Read once to seed the
+   *  shared switch, which owns the value from then on. */
+  responsesEnabled: boolean;
   createdAt: string;
 }
 
@@ -314,6 +319,8 @@ export function LegacyPacketEditor() {
       identityMode: (p.identity_mode as IdentityMode) || "default",
       // Absent or null reads as ON, matching the recipient renderer.
       showQuickNav: p.show_quick_nav !== false,
+      // Absent, empty or unexpected reads as OFF: responses are opt-in.
+      responsesEnabled: acceptsResponses(p.response_actions),
       customIdentity: p.custom_identity
         ? {
             name: p.custom_identity.name || "",
@@ -1912,6 +1919,10 @@ export function LegacyPacketEditor() {
           </p>
         )}
       </div>
+
+      {/* Beside Sender, because both answer how this Sendset meets the people it
+          reaches. The same component the block editor mounts. */}
+      <RecipientResponsesSettings packetId={packet.id} initialEnabled={packet.responsesEnabled} />
 
       <DeletePacketAction
         packetId={packet.id}

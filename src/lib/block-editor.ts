@@ -1,6 +1,7 @@
 import { createServerClient } from "./supabase";
 import { assembleItemsByIds } from "./queries";
 import type { PacketBlock } from "./types";
+import { acceptsResponses } from "./response-actions";
 
 // ============================================================
 // Editor-side loader for a block-mode packet. Owner-scoped. Returns the routing
@@ -21,6 +22,7 @@ export type BlockEditorLoad =
        *  legacy editor until now, which is why a block packet could carry one
        *  it could not remove. */
       mapUrl: string;
+      responsesEnabled: boolean;
       clientName: string; createdAt: string; blocks: PacketBlock[] };
 
 export async function getBlockEditorData(packetId: string, userId: string): Promise<BlockEditorLoad> {
@@ -30,7 +32,7 @@ export async function getBlockEditorData(packetId: string, userId: string): Prom
     .from("packets")
     // client_name and created_at identify the packet in the delete
     // confirmation; nothing else reads them here.
-    .select("id, title, client_title, status, composition_mode, client_name, created_at, map_url")
+    .select("id, title, client_title, status, composition_mode, client_name, created_at, map_url, response_actions")
     .eq("id", packetId)
     .eq("user_id", userId)
     .single();
@@ -70,6 +72,7 @@ export async function getBlockEditorData(packetId: string, userId: string): Prom
     found: true, mode: "blocks", status: packet.status, title: packet.title,
     clientTitle: (packet as { client_title?: string }).client_title || "",
     mapUrl: (packet as { map_url?: string }).map_url || "",
+    responsesEnabled: acceptsResponses((packet as { response_actions?: unknown }).response_actions),
     clientName: (packet as { client_name?: string }).client_name || "",
     createdAt: (packet as { created_at?: string }).created_at || "",
     blocks,

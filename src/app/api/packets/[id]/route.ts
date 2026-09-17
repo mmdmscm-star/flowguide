@@ -3,6 +3,7 @@ import { TREATMENT_NAMES } from "@/lib/style/treatment";
 import { packetMapUrl } from "@/lib/maps-url";
 import { getSession } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase";
+import { parseResponseActions } from "@/lib/response-actions";
 
 type Context = { params: Promise<{ id: string }> };
 
@@ -152,6 +153,21 @@ export async function PATCH(request: Request, context: Context) {
         message: `Unknown treatment. Choose one of: ${TREATMENT_NAMES.join(", ")}.`,
       }, { status: 400 });
     }
+  }
+
+  // RECIPIENT RESPONSES (0058). Validated against the one shared list, which the
+  // database's CHECK mirrors, so a bad value gets a sentence rather than a
+  // Postgres error. Written straight to the Sendset: it is not part of the
+  // frozen publication, so the change is live on the next request.
+  if ("responseActions" in body) {
+    const parsed = parseResponseActions(body.responseActions);
+    if (parsed === null) {
+      return NextResponse.json({
+        error: "invalid_response_actions",
+        message: "Responses can only be turned on or off.",
+      }, { status: 400 });
+    }
+    updates["response_actions"] = parsed;
   }
 
   if (Object.keys(updates).length === 0) {

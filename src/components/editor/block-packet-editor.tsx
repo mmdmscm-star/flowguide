@@ -28,6 +28,7 @@ import { CompositionModeControl } from "@/components/editor/composition-mode-con
 import OwnershipDecisions from "@/components/OwnershipDecisions";
 import { SerialMutations, type MutationResult } from "@/lib/serial-mutation";
 import { usePublicationState } from "@/components/editor/publication-state";
+import { RecipientResponsesSettings } from "./recipient-responses-settings";
 
 // ============================================================
 // R2-A persistent block-composition editor.
@@ -223,6 +224,7 @@ async function errorFrom(res: Response): Promise<string> {
 
 export function BlockPacketEditor({
   packetId, title, clientTitle: initialClientTitle, mapUrl: initialMapUrl, status, clientName, createdAt, initialBlocks, justConverted,
+  initialResponsesEnabled,
 }: {
   packetId: string;
   /** The professional's own name for this FlowGuide. Backstage: shown here so
@@ -237,6 +239,8 @@ export function BlockPacketEditor({
   createdAt?: string;
   initialBlocks: PacketBlock[];
   justConverted?: boolean;
+  /** Whether the published page accepts responses (0058). */
+  initialResponsesEnabled: boolean;
 }) {
   const readOnly = status !== "draft";
 
@@ -600,6 +604,16 @@ export function BlockPacketEditor({
         {blocks.length === 0 && (
           <p className="text-center text-body text-ink-2 py-8">This packet has no blocks yet.</p>
         )}
+
+        {/* RECIPIENT RESPONSES — the same component the legacy editor mounts,
+            in the same place relative to Delete. This editor has no settings
+            area and this does not add one: it is this one Sendset capability
+            and nothing else.
+
+            NOT gated on readOnly. Composition is locked on a published
+            Sendset; responses are not part of the composition, and a published
+            Sendset is exactly where turning them off must work at once. */}
+        <RecipientResponsesSettings packetId={packetId} initialEnabled={initialResponsesEnabled} />
 
         {/* Same component the legacy editor mounts — one delete, wherever the
             professional happens to be. */}
