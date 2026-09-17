@@ -112,6 +112,11 @@ from Remote, in order — never run one without this check.
   baseline was a full-row digest of every public table. See
   [0058-sendset-responses.md](0058-sendset-responses.md).
 
+- **0059 (2026-09-17)** applied the same way, over real correspondence: the
+  before/after proof compares the existing response against itself, with a
+  fixture created inside the migration so the comparison can never be vacuous.
+  See [0059-item-actions.md](0059-item-actions.md).
+
 ## Fallback: the SQL Editor
 
 If the CLI path is unavailable, paste the exact file into the Supabase SQL
