@@ -108,6 +108,10 @@ from Remote, in order — never run one without this check.
   baseline step during Supabase scheduled maintenance (503) and was resumed from
   step 1 afterwards.
 
+- **0058 (2026-09-17)** applied with this process before its app half deployed;
+  baseline was a full-row digest of every public table. See
+  [0058-sendset-responses.md](0058-sendset-responses.md).
+
 ## Fallback: the SQL Editor
 
 If the CLI path is unavailable, paste the exact file into the Supabase SQL
