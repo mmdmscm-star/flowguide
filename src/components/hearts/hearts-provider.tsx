@@ -17,12 +17,25 @@ import { ACTION_HEADER, ACTION_OUTCOME, type MyAction, type MyActions } from "@/
  *
  *  NOTHING ABOUT ANYBODY ELSE. There is no count here, no "3 people liked
  *  this", no activity. Whoever else holds this link, what they hearted is not
- *  this reader's business. */
+ *  this reader's business.
+ *
+ *  IT IS MOUNTED EVEN WHEN THE CREATOR HAS SWITCHED HEARTS OFF, and that is the
+ *  point: somebody who hearted three things must still be able to see them and
+ *  take them back. The database says the same (0059) — off stops new
+ *  expression, never withdrawal.
+ *
+ *  Which means one small request on every recipient page, including Sendsets
+ *  that never took hearts. The alternative was to decide server-side from the
+ *  capability cookie, which would make the page's HTML vary per reader — and a
+ *  single caching mistake would then serve one reader's hearts to another. A
+ *  request that answers "nothing" is the cheaper mistake. */
 type Status = "loading" | "ready";
 
 interface HeartsValue {
   slug: string;
   ready: boolean;
+  /** Is the Sendset taking NEW hearts? False still allows withdrawal. */
+  accepting: boolean;
   isHearted: (itemId: string) => boolean;
   isPending: (itemId: string) => boolean;
   toggle: (itemId: string) => void;
@@ -47,10 +60,14 @@ export function HeartsProvider({
 }: {
   slug: string;
   /** The publication marker, exactly as the server rendered it: an opaque
-   *  string, handed back untouched. Never parsed here. */
-  marker: string;
+   *  string, handed back untouched. Never parsed here.
+   *
+   *  NULL MEANS HEARTS ARE SWITCHED OFF. There is nothing to mark a new heart
+   *  with, because there will be no new heart. */
+  marker: string | null;
   children: React.ReactNode;
 }) {
+  const accepting = marker !== null;
   const [status, setStatus] = useState<Status>("loading");
   const [actions, setActions] = useState<MyAction[]>([]);
   const [signatureName, setSignatureName] = useState<string | null>(null);
@@ -103,6 +120,11 @@ export function HeartsProvider({
     setError(null);
     const on = actions.some((a) => a.itemId === itemId);
 
+    // HEARTS OFF: the only thing that can happen is taking one back. No
+    // signature is asked for, and no `set` is ever generated — there is not
+    // even a marker to send one with.
+    if (!accepting && !on) return;
+
     if (!on && signatureName === null && status === "ready") {
       // THE FIRST HEART. It appears at once, and the signature sheet opens; if
       // the person cancels, it goes back and NOTHING is written.
@@ -126,7 +148,7 @@ export function HeartsProvider({
         mark(itemId, false);
       }
     })();
-  }, [actions, mark, marker, pending, send, signatureName, status]);
+  }, [accepting, actions, mark, marker, pending, send, signatureName, status]);
 
   const confirmSignature = useCallback(async (name: string, contact: string) => {
     const itemId = askingFor;
@@ -164,6 +186,7 @@ export function HeartsProvider({
   const value = useMemo<HeartsValue>(() => ({
     slug,
     ready: status === "ready",
+    accepting,
     isHearted: (itemId) => actions.some((a) => a.itemId === itemId) || askingFor === itemId,
     isPending: (itemId) => pending.has(itemId),
     toggle,
@@ -175,7 +198,7 @@ export function HeartsProvider({
     askingFor,
     confirmSignature,
     cancelSignature,
-  }), [actions, askingFor, cancelSignature, confirmSignature, error, forget, pending, signatureName, slug, status, toggle]);
+  }), [accepting, actions, askingFor, cancelSignature, confirmSignature, error, forget, pending, signatureName, slug, status, toggle]);
 
   return <HeartsContext.Provider value={value}>{children}</HeartsContext.Provider>;
 }

@@ -111,6 +111,11 @@ export function sessionSignatureLine(name: string | null | undefined): string | 
 
 export const NOT_YOU = "Not you? Start a new response";
 
+/** Said once, quietly, when the creator has switched hearts off and this
+ *  browser still holds some. It explains the missing empty hearts and the one
+ *  thing that still works. */
+export const LIKES_CLOSED = "Likes are no longer being accepted. You can remove likes you already made.";
+
 /** "1 heart", "4 hearts" — of items, by this one browser. Never people. */
 export function heartCountLabel(count: number): string {
   return `${count} ${count === 1 ? "heart" : "hearts"}`;

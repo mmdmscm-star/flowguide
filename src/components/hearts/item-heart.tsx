@@ -10,12 +10,21 @@ import { useHearts } from "./hearts-provider";
  *
  *  IT SAYS ONLY WHAT THIS BROWSER DID. There is no count beside it and no sign
  *  of anybody else: on a Sendset shared with a family, one person's hearts are
- *  not the others' business. */
+ *  not the others' business.
+ *
+ *  WITH HEARTS SWITCHED OFF there is no empty heart to press — an affordance
+ *  that cannot do anything should not be drawn. A heart this browser already
+ *  gave still shows, still filled, and still comes off: switching hearts off
+ *  stops new ones, it does not trap the ones people already left. */
 export function ItemHeart({ itemId, title }: { itemId: string; title?: string }) {
   const hearts = useHearts();
   if (!hearts) return null;
 
   const on = hearts.isHearted(itemId);
+  // Nothing at all while off and unhearted — including during the moment
+  // before the browser's own hearts have loaded, so no empty heart ever
+  // flickers into view on a Sendset that is not taking any.
+  if (!hearts.accepting && !on) return null;
   const busy = hearts.isPending(itemId);
   const named = String(title ?? "").trim();
 

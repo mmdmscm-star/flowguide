@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { heartCountLabel, NOT_YOU, sessionSignatureLine } from "@/lib/item-actions";
+import { heartCountLabel, LIKES_CLOSED, NOT_YOU, sessionSignatureLine } from "@/lib/item-actions";
 import { useHearts } from "./hearts-provider";
 
 /** WHAT THIS BROWSER HAS SAID, at the end of the Sendset.
@@ -19,11 +19,20 @@ import { useHearts } from "./hearts-provider";
  *     hearted. It is still theirs, so it is still shown — labelled, uneditable,
  *     and withdrawable. It is never silently dropped.
  *
+ *  WITH HEARTS SWITCHED OFF it says so, once, and only while there is still
+ *  something to remove. When the last one is withdrawn the whole panel goes:
+ *  a reader who has nothing here should not be told about a feature they
+ *  cannot use.
+ *
  *  No counts of anybody else, ever. */
 export function HeartsFooter() {
   const hearts = useHearts();
   const [confirming, setConfirming] = useState(false);
   if (!hearts || !hearts.ready) return null;
+  // Nothing to show and nothing to say: no reason to be here. That covers the
+  // off case too — when the last heart is withdrawn the panel goes with it —
+  // while an error still keeps it, because a withdrawal that failed has to be
+  // visible.
   if (hearts.count === 0 && !hearts.error) return null;
 
   const line = sessionSignatureLine(hearts.signatureName);
@@ -38,7 +47,9 @@ export function HeartsFooter() {
       {hearts.count > 0 && (
         <p style={{ ...small, color: "var(--sg-ink)" }}>
           {heartCountLabel(hearts.count)} on this Sendset.{" "}
-          {line && <span style={{ color: "var(--sg-muted)" }}>{line}</span>}
+          {hearts.accepting
+            ? line && <span style={{ color: "var(--sg-muted)" }}>{line}</span>
+            : <span style={{ color: "var(--sg-muted)" }}>{LIKES_CLOSED}</span>}
         </p>
       )}
 
@@ -68,7 +79,8 @@ export function HeartsFooter() {
         <p role="alert" className="mt-2" style={{ ...small, color: "#b42318" }}>{hearts.error}</p>
       )}
 
-      {hearts.signatureName && (
+      {/* Starting again is only meaningful while a new response is possible. */}
+      {hearts.signatureName && hearts.accepting && (
         <div className="mt-3">
           {confirming ? (
             <p style={{ ...small, color: "var(--sg-muted)" }}>

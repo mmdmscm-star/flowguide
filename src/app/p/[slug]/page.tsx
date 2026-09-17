@@ -97,14 +97,19 @@ export default async function PacketPage({ params }: Props) {
   // the endpoint checks again for itself.
   const countThisOpen = !isPublicDemo(slug) && isSupabaseConfigured && !ownedId;
 
-  // HEARTS — only when this Sendset takes them (read live from the Sendset,
-  // never from its publication) and the reader is not its owner. The provider
-  // is what makes ItemHeart render at all, so Preview, print and email cannot
-  // gain hearts by rendering the same item card.
-  const hearts = Boolean(likeMarker) && !ownedId;
+  // HEARTS — for every reader of a real published Sendset who is not its owner,
+  // whether or not it is taking new ones. `likeMarker` is null when the creator
+  // has switched them off, and that null is what stops a new heart: there is
+  // nothing to mark one with, no empty heart is drawn, and no signature is
+  // asked for. What a reader already hearted still loads, and can still be
+  // taken back — the same rule the database keeps (0059).
+  //
+  // The provider is what makes ItemHeart render at all, so Preview, print and
+  // email cannot gain hearts by rendering the same item card.
+  const hearts = !ownedId && !isPublicDemo(slug) && isSupabaseConfigured;
   const withHearts = (body: React.ReactNode) =>
     hearts ? (
-      <HeartsProvider slug={slug} marker={likeMarker!}>
+      <HeartsProvider slug={slug} marker={likeMarker}>
         {body}
         <HeartsFooter />
         <SignatureSheet />

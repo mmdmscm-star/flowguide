@@ -262,10 +262,8 @@ test("the database's refusals reach the reader as sentences, revealing nothing",
 // THE PAGE
 // ---------------------------------------------------------------------------
 
-test("hearts are mounted only by the recipient page, only when the Sendset takes them", () => {
+test("hearts are mounted only by the recipient page — and never by any other surface", () => {
   const page = codeOf("src/app/p/[slug]/page.tsx");
-  assert.match(page, /const hearts = Boolean\(likeMarker\) && !ownedId;/);
-  assert.match(page, /<HeartsProvider slug=\{slug\} marker=\{likeMarker!\}>/);
   assert.match(page, /if \(demo\) return \{ packet: demo, responseMarker: null, likeMarker: null \};/);
 
   // No other surface mounts the provider — which is what makes ItemHeart render
@@ -434,12 +432,12 @@ before(async () => {
 });
 after(() => dom.window.close());
 
-async function mount() {
+async function mount(marker: string | null = MARKER) {
   const host = dom.window.document.getElementById("root")!;
   host.innerHTML = "";
   const root = createRoot(host);
   await act(async () => {
-    root.render(React.createElement(HeartsProvider, { slug: "harbor-7k2", marker: MARKER },
+    root.render(React.createElement(HeartsProvider, { slug: "harbor-7k2", marker },
       React.createElement(ItemHeart, { itemId: ITEM, title: "Harbor House" }),
       React.createElement(ItemHeart, { itemId: ITEM2, title: "The Loft" }),
       React.createElement(HeartsFooter, {}),
@@ -562,6 +560,123 @@ test("Not you? forgets the browser's handle and asks first", async () => {
   assert.deepEqual(posts.map((p) => p.body), [{ op: "forget" }]);
   assert.equal(heart(host).getAttribute("aria-pressed"), "false", "the new browser state still shows the old hearts");
   await act(async () => root.unmount());
+});
+
+// ---------------------------------------------------------------------------
+// HEARTS SWITCHED OFF: NOTHING NEW, BUT NOTHING TRAPPED
+//
+// The same rule the database keeps (0059). A null marker is what says "off":
+// there is nothing to mark a new heart with, because there will not be one.
+// ---------------------------------------------------------------------------
+
+test("off with nothing hearted: no heart UI at all, and no request but the read", async () => {
+  posts.length = 0; initial = NO_ACTIONS;
+  const { host, root } = await mount(null);
+  assert.equal(host.querySelectorAll("[aria-pressed]").length, 0, "an empty heart was drawn on a Sendset that takes none");
+  assert.equal(host.textContent, "", "something about hearts was shown to a reader who has none");
+  assert.deepEqual(posts, [], "a mutation was sent while hearts are off");
+  await act(async () => root.unmount());
+});
+
+test("off with a heart already given: it shows, filled, and comes off", async () => {
+  posts.length = 0;
+  initial = {
+    signature: { name: "Lisa" },
+    actions: [{ itemId: ITEM, action: "like", label: "Harbor House", inCurrent: true, wasCurrent: true }],
+  };
+  reply = () => new Response(JSON.stringify({ ok: true, removed: true }), { status: 200 });
+  const { host, root } = await mount(null);
+
+  const drawn = [...host.querySelectorAll("[aria-pressed]")];
+  assert.equal(drawn.length, 1, "only the heart they already gave is drawn");
+  assert.equal(drawn[0].getAttribute("aria-pressed"), "true");
+  assert.match(drawn[0].getAttribute("aria-label")!, /^Remove your heart/);
+  assert.match(host.textContent!, /Likes are no longer being accepted\. You can remove likes you already made\./);
+  // Starting again cannot happen while off, so it is not offered. (Compared as
+  // text: NOT_YOU contains a "?", which a regex would read as a quantifier and
+  // quietly match nothing.)
+  assert.ok(!host.textContent!.includes(NOT_YOU), "it offered a new response while hearts are off");
+
+  await click(drawn[0]);
+  assert.deepEqual(posts.map((p) => p.body), [{ op: "clear", itemId: ITEM, action: "like" }]);
+  // Once it is gone there is nothing left to say.
+  assert.equal(host.querySelectorAll("[aria-pressed]").length, 0);
+  assert.equal(host.textContent, "");
+  await act(async () => root.unmount());
+});
+
+test("off: a withdrawn heart CANNOT be put back, and no set can be generated", async () => {
+  posts.length = 0;
+  initial = { signature: { name: "Lisa" }, actions: [{ itemId: ITEM, action: "like", label: "Harbor House", inCurrent: true, wasCurrent: true }] };
+  reply = () => new Response(JSON.stringify({ ok: true, removed: true }), { status: 200 });
+  const { host, root } = await mount(null);
+  const heartEl = host.querySelector("[aria-pressed]") as HTMLButtonElement;
+  await click(heartEl);
+  // The button is gone, so there is nothing to press to re-add it — and if a
+  // stale reference were pressed anyway, the provider still sends nothing.
+  await click(heartEl);
+  assert.deepEqual(posts.map((p) => p.body.op), ["clear"], "a set was generated while hearts are off");
+  assert.equal(host.querySelector('[role="dialog"]'), null, "the signature sheet opened while hearts are off");
+  await act(async () => root.unmount());
+});
+
+test("off: the panel disappears with the last heart, but an error keeps it", async () => {
+  posts.length = 0;
+  initial = { signature: { name: "Lisa" }, actions: [{ itemId: ITEM, action: "like", label: "Harbor House", inCurrent: true, wasCurrent: true }] };
+  reply = () => new Response(JSON.stringify({ message: "That didn\u2019t save. Please try again." }), { status: 500 });
+  const { host, root } = await mount(null);
+  await click(host.querySelector("[aria-pressed]") as HTMLButtonElement);
+  assert.match(host.textContent!, /That didn\u2019t save/, "a failed withdrawal vanished silently");
+  await act(async () => root.unmount());
+});
+
+test("off: a heart whose item has gone is still shown and still withdrawable", async () => {
+  posts.length = 0;
+  const GONE = "99999999-0000-4000-8000-000000000009";
+  initial = {
+    signature: { name: "Lisa" },
+    actions: [{ itemId: GONE, action: "like", label: "The Loft", inCurrent: false, wasCurrent: true }],
+  };
+  reply = () => new Response(JSON.stringify({ ok: true, removed: true }), { status: 200 });
+  const { host, root } = await mount(null);
+  assert.match(host.textContent!, /No longer in this Sendset:/);
+  assert.match(host.textContent!, /The Loft/);
+  await click(byText(host, "Remove")!);
+  assert.deepEqual(posts.map((p) => p.body), [{ op: "clear", itemId: GONE, action: "like" }]);
+  assert.equal(host.textContent, "", "nothing should remain once the last heart is withdrawn");
+  await act(async () => root.unmount());
+});
+
+test("off: no signature is ever asked for", async () => {
+  posts.length = 0; initial = NO_ACTIONS;
+  const { host, root } = await mount(null);
+  // Nothing to press, and the sheet is not open either.
+  assert.equal(host.querySelector('[role="dialog"]'), null);
+  assert.deepEqual(posts, []);
+  await act(async () => root.unmount());
+  // In code: the one place a signature is asked for is behind the marker.
+  const provider = codeOf(PROVIDER);
+  assert.match(provider, /if \(!accepting && !on\) return;/);
+  assert.ok(provider.indexOf("if (!accepting && !on) return;") < provider.indexOf("setAskingFor(itemId)"),
+    "the signature sheet can open before the off check");
+  // And the off state comes from the marker the server rendered, not from
+  // anything the browser decided for itself.
+  assert.match(provider, /const accepting = marker !== null;/);
+  assert.match(codeOf("src/components/hearts/item-heart.tsx"), /if \(!hearts\.accepting && !on\) return null;/);
+});
+
+test("the page mounts hearts for every reader, and lets the marker decide", () => {
+  const page = codeOf("src/app/p/[slug]/page.tsx");
+  // Not gated on the switch: a reader with hearts must be able to recover them.
+  assert.match(page, /const hearts = !ownedId && !isPublicDemo\(slug\) && isSupabaseConfigured;/);
+  assert.match(page, /<HeartsProvider slug=\{slug\} marker=\{likeMarker\}>/);
+  // NOT decided from the cookie on the server: the HTML stays the same for
+  // everybody, so no cache can serve one reader's hearts to another.
+  assert.doesNotMatch(page, /cookies\(\)|CAPABILITY_COOKIE|capabilityFromRequest/);
+  // And no companion cookie or client-readable marker was added to detect one.
+  for (const f of filesUnder("src/components/hearts")) {
+    assert.doesNotMatch(codeOf(f), /document\.cookie|localStorage|sessionStorage/, `${f} stores a client identifier`);
+  }
 });
 
 test("a refusal is said plainly, and the heart goes back to what was actually saved", async () => {
