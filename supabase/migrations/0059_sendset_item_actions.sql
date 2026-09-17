@@ -14,13 +14,32 @@
 --                     republishes and no single marker could be true of it.
 --                     Never notified: hearts are not correspondence.
 --
--- THE CAPABILITY. A browser that acts on an item is given 256 random bits in an
--- HttpOnly cookie scoped to that one Sendset's path. The database sees only the
--- SHA-256 of it, and only as an argument. It is a BEARER TOKEN FOR ONE
--- SUBMISSION ON ONE SENDSET — not an identity, not an account, and never proof
--- of who anybody is. It is minted only by a completed first action, so a person
--- who merely reads a Sendset is given nothing at all, and there is no row, no
--- counter and no cookie describing them.
+-- THE CAPABILITY, and where each part of it is allowed to exist:
+--
+--   * THE SERVER generates the raw 256 bits. Nothing else ever does.
+--   * It reaches the browser ONLY as an HttpOnly, Secure cookie scoped to that
+--     one Sendset's path.
+--   * JAVASCRIPT NEVER RECEIVES OR READS IT. HttpOnly is what makes that true
+--     rather than a convention the page is trusted to keep.
+--   * It never appears in JSON, in application logs, in a URL, or in
+--     PostgreSQL.
+--   * POSTGRESQL RECEIVES ONLY THE 32-BYTE SHA-256 HASH, as an argument, and
+--     stores only that.
+--
+-- It is a BEARER TOKEN FOR ONE SUBMISSION ON ONE SENDSET — not an identity, not
+-- an account, and never proof of who anybody is. It is minted only by a
+-- completed first action, so a person who merely reads a Sendset is given
+-- nothing at all, and there is no row, no counter and no cookie describing
+-- them.
+--
+-- TURNING LIKE OFF STOPS NEW EXPRESSION, NOT WITHDRAWAL. While the creator has
+-- Like switched off, nothing new can be minted or set — but a capability that
+-- already exists can still READ what it said and still WITHDRAW it, including a
+-- like on an item the Sendset no longer carries. Someone who hearted three
+-- things must not be locked in by a switch they do not hold, so `clear` and
+-- `read` do not read response_actions AT ALL. That is structural: there is no
+-- condition to re-add by accident, and the harness mutates one back in to prove
+-- the difference is real.
 --
 -- WHAT IS DELIBERATELY ABSENT: no IP, no fingerprint, no visit log, no
 -- last-seen, no read counter, no cross-Sendset identifier, and no per-mutation
@@ -401,6 +420,8 @@ begin
    where slug = p_slug
      for no key update;
 
+  -- THE ONE PLACE THE CREATOR'S SWITCH IS READ. New expression stops here when
+  -- Like is off; reading and withdrawing do not consult it at all.
   if v_packet.id is null
      or v_packet.status <> 'published'
      or not ('like' = any (v_packet.response_actions)) then
@@ -523,6 +544,11 @@ comment on function public.set_sendset_item_action(text, text, bytea, text, text
 --
 -- A capability that owns no such line is not an error: nothing was withdrawn,
 -- and saying so reveals nothing.
+--
+-- NOT GATED ON THE CREATOR'S SWITCH. response_actions is never read here: a
+-- withdrawal is the responder taking back their own statement, and Like being
+-- switched off must not trap it. It cannot be used to add anything, and it
+-- cannot mint: a browser with no capability withdraws nothing.
 -- ---------------------------------------------------------------------------
 create function public.clear_sendset_item_action(
   p_slug         text,
@@ -554,14 +580,12 @@ begin
     raise exception 'action: a target is required' using errcode = 'PT400', detail = 'target_invalid';
   end if;
 
-  select id, status, response_actions into v_packet
+  select id, status into v_packet
     from public.packets
    where slug = p_slug
      for no key update;
 
-  if v_packet.id is null
-     or v_packet.status <> 'published'
-     or not ('like' = any (v_packet.response_actions)) then
+  if v_packet.id is null or v_packet.status <> 'published' then
     raise exception 'action: this Sendset is not accepting item actions'
       using errcode = 'PT404', detail = 'not_accepting';
   end if;
@@ -617,14 +641,18 @@ end;
 $$;
 
 comment on function public.clear_sendset_item_action(text, bytea, uuid, text) is
-  'Withdraw ONE item action held by ONE capability (0059). Scoped to that capability''s own submission, so another''s line is unaddressable. Allowed for an item no longer in the publication: withdrawing your own statement is deliberate. Server-only.';
+  'Withdraw ONE item action held by ONE capability (0059). Never consults response_actions: switching Like off stops new expression, not withdrawal. Scoped to that capability''s own submission, so another''s line is unaddressable. Allowed for an item no longer in the publication: withdrawing your own statement is deliberate. Server-only.';
 
 -- ---------------------------------------------------------------------------
 -- 9. WHAT THIS CAPABILITY ITSELF SAID.
 --
 -- ITS OWN LINES AND NOTHING ELSE: no counts, no other submissions, no hint that
--- anybody else has responded at all. An unknown capability, a Sendset that does
--- not accept hearts and a slug that never existed return the SAME empty answer.
+-- anybody else has responded at all. An unknown capability and a slug that never
+-- existed return the SAME empty answer.
+--
+-- NOT GATED ON THE CREATOR'S SWITCH, for the same reason as the withdrawal: what
+-- somebody already said stays visible to them, and they cannot be shown an empty
+-- list for hearts they can still withdraw. response_actions is never read here.
 --
 -- The contact is deliberately not returned. The message form may prefill a name
 -- from this; a contact detail typed once for hearts is not something to hand
@@ -647,10 +675,8 @@ begin
     return v_empty;
   end if;
 
-  select id, status, response_actions into v_packet from public.packets where slug = p_slug;
-  if v_packet.id is null
-     or v_packet.status <> 'published'
-     or not ('like' = any (v_packet.response_actions)) then
+  select id, status into v_packet from public.packets where slug = p_slug;
+  if v_packet.id is null or v_packet.status <> 'published' then
     return v_empty;
   end if;
 
@@ -686,7 +712,7 @@ end;
 $$;
 
 comment on function public.read_sendset_session_actions(text, bytea) is
-  'One capability''s OWN item actions (0059). Never counts, never anyone else''s, and never says whether a slug exists. Returns the signature''s name only. Server-only.';
+  'One capability''s OWN item actions (0059). Never consults response_actions: what somebody already said stays visible to them. Never counts, never anyone else''s, and never says whether a slug exists. Returns the signature''s name only. Server-only.';
 
 -- ---------------------------------------------------------------------------
 -- 10. LOCKED DOWN.

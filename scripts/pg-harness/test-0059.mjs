@@ -325,6 +325,69 @@ async function main() {
     await c.end();
   }
 
+  // --- LIKE SWITCHED OFF: NEW EXPRESSION STOPS, WITHDRAWAL DOES NOT ---------
+  {
+    const db = await freshDb("r59_like_off");
+    const c = await connect(db);
+    const ss = await sendset(c);
+    await publish(c, ss, legacySnapshot(ss, [{ id: ss.itemA, title: "Harbor House" }, { id: ss.itemB, title: "The Loft" }]));
+    await accept(c, ss, ["like"]);
+    const m1 = await marker(c, ss);
+    const h = cap(), stranger = cap();
+    await setAction(c, ss.slug, m1, h, ss.itemA);
+    await setAction(c, ss.slug, m1, h, ss.itemB);
+
+    // The Loft leaves the Sendset, and then the creator switches Like off.
+    await publish(c, ss, legacySnapshot(ss, [{ id: ss.itemA, title: "Harbor House" }]));
+    const m2 = await marker(c, ss);
+    await accept(c, ss, ["respond"]);
+
+    // NOTHING NEW.
+    ok(refusedWith(await trySet(c, ss.slug, m2, h, ss.itemA), "PT404", "not_accepting"),
+      "with Like off, an existing capability cannot set a new action");
+    ok(refusedWith(await trySet(c, ss.slug, m2, stranger, ss.itemA), "PT404", "not_accepting"),
+      "and no new capability can be minted");
+    ok(await countRows(c, "sendset_responses") === 1, "so no submission was created by either attempt");
+
+    // WHAT THEY ALREADY SAID IS STILL THEIRS.
+    const mine = await readActions(c, ss.slug, h);
+    ok(mine.signature.name === "Lisa" && mine.actions.length === 2,
+      "the capability still reads its own two likes while Like is off");
+    ok(mine.actions.find((a) => a.itemId === ss.itemB).inCurrent === false,
+      "including the one whose item the Sendset no longer carries");
+
+    // AND THEY MAY TAKE IT BACK — including the one with no item left.
+    ok((await clearAction(c, ss.slug, h, ss.itemB)).rows[0].r.removed === true,
+      "a like on a removed item can still be withdrawn while Like is off");
+    ok((await clearAction(c, ss.slug, h, ss.itemA)).rows[0].r.removed === true,
+      "and so can one whose item is still there");
+    ok((await readActions(c, ss.slug, h)).actions.length === 0, "both are gone from their own view");
+
+    // BUT THEY CANNOT PUT IT BACK.
+    ok(refusedWith(await trySet(c, ss.slug, m2, h, ss.itemA), "PT404", "not_accepting"),
+      "a withdrawn like cannot be re-added while Like is off");
+
+    // A browser holding nothing is still told nothing, and still creates nothing.
+    const isEmpty = (r) => r !== null && r.signature === null && Array.isArray(r.actions) && r.actions.length === 0;
+    ok(isEmpty(await readActions(c, ss.slug, stranger)), "an unknown capability reads empty, as always");
+    ok((await clearAction(c, ss.slug, stranger, ss.itemA)).rows[0].r.removed === false, "and withdraws nothing");
+    ok(await countRows(c, "sendset_responses") === 1 && await countRows(c, "sendset_response_lines") === 0,
+      "no capability was minted by reading or withdrawing");
+
+    // An unpublished Sendset is a different matter: there is no page at all.
+    await unpublish(c, ss);
+    ok(isEmpty(await readActions(c, ss.slug, h)), "an unpublished Sendset reads empty");
+    ok(refusedWith(await tryClear(c, ss.slug, h, ss.itemA), "PT404", "not_accepting"),
+      "and refuses a withdrawal with the answer everything else gets");
+
+    // Switching Like back on restores new expression.
+    await publish(c, ss, legacySnapshot(ss, [{ id: ss.itemA, title: "Harbor House" }]));
+    await accept(c, ss, ["like"]);
+    ok((await trySet(c, ss.slug, await marker(c, ss), h, ss.itemA)).ok,
+      "and with Like switched back on, the same capability can act again");
+    await c.end();
+  }
+
   // --- BOTH PUBLICATION SHAPES ----------------------------------------------
   {
     const db = await freshDb("r59_shapes");
@@ -631,6 +694,29 @@ async function main() {
         const { rows: [l] } = await c.query(
           "select to_json(live_publication_published_at) #>> '{}' as m, rendered_publication_was_current as cur from public.sendset_response_lines where target_item_id = $1", [ss.itemB]);
         return [l.m !== m || l.cur === true, `a stale page's own claim was stored (${l.m}, current=${l.cur})`];
+      }],
+    ["clear is gated on the creator's Like switch",
+      (s) => s.replace("  select id, status into v_packet\n    from public.packets\n   where slug = p_slug\n     for no key update;\n\n  if v_packet.id is null or v_packet.status <> 'published' then", "  select id, status, response_actions into v_packet\n    from public.packets\n   where slug = p_slug\n     for no key update;\n\n  if v_packet.id is null or v_packet.status <> 'published'\n     or not ('like' = any (v_packet.response_actions)) then"),
+      async (c, ss, m, h) => {
+        await accept(c, ss, []);
+        const r = await tryClear(c, ss.slug, h, ss.itemA);
+        const left = await countRows(c, "sendset_response_lines");
+        return [!r.ok || left === 1, `with Like off a withdrawal no longer worked (${r.ok ? "left " + left : r.err.detail})`];
+      }],
+    ["read is gated on the creator's Like switch",
+      (s) => s.replace("  select id, status into v_packet from public.packets where slug = p_slug;\n  if v_packet.id is null or v_packet.status <> 'published' then", "  select id, status, response_actions into v_packet from public.packets where slug = p_slug;\n  if v_packet.id is null or v_packet.status <> 'published'\n     or not ('like' = any (v_packet.response_actions)) then"),
+      async (c, ss, m, h) => {
+        await accept(c, ss, []);
+        const mine = await readActions(c, ss.slug, h);
+        return [mine.actions.length === 0, "with Like off a capability could no longer see what it had already said"];
+      }],
+    ["set is NOT gated on the creator's Like switch",
+      (s) => s.replace("  if v_packet.id is null\n     or v_packet.status <> 'published'\n     or not ('like' = any (v_packet.response_actions)) then", "  if v_packet.id is null\n     or v_packet.status <> 'published' then"),
+      async (c, ss, m, h) => {
+        await accept(c, ss, []);
+        const again = await trySet(c, ss.slug, m, h, ss.itemB);
+        const minted = await trySet(c, ss.slug, m, cap(), ss.itemB, { name: "Stranger" });
+        return [again.ok || minted.ok, "with Like off a new action or a new capability was still accepted"];
       }],
     ["mutations are not counted",
       (s) => s.replace("  update public.sendset_action_rate set mutations = mutations + 1 where packet_id = v_packet.id;\n\n  return jsonb_build_object(\n    'responseId'", "\n  return jsonb_build_object(\n    'responseId'"),
