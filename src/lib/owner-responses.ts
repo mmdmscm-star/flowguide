@@ -92,7 +92,11 @@ export async function loadOwnerResponses(
 
   const [{ data: rows, error }, current] = await Promise.all([
     db.from("sendset_responses")
-      .select("id, kind, created_at, updated_at, responder_name, responder_contact, notification_due, notified_at, rendered_publication_was_current, sendset_response_lines(target_kind, target_item_id, target_label, action, note, rendered_publication_was_current, live_publication_published_at)")
+      // THE RELATIONSHIP IS NAMED, and it has to be. 0059 gave the lines a
+      // SECOND foreign key to this table — the composite (response_id,
+      // parent_kind) that keeps a like under an action session — so an
+      // unqualified embed is ambiguous and PostgREST refuses it outright.
+      .select("id, kind, created_at, updated_at, responder_name, responder_contact, notification_due, notified_at, rendered_publication_was_current, sendset_response_lines!sendset_response_lines_response_id_fkey(id, target_kind, target_item_id, target_label, action, note, rendered_publication_was_current, live_publication_published_at)")
       .eq("packet_id", packetId)
       .eq("owner_user_id", userId)
       .order("created_at", { ascending: false }),

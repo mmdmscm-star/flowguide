@@ -383,6 +383,17 @@ test("an action session is never labelled with a message's staleness", async () 
   assert.equal(gone.republishedSince, true, "a heart given under an earlier publication says so, per heart");
 });
 
+test("the owner's embed names WHICH relationship it means", () => {
+  // 0059 added a second foreign key from the lines to their submission, so an
+  // unqualified embed is ambiguous and PostgREST refuses the whole query. This
+  // is not reachable by the fake database in these tests — it was found by
+  // running the real read against production — so it is pinned here as source.
+  const owner = codeOf("src/lib/owner-responses.ts");
+  assert.match(owner, /sendset_response_lines!sendset_response_lines_response_id_fkey\(/);
+  const sql = raw("supabase/migrations/0059_sendset_item_actions.sql");
+  assert.match(sql, /add constraint sendset_response_lines_parent_kind_fkey/, "the second relationship this disambiguates");
+});
+
 test("the owner's list shows the two kinds as two different things", () => {
   const list = codeOf("src/components/responses/response-list.tsx");
   // Hearts are never described as sent or emailed: they are not correspondence.
