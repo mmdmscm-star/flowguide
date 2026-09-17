@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { isPublicDemo, publicDemo } from "@/lib/public-demos";
-import { getPublishedPacket, publishedSenderIdentity } from "@/lib/queries";
+import { getPublishedPacketForPage, publishedSenderIdentity } from "@/lib/queries";
 import { PacketHeader } from "@/components/packet-header";
 import { PersonalNote } from "@/components/personal-note";
 import { SectionGroup } from "@/components/section-group";
@@ -15,6 +15,7 @@ import { RecordView } from "@/components/record-view";
 import { recipientMetadata } from "@/lib/recipient-metadata";
 import { treatmentFor, webVars } from "@/lib/style/treatment";
 import { packetMapUrl } from "@/lib/maps-url";
+import { RespondPanel } from "@/components/respond-panel";
 
 // Render on every request — never serve a cached copy. This is what makes
 // unpublish/delete take effect immediately: there is no stored HTML that could
@@ -29,14 +30,15 @@ const isSupabaseConfigured =
   !!process.env.NEXT_PUBLIC_SUPABASE_URL &&
   !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-async function resolvePacket(slug: string): Promise<Packet | null> {
-  // A demo always works, even without a database.
+async function resolvePacket(slug: string): Promise<{ packet: Packet; responseMarker: string | null } | null> {
+  // A demo always works, even without a database — and never takes responses:
+  // it belongs to nobody.
   const demo = publicDemo(slug);
-  if (demo) return demo;
+  if (demo) return { packet: demo, responseMarker: null };
 
   // If Supabase is configured, try the database
   if (isSupabaseConfigured) {
-    return getPublishedPacket(slug);
+    return getPublishedPacketForPage(slug);
   }
 
   return null;
@@ -62,13 +64,14 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function PacketPage({ params }: Props) {
   const { slug } = await params;
-  const packet = await resolvePacket(slug);
+  const resolved = await resolvePacket(slug);
 
   // A missing OR unpublished packet must return a real HTTP 404 — not a 200 with
   // a "not found" body. notFound() renders the not-found.tsx boundary with a 404
   // status. Because the page is force-dynamic, an unpublished packet 404s on the
   // very next request (getPublishedPacket filters status='published').
-  if (!packet) notFound();
+  if (!resolved) notFound();
+  const { packet, responseMarker } = resolved;
 
   // Is the person reading this its author? Costs a recipient nothing: with no
   // session cookie this returns null without a query. Everything below renders
@@ -143,6 +146,14 @@ export default async function PacketPage({ params }: Props) {
 
         {packet.professional.name && (
           <ProfessionalFooter professional={packet.professional} />
+        )}
+
+        {/* RESPOND — only when this Sendset accepts responses (read live from
+            the Sendset, never from its publication) and the reader is not its
+            owner. The owner's own message would not be a response. Nothing
+            about any other response is ever rendered here. */}
+        {responseMarker && !ownedId && (
+          <RespondPanel slug={slug} marker={responseMarker} senderName={packet.professional.name} />
         )}
 
         <SendsetSignature />

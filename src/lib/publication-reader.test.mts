@@ -222,9 +222,11 @@ test("an unpublished Sendset renders nothing, whatever rows exist", async () => 
 });
 
 test("web, print and email all load through the publication reader", () => {
+  // The recipient page uses getPublishedPacketForPage — the same reader, which
+  // also returns the response marker from the same publication row.
   for (const f of ["src/app/p/[slug]/page.tsx", "src/app/p/[slug]/print/page.tsx", "src/app/api/packets/[id]/email/route.ts"]) {
     const src = readFileSync(f, "utf8");
-    assert.match(src, /getPublishedPacket\(/, `${f} no longer loads the publication`);
+    assert.match(src, /getPublishedPacket(ForPage)?\(/, `${f} no longer loads the publication`);
     assert.doesNotMatch(src, /getLiveRowsPublishedPacket|getPacketForEditor/, `${f} renders working rows to a recipient`);
   }
   const files: string[] = [];

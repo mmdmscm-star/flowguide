@@ -50,6 +50,7 @@ const PACKET_FILES = [
   "src/components/packet-block-body.tsx",
   "src/components/professional-footer.tsx",
   "src/components/sendset-signature.tsx",
+  "src/components/respond-panel.tsx",
   "src/components/photo-gallery.tsx",
   "src/components/preview-surface.tsx",
   "src/app/p/[slug]/page.tsx",

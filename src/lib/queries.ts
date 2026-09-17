@@ -1,6 +1,7 @@
 import { createPublicClient, createServerClient } from "./supabase";
 import type { Packet, PacketBlock, Section, Item, ItemDetail, ItemLink, ItemContact, ProfessionalContact } from "./types";
 import type { SenderIdentity } from "./recipient-metadata";
+import { acceptsResponses } from "./response-actions";
 
 // ============================================================
 // Resolve which identity a packet presents in the editor/preview,
@@ -63,6 +64,30 @@ export function resolveProfessional(
 // The internal title is never part of a publication, so it is blank here on
 // every path: a recipient's Packet does not carry it.
 export async function getPublishedPacket(slug: string, db: Db = createServerClient()): Promise<Packet | null> {
+  return (await getPublishedPacketForPage(slug, db))?.packet ?? null;
+}
+
+/**
+ * The same published Sendset, plus what the recipient PAGE alone needs: whether
+ * it accepts responses, and the marker of the publication it is rendering.
+ *
+ * THE MARKER COMES FROM THE SAME ROW AS THE CONTENT, in the same query. Reading
+ * them separately could pair the content of one publication with the marker of
+ * the next, and a response would then be recorded as current for a page that
+ * never showed that publication.
+ *
+ * THE MARKER IS PostgREST's STRING, returned untouched. Never a Date. See
+ * MARKER_SHAPE in responses.ts.
+ *
+ * `response_actions` is read live from the Sendset, never from the publication:
+ * turning responses off takes effect on the next request, with no Republish.
+ * `responseMarker` is null whenever responses are not offered — off, or a
+ * Sendset still on the rollout fallback, which has no publication to mark.
+ */
+export async function getPublishedPacketForPage(
+  slug: string,
+  db: Db = createServerClient()
+): Promise<{ packet: Packet; responseMarker: string | null } | null> {
   const { data: packet, error: packetError } = await db
     .from("packets")
     .select("*")
@@ -75,7 +100,12 @@ export async function getPublishedPacket(slug: string, db: Db = createServerClie
   // A failed read or an unknown format THROWS: rendering the working rows
   // instead would show a recipient changes that were never published.
   const publication = await readPublication(db, packet.id);
-  if (publication) return recipientPacket(publication.content);
+  if (publication) {
+    const marker = acceptsResponses(packet.response_actions) && typeof publication.publishedAt === "string"
+      ? publication.publishedAt
+      : null;
+    return { packet: recipientPacket(publication.content), responseMarker: marker };
+  }
 
   // TEMPORARY ROLLOUT FALLBACK — a published Sendset with no publication row.
   //
@@ -87,7 +117,7 @@ export async function getPublishedPacket(slug: string, db: Db = createServerClie
   // Removed once production has run clean on publications alone.
   console.error("[publication-reader] published Sendset has no publication; rendering live rows", { packetId: packet.id });
   const live = await assemblePublishedFromLiveRows(db, packet);
-  return { ...live, title: "" };
+  return { packet: { ...live, title: "" }, responseMarker: null };
 }
 
 /** WHO SENT IT, and deliberately nothing else.
@@ -135,20 +165,37 @@ export async function publishedSenderIdentity(
 const str = (v: unknown): string | undefined =>
   typeof v === "string" && v.trim() ? v : undefined;
 
-/** Where a published Sendset's frozen copy is read. Throws on a failed read or an unknown format. */
-export async function readPublication(db: Db, packetId: string): Promise<{ formatVersion: number; content: PublicationSnapshot } | null> {
+/** The CURRENT publication's marker for a Sendset — PostgREST's string for
+ *  published_at, untouched — or null when there is no publication. For the
+ *  owner's response list, which asks Postgres (by equality) which responses
+ *  arrived under it. Never a Date; see MARKER_SHAPE in responses.ts. */
+export async function currentPublicationMarker(db: Db, packetId: string): Promise<string | null> {
   const { data, error } = await db
     .from("packet_publications")
-    .select("format_version, content")
+    .select("published_at")
+    .eq("packet_id", packetId)
+    .maybeSingle();
+  if (error || !data) return null;
+  const marker = (data as { published_at?: unknown }).published_at;
+  return typeof marker === "string" ? marker : null;
+}
+
+/** Where a published Sendset's frozen copy is read. Throws on a failed read or an unknown format. */
+export async function readPublication(db: Db, packetId: string): Promise<{ formatVersion: number; content: PublicationSnapshot; publishedAt: unknown } | null> {
+  const { data, error } = await db
+    .from("packet_publications")
+    .select("format_version, content, published_at")
     .eq("packet_id", packetId)
     .maybeSingle();
   if (error) throw new Error(`publication could not be read: ${error.message}`);
   if (!data) return null;
-  const row = data as { format_version: number; content: PublicationSnapshot };
+  const row = data as { format_version: number; content: PublicationSnapshot; published_at: unknown };
   if (row.format_version !== PUBLICATION_FORMAT_VERSION) {
     throw new Error(`publication format ${row.format_version} is not one this reader renders`);
   }
-  return { formatVersion: row.format_version, content: row.content };
+  // published_at stays `unknown` and untouched: only the response marker uses
+  // it, and only as the string PostgREST produced.
+  return { formatVersion: row.format_version, content: row.content, publishedAt: row.published_at };
 }
 
 function recipientPacket(content: PublicationSnapshot): Packet {

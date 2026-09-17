@@ -5,7 +5,8 @@ import { Button } from "@/components/ui/button";
 import { INPUT_SHELL } from "@/components/ui/field";
 
 import { useEffect, useState, useCallback } from "react";
-import { deleteConfirmMessage, deletePacketRequest } from "@/lib/delete-packet";
+import { confirmAndDeletePacket } from "@/lib/delete-packet";
+import { responseCountLabel } from "@/lib/responses";
 import { publicSendsetUrl } from "@/lib/public-url";
 import QrCodePanel from "@/components/qr-code-panel";
 import { useRouter } from "next/navigation";
@@ -18,6 +19,8 @@ interface PacketSummary {
   client_name: string;
   status: string;
   view_count: number;
+  /** Private to the owner. Stated in the delete confirmation. */
+  response_count: number;
   created_at: string;
   updated_at: string;
 }
@@ -97,17 +100,16 @@ export default function DashboardWorkspace() {
   // was indistinguishable from success, because the list simply reloaded with
   // the packet still in it and nothing said why.
   async function deletePacket(packet: PacketSummary) {
-    if (!confirm(deleteConfirmMessage({
-      title: packet.title,
-      clientName: packet.client_name,
-      status: packet.status,
-      createdAt: packet.created_at,
-    }))) return;
-
     setDeleteError("");
     try {
-      await deletePacketRequest(packet.id);
-      loadPackets();
+      const deleted = await confirmAndDeletePacket(packet.id, {
+        title: packet.title,
+        clientName: packet.client_name,
+        status: packet.status,
+        createdAt: packet.created_at,
+        responseCount: packet.response_count,
+      }, (message) => confirm(message));
+      if (deleted) loadPackets();
     } catch (e) {
       setDeleteError(e instanceof Error ? e.message : "Could not delete that Sendset.");
     }
@@ -386,6 +388,13 @@ export default function DashboardWorkspace() {
                         {viewCountLabel(packet.view_count)}
                       </span>
                     )}
+                    {/* Responses are an event too, and they can outlive a
+                        publication, so the count shows whatever the status. */}
+                    {packet.response_count > 0 && (
+                      <span className="rounded-full bg-mark-soft px-2 py-0.5 font-medium text-mark">
+                        {responseCountLabel(packet.response_count)}
+                      </span>
+                    )}
                   </div>
                 </button>
                 {/* FOUR ACTIONS AT THE SAME WEIGHT, AND DELETE IN RED, meant
@@ -410,6 +419,12 @@ export default function DashboardWorkspace() {
                         QR code
                       </Button>
                     </>
+                  )}
+                  {packet.response_count > 0 && (
+                    <Button variant="ghost" size="sm"
+                      onClick={() => router.push(`/responses/${packet.id}`)}>
+                      Responses
+                    </Button>
                   )}
                   <Button variant="ghost" size="sm"
                     onClick={() => duplicatePacket(packet.id)}

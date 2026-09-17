@@ -11,13 +11,22 @@ export async function GET() {
   const supabase = createServerClient();
   const { data: packets, error } = await supabase
     .from("packets")
-    .select("id, slug, title, client_name, status, view_count, created_at, updated_at")
+    .select("id, slug, title, client_name, status, view_count, created_at, updated_at, sendset_responses(count)")
     .eq("user_id", session.userId)
     .order("updated_at", { ascending: false });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  return NextResponse.json({ packets });
+  // RESPONSE COUNT, flattened. Private to the owner: this route is session-scoped
+  // and the count is never part of anything a recipient can reach. It is also
+  // the number the dashboard's delete confirmation states — and the server holds
+  // that confirmation to it (delete_sendset, 0058).
+  const withCounts = (packets ?? []).map((p) => {
+    const { sendset_responses: embedded, ...rest } = p as typeof p & { sendset_responses?: { count: number }[] };
+    return { ...rest, response_count: Number(embedded?.[0]?.count ?? 0) };
+  });
+
+  return NextResponse.json({ packets: withCounts });
 }
 
 // POST /api/packets — create a new packet
