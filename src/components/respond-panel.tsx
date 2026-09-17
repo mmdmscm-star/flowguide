@@ -23,7 +23,11 @@ import { respondHeading, RESPONSE_OUTCOME, type ResponseField } from "@/lib/resp
  *  and it is replaced by "Sent." with no echo of the message.
  *
  *  NO maxLength on the fields: a browser truncates a paste to it silently, and
- *  a message cut short without a word is worse than being told it is too long. */
+ *  a message cut short without a word is worse than being told it is too long.
+ *
+ *  IT POSTS TO THE CANONICAL PATH, /p/<slug>/respond. The old /api path is kept
+ *  alive only for bundles rendered before the move, which are still open in
+ *  somebody's browser; nothing new calls it. */
 export function RespondPanel({ slug, marker, senderName }: { slug: string; marker: string; senderName?: string | null }) {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
@@ -40,7 +44,7 @@ export function RespondPanel({ slug, marker, senderName }: { slug: string; marke
     setState("sending");
     setError(null);
     try {
-      const res = await fetch(`/api/p/${encodeURIComponent(slug)}/responses`, {
+      const res = await fetch(`/p/${encodeURIComponent(slug)}/respond`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ marker, name, contact, message, website }),

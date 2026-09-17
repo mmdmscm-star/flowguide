@@ -247,7 +247,7 @@ test("the recipient reader is the published row's frozen publication (reader swi
   // getPublishedPacket is getPublishedPacketForPage's packet; the page variant
   // adds only the response marker, read from the SAME publication row.
   assert.match(reader, /return \(await getPublishedPacketForPage\(slug, db\)\)\?\.packet \?\? null;/, "getPublishedPacket is no longer the page reader's packet");
-  assert.match(reader, /const publication = await readPublication\(db, packet\.id\);\s*if \(publication\) \{[\s\S]{0,260}return \{ packet: recipientPacket\(publication\.content\), responseMarker: marker \};/, "getPublishedPacket does not serve the publication");
+  assert.match(reader, /const publication = await readPublication\(db, packet\.id\);\s*if \(publication\) \{[\s\S]{0,400}packet: recipientPacket\(publication\.content\),/, "getPublishedPacket does not serve the publication");
   for (const f of ["src/app/p/[slug]/page.tsx", "src/app/p/[slug]/print/page.tsx", "src/app/api/packets/[id]/email/route.ts"]) {
     assert.match(codeOf(f), /getPublishedPacket(ForPage)?\(/, `${f} no longer renders through getPublishedPacket`);
   }

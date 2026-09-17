@@ -16,6 +16,9 @@ import { recipientMetadata } from "@/lib/recipient-metadata";
 import { treatmentFor, webVars } from "@/lib/style/treatment";
 import { packetMapUrl } from "@/lib/maps-url";
 import { RespondPanel } from "@/components/respond-panel";
+import { HeartsProvider } from "@/components/hearts/hearts-provider";
+import { HeartsFooter } from "@/components/hearts/hearts-footer";
+import { SignatureSheet } from "@/components/hearts/signature-sheet";
 
 // Render on every request — never serve a cached copy. This is what makes
 // unpublish/delete take effect immediately: there is no stored HTML that could
@@ -30,11 +33,11 @@ const isSupabaseConfigured =
   !!process.env.NEXT_PUBLIC_SUPABASE_URL &&
   !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-async function resolvePacket(slug: string): Promise<{ packet: Packet; responseMarker: string | null } | null> {
-  // A demo always works, even without a database — and never takes responses:
-  // it belongs to nobody.
+async function resolvePacket(slug: string): Promise<{ packet: Packet; responseMarker: string | null; likeMarker: string | null } | null> {
+  // A demo always works, even without a database — and never takes responses or
+  // hearts: it belongs to nobody.
   const demo = publicDemo(slug);
-  if (demo) return { packet: demo, responseMarker: null };
+  if (demo) return { packet: demo, responseMarker: null, likeMarker: null };
 
   // If Supabase is configured, try the database
   if (isSupabaseConfigured) {
@@ -71,7 +74,7 @@ export default async function PacketPage({ params }: Props) {
   // status. Because the page is force-dynamic, an unpublished packet 404s on the
   // very next request (getPublishedPacket filters status='published').
   if (!resolved) notFound();
-  const { packet, responseMarker } = resolved;
+  const { packet, responseMarker, likeMarker } = resolved;
 
   // Is the person reading this its author? Costs a recipient nothing: with no
   // session cookie this returns null without a query. Everything below renders
@@ -94,6 +97,20 @@ export default async function PacketPage({ params }: Props) {
   // the endpoint checks again for itself.
   const countThisOpen = !isPublicDemo(slug) && isSupabaseConfigured && !ownedId;
 
+  // HEARTS — only when this Sendset takes them (read live from the Sendset,
+  // never from its publication) and the reader is not its owner. The provider
+  // is what makes ItemHeart render at all, so Preview, print and email cannot
+  // gain hearts by rendering the same item card.
+  const hearts = Boolean(likeMarker) && !ownedId;
+  const withHearts = (body: React.ReactNode) =>
+    hearts ? (
+      <HeartsProvider slug={slug} marker={likeMarker!}>
+        {body}
+        <HeartsFooter />
+        <SignatureSheet />
+      </HeartsProvider>
+    ) : body;
+
   return (
     <>
       {countThisOpen && <RecordView slug={slug} />}
@@ -107,46 +124,48 @@ export default async function PacketPage({ params }: Props) {
         style={webVars(treatmentFor(packet)) as React.CSSProperties}
         className="sg-packet w-full max-w-lg mx-auto pb-12 overflow-x-hidden break-words"
       >
-        <PacketHeader
-          title={packet.clientTitle}
-          clientName={packet.clientName}
-          professional={packet.professional}
-        />
+        {withHearts(<>
+          <PacketHeader
+            title={packet.clientTitle}
+            clientName={packet.clientName}
+            professional={packet.professional}
+          />
 
-        {packet.personalNote && <PersonalNote note={packet.personalNote} />}
+          {packet.personalNote && <PersonalNote note={packet.personalNote} />}
 
-        {/* Map button */}
-        {packetMap && (
-          <div className="mx-[var(--sg-page-gutter)] mb-8">
-            <a
-              href={packetMap}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="sg-btn-primary flex items-center justify-center gap-2 w-full py-3 font-medium transition-colors"
-              style={{ borderRadius: "var(--sg-card-radius)", fontSize: "var(--sg-body)", lineHeight: "var(--sg-body-lh)" }}
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
-              </svg>
-              View Map
-            </a>
-          </div>
-        )}
+          {/* Map button */}
+          {packetMap && (
+            <div className="mx-[var(--sg-page-gutter)] mb-8">
+              <a
+                href={packetMap}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="sg-btn-primary flex items-center justify-center gap-2 w-full py-3 font-medium transition-colors"
+                style={{ borderRadius: "var(--sg-card-radius)", fontSize: "var(--sg-body)", lineHeight: "var(--sg-body-lh)" }}
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+                </svg>
+                View Map
+              </a>
+            </div>
+          )}
 
-        {/* Body renderer selected by composition mode. Legacy packets render the
-            exact section/item path (unchanged); block packets render the ordered
-            block body. Both present the same packet shell, header, and footer. */}
-        {packet.compositionMode === "blocks" ? (
-          <PacketBlockBody blocks={packet.blocks ?? []} />
-        ) : (
-          packet.sections.map((section) => (
-            <SectionGroup key={section.id} section={section} showQuickNav={packet.showQuickNav !== false} />
-          ))
-        )}
+          {/* Body renderer selected by composition mode. Legacy packets render the
+              exact section/item path (unchanged); block packets render the ordered
+              block body. Both present the same packet shell, header, and footer. */}
+          {packet.compositionMode === "blocks" ? (
+            <PacketBlockBody blocks={packet.blocks ?? []} />
+          ) : (
+            packet.sections.map((section) => (
+              <SectionGroup key={section.id} section={section} showQuickNav={packet.showQuickNav !== false} />
+            ))
+          )}
 
-        {packet.professional.name && (
-          <ProfessionalFooter professional={packet.professional} />
-        )}
+          {packet.professional.name && (
+            <ProfessionalFooter professional={packet.professional} />
+          )}
+        </>)}
 
         {/* RESPOND — only when this Sendset accepts responses (read live from
             the Sendset, never from its publication) and the reader is not its

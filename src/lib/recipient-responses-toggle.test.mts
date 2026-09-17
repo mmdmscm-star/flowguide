@@ -8,7 +8,7 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { JSDOM } from "jsdom";
-import { RESPONSE_ACTIONS, acceptsResponses, parseResponseActions } from "./response-actions.ts";
+import { RESPONSE_ACTIONS, acceptsResponses, acceptsLikes, parseResponseActions } from "./response-actions.ts";
 
 const read = (p: string) => readFileSync(p, "utf8");
 const LEGACY = read("src/components/editor/legacy-packet-editor.tsx");
@@ -19,25 +19,34 @@ const MOUNT = /<RecipientResponsesSettings\b[^>]*\/>/g;
 
 // --- the shared list ---------------------------------------------------------
 
-test("the only v1 action is respond, and the database CHECK lists exactly the same", () => {
-  assert.deepEqual([...RESPONSE_ACTIONS], ["respond"]);
-  const sql = read("supabase/migrations/0058_sendset_responses.sql");
-  const check = sql.match(/check \(response_actions <@ array\[([^\]]*)\]::text\[\]\)/);
-  assert.ok(check, "0058 must constrain response_actions");
+test("the accepted actions are exactly what the database allows, and both start off", () => {
+  assert.deepEqual([...RESPONSE_ACTIONS], ["respond", "like"]);
+  assert.match(read("supabase/migrations/0058_sendset_responses.sql"),
+    /response_actions text\[\] not null default '\{\}'/, "default must be off");
+  const sql = read("supabase/migrations/0059_sendset_item_actions.sql");
+  const check = [...sql.matchAll(/check \(response_actions <@ array\[([^\]]*)\]::text\[\]\)/g)].at(-1);
+  assert.ok(check, "0059 must constrain response_actions");
   assert.deepEqual(check[1].split(",").map((s) => s.trim().replace(/'/g, "")), [...RESPONSE_ACTIONS]);
-  assert.match(sql, /response_actions text\[\] not null default '\{\}'/, "default must be off");
 });
 
-test("a stored value is on only when it really contains respond", () => {
+test("a stored value is on only when it really contains that action", () => {
   assert.equal(acceptsResponses(["respond"]), true);
+  assert.equal(acceptsLikes(["like"]), true);
+  assert.equal(acceptsResponses(["like"]), false, "hearts are not messages");
+  assert.equal(acceptsLikes(["respond"]), false, "messages are not hearts");
+  assert.equal(acceptsResponses(["respond", "like"]), true);
+  assert.equal(acceptsLikes(["respond", "like"]), true);
   for (const v of [[], null, undefined, "respond", "{respond}", ["Respond"], {}]) {
     assert.equal(acceptsResponses(v), false, `${JSON.stringify(v)} must read as off`);
+    assert.equal(acceptsLikes(v), false, `${JSON.stringify(v)} must read as off`);
   }
 });
 
-test("the API accepts on, off and duplicates; refuses anything else", () => {
+test("the API accepts either action, both, neither and duplicates; refuses anything else", () => {
   assert.deepEqual(parseResponseActions(["respond"]), ["respond"]);
+  assert.deepEqual(parseResponseActions(["like"]), ["like"]);
   assert.deepEqual(parseResponseActions([]), []);
+  assert.deepEqual(parseResponseActions(["like", "respond"]), ["respond", "like"], "stored in one order, whatever order it arrives in");
   assert.deepEqual(parseResponseActions(["respond", "respond"]), ["respond"]);
   for (const v of [null, true, "respond", ["approve"], ["respond", "approve"], [1], [null], {}]) {
     assert.equal(parseResponseActions(v), null, `${JSON.stringify(v)} must be refused`);
@@ -55,20 +64,21 @@ test("PATCH validates with the shared parser and refuses with a sentence", () =>
 
 // --- one component, both editors ---------------------------------------------
 
-test("both editors mount the SAME component exactly once, with only its two props", () => {
-  for (const [name, src, id, initial] of [
-    ["legacy", LEGACY, "packet.id", "packet.responsesEnabled"],
-    ["block", BLOCK, "packetId", "initialResponsesEnabled"],
+test("both editors mount the SAME component exactly once, with only its stored values", () => {
+  for (const [name, src, id, initial, likes] of [
+    ["legacy", LEGACY, "packet.id", "packet.responsesEnabled", "packet.likesEnabled"],
+    ["block", BLOCK, "packetId", "initialResponsesEnabled", "initialLikesEnabled"],
   ] as const) {
     assert.match(src, /import \{ RecipientResponsesSettings \} from "\.\/recipient-responses-settings";/, `${name} imports it`);
     const mounts = src.match(MOUNT) ?? [];
     assert.equal(mounts.length, 1, `${name} mounts it once`);
-    assert.equal(mounts[0], `<RecipientResponsesSettings packetId={${id}} initialEnabled={${initial}} />`,
+    assert.equal(mounts[0],
+      `<RecipientResponsesSettings packetId={${id}} initialEnabled={${initial}} initialLikesEnabled={${likes}} />`,
       `${name} passes nothing else — no disabled, no readOnly, no options`);
   }
-  // No editor carries its own copy of the switch.
+  // No editor carries its own copy of either switch.
   for (const src of [LEGACY, BLOCK]) {
-    assert.doesNotMatch(src, /Allow responses|responseActions|role="switch"/);
+    assert.doesNotMatch(src, /Allow responses|Allow hearts|responseActions|role="switch"/);
   }
 });
 
@@ -128,10 +138,16 @@ test("only the two editors mount it: not Preview, not the recipient page, not se
   }
 });
 
-test("the component offers on/off and nothing else", () => {
-  assert.equal((COMPONENT.match(/<button\b/g) ?? []).length, 1);
-  assert.doesNotMatch(COMPONENT, /<input\b|<select\b|<textarea\b/);
-  assert.match(COMPONENT, /body: JSON\.stringify\(\{ responseActions: next \? \["respond"\] : \[\] \}\)/);
+test("the component offers two on/off switches and nothing else", () => {
+  // One switch per action, and no other control: no required-field options, no
+  // wording choices, no item pickers. v1 configures nothing but on and off.
+  assert.equal((COMPONENT.match(/role="switch"/g) ?? []).length, 1, "one switch element, rendered per action");
+  assert.equal((COMPONENT.match(/<Row\b/g) ?? []).length, 2, "exactly two rows: messages and hearts");
+  assert.match(COMPONENT, /Allow responses/);
+  assert.match(COMPONENT, /Allow hearts on items/);
+  assert.doesNotMatch(COMPONENT, /<select\b|<textarea\b/);
+  // What is sent is the full list, built from the one shared registry.
+  assert.match(COMPONENT, /body: JSON\.stringify\(\{ responseActions: RESPONSE_ACTIONS\.filter\(\(a\) => next\.has\(a\)\) \}\)/);
   // Immediate: nothing in the component's code waits on, or asks for, a publish.
   assert.doesNotMatch(COMPONENT.replace(/\/\*[\s\S]*?\*\/|\{\/\*[\s\S]*?\*\/\}|\/\/.*$/gm, ""), /publish/i);
 });

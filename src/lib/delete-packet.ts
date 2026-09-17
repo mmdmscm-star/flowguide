@@ -19,6 +19,12 @@ export interface PacketIdentity {
   /** How many responses this Sendset holds, as last read. They are deleted
    *  with it, so the creator is told the number before confirming. */
   responseCount?: number | null;
+  /** The same number, broken down, where the caller knows it. A "response" is
+   *  one submission — which may be a message somebody wrote or a set of hearts
+   *  somebody left — and those read very differently to a creator deciding
+   *  whether to delete. The TOTAL is what the server is held to; this only
+   *  says what it is made of. */
+  responseBreakdown?: { messages: number; heartSessions: number } | null;
 }
 
 const MONTHS = [
@@ -79,9 +85,17 @@ export function deleteConfirmMessage(packet: PacketIdentity): string {
   // number, because it is the number the server will hold this confirmation to.
   const responses = Number(packet.responseCount ?? 0);
   if (Number.isInteger(responses) && responses > 0) {
+    const head = responses === 1 ? "It has 1 response" : `It has ${responses} responses`;
+    const b = packet.responseBreakdown;
+    const parts: string[] = [];
+    if (b && b.messages + b.heartSessions === responses && b.messages > 0 && b.heartSessions > 0) {
+      parts.push(b.messages === 1 ? "1 message" : `${b.messages} messages`);
+      parts.push(b.heartSessions === 1 ? "1 with hearts" : `${b.heartSessions} with hearts`);
+    }
+    const detail = parts.length ? ` \u2014 ${parts.join(" and ")}` : "";
     lines.push("", responses === 1
-      ? "It has 1 response. Deleting it deletes that response too."
-      : `It has ${responses} responses. Deleting it deletes them too.`);
+      ? `${head}${detail}. Deleting it deletes that response too.`
+      : `${head}${detail}. Deleting it deletes them too.`);
   }
 
   lines.push("", "This cannot be undone.");

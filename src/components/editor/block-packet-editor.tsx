@@ -225,6 +225,7 @@ async function errorFrom(res: Response): Promise<string> {
 export function BlockPacketEditor({
   packetId, title, clientTitle: initialClientTitle, mapUrl: initialMapUrl, status, clientName, createdAt, initialBlocks, justConverted,
   initialResponsesEnabled,
+  initialLikesEnabled,
 }: {
   packetId: string;
   /** The professional's own name for this FlowGuide. Backstage: shown here so
@@ -241,6 +242,8 @@ export function BlockPacketEditor({
   justConverted?: boolean;
   /** Whether the published page accepts responses (0058). */
   initialResponsesEnabled: boolean;
+  /** Whether it accepts hearts on items (0059). A separate creator choice. */
+  initialLikesEnabled: boolean;
 }) {
   const readOnly = status !== "draft";
 
@@ -613,7 +616,7 @@ export function BlockPacketEditor({
             NOT gated on readOnly. Composition is locked on a published
             Sendset; responses are not part of the composition, and a published
             Sendset is exactly where turning them off must work at once. */}
-        <RecipientResponsesSettings packetId={packetId} initialEnabled={initialResponsesEnabled} />
+        <RecipientResponsesSettings packetId={packetId} initialEnabled={initialResponsesEnabled} initialLikesEnabled={initialLikesEnabled} />
 
         {/* Same component the legacy editor mounts — one delete, wherever the
             professional happens to be. */}

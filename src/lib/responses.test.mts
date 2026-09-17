@@ -7,7 +7,8 @@
 // the words the owner reads.
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync, statSync } from "node:fs";
+import { join } from "node:path";
 import { JSDOM } from "jsdom";
 import {
   MARKER_SHAPE, parseResponseBody, responseEmail, stalenessLabel, notificationLabel,
@@ -15,13 +16,24 @@ import {
 } from "./responses.ts";
 
 const raw = (p: string) => readFileSync(p, "utf8");
+/** Every source file under a directory, tests excluded. */
+function filesUnder(dir: string): string[] {
+  return readdirSync(dir).flatMap((f) => {
+    const p = join(dir, f);
+    return statSync(p).isDirectory() ? filesUnder(p) : /\.tsx?$/.test(f) ? [p] : [];
+  });
+}
 /** Source with comments removed, so a comment explaining a rule cannot satisfy
  *  or break the rule's guard. */
 const codeOf = (p: string) =>
   raw(p).replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\{\/\*[\s\S]*?\*\/\}/g, " ")
     .split("\n").map((l) => l.replace(/(^|[^:])\/\/.*$/, "$1")).join("\n");
 
-const ROUTE = "src/app/api/p/[slug]/responses/route.ts";
+// The message handler moved out of the route when the endpoints moved under
+// /p/[slug]; both paths delegate to this one implementation.
+const ROUTE = "src/lib/respond-handler.ts";
+const CANONICAL_ROUTE = "src/app/p/[slug]/respond/route.ts";
+const LEGACY_ROUTE = "src/app/api/p/[slug]/responses/route.ts";
 const PANEL = "src/components/respond-panel.tsx";
 const PAGE = "src/app/p/[slug]/page.tsx";
 
@@ -69,6 +81,13 @@ test("NO DATE ANYWHERE ON THE MARKER'S PATH", () => {
   assert.match(codeOf(PAGE), /<RespondPanel slug=\{slug\} marker=\{responseMarker\}/);
   assert.match(codeOf(PANEL), /JSON\.stringify\(\{ marker, name, contact, message, website \}\)/);
   assert.match(codeOf(ROUTE), /p_rendered_published_at: parsed\.marker,/);
+  // The item-action path carries the same marker under the same rule.
+  assert.match(codeOf("src/app/p/[slug]/actions/route.ts"), /p_rendered_published_at: parsed\.marker,/);
+  for (const f of ["src/app/p/[slug]/actions/route.ts", "src/lib/item-actions.ts", "src/lib/capability.ts",
+                   "src/components/hearts/hearts-provider.tsx"]) {
+    assert.doesNotMatch(codeOf(f), /new Date\(|Date\.parse|Date\.UTC|toISOString|toLocale|date-fns|dayjs|moment\(/,
+      `${f} handles a date`);
+  }
 });
 
 test("staleness is decided by Postgres equality, never by ordering", () => {
@@ -172,6 +191,30 @@ test("every refusal is worded so it cannot reveal whether the Sendset exists", (
   assert.equal(RESPONSE_OUTCOME.notAccepting, "This Sendset isn\u2019t accepting responses right now.");
   // Sent promises nothing and echoes nothing.
   assert.equal(RESPONSE_OUTCOME.sent, "Sent.");
+});
+
+test("the two paths to a message are ONE handler, and the legacy one says only that it was used", () => {
+  const canonical = codeOf(CANONICAL_ROUTE), legacy = codeOf(LEGACY_ROUTE);
+  for (const [name, src] of [["canonical", canonical], ["legacy", legacy]] as const) {
+    assert.match(src, /handleRespond\(request, slug\)/, `${name} does not delegate to the shared handler`);
+    assert.doesNotMatch(src, /record_sendset_response|parseResponseBody/, `${name} holds its own copy of the body`);
+  }
+  assert.match(legacy, /console\.log\("\[responses\] legacy endpoint used"\)/);
+  for (const [, arg] of legacy.matchAll(/console\.\w+\(([^)]*)\)/g)) {
+    assert.doesNotMatch(arg, /slug|name|contact|message|marker|capability|hash/i, "the legacy signal records who called it");
+  }
+  // A MESSAGE IS NOT HELD BY A CAPABILITY. The cookie is scoped to /p/<slug>,
+  // so the browser sends it here too — and neither path reads it.
+  assert.doesNotMatch(legacy + canonical + codeOf(ROUTE), /capabilityFromRequest|CAPABILITY_COOKIE|sendset_actions/);
+});
+
+test("new code calls the canonical path; nothing new calls the legacy one", () => {
+  const callers = [...filesUnder("src/app"), ...filesUnder("src/components"), ...filesUnder("src/lib")]
+    .filter((f) => !/\.test\./.test(f) && f !== LEGACY_ROUTE)
+    // Code only: a comment naming the old path is documentation, not a call.
+    .filter((f) => /["'`][^"'`]*\/api\/p\/[^"'`]*\/responses/.test(codeOf(f)));
+  assert.deepEqual(callers, [], `still calling the legacy endpoint: ${callers.join(", ")}`);
+  assert.match(codeOf("src/components/respond-panel.tsx"), /\/p\/\$\{encodeURIComponent\(slug\)\}\/respond/);
 });
 
 // ---------------------------------------------------------------------------
@@ -327,7 +370,7 @@ test("the published copy never carries response settings or responses", async ()
 test("the page mounts the panel only for a non-owner, and nothing else about responses", () => {
   const page = codeOf(PAGE);
   assert.match(page, /\{responseMarker && !ownedId && \(\s*<RespondPanel /);
-  assert.match(page, /if \(demo\) return \{ packet: demo, responseMarker: null \};/);
+  assert.match(page, /if \(demo\) return \{ packet: demo, responseMarker: null, likeMarker: null \};/);
   for (const src of [page, codeOf(PANEL)]) {
     assert.doesNotMatch(src, /owner-responses|responseCountLabel|response_count|sendset_responses|IDENTITY_NOTE/,
       "a recipient surface reaches for other people's responses");
@@ -425,7 +468,7 @@ test("a send posts the marker untouched; success replaces the form with Sent. an
     await type(host.querySelector('input[name="name"]')!, "Lisa");
     await type(host.querySelector('textarea[name="message"]')!, "Is Saturday still open?");
     await submit(host);
-    assert.deepEqual(posts, [{ url: "/api/p/harbor-7k2/responses",
+    assert.deepEqual(posts, [{ url: "/p/harbor-7k2/respond",
       body: { marker: MARKER, name: "Lisa", contact: "", message: "Is Saturday still open?", website: "" } }]);
     assert.equal(host.querySelector("form"), null);
     assert.equal(host.textContent, "Sent.");

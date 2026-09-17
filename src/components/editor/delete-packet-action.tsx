@@ -45,9 +45,16 @@ export default function DeletePacketAction({
         const body = (await res.json().catch(() => ({}))) as { message?: string };
         throw new Error(body.message || "Could not check this Sendset\u2019s responses. Try again.");
       }
-      const { count } = (await res.json()) as { count: number };
+      const { count, responses } = (await res.json()) as { count: number; responses?: { kind?: string }[] };
+      const messages = (responses ?? []).filter((r) => r.kind === "message").length;
 
-      const deleted = await confirmAndDeletePacket(packetId, { ...packet, responseCount: count }, (m) => confirm(m));
+      const deleted = await confirmAndDeletePacket(packetId, {
+        ...packet,
+        responseCount: count,
+        // The list is already in hand, so the warning can say what the number
+        // is made of rather than leaving a creator to guess.
+        responseBreakdown: responses ? { messages, heartSessions: responses.length - messages } : null,
+      }, (m) => confirm(m));
       if (!deleted) { setBusy(false); return; }
       // Only on success. A failed delete must leave the creator where they are,
       // still looking at the FlowGuide that still exists.

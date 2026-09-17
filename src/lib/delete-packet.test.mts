@@ -105,7 +105,7 @@ test("and every caller uses the shared confirmation wording", () => {
 test("A FAILED DELETE IS VISIBLE, and does not navigate away", () => {
   const action = codeOf("src/components/editor/delete-packet-action.tsx");
   // The push must be inside the try, after the await — never in a finally.
-  assert.match(action, /const deleted = await confirmAndDeletePacket\([\s\S]{0,160}if \(!deleted\) \{ setBusy\(false\); return; \}[\s\S]{0,160}router\.push\("\/dashboard"\)/,
+  assert.match(action, /const deleted = await confirmAndDeletePacket\([\s\S]{0,400}if \(!deleted\) \{ setBusy\(false\); return; \}[\s\S]{0,200}router\.push\("\/dashboard"\)/,
     "navigation is not gated on the delete succeeding");
   assert.match(action, /catch[\s\S]{0,160}setError\(/, "a failed delete says nothing");
   assert.doesNotMatch(action, /finally[\s\S]{0,80}router\.push/, "it navigates away even on failure");
@@ -233,6 +233,20 @@ test("THE ROUTE DELETES ONLY THROUGH delete_sendset, holding it to the acknowled
 // ---------------------------------------------------------------------------
 // RESPONSES GO WITH A SENDSET, AND THE CREATOR IS TOLD THE NUMBER
 // ---------------------------------------------------------------------------
+
+test("the warning says what the number is made of, when the caller knows", () => {
+  const both = deleteConfirmMessage({ title: "X", responseCount: 3, responseBreakdown: { messages: 1, heartSessions: 2 } });
+  assert.match(both, /It has 3 responses \u2014 1 message and 2 with hearts\. Deleting it deletes them too\./);
+  // One kind only: the breakdown would say nothing the total does not.
+  assert.match(deleteConfirmMessage({ title: "X", responseCount: 2, responseBreakdown: { messages: 2, heartSessions: 0 } }),
+    /It has 2 responses\. Deleting/);
+  // A breakdown that does not add up is not shown — the TOTAL is what the
+  // server holds the confirmation to, and a mismatch means it is stale.
+  assert.match(deleteConfirmMessage({ title: "X", responseCount: 3, responseBreakdown: { messages: 1, heartSessions: 1 } }),
+    /It has 3 responses\. Deleting/);
+  assert.match(deleteConfirmMessage({ title: "X", responseCount: 1, responseBreakdown: { messages: 0, heartSessions: 1 } }),
+    /It has 1 response\. Deleting it deletes that response too\./);
+});
 
 test("the confirmation states the response count, and only when there are any", () => {
   assert.match(deleteConfirmMessage({ title: "X", responseCount: 1 }), /It has 1 response\. Deleting it deletes that response too\./);

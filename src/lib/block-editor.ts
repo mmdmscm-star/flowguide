@@ -1,7 +1,7 @@
 import { createServerClient } from "./supabase";
 import { assembleItemsByIds } from "./queries";
 import type { PacketBlock } from "./types";
-import { acceptsResponses } from "./response-actions";
+import { acceptsResponses, acceptsLikes } from "./response-actions";
 
 // ============================================================
 // Editor-side loader for a block-mode packet. Owner-scoped. Returns the routing
@@ -23,6 +23,7 @@ export type BlockEditorLoad =
        *  it could not remove. */
       mapUrl: string;
       responsesEnabled: boolean;
+      likesEnabled: boolean;
       clientName: string; createdAt: string; blocks: PacketBlock[] };
 
 export async function getBlockEditorData(packetId: string, userId: string): Promise<BlockEditorLoad> {
@@ -73,6 +74,7 @@ export async function getBlockEditorData(packetId: string, userId: string): Prom
     clientTitle: (packet as { client_title?: string }).client_title || "",
     mapUrl: (packet as { map_url?: string }).map_url || "",
     responsesEnabled: acceptsResponses((packet as { response_actions?: unknown }).response_actions),
+    likesEnabled: acceptsLikes((packet as { response_actions?: unknown }).response_actions),
     clientName: (packet as { client_name?: string }).client_name || "",
     createdAt: (packet as { created_at?: string }).created_at || "",
     blocks,

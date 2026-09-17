@@ -1,7 +1,7 @@
 import { createPublicClient, createServerClient } from "./supabase";
 import type { Packet, PacketBlock, Section, Item, ItemDetail, ItemLink, ItemContact, ProfessionalContact } from "./types";
 import type { SenderIdentity } from "./recipient-metadata";
-import { acceptsResponses } from "./response-actions";
+import { acceptsResponses, acceptsLikes } from "./response-actions";
 
 // ============================================================
 // Resolve which identity a packet presents in the editor/preview,
@@ -80,14 +80,17 @@ export async function getPublishedPacket(slug: string, db: Db = createServerClie
  * MARKER_SHAPE in responses.ts.
  *
  * `response_actions` is read live from the Sendset, never from the publication:
- * turning responses off takes effect on the next request, with no Republish.
- * `responseMarker` is null whenever responses are not offered — off, or a
- * Sendset still on the rollout fallback, which has no publication to mark.
+ * turning either off takes effect on the next request, with no Republish. Each
+ * marker is null whenever that action is not offered — off, or a Sendset still
+ * on the rollout fallback, which has no publication to mark.
+ *
+ * The two are separate because the creator chooses them separately: a Sendset
+ * may take messages, hearts, both or neither.
  */
 export async function getPublishedPacketForPage(
   slug: string,
   db: Db = createServerClient()
-): Promise<{ packet: Packet; responseMarker: string | null } | null> {
+): Promise<{ packet: Packet; responseMarker: string | null; likeMarker: string | null } | null> {
   const { data: packet, error: packetError } = await db
     .from("packets")
     .select("*")
@@ -101,10 +104,12 @@ export async function getPublishedPacketForPage(
   // instead would show a recipient changes that were never published.
   const publication = await readPublication(db, packet.id);
   if (publication) {
-    const marker = acceptsResponses(packet.response_actions) && typeof publication.publishedAt === "string"
-      ? publication.publishedAt
-      : null;
-    return { packet: recipientPacket(publication.content), responseMarker: marker };
+    const live = typeof publication.publishedAt === "string" ? publication.publishedAt : null;
+    return {
+      packet: recipientPacket(publication.content),
+      responseMarker: acceptsResponses(packet.response_actions) ? live : null,
+      likeMarker: acceptsLikes(packet.response_actions) ? live : null,
+    };
   }
 
   // TEMPORARY ROLLOUT FALLBACK — a published Sendset with no publication row.
@@ -117,7 +122,7 @@ export async function getPublishedPacketForPage(
   // Removed once production has run clean on publications alone.
   console.error("[publication-reader] published Sendset has no publication; rendering live rows", { packetId: packet.id });
   const live = await assemblePublishedFromLiveRows(db, packet);
-  return { packet: { ...live, title: "" }, responseMarker: null };
+  return { packet: { ...live, title: "" }, responseMarker: null, likeMarker: null };
 }
 
 /** WHO SENT IT, and deliberately nothing else.
@@ -178,6 +183,19 @@ export async function currentPublicationMarker(db: Db, packetId: string): Promis
   if (error || !data) return null;
   const marker = (data as { published_at?: unknown }).published_at;
   return typeof marker === "string" ? marker : null;
+}
+
+/** The current publication's CONTENT for a Sendset, or null. For the owner's
+ *  response list, which needs to know whether a hearted item is still in the
+ *  Sendset. Read here so packet_publications keeps exactly one reader. */
+export async function currentPublicationContent(db: Db, packetId: string): Promise<PublicationSnapshot | null> {
+  const { data, error } = await db
+    .from("packet_publications")
+    .select("content")
+    .eq("packet_id", packetId)
+    .maybeSingle();
+  if (error || !data) return null;
+  return (data as { content?: PublicationSnapshot }).content ?? null;
 }
 
 /** Where a published Sendset's frozen copy is read. Throws on a failed read or an unknown format. */

@@ -4,6 +4,7 @@ import { Item } from "@/lib/types";
 import { detectLinkType, resolveCardLinks, type LinkType } from "@/lib/item-links";
 import { addressMapUrl } from "@/lib/maps-url";
 import { PhotoGallery } from "./photo-gallery";
+import { ItemHeart } from "./hearts/item-heart";
 
 // URL type detection, labelling, and link identity live in @/lib/item-links so
 // the rules are pure and unit-testable; this file keeps only presentation.
@@ -130,16 +131,24 @@ export function ItemCard({ item, audience = "recipient" }: { item: Item; audienc
       )}
 
       <div className="min-w-0" style={{ padding: "var(--sg-card-pad)" }}>
-        <h3
-          className="text-[length:var(--sg-item-title)] text-[color:var(--sg-ink)] mb-1"
-          style={{
-            fontFamily: "var(--sg-font-display)",
-            fontWeight: "var(--sg-item-title-weight)",
-            letterSpacing: "var(--sg-title-tracking)",
-          }}
-        >
-          {item.title}
-        </h3>
+        {/* THE HEART SITS BESIDE THE NAME, and only on a Sendset that takes
+            hearts: ItemHeart renders nothing unless the recipient page has
+            mounted HeartsProvider, so Preview, print and email are untouched by
+            its presence here. The title keeps the whole width when it is
+            absent, because an absent element takes no space. */}
+        <div className="flex items-start justify-between gap-3">
+          <h3
+            className="min-w-0 text-[length:var(--sg-item-title)] text-[color:var(--sg-ink)] mb-1"
+            style={{
+              fontFamily: "var(--sg-font-display)",
+              fontWeight: "var(--sg-item-title-weight)",
+              letterSpacing: "var(--sg-title-tracking)",
+            }}
+          >
+            {item.title}
+          </h3>
+          {audience === "recipient" && item.id && <ItemHeart itemId={item.id} title={item.title} />}
+        </div>
 
         {/* Address with a map link. The URL comes from the shared helper so
             this and the email flavour cannot drift — see @/lib/maps-url. */}
