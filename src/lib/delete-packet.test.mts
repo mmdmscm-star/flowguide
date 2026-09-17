@@ -75,31 +75,37 @@ test("every message ends by saying it cannot be undone", () => {
 // ONE MECHANISM
 // ---------------------------------------------------------------------------
 
-test("EVERY caller goes through the shared request helper", () => {
+test("EVERY caller goes through the shared confirm-and-delete flow", () => {
   for (const caller of [
     "src/components/editor/delete-packet-action.tsx",
     "src/components/dashboard/dashboard-workspace.tsx",
   ]) {
     const src = codeOf(caller);
-    assert.match(src, /deletePacketRequest\(/, `${caller} does not use the shared helper`);
+    assert.match(src, /confirmAndDeletePacket\(/, `${caller} does not use the shared flow`);
     // A second hand-rolled DELETE would be a second mechanism.
     assert.doesNotMatch(src, /method:\s*"DELETE"/, `${caller} rolls its own delete request`);
   }
 });
 
 test("and every caller uses the shared confirmation wording", () => {
+  // The flow composes the message itself; a caller only supplies how to ask.
+  assert.match(codeOf("src/lib/delete-packet.ts"),
+    /export async function confirmAndDeletePacket[\s\S]*deleteConfirmMessage\(\{ \.\.\.packet, responseCount: count \}\)/);
   for (const caller of [
     "src/components/editor/delete-packet-action.tsx",
     "src/components/dashboard/dashboard-workspace.tsx",
   ]) {
-    assert.match(codeOf(caller), /deleteConfirmMessage\(/, `${caller} writes its own confirmation`);
+    const src = codeOf(caller);
+    assert.doesNotMatch(src, /confirm\(\s*["'`]/, `${caller} writes its own confirmation`);
+    assert.match(src, /\(m(essage)?\) => confirm\(m(essage)?\)/, `${caller} does not ask with the shared message`);
+    assert.match(src, /responseCount: (packet\.response_count|count)\b/, `${caller} does not state the response count`);
   }
 });
 
 test("A FAILED DELETE IS VISIBLE, and does not navigate away", () => {
   const action = codeOf("src/components/editor/delete-packet-action.tsx");
   // The push must be inside the try, after the await — never in a finally.
-  assert.match(action, /await deletePacketRequest\(packetId\);[\s\S]{0,120}router\.push\("\/dashboard"\)/,
+  assert.match(action, /const deleted = await confirmAndDeletePacket\([\s\S]{0,160}if \(!deleted\) \{ setBusy\(false\); return; \}[\s\S]{0,160}router\.push\("\/dashboard"\)/,
     "navigation is not gated on the delete succeeding");
   assert.match(action, /catch[\s\S]{0,160}setError\(/, "a failed delete says nothing");
   assert.doesNotMatch(action, /finally[\s\S]{0,80}router\.push/, "it navigates away even on failure");
@@ -111,7 +117,7 @@ test("A FAILED DELETE IS VISIBLE, and does not navigate away", () => {
 
 test("the helper throws rather than returning a flag a caller can ignore", () => {
   const lib = codeOf("src/lib/delete-packet.ts");
-  assert.match(lib, /if \(!res\.ok\)[\s\S]{0,200}throw new Error/, "a non-OK response is not thrown");
+  assert.match(lib, /if \(!res\.ok\)[\s\S]{0,700}throw new Error/, "a non-OK response is not thrown");
   assert.match(lib, /catch[\s\S]{0,120}throw new Error/, "a network failure is not thrown");
 });
 
@@ -205,15 +211,87 @@ test("a 200 resolves — success is still success", async () => {
   assert.equal(await messageFor(json(200, { ok: true })), "");
 });
 
-test("THE ROUTE REPORTS WHAT IT DELETED", () => {
+test("THE ROUTE DELETES ONLY THROUGH delete_sendset, holding it to the acknowledged count", () => {
   const route = codeOf("src/app/api/packets/[id]/route.ts");
   const del = route.slice(route.indexOf("export async function DELETE"));
-  // Without .select() PostgREST answers happily on zero rows.
-  assert.match(del, /\.select\("id"\)/, "the delete does not report which rows it removed");
-  assert.match(del, /data\.length === 0[\s\S]{0,220}status: 404/, "zero rows still answers success");
-  // The owner scope must survive the change.
-  assert.match(del, /\.eq\("user_id", session\.userId\)/, "the delete lost its owner scope");
-  // And nothing may ask whether the row exists regardless of owner — that is
-  // the query that leaks whether a stranger's id is real.
-  assert.doesNotMatch(del, /\.select\([^)]*\)\s*\.eq\("id", id\)\s*\.single/, "an existence probe was added");
+  assert.match(del, /if \(!session\) return NextResponse\.json\(\{ error: "Unauthorized" \}, \{ status: 401 \}\)/);
+  assert.match(del, /rpc\("delete_sendset", \{\s*p_owner: session\.userId,\s*p_packet_id: id,\s*p_acknowledged_responses: acknowledged,\s*\}\)/,
+    "the owner scope or the acknowledgement is not passed to delete_sendset");
+  // No plain delete anywhere in the route: RESTRICT would refuse it once a
+  // response exists, and it would never have checked the count.
+  assert.doesNotMatch(route, /\.delete\(\)/, "the route still deletes the row directly");
+  // Not-yours and not-there stay one answer.
+  assert.match(del, /error\.code === "PT404"[\s\S]{0,200}error: "not_found"[\s\S]{0,160}status: 404/);
+  assert.doesNotMatch(del, /\.from\("packets"\)/, "an existence probe was added");
+  // A moved count is 409 with the true number, and nothing deleted.
+  assert.match(del, /error\.code === "PT409" && error\.details === "responses_changed"[\s\S]{0,400}responses:[\s\S]{0,80}status: 409/);
+  // The acknowledgement is a plain non-negative integer or nothing.
+  assert.match(del, /searchParams\.get\("acknowledgedResponses"\)/);
+  assert.match(del, /\^\\d\{1,9\}\$/);
 });
+
+// ---------------------------------------------------------------------------
+// RESPONSES GO WITH A SENDSET, AND THE CREATOR IS TOLD THE NUMBER
+// ---------------------------------------------------------------------------
+
+test("the confirmation states the response count, and only when there are any", () => {
+  assert.match(deleteConfirmMessage({ title: "X", responseCount: 1 }), /It has 1 response\. Deleting it deletes that response too\./);
+  assert.match(deleteConfirmMessage({ title: "X", responseCount: 3 }), /It has 3 responses\. Deleting it deletes them too\./);
+  for (const none of [0, null, undefined]) {
+    assert.doesNotMatch(deleteConfirmMessage({ title: "X", responseCount: none }), /response/);
+  }
+  assert.match(deleteConfirmMessage({ title: "X", responseCount: 3 }), /This cannot be undone\.$/);
+});
+
+/** Drive confirmAndDeletePacket against scripted server answers. */
+async function runFlow(answers: Response[], replies: boolean[], responseCount = 0) {
+  const { confirmAndDeletePacket } = await import("./delete-packet.ts");
+  const urls: string[] = [];
+  const asked: string[] = [];
+  const real = globalThis.fetch;
+  globalThis.fetch = (async (url: string) => { urls.push(String(url)); return answers.shift()!; }) as typeof fetch;
+  try {
+    const result = await confirmAndDeletePacket("p1", { title: "X", responseCount },
+      (m) => { asked.push(m); return replies.shift() ?? false; });
+    return { result, urls, asked };
+  } finally {
+    globalThis.fetch = real;
+  }
+}
+
+test("the request acknowledges exactly the count the creator was shown", async () => {
+  const { result, urls, asked } = await runFlow([json(200, { ok: true })], [true], 2);
+  assert.equal(result, true);
+  assert.match(asked[0], /It has 2 responses/);
+  assert.deepEqual(urls, ["/api/packets/p1?acknowledgedResponses=2"]);
+});
+
+test("cancelling sends nothing", async () => {
+  const { result, urls } = await runFlow([], [false], 2);
+  assert.equal(result, false);
+  assert.deepEqual(urls, []);
+});
+
+test("A RESPONSE THAT ARRIVED AFTER THE WARNING: nothing deleted, the creator is asked again with the true number", async () => {
+  const { result, urls, asked } = await runFlow(
+    [json(409, { error: "responses_changed", responses: 3 }), json(200, { ok: true })], [true, true], 2);
+  assert.equal(result, true);
+  assert.equal(asked.length, 2);
+  assert.match(asked[1], /^A new response arrived\./);
+  assert.match(asked[1], /It has 3 responses/);
+  assert.deepEqual(urls, ["/api/packets/p1?acknowledgedResponses=2", "/api/packets/p1?acknowledgedResponses=3"]);
+});
+
+test("declining the second warning deletes nothing", async () => {
+  const { result, urls } = await runFlow([json(409, { error: "responses_changed", responses: 1 })], [true, false], 0);
+  assert.equal(result, false);
+  assert.equal(urls.length, 1);
+});
+
+test("any other failure is thrown, not retried", async () => {
+  await assert.rejects(runFlow([json(500, { message: "Could not delete this Sendset. Try again." })], [true]),
+    /Could not delete this Sendset\. Try again\./);
+  // A 409 without a usable count is a failure, not a silent re-ask.
+  await assert.rejects(runFlow([json(409, { error: "responses_changed" })], [true]), /Could not delete|responses_changed/);
+});
+

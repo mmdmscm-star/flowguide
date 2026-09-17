@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { deleteConfirmMessage, deletePacketRequest, type PacketIdentity } from "@/lib/delete-packet";
+import { confirmAndDeletePacket, type PacketIdentity } from "@/lib/delete-packet";
 
 // DELETE THE FLOWGUIDE YOU ARE LOOKING AT.
 //
@@ -34,12 +34,21 @@ export default function DeletePacketAction({
 
   async function onDelete() {
     if (busy) return;
-    if (!confirm(deleteConfirmMessage(packet))) return;
-
     setBusy(true);
     setError("");
     try {
-      await deletePacketRequest(packetId);
+      // THE COUNT IS READ NOW, at the click, because responses keep arriving
+      // while an editor sits open. If one lands after this read, the server
+      // deletes nothing and the creator is asked again with the true number.
+      const res = await fetch(`/api/packets/${packetId}/responses`);
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { message?: string };
+        throw new Error(body.message || "Could not check this Sendset\u2019s responses. Try again.");
+      }
+      const { count } = (await res.json()) as { count: number };
+
+      const deleted = await confirmAndDeletePacket(packetId, { ...packet, responseCount: count }, (m) => confirm(m));
+      if (!deleted) { setBusy(false); return; }
       // Only on success. A failed delete must leave the creator where they are,
       // still looking at the FlowGuide that still exists.
       router.push("/dashboard");

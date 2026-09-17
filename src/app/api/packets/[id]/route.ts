@@ -185,37 +185,70 @@ export async function PATCH(request: Request, context: Context) {
   return NextResponse.json({ ok: true });
 }
 
-// DELETE /api/packets/:id — delete a packet
-export async function DELETE(_request: Request, context: Context) {
+// DELETE /api/packets/:id?acknowledgedResponses=N — delete a packet
+//
+// THROUGH delete_sendset (0058), NEVER A PLAIN DELETE. A Sendset's responses are
+// other people's words, and the database refuses to drop them as a side effect:
+// both foreign keys into sendset_responses are ON DELETE RESTRICT. delete_sendset
+// is the one path that can remove them, and only when the caller acknowledges
+// EXACTLY the number that exists — checked under a row lock that also holds off
+// any response still arriving. So a creator who was shown "2 responses" cannot
+// destroy a third that landed after the confirmation was drawn.
+//
+// `acknowledgedResponses` is the count the creator was shown. Absent means none
+// were shown, which is right for a Sendset without responses and refused (409)
+// for one with them.
+export async function DELETE(request: Request, context: Context) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id } = await context.params;
+
+  const raw = new URL(request.url).searchParams.get("acknowledgedResponses");
+  let acknowledged: number | null = null;
+  if (raw !== null) {
+    if (!/^\d{1,9}$/.test(raw)) {
+      return NextResponse.json({
+        error: "invalid_acknowledgement",
+        message: "Could not delete this Sendset. Reload the page and try again.",
+      }, { status: 400 });
+    }
+    acknowledged = Number(raw);
+  }
+
   const supabase = createServerClient();
+  const { error } = await supabase.rpc("delete_sendset", {
+    p_owner: session.userId,
+    p_packet_id: id,
+    p_acknowledged_responses: acknowledged,
+  });
 
-  // `.select()` so the delete REPORTS WHAT IT DID. Without it PostgREST answers
-  // happily when the owner-scoped filter matched nothing, and this route
-  // returned `{ ok: true }` for a packet that was never touched — a caller
-  // could not tell "deleted" from "there was nothing there".
-  const { data, error } = await supabase
-    .from("packets")
-    .delete()
-    .eq("id", id)
-    .eq("user_id", session.userId)
-    .select("id");
-
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-
-  // ONE ANSWER FOR TWO CASES, deliberately. A packet that does not exist and a
-  // packet belonging to someone else are indistinguishable from here, because
-  // the filter that found neither is the same filter. Telling them apart would
-  // require asking whether the row exists regardless of owner, which is exactly
-  // the question that leaks whether a stranger's packet id is real.
-  if (!data || data.length === 0) {
-    return NextResponse.json({
-      error: "not_found",
-      message: "This Sendset no longer exists, or you no longer have access to it.",
-    }, { status: 404 });
+  if (error) {
+    // ONE ANSWER FOR TWO CASES, deliberately. A packet that does not exist and
+    // a packet belonging to someone else are indistinguishable here, because
+    // delete_sendset finds neither with the same owner-scoped lookup. Telling
+    // them apart would leak whether a stranger's packet id is real.
+    //
+    // A malformed id is the same case: it names no Sendset of yours.
+    if (error.code === "PT404" || error.code === "22P02") {
+      return NextResponse.json({
+        error: "not_found",
+        message: "This Sendset no longer exists, or you no longer have access to it.",
+      }, { status: 404 });
+    }
+    // The count moved between the confirmation and the click. Nothing was
+    // deleted. `responses` is the true count, so the caller can ask again with
+    // the right number — after the creator has seen it.
+    if (error.code === "PT409" && error.details === "responses_changed") {
+      const responses = Number(error.hint);
+      return NextResponse.json({
+        error: "responses_changed",
+        message: "A response arrived since you confirmed. Nothing was deleted.",
+        responses: Number.isInteger(responses) ? responses : null,
+      }, { status: 409 });
+    }
+    console.error("[delete] delete_sendset failed", { code: error.code });
+    return NextResponse.json({ error: "delete_failed", message: "Could not delete this Sendset. Try again." }, { status: 500 });
   }
 
   return NextResponse.json({ ok: true });

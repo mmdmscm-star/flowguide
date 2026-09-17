@@ -16,6 +16,9 @@ export interface PacketIdentity {
   status?: string | null;
   /** ISO timestamp from the database. */
   createdAt?: string | null;
+  /** How many responses this Sendset holds, as last read. They are deleted
+   *  with it, so the creator is told the number before confirming. */
+  responseCount?: number | null;
 }
 
 const MONTHS = [
@@ -72,8 +75,26 @@ export function deleteConfirmMessage(packet: PacketIdentity): string {
     lines.push("", "Anyone you shared the link with will no longer be able to open it.");
   }
 
+  // Responses are other people's words, and they go with the Sendset. Say the
+  // number, because it is the number the server will hold this confirmation to.
+  const responses = Number(packet.responseCount ?? 0);
+  if (Number.isInteger(responses) && responses > 0) {
+    lines.push("", responses === 1
+      ? "It has 1 response. Deleting it deletes that response too."
+      : `It has ${responses} responses. Deleting it deletes them too.`);
+  }
+
   lines.push("", "This cannot be undone.");
   return lines.join("\n");
+}
+
+/** The server refused because the Sendset holds a different number of
+ *  responses than the creator was shown. Nothing was deleted. */
+export class ResponsesChangedError extends Error {
+  constructor(readonly responses: number) {
+    super("A response arrived since you confirmed. Nothing was deleted.");
+    this.name = "ResponsesChangedError";
+  }
 }
 
 /**
@@ -82,15 +103,19 @@ export function deleteConfirmMessage(packet: PacketIdentity): string {
  * Throwing rather than returning a flag is the point: a caller that forgets to
  * check gets a visible failure instead of a silent one.
  */
-export async function deletePacketRequest(id: string): Promise<void> {
+export async function deletePacketRequest(id: string, acknowledgedResponses = 0): Promise<void> {
   let res: Response;
   try {
-    res = await fetch(`/api/packets/${id}`, { method: "DELETE" });
+    res = await fetch(`/api/packets/${id}?acknowledgedResponses=${acknowledgedResponses}`, { method: "DELETE" });
   } catch {
     throw new Error("Could not reach Sendset. Check your connection and try again.");
   }
   if (!res.ok) {
-    const body = (await res.json().catch(() => ({}))) as { message?: string; error?: string };
+    const body = (await res.json().catch(() => ({}))) as { message?: string; error?: string; responses?: unknown };
+    if (res.status === 409 && body?.error === "responses_changed"
+        && Number.isInteger(body.responses) && (body.responses as number) >= 0) {
+      throw new ResponsesChangedError(body.responses as number);
+    }
     // `message` first, `error` second. Routes here carry a machine code in
     // `error` ("not_found") and the sentence a professional should read in
     // `message`; preferring `error` would put the code on screen.
@@ -99,5 +124,37 @@ export async function deletePacketRequest(id: string): Promise<void> {
         body?.error?.trim() ||
         `Could not delete this Sendset (${res.status}).`
     );
+  }
+}
+
+/**
+ * Confirm, then delete — the whole flow both surfaces use.
+ *
+ * The confirmation states `packet.responseCount`, and the request acknowledges
+ * that same number. If responses arrived in between, the server deletes nothing
+ * and reports the true count; the creator is asked AGAIN with it. Nothing is
+ * ever deleted on a confirmation that stated the wrong number.
+ *
+ * Resolves true when deleted, false when the creator cancelled. Throws on any
+ * other failure.
+ */
+export async function confirmAndDeletePacket(
+  id: string,
+  packet: PacketIdentity,
+  ask: (message: string) => boolean,
+): Promise<boolean> {
+  let count = Math.max(0, Number(packet.responseCount ?? 0) || 0);
+  let changed = false;
+  for (;;) {
+    const message = deleteConfirmMessage({ ...packet, responseCount: count });
+    if (!ask(changed ? `A new response arrived.\n\n${message}` : message)) return false;
+    try {
+      await deletePacketRequest(id, count);
+      return true;
+    } catch (e) {
+      if (!(e instanceof ResponsesChangedError)) throw e;
+      count = e.responses;
+      changed = true;
+    }
   }
 }
