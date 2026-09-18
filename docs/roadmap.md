@@ -29,6 +29,119 @@ must obey.
 
 ---
 
+## Sendset Responses and item Hearts — v1 (SHIPPED 2026-09-17)
+
+**Complete.** Migrations 0058 (responses) and 0059 (item actions) applied and
+recorded; the app deployed in two parts and verified against production; the
+founder's own end-to-end message and heart both landed. Details:
+`docs/migrations/0058-sendset-responses.md` and
+`docs/migrations/0059-item-actions.md`.
+
+**Two different things, kept apart on purpose:**
+
+| | **Respond** | **Hearts** |
+|---|---|---|
+| What it is | correspondence: a message somebody wrote | preference: a heart on one item |
+| Mutable? | **No.** Immutable once sent — it cannot be edited or rewritten | **Yes.** Given and taken back by the person who gave it |
+| Held by | nothing; it is simply stored | a capability that browser holds |
+| Notified | yes, capped, best-effort | **never** — taps must not spend the notification allowance |
+| Staleness | one marker, for the moment it happened | one marker **per heart**, because a session spans republishes |
+
+The database refuses every mixture of the two: `sendset_responses.kind` is
+`message` or `actions`, and a composite foreign key makes a heart under a message
+(or a message inside an action session) unrepresentable.
+
+**Production behaviour:**
+
+- Both are **separate creator choices** on one shared panel — *Allow responses*
+  and *Allow hearts on items* — in both editors, live immediately with no
+  Republish, and **both default off**. Every Sendset that existed before this
+  shipped still has responses and hearts off.
+- **Respond**: one quiet affordance at the end of a published Sendset. Name
+  required, contact optional, message required. Stored first, then a capped
+  best-effort email to the **owner's account address** — never a profile or
+  custom-organisation address, never the responder's, and **no Reply-To**. The
+  subject carries only the owner's private name for the Sendset.
+- **Hearts**: a heart beside each item name. The first one asks for a name once;
+  cancelling that writes nothing at all. After that hearts are immediate, and
+  each one can be taken back.
+- **The owner's view** (`/responses/<id>`, private) lists submissions newest
+  first, with the standing line that Sendset does not verify who sent a response.
+  A name is shown as a **signature** — *Signed "Lisa"* — never as an author, a
+  vote, or a count of people. The dashboard shows a per-Sendset count.
+- **Nothing about responses is ever shown to a recipient**: no counts, no
+  aggregates, no sign that anybody else responded at all. One reader sees only
+  what that browser itself did.
+- **Deleting a Sendset** goes through `delete_sendset` and is held to the exact
+  count the creator was shown; every other deletion path is refused by the
+  database while responses exist.
+
+**Recipient action state is a capability, not an identity.**
+
+- 256 random bits generated **server-side** on a completed first heart, handed to
+  the browser only as an **HttpOnly, Secure cookie scoped to `/p/<slug>`**.
+  JavaScript never receives or reads it; it never appears in JSON, in a log, or
+  in a URL; PostgreSQL stores only its SHA-256.
+- It is **one Sendset, one browser**. There is no recipient entity, no account, no
+  cross-Sendset identifier, no IP, no fingerprint, no last-seen and no visit log.
+  A shared device is one capability, which the page says plainly — *"You're
+  hearting as 'Lisa' from this browser"* — with **Not you? Start a new response**,
+  which drops the browser's handle and changes no stored row.
+- **It is not proof of who anybody is**, and no surface may describe it as such.
+- Nothing is minted by reading: somebody who only opens a Sendset is given no
+  cookie, no row and no counter.
+- The only activity state in the system is a rate-limit counter: **one row per
+  Sendset, overwritten in place**, self-erasing — not an event log.
+
+**Turning Hearts off stops new expression, never withdrawal:**
+
+- No new capability can be minted and no new heart can be set, anywhere.
+- An existing capability can still **read** its own hearts and still **withdraw**
+  them, including a heart on an item a Republish has since removed.
+- A withdrawn heart **cannot be re-added** while hearts are off.
+- The page draws no empty hearts and never asks for a signature; it says
+  *"Likes are no longer being accepted. You can remove likes you already made."*
+  and disappears entirely once the last heart is withdrawn.
+- In the database this is structural: `clear` and `read` never consult
+  `response_actions` at all, so the rule cannot be re-coupled by accident.
+
+**A heart on an item that a Republish removed is never silently lost.** The line
+has no foreign key to the item and carries the item's title frozen at the time,
+so it survives, is shown to both sides as *No longer in this Sendset*, refuses
+new actions, and can still be withdrawn. No endpoint can express "these are all
+my hearts", so a client that cannot render a line cannot delete it by omission.
+
+**Temporary, on purpose:**
+
+- **`POST /api/p/<slug>/responses` remains** as a compatibility alias for bundles
+  rendered before the endpoints moved under `/p/<slug>/`. It is the *same*
+  handler as `/p/<slug>/respond`, so the two cannot drift; nothing new calls it,
+  and a test enforces that. It logs one fixed, identifier-free line so it can be
+  retired on evidence rather than a guess.
+
+**Deferred, deliberately — not done:**
+
+1. **Public counts or aggregates of any kind.** On a family Sendset "3 hearts on
+   option 2" leaks the siblings' leanings to each other; on a public link it is
+   gameable, because nothing is deduplicated. If it ever ships it must be a
+   separate, explicit setting, worded as hearts and never as people.
+2. **Select, Pass and Approve.** Approve especially: under a link anyone can
+   forward, it can only mean *a submission signed "X" pressed a button*, and a
+   professional who reads "Approved — Maria" will reasonably act on it.
+   Personalized links alone would not make it authoritative.
+3. **Item-level messages**, anonymous responses, required-contact policy, an
+   open/closed window, or any other response configuration.
+4. **Replying from Sendset**, threads, an inbox or read state. The professional
+   replies from their own email or phone; Sendset never mails a
+   responder-supplied address.
+5. **A retention policy** beyond the acknowledged delete.
+6. **Withdrawal once hearts are switched off is unreachable in the UI** — the
+   database allows it, but the panel disappears with the switch.
+7. **Read rate limiting.** Deliberately unmetered: metering reads means storing
+   activity, which is the thing this design refuses.
+
+---
+
 ## Recipient link preview — sender-first, and no image at all (SHIPPED 2026-09-16)
 
 **Complete.** A Sendset pasted into a text message used to unfurl as a large card
