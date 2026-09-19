@@ -219,7 +219,7 @@ test("the route stores bytes and cannot start a run", () => {
 test("THE TRANSCRIPTION LANDS IN THE EDITABLE BOX, not in a run", () => {
   const fn = NEW.slice(NEW.indexOf("async function transcribeOne"), NEW.indexOf("async function readOneTextFile"));
   assert.match(fn, /append\(data\.text\)/, "the transcription does not reach the editable text");
-  assert.match(NEW, /const append = \(text: string\)[\s\S]*?setRawText\(/,
+  assert.match(NEW, /const append = \(text: string\)[\s\S]*?setText\(/,
     "the shared appender no longer writes the editable box");
   assert.ok(!/ingest\/organize/.test(fn), "reading a picture starts organizing by itself");
   // Organize stays the professional's own act, on the text they can see.

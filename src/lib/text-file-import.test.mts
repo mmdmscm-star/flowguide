@@ -15,11 +15,13 @@ test("the three formats are accepted", () => {
   }
 });
 
-test("PDF and Word get their OWN sentence, not 'unsupported'", () => {
-  // These are the two most likely next attempts. "We can't read PDFs yet" is a
-  // different message from "that isn't a file type we know", and the difference
-  // is what tells a professional whether to wait or to work around it.
-  assert.match(rejectionFor("brochure.pdf", 100)!, /can’t read PDFs yet/);
+test("Word and spreadsheets get their OWN sentence, and a PDF is not a text file", () => {
+  // The most likely next attempts after a PDF, which now has its own reader.
+  // "Save the sheet as CSV" tells a professional what to do; "that isn't a
+  // file type we know" does not.
+  // A PDF never reaches the TEXT reader: the planner routes it to the PDF
+  // reader first. If one ever did, it is refused rather than read as text.
+  assert.match(rejectionFor("brochure.pdf", 100)!, /PDF reader/);
   assert.match(rejectionFor("notes.docx", 100)!, /Word documents/);
   // A spreadsheet gets the actionable instruction rather than a refusal.
   assert.match(rejectionFor("list.xlsx", 100)!, /Save the sheet as CSV/);
@@ -56,7 +58,7 @@ test("a file over the character limit says the actual numbers", async () => {
 
 test("a rejected type throws before any reading happens", async () => {
   await assert.rejects(() => readTextFile(fileOf("b.pdf", "%PDF-1.4 …")),
-    (e: Error) => e instanceof TextFileError && /PDFs/.test(e.message));
+    (e: Error) => e instanceof TextFileError && /PDF reader/.test(e.message));
 });
 
 // ---------------------------------------------------------------------------
@@ -97,12 +99,17 @@ test("NO STORAGE, NO UPLOAD, NO SECOND SOURCE — for a FILE", () => {
 
   // Both paths' text must reach the SAME organize call a paste reaches.
   assert.match(ui, /rawText: source/, "the organize contract changed");
-  assert.match(ui, /setRawText\(/, "the file text does not land in the shared box");
+  assert.match(ui, /setText\(/, "the file text does not land in the shared box");
+  // ONE WRITER. Every change to the box goes through setText, which is what
+  // keeps the synchronous copy a PDF measures its room against from going
+  // stale.
+  assert.equal((ui.match(/setRawText\(/g) ?? []).length, 1, "the box has a second writer");
+  assert.match(ui, /const setText = \(next: string\) => \{ rawTextRef\.current = next; setRawText\(next\); \};/);
   // Both contributions go through ONE appender, which is what keeps a picture
   // and a spreadsheet landing in the same box, blank-line separated, with no
   // page marker either of them could be mistaken for.
   assert.match(picturePath, /append\(data\.text\)/, "the transcription does not land in the shared box");
-  assert.match(ui, /const append = \(text: string\)[\s\S]*?setRawText\(/,
+  assert.match(ui, /const append = \(text: string\)[\s\S]*?setText\(/,
     "there is no shared appender, so the two paths can drift");
 });
 
@@ -129,6 +136,10 @@ test("adding a file APPENDS rather than destroying what is already typed", async
 test("one accept list, stated once", () => {
   const lib = codeOf("src/lib/text-file-import.ts");
   const ui = codeOf("src/components/new/new-packet-workspace.tsx");
-  assert.match(ui, /accept=\{TEXT_FILE_ACCEPT\}/, "the picker has its own copy of the accept list");
+  // The picker accepts the text formats AND PDF, built from the one text list
+  // rather than a second copy of it.
+  const bundle = codeOf("src/lib/source-bundle.ts");
+  assert.match(ui, /accept=\{DOCUMENT_ACCEPT\}/, "the picker has its own copy of the accept list");
   assert.match(lib, /export const TEXT_FILE_ACCEPT/);
+  assert.match(bundle, /export const DOCUMENT_ACCEPT = `\$\{TEXT_FILE_ACCEPT\},\.pdf,application\/pdf`;/);
 });

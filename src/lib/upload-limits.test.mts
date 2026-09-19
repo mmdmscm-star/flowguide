@@ -196,10 +196,10 @@ test("THE COMPONENT APPLIES THAT RULE, AND ONLY THAT RULE", () => {
     "a transcribed picture is removed without accounting for its text");
   assert.match(rm, /if \(!cut\.ok\) \{ setError\(`\$\{target\.label\}: \$\{cut\.message\}`\); return; \}/,
     "a refusal is not explained, or does not stop the removal");
-  // The ONLY setRawText in the removal path is the exact cut.
-  assert.equal((rm.match(/setRawText\(/g) ?? []).length, 1,
+  // The ONLY write in the removal path is the exact cut.
+  assert.equal((rm.match(/setText\(/g) ?? []).length, 1,
     "the removal path writes the box more than once");
-  assert.match(rm, /setRawText\(cut\.text\)/, "the removal path edits text it did not cut");
+  assert.match(rm, /setText\(cut\.text\)/, "the removal path edits text it did not cut");
   // failed: no text was contributed, so nothing is checked.
   assert.ok(rm.indexOf('=== "done"') > 0, "a failed picture is held to the transcribed rule");
 });

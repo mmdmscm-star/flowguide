@@ -263,11 +263,12 @@ test("NO SCHEMA MIGRATION WAS INTRODUCED", () => {
   // (review-pending marker), 0052 (atomic publication), 0053 (the status
   // single door) and 0054 (publication backfill) belong to the published-snapshot
   // track, 0055/0056 (early-access invites and invitations) to the access gate,
-  // 0057 (the page-open counter) to view counting, and 0058/0059 (recipient
-  // responses, then item actions) to Responses — not this slice.
+  // 0057 (the page-open counter) to view counting, 0058/0059 (recipient
+  // responses, then item actions) to Responses, and 0060 (source-document
+  // provenance) to PDF input — not this slice.
   const migrations = readdirSync("supabase/migrations").filter((f) => f.endsWith(".sql")).sort();
   const highest = migrations[migrations.length - 1];
-  assert.equal(highest, "0059_sendset_item_actions.sql",
+  assert.equal(highest, "0060_ingestion_source_documents.sql",
     `a migration was added: ${highest}`);
 });
 

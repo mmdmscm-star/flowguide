@@ -70,9 +70,9 @@ test("MORE THAN ONE TEXT FILE IS REFUSED, not silently concatenated", () => {
 });
 
 test("THE WHOLE BATCH IS REFUSED, never part of it", () => {
-  const p = planBundle([img("page1.jpg"), file("notes.pdf")]);
+  const p = planBundle([img("page1.jpg"), file("notes.docx")]);
   assert.equal(p.ok, false, "a batch with an unreadable file was partly accepted");
-  if (!p.ok) assert.match(p.message, /PDF/i, "the PDF does not get its own sentence");
+  if (!p.ok) assert.match(p.message, /Word/i, "the Word document does not get its own sentence");
   for (const [name, re] of [["deck.docx", /Word/i], ["rates.xlsx", /CSV/i], ["x.zip", /isn’t supported/i]] as const) {
     const r = planBundle([file(name)]);
     assert.equal(r.ok, false, name);

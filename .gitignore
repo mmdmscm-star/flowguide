@@ -69,3 +69,6 @@ scripts/marketing/.work/
 
 # local PostgreSQL harness client (scripts/pg-harness)
 /scripts/pg-harness/node_modules
+
+# pdf.js worker and character maps, copied from node_modules at dev/build time
+/public/pdfjs/

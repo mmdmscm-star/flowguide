@@ -4,6 +4,7 @@ import { createServerClient } from "@/lib/supabase";
 import { buildRunChunks, SEGMENTER_VERSION } from "@/lib/ingestion";
 import { segmentHash } from "@/lib/segmentation";
 import { generateSlug } from "@/lib/slug";
+import { verifySourceDocuments } from "@/lib/source-documents";
 
 export const maxDuration = 60;
 
@@ -66,6 +67,17 @@ export async function POST(request: Request) {
   }
   if (requestKey.length < 8) return NextResponse.json({ error: "missing request key" }, { status: 400 });
 
+  // WHICH PDF PAGES THIS TEXT CAME FROM (0060) — checked against the text
+  // itself before anything is created. A span that does not hash to its page
+  // is refused outright: a run must not carry provenance that is false.
+  const documents = verifySourceDocuments(body.sourceDocuments, rawText);
+  if (documents && !documents.ok) {
+    return NextResponse.json({
+      error: "provenance_mismatch",
+      message: "The text changed while it was being sent, so nothing was organized. Please try again.",
+    }, { status: 400 });
+  }
+
   const supabase = createServerClient();
   const chunks = buildRunChunks(rawText);
   const { data, error } = await supabase.rpc("create_organize_run", {
@@ -124,6 +136,7 @@ export async function POST(request: Request) {
       ? sourceImageUrls
       : [sourceImageUrl];
   }
+  if (documents?.ok) stamp.source_documents = documents.documents;
   if (groupingIntent !== "auto") {
     stamp.grouping_intent = groupingIntent;
     stamp.grouping_title = groupingIntent === "keep_together" ? groupingTitle : null;

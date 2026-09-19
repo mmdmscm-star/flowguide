@@ -9,8 +9,8 @@
 //
 // Text formats only, deliberately. A .csv, .txt or .md IS text; nothing has to
 // interpret it. PDF is a print format whose text extraction fails quietly on
-// scans, columns and tables, so it is a separate decision rather than one more
-// entry in this list.
+// scans, columns and tables, so it has its own reader (pdf-extract.ts), which
+// refuses exactly those cases rather than one more entry in this list.
 
 /** What the file picker accepts, and the single statement of it. */
 export const TEXT_FILE_ACCEPT = ".csv,.tsv,.txt,.md,.markdown,text/csv,text/plain,text/markdown";
@@ -52,19 +52,23 @@ export function isSupportedTextFile(name: string): boolean {
 /**
  * Everything that can go wrong, said in the professional's terms.
  *
- * A PDF gets its own sentence rather than falling into "unsupported". It is the
- * most likely thing to be tried next, and "we can't read PDFs yet" is a
- * different message from "that isn't a file type we know".
+ * A Word document and a spreadsheet get their own sentences rather than
+ * falling into "unsupported": they are the most likely things to be tried
+ * next, and "save it as CSV" is more use than "that isn't a file type we
+ * know". (A PDF never reaches here — the bundle planner routes it to the PDF
+ * reader first.)
  */
 export function rejectionFor(name: string, size: number): string | null {
   const ext = extensionOf(name);
-  if (ext === "pdf") return "Sendset can’t read PDFs yet. Copy the text out and paste it instead.";
+  // Never reached from New Sendset — the planner hands a PDF to the PDF
+  // reader. Refused here so this function can never read one as text.
+  if (ext === "pdf") return "A PDF is read by Sendset’s PDF reader, not as a text file.";
   if (["doc", "docx", "pages", "rtf"].includes(ext))
     return "Sendset can’t read Word documents yet. Copy the text out and paste it instead.";
   if (["xls", "xlsx", "numbers"].includes(ext))
     return "Save the sheet as CSV and try again — Sendset reads .csv.";
   if (!isSupportedTextFile(name))
-    return "That file type isn’t supported. Use a .csv, .txt or .md file, or paste the text instead.";
+    return "That file type isn’t supported. Use a PDF, or a .csv, .txt or .md file, or paste the text instead.";
   // Bytes, not characters — a rough gate before reading, so a 40MB file is
   // refused without being loaded into memory first.
   if (size > MAX_IMPORT_CHARS * 4)

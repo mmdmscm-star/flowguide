@@ -5,8 +5,11 @@ import { CreatorNav } from "@/components/nav/creator-nav";
 
 import { useEffect, useRef, useState } from "react";
 import { PHOTO_ACCEPT_ATTR } from "@/lib/photo-upload";
-import { TEXT_FILE_ACCEPT, readTextFile, TextFileError, delimiterForFile } from "@/lib/text-file-import";
-import { planBundle, blockingImage, blockingMessage, type BundleItem } from "@/lib/source-bundle";
+import { readTextFile, TextFileError, delimiterForFile } from "@/lib/text-file-import";
+import { planBundle, blockingImage, blockingMessage, DOCUMENT_ACCEPT, type BundleItem } from "@/lib/source-bundle";
+import { readPdfInBrowser } from "@/lib/pdf-browser";
+import { MAX_SOURCE_CHARS } from "@/lib/pdf-extract";
+import { buildManifest, type ReadDocument } from "@/lib/pdf-manifest";
 import { removeContributedBlock } from "@/lib/contributed-block";
 import { useRouter } from "next/navigation";
 
@@ -31,10 +34,31 @@ interface SourceImage {
   error?: string;
 }
 
+/** ONE PDF, read on this device.
+ *
+ *  The file's bytes never leave the browser and are not kept here either: only
+ *  what was read survives — the text, now in the box, and the page map the
+ *  manifest is built from at organize time. A PDF is refused whole or read
+ *  whole, so there is no "failed" state to linger in the list: a refusal names
+ *  the file and the reason, and the file is simply not added. */
+interface SourceDocument {
+  id: string;
+  name: string;
+  status: "reading" | "done";
+  doc?: ReadDocument;
+}
 
 export default function NewPacketWorkspace() {
   const router = useRouter();
   const [rawText, setRawText] = useState("");
+  /** THE BOX, READABLE SYNCHRONOUSLY. A PDF has to know how much room is left
+   *  under the 200,000-character ceiling BEFORE it is read, and a file dropped
+   *  in the same batch may have just added to the box without a render in
+   *  between. Every write goes through setText, so this is never stale. */
+  const rawTextRef = useRef("");
+  const setText = (next: string) => { rawTextRef.current = next; setRawText(next); };
+  const [sourceDocs, setSourceDocs] = useState<SourceDocument[]>([]);
+  const [readingPdf, setReadingPdf] = useState(false);
   /** SET ONLY BY A PASTE, AND ONLY WHEN THE TWO CLIPBOARD FLAVOURS CONTRADICT
    *  EACH OTHER. Advisory: it never blocks, never edits the text, and holds no
    *  HTML — `checkPastedPairing` reads the fragment once and returns a verdict,
@@ -107,7 +131,8 @@ export default function NewPacketWorkspace() {
   const append = (text: string) => {
     const t = String(text ?? "").trim();
     if (!t) return;
-    setRawText((prev) => (prev.trim() ? `${prev.replace(/\s+$/, "")}\n\n${t}` : t));
+    const prev = rawTextRef.current;
+    setText(prev.trim() ? `${prev.replace(/\s+$/, "")}\n\n${t}` : t);
   };
 
   /** ONE PICTURE, ONE MODEL CALL. Never several images in one request: that is
@@ -159,6 +184,49 @@ export default function NewPacketWorkspace() {
     });
   }
 
+  /** Read one PDF, in this browser, and append exactly what it contained — or
+   *  add nothing and say, by file, why not. The file itself is read into this
+   *  tab's memory and dropped; no request carries it anywhere. */
+  async function readOnePdf(file: File) {
+    const id = crypto.randomUUID();
+    setSourceDocs((prev) => [...prev, { id, name: file.name, status: "reading" }]);
+    const inBox = rawTextRef.current;
+    // The blank line a contribution is joined with counts against the ceiling.
+    const room = MAX_SOURCE_CHARS - inBox.length - (inBox.trim() ? 2 : 0);
+    const result = await readPdfInBrowser(file, Math.max(0, room));
+    if (!result.ok) {
+      setSourceDocs((prev) => prev.filter((d) => d.id !== id));
+      setError(`${file.name}: ${result.message}`);
+      return;
+    }
+    const contributed = result.text.trim();
+    append(contributed);
+    setSourceDocs((prev) => prev.map((d) => d.id === id ? {
+      ...d, status: "done",
+      doc: {
+        name: result.name, bytes: result.bytes, sha256: result.sha256, pageCount: result.pageCount,
+        extractor: result.extractor, pages: result.pages, contributed,
+      },
+    } : d));
+  }
+
+  /** Remove a PDF, and with it exactly the text it contributed — the same
+   *  rule as a picture: the block goes only if it is still there, untouched
+   *  and unique; otherwise the refusal is explained and the box is left alone. */
+  function removeDoc(id: string) {
+    const target = sourceDocs.find((d) => d.id === id);
+    if (!target || target.status !== "done" || !target.doc) return;
+    const siblings = [
+      ...sourceImages.filter((x) => x.status === "done" && x.contributedText).map((x) => x.contributedText as string),
+      ...sourceDocs.filter((d) => d.id !== id && d.doc).map((d) => d.doc!.contributed),
+    ];
+    const cut = removeContributedBlock(rawTextRef.current, target.doc.contributed, siblings);
+    if (!cut.ok) { setError(`${target.name}: ${cut.message}`); return; }
+    setText(cut.text);
+    setError("");
+    setSourceDocs((prev) => prev.filter((d) => d.id !== id));
+  }
+
   // THE ONE WAY IN. Browsing and dropping both land here, so there is no second
   // idea of what a supported file is and no second upload path.
   //
@@ -192,6 +260,8 @@ export default function NewPacketWorkspace() {
       })]);
       setReadingImage(true);
     }
+    const hasPdf = plan.items.some((i) => i.kind === "pdf");
+    if (hasPdf) setReadingPdf(true);
 
     try {
       for (const item of plan.items) {
@@ -203,15 +273,18 @@ export default function NewPacketWorkspace() {
           }
           continue;
         }
+        if (item.kind === "pdf") { await readOnePdf(item.file); continue; }
         const entry = entries.get(item);
         if (entry) await transcribeOne(entry);
       }
     } finally {
       setReadingImage(false);
+      setReadingPdf(false);
     }
-    // A photographed table is not a delimited file, and claiming a delimiter
-    // for it would be a hint we cannot stand behind.
-    if (entries.size) setDelimiterHint(null);
+    // A photographed table is not a delimited file, and neither is a PDF's —
+    // its cells are separated by what the page looked like, not by a format.
+    // Claiming a delimiter for either would be a hint we cannot stand behind.
+    if (entries.size || hasPdf) setDelimiterHint(null);
   }
 
   /** Read a failed picture again.
@@ -257,7 +330,7 @@ export default function NewPacketWorkspace() {
         .map((x) => x.contributedText as string);
       const cut = removeContributedBlock(rawText, target.contributedText ?? "", siblings);
       if (!cut.ok) { setError(`${target.label}: ${cut.message}`); return; }
-      setRawText(cut.text);
+      setText(cut.text);
     }
 
     setError("");
@@ -305,6 +378,12 @@ export default function NewPacketWorkspace() {
     // run CLAIMS is coherent, not that the claim is complete.
     const blocked = blockingImage(sourceImages);
     if (blocked) { setError(blockingMessage(blocked)); return; }
+    // A PDF still being read has not put its text in the box yet.
+    const readingDoc = sourceDocs.find((d) => d.status === "reading");
+    if (readingDoc || readingPdf) {
+      setError(`${readingDoc?.name ?? "A PDF"} is still being read. Wait for it to finish before organizing.`);
+      return;
+    }
     // AND THE PAIRING ADVISORY IS ANSWERED FIRST, for the same reason.
     //
     // A warning that is merely on screen while Create still works is not a
@@ -376,6 +455,8 @@ export default function NewPacketWorkspace() {
         sourceImageUrls.push(stored.url as string);
       }
 
+      const docsForManifest = sourceDocs.filter((d) => d.status === "done" && d.doc).map((d) => d.doc!);
+
       // ONE atomic call creates the draft packet + ingestion run + chunk plan +
       // origin marker together, so a partial failure can't leave an orphan draft.
       // The request key makes a duplicate/retried POST return the same packet.
@@ -392,6 +473,10 @@ export default function NewPacketWorkspace() {
           ...(sourceImageUrls.length
             ? { sourceImageUrl: sourceImageUrls[0], sourceImageUrls }
             : {}),
+          // WHERE EACH PDF PAGE LANDED in this exact text — hashes and offsets
+          // only, never the page text again; the server re-hashes every span
+          // against what it received. Present only when a PDF contributed.
+          ...(docsForManifest.length ? { sourceDocuments: buildManifest(source, docsForManifest) } : {}),
           // Present only when the creator asked for it, so every other path
           // stays on automatic detection.
           ...(keepTogether
@@ -429,7 +514,9 @@ export default function NewPacketWorkspace() {
   // The SAME predicate the handler enforces, so a disabled button and a refused
   // action can never disagree about why.
   const blockingNow = blockingImage(sourceImages);
-  const ready = Boolean(rawText.trim()) && !processing && !blockingNow && !pairingWarning;
+  const ready = Boolean(rawText.trim()) && !processing && !blockingNow && !pairingWarning && !readingPdf;
+  /** Anything still being read from a file: no new files, no removals. */
+  const busy = readingImage || readingPdf;
 
   return (
     /* THE SHARED SHELL, LATE BUT NOT ARBITRARILY LATE.
@@ -485,12 +572,12 @@ export default function NewPacketWorkspace() {
           of its own — it normalises a DataTransfer into File[] and hands it to
           the same function the pickers call. */}
       <div
-        onDragOver={(e) => { e.preventDefault(); if (!processing && !readingImage) setDragging(true); }}
+        onDragOver={(e) => { e.preventDefault(); if (!processing && !busy) setDragging(true); }}
         onDragLeave={(e) => { e.preventDefault(); setDragging(false); }}
         onDrop={(e) => {
           e.preventDefault();
           setDragging(false);
-          if (processing || readingImage) return;
+          if (processing || busy) return;
           const dropped = Array.from(e.dataTransfer?.files ?? []);
           if (dropped.length) ingestFiles(dropped);
         }}
@@ -536,7 +623,7 @@ export default function NewPacketWorkspace() {
                     <button
                       type="button"
                       onClick={() => retryImage(img.id)}
-                      disabled={processing || readingImage}
+                      disabled={processing || busy}
                       className="mt-1 block w-full rounded-md border border-line py-0.5 text-[11px] font-medium text-mark hover:text-mark/80 disabled:opacity-60"
                     >
                       Try again
@@ -545,7 +632,7 @@ export default function NewPacketWorkspace() {
                   <button
                     type="button"
                     onClick={() => removeImage(img.id)}
-                    disabled={processing || readingImage}
+                    disabled={processing || busy}
                     aria-label={`Remove ${img.label}`}
                     className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full border border-line bg-ground text-meta leading-none text-ink-2 shadow-sm hover:text-ink disabled:opacity-60"
                   >
@@ -564,7 +651,47 @@ export default function NewPacketWorkspace() {
               Sent to our AI provider for transcription using zero-data-retention
               routing, one picture at a time. If you continue, Sendset keeps the
               source pictures with the ingestion evidence for the normal retention
-              period. A .csv, .txt or .md file is read on your device instead.
+              period. A PDF, .csv, .txt or .md file is read on your device instead.
+            </p>
+          </div>
+        )}
+        {sourceDocs.length > 0 && (
+          <div className="border-b border-line bg-ground/60 px-4 py-3">
+            <p className="text-body font-medium text-ink">
+              {sourceDocs.length === 1 ? "Read from your PDF" : `Read from your ${sourceDocs.length} PDFs`}
+            </p>
+            <p className="mt-0.5 text-meta text-ink-2">
+              Check the text below against the PDF — especially prices and anything
+              laid out in a table — and fix anything that&rsquo;s off before you organize.
+            </p>
+            <ul className="mt-2.5 flex flex-wrap gap-2">
+              {sourceDocs.map((d) => (
+                <li key={d.id}
+                    className="flex max-w-full items-center gap-2 rounded-[var(--radius-control)] border border-line bg-ground py-1.5 pl-2.5 pr-1.5 text-meta">
+                  <span className="min-w-0 truncate font-medium text-ink">{d.name}</span>
+                  <span className="shrink-0 text-ink-2">
+                    {d.status === "reading" ? "Reading…"
+                      : `${d.doc!.pageCount} ${d.doc!.pageCount === 1 ? "page" : "pages"}`}
+                  </span>
+                  {d.status === "done" && (
+                    <button
+                      type="button"
+                      onClick={() => removeDoc(d.id)}
+                      disabled={processing || busy}
+                      aria-label={`Remove ${d.name}`}
+                      className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-ink-2 hover:text-ink disabled:opacity-60"
+                    >
+                      ×
+                    </button>
+                  )}
+                </li>
+              ))}
+            </ul>
+            {/* WHAT HAPPENED TO THE FILE, said plainly, because it differs from a
+                picture: nothing left this device. */}
+            <p className="mt-2 text-meta text-ink-2/80">
+              Read on your device. The PDF itself is never uploaded or stored — only
+              the text below is organized.
             </p>
           </div>
         )}
@@ -599,7 +726,7 @@ export default function NewPacketWorkspace() {
               {/* THE SAFE STOP. Clears the box so a re-copy starts clean rather
                   than appending to a source already known to be wrong. */}
               <Button variant="secondary" size="sm"
-                onClick={() => { setRawText(""); setFileName(""); setDelimiterHint(null); setPairingWarning(null); }}>
+                onClick={() => { setText(""); setFileName(""); setDelimiterHint(null); setPairingWarning(null); }}>
                 Clear and re-copy
               </Button>
               {/* THE EXPLICIT CONTINUE. Dismissing changes nothing about the
@@ -630,7 +757,7 @@ export default function NewPacketWorkspace() {
               setPairingWarning(null);
             }
           }}
-          onChange={(e) => { setRawText(e.target.value); setDelimiterHint(null); }}
+          onChange={(e) => { setText(e.target.value); setDelimiterHint(null); }}
           placeholder="Paste your notes here…"
           aria-label="Your notes"
           disabled={processing}
@@ -648,14 +775,14 @@ export default function NewPacketWorkspace() {
               below, where it can be corrected, and only the corrected text is
               ever structured. The picture itself never reaches a client. */}
           <label className={`ml-auto shrink-0 cursor-pointer text-meta font-medium text-mark hover:text-mark/80 ${
-            processing || readingImage ? "pointer-events-none opacity-60" : ""}`}>
+            processing || busy ? "pointer-events-none opacity-60" : ""}`}>
             {readingImage ? "Reading your pictures…" : "or use pictures"}
             <input
               type="file"
               accept={PHOTO_ACCEPT_ATTR}
               multiple
               className="hidden"
-              disabled={processing || readingImage}
+              disabled={processing || busy}
               onChange={(e) => {
                 const picked = Array.from(e.target.files ?? []);
                 // Cleared so choosing the same file twice still fires.
@@ -664,13 +791,14 @@ export default function NewPacketWorkspace() {
               }}
             />
           </label>
-          <label className={`shrink-0 cursor-pointer text-meta font-medium text-mark hover:text-mark/80 ${processing || readingImage ? "pointer-events-none opacity-60" : ""}`}>
-            {fileName ? `Added ${fileName} — add another` : "or open a .csv, .txt or .md file"}
+          <label className={`shrink-0 cursor-pointer text-meta font-medium text-mark hover:text-mark/80 ${processing || busy ? "pointer-events-none opacity-60" : ""}`}>
+            {readingPdf ? "Reading your PDF…" : fileName ? `Added ${fileName} — add another` : "or open a PDF, .csv, .txt or .md file"}
             <input
               type="file"
-              accept={TEXT_FILE_ACCEPT}
+              accept={DOCUMENT_ACCEPT}
+              multiple
               className="hidden"
-              disabled={processing || readingImage}
+              disabled={processing || busy}
               onChange={(e) => {
                 const picked = Array.from(e.target.files ?? []);
                 // Cleared so choosing the same file twice still fires.
@@ -738,7 +866,7 @@ export default function NewPacketWorkspace() {
           <input
             type="checkbox"
             checked={keepTogether}
-            disabled={processing || readingImage}
+            disabled={processing || busy}
             onChange={(e) => {
               setKeepTogether(e.target.checked);
               if (!e.target.checked) setGroupingTitle("");
@@ -771,7 +899,7 @@ export default function NewPacketWorkspace() {
               value={groupingTitle}
               onChange={(e) => setGroupingTitle(e.target.value)}
               placeholder="e.g. Harbor House Hotel"
-              disabled={processing || readingImage}
+              disabled={processing || busy}
               className="mt-1 w-full max-w-sm rounded-[var(--radius-control)] border border-line bg-ground px-3 py-2 text-body
                          text-ink outline-none focus:ring-2 focus:ring-mark/15 disabled:opacity-60"
             />

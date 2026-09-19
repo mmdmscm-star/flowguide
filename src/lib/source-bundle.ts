@@ -21,14 +21,19 @@
 // though it were one document. Images are different — they are pages of one
 // thing by construction, and a photograph declares no structure at all.
 
-import { isSupportedTextFile, rejectionFor } from "./text-file-import.ts";
+import { isSupportedTextFile, rejectionFor, TEXT_FILE_ACCEPT } from "./text-file-import.ts";
 import { ACCEPTED_PHOTO_TYPES, MAX_UPLOAD_BYTES, OVERSIZED_IMAGE_MESSAGE } from "./photo-upload.ts";
+import { MAX_PDF_BYTES, pdfError } from "./pdf-extract.ts";
+
+/** What the document picker accepts: the text formats, and PDF. One statement
+ *  of it, shared by the picker and nothing else. */
+export const DOCUMENT_ACCEPT = `${TEXT_FILE_ACCEPT},.pdf,application/pdf`;
 
 /** Extensions matching the mime allowlist. SVG is absent there and so here. */
 const IMAGE_EXTENSIONS = ["jpg", "jpeg", "png", "webp", "gif"];
 const IMAGE_MIMES = ACCEPTED_PHOTO_TYPES.map((t) => t.mime);
 
-export type BundleKind = "image" | "text";
+export type BundleKind = "image" | "text" | "pdf";
 export interface BundleItem { kind: BundleKind; file: File }
 
 export type BundlePlan =
@@ -52,6 +57,13 @@ export function looksLikeImage(file: File): boolean {
   const type = String(file?.type ?? "").toLowerCase();
   if (IMAGE_MIMES.includes(type)) return true;
   return IMAGE_EXTENSIONS.includes(extensionOf(file?.name ?? ""));
+}
+
+/** Is this a PDF? By either signal, for the same reason as an image. The
+ *  extractor checks the file's own header before trusting either. */
+export function looksLikePdf(file: File): boolean {
+  const type = String(file?.type ?? "").toLowerCase();
+  return type === "application/pdf" || extensionOf(file?.name ?? "") === "pdf";
 }
 
 /**
@@ -87,6 +99,19 @@ export function planBundle(files: File[]): BundlePlan {
       continue;
     }
 
+    // A PDF IS A DOCUMENT OF PAGES, like a set of pictures and unlike a
+    // spreadsheet: it declares no delimiter, so several can be added together,
+    // in order. Sized BEFORE any is read, for the same reason as a picture —
+    // an oversized third file must not be discovered after the first two
+    // have already landed in the box.
+    if (looksLikePdf(file)) {
+      if (file.size > MAX_PDF_BYTES) {
+        return { ok: false, message: `${file.name}: ${pdfError("too_large", { bytes: file.size })}` };
+      }
+      items.push({ kind: "pdf", file });
+      continue;
+    }
+
     if (isSupportedTextFile(file.name)) {
       textCount++;
       if (textCount > 1) {
@@ -102,9 +127,9 @@ export function planBundle(files: File[]): BundlePlan {
       continue;
     }
 
-    // Not an image and not a text file we read. text-file-import already has
-    // the right sentence for a PDF, a Word document and a spreadsheet, and
-    // those are the three things most likely to be tried next.
+    // Not an image, a PDF or a text file we read. text-file-import has the
+    // right sentence for a Word document and a spreadsheet, the two things
+    // most likely to be tried next.
     return { ok: false, message: rejectionFor(file.name, file.size)
       ?? "That file type isn’t supported." };
   }
