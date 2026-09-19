@@ -37,8 +37,10 @@ export type PdfErrorCode =
   | "too_long" | "timeout";
 
 /** One page as read. `sha256` is of `text` (UTF-8): it is what lets the
- *  server confirm, at organize time, that a span in the source really is this
- *  page's text — without the page text travelling twice. */
+ *  server confirm, at organize time, that a span in the source is exactly the
+ *  text this browser reported for the page — without the page text travelling
+ *  twice. (That the text came from the PDF is this reader's word: the server
+ *  never sees the file.) */
 export interface PdfPage { page: number; text: string; chars: number; sha256: string }
 
 export type PdfResult =
@@ -129,8 +131,10 @@ export interface ExtractOptions {
   timeoutMs?: number;
 }
 
-/** SHA-256, hex — of the file (it identifies the exact file a source came
- *  from without keeping any of it) and of each page's text. */
+/** SHA-256, hex — of the file and of each page's text. The file hash is
+ *  REPORTED to the server, never checked by it (the file never leaves this
+ *  device): it lets someone who later holds a file see whether it matches
+ *  what was reported, and proves nothing on its own. */
 export async function sha256Hex(bytes: Uint8Array): Promise<string> {
   const digest = await globalThis.crypto.subtle.digest("SHA-256", bytes as Uint8Array<ArrayBuffer>);
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");

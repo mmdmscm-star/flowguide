@@ -16,8 +16,13 @@
 //     is worse than none.
 //
 // Offsets are JavaScript string indexes (UTF-16 code units), the same unit the
-// chunks and source_len already use. The server re-hashes every span against
-// the text it actually received before storing anything.
+// chunks and source_len already use.
+//
+// TRUST. Everything here is REPORTED by this browser. The server re-hashes
+// every span against the text it actually received, so a stored span is
+// checked; the document fields — name, size, file hash, page count, reader —
+// cannot be, because the file never leaves this device. They are provenance
+// as reported, not attested (source-documents.ts).
 import type { PdfPage } from "./pdf-extract.ts";
 
 export interface ReadDocument {
@@ -41,6 +46,8 @@ export interface ManifestDocument {
   extractor: string;
   pages: ManifestPage[];
 }
+
+const CONTROL = /[\u0000-\u001F\u007F]/g;
 
 const occurrences = (hay: string, needle: string): number[] => {
   const at: number[] = [];
@@ -79,7 +86,10 @@ export function buildManifest(source: string, docs: ReadDocument[]): ManifestDoc
     cursor = Math.max(cursor, at);
     return {
       kind: "pdf" as const,
-      name: doc.name.slice(0, 255) || "document.pdf",
+      // The server refuses a name it cannot store as given, rather than
+      // trimming it, so it is made storable here: control characters out, and
+      // cut at 255 CHARACTERS (code points, never half an emoji).
+      name: Array.from(doc.name.replace(CONTROL, "")).slice(0, 255).join("") || "document.pdf",
       bytes: doc.bytes,
       sha256: doc.sha256,
       pageCount: doc.pageCount,

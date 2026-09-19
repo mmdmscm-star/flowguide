@@ -67,14 +67,20 @@ export async function POST(request: Request) {
   }
   if (requestKey.length < 8) return NextResponse.json({ error: "missing request key" }, { status: 400 });
 
-  // WHICH PDF PAGES THIS TEXT CAME FROM (0060) — checked against the text
-  // itself before anything is created. A span that does not hash to its page
-  // is refused outright: a run must not carry provenance that is false.
+  // WHICH PDF PAGES THIS TEXT CAME FROM (0060), checked before anything is
+  // created. The document fields (name, size, file hash, page count, reader)
+  // are what the browser REPORTED — the PDF never comes here, so they cannot
+  // be confirmed. What IS verified here is every page span, re-hashed against
+  // this exact text. A manifest that is malformed or oversized, or whose spans
+  // do not match, refuses the request: never trimmed, never stored in part.
   const documents = verifySourceDocuments(body.sourceDocuments, rawText);
   if (documents && !documents.ok) {
-    return NextResponse.json({
+    return NextResponse.json(documents.reason === "mismatch" ? {
       error: "provenance_mismatch",
       message: "The text changed while it was being sent, so nothing was organized. Please try again.",
+    } : {
+      error: "invalid_source_documents",
+      message: "Sendset couldn\u2019t record which PDF pages this text came from, so nothing was organized. Remove the PDF, add it again, and try again.",
     }, { status: 400 });
   }
 

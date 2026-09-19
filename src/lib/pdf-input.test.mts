@@ -177,41 +177,149 @@ test("two PDFs are mapped in order, each to its own text", () => {
 });
 
 // ---------------------------------------------------------------------------
-// THE SERVER BELIEVES NOTHING IT CANNOT CHECK
+// WHAT THE SERVER VERIFIES, AND WHAT IT ONLY RECORDS AS REPORTED
+//
+// The PDF never reaches the server. So the document fields — name, size, file
+// SHA-256, page count, extractor — are CLIENT-REPORTED: bounded and
+// well-formed, but not provable. What the server verifies independently is the
+// text it received: every page span must hash to the page it claims to be.
 // ---------------------------------------------------------------------------
 
-test("a manifest whose spans hash to their pages is accepted — and only its known fields are kept", () => {
+const BELL = String.fromCharCode(7);
+const PAGE_EMOJI = String.fromCodePoint(0x1F4C4);         // one character, two UTF-16 units
+const HALF_EMOJI = String.fromCharCode(0xD83D);           // a surrogate with no partner
+const blankPages = (n: number) =>
+  Array.from({ length: n }, (_, i) => ({ page: i + 1, chars: 0, sha256: sha(""), start: null, end: null }));
+
+/** A correct manifest for a two-page PDF inside `source`. */
+function fixture() {
   const d = doc("prices.pdf", ["Harbor House\t$2,400", ""]);
   const source = `Intro.\n\n${d.contributed}`;
-  const manifest = buildManifest(source, [d]).map((m) => ({ ...m, pages: m.pages.map((p) => ({ ...p, text: "SMUGGLED" })), extra: 1 }));
+  return { source, manifest: buildManifest(source, [d]) as unknown as Record<string, unknown>[] };
+}
+const refusedAs = (raw: unknown, source: string, reason: "malformed" | "mismatch", what: string) => {
+  const v = verifySourceDocuments(raw, source);
+  assert.ok(v && !v.ok, `${what} was accepted`);
+  assert.equal(v && !v.ok && v.reason, reason, `${what} was refused for the wrong reason`);
+  // Refused means NOTHING is stored: there is no partial or trimmed result.
+  assert.ok(!("documents" in (v as object)), `${what} returned documents alongside a refusal`);
+};
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type Mut = (m: Record<string, any>[]) => void;
+const mutated = (f: Mut) => { const { source, manifest } = fixture(); const m = structuredClone(manifest); f(m); return { source, m }; };
+
+test("a correct manifest is accepted and stored EXACTLY as sent — nothing added, nothing trimmed", () => {
+  const { source, manifest } = fixture();
   const v = verifySourceDocuments(manifest, source);
   assert.ok(v && v.ok);
-  const stored = JSON.stringify(v && v.ok ? v.documents : null);
-  assert.doesNotMatch(stored, /SMUGGLED|"extra"/, "fields the browser added reached the database");
-});
-
-test("ONE span that does not match its page refuses the whole request", () => {
-  const d = doc("prices.pdf", ["Harbor House\t$2,400", "The Loft\t$1,950"]);
-  const source = d.contributed;
-  const good = buildManifest(source, [d]);
-  const shifted = structuredClone(good);
-  shifted[0].pages[1].start! += 1; shifted[0].pages[1].end! += 1;
-  const forged = structuredClone(good);
-  forged[0].pages[0].sha256 = sha("Harbor House\t$9,999");
-  const beyond = structuredClone(good);
-  beyond[0].pages[1].end = source.length + 5; beyond[0].pages[1].start = source.length + 5 - beyond[0].pages[1].chars;
-  for (const [what, m] of [["a shifted span", shifted], ["a forged hash", forged], ["a span past the end", beyond]] as const) {
-    const v = verifySourceDocuments(m, source);
-    assert.ok(v && !v.ok, `${what} was accepted`);
-  }
+  assert.deepEqual(v && v.ok && v.documents, manifest);
   assert.equal(verifySourceDocuments(undefined, source), null, "no manifest is not an error");
-  assert.ok(!(verifySourceDocuments({}, source) as { ok: boolean }).ok);
+  assert.equal(verifySourceDocuments(null, source), null);
 });
 
-test("organize checks the manifest BEFORE it creates anything, and stamps what it checked", () => {
+test("THE FILE HASH IS REPORTED, NOT ATTESTED: the server cannot check it, and does not claim to", () => {
+  // Any well-formed hash is accepted with correct spans, because the server
+  // never holds the file. A test that pretended otherwise would be the lie.
+  const { source, m } = mutated((m) => { m[0].sha256 = "f".repeat(64); m[0].name = "not-what-was-read.pdf"; m[0].bytes = 7; });
+  assert.ok(verifySourceDocuments(m, source)?.ok, "reported fields are being treated as checkable");
+  // ...while the SPANS are checked against the text actually received.
+  const { m: forged } = mutated((m) => { m[0].pages[0].sha256 = sha("Harbor House\t$9,999"); });
+  refusedAs(forged, source, "mismatch", "a span whose text is not the reported page");
+  const src = codeOf("src/lib/source-documents.ts") + raw("src/lib/source-documents.ts");
+  assert.match(src, /CLIENT-REPORTED/);
+  assert.match(src, /does NOT prove which file/);
+});
+
+test("ONE span that does not match the text received refuses the whole request", () => {
+  const cases: [string, Mut][] = [
+    ["a shifted span", (m) => { m[0].pages[0].start += 1; m[0].pages[0].end += 1; }],
+    ["a span past the end of the source", (m) => { m[0].pages[0].end = 10_000; m[0].pages[0].start = 10_000 - m[0].pages[0].chars; }],
+    ["a blank page with a made-up hash", (m) => { m[0].pages[1].sha256 = "b".repeat(64); }],
+  ];
+  for (const [what, f] of cases) { const { source, m } = mutated(f); refusedAs(m, source, "mismatch", what); }
+});
+
+test("THE BOUNDARY: anything outside the exact shape refuses the request, never trimmed to fit", () => {
+  const cases: [string, Mut | unknown][] = [
+    ["not an array", { documents: [] }],
+    ["an empty list", []],
+    ["21 documents", (m) => { while (m.length < 21) m.push(structuredClone(m[0])); }],
+    ["an extra document field", (m) => { m[0].text = "the whole PDF"; }],
+    ["a missing document field", (m) => { delete m[0].extractor; }],
+    ["an extra page field", (m) => { m[0].pages[0].text = "Harbor House\t$2,400"; }],
+    ["a __proto__ key", (m) => { m[0] = JSON.parse(JSON.stringify(m[0]).replace("{", '{"__proto__":{"x":1},')); }],
+    ["another kind", (m) => { m[0].kind = "docx"; }],
+    ["an empty name", (m) => { m[0].name = ""; }],
+    ["a 256-character name", (m) => { m[0].name = "x".repeat(252) + ".pdf"; }],
+    ["a control character in the name", (m) => { m[0].name = `a${BELL}.pdf`; }],
+    ["half an emoji in the name", (m) => { m[0].name = `a${HALF_EMOJI}.pdf`; }],
+    ["a size of zero", (m) => { m[0].bytes = 0; }],
+    ["a size over 20 MB", (m) => { m[0].bytes = 20 * 1024 * 1024 + 1; }],
+    ["a fractional size", (m) => { m[0].bytes = 10.5; }],
+    ["an upper-case hash", (m) => { m[0].sha256 = "A".repeat(64); }],
+    ["a short hash", (m) => { m[0].sha256 = "a".repeat(63); }],
+    ["a page count of 0", (m) => { m[0].pageCount = 0; m[0].pages = []; }],
+    ["a page count of 51", (m) => { m[0].pageCount = 51; m[0].pages = blankPages(51); }],
+    ["page entries disagreeing with the count", (m) => { m[0].pageCount = 3; }],
+    ["pages out of order", (m) => { m[0].pages[0].page = 2; m[0].pages[1].page = 1; }],
+    ["an unknown extractor", (m) => { m[0].extractor = "my-own-reader"; }],
+    ["an unbounded extractor", (m) => { m[0].extractor = `pdfjs-dist@6.3.289+sendset-pdf-layout@1${"9".repeat(200)}`; }],
+    ["a negative start", (m) => { m[0].pages[0].start = -1; }],
+    ["half a span", (m) => { m[0].pages[0].end = null; }],
+    ["a span longer than its page", (m) => { m[0].pages[0].end += 1; }],
+    ["a span on a blank page", (m) => { m[0].pages[1].start = 0; m[0].pages[1].end = 0; }],
+    ["a string offset", (m) => { m[0].pages[0].start = String(m[0].pages[0].start); }],
+    // An EDITED page has no span, so nothing but the shape rules guards these.
+    ["a negative character count on an edited page", (m) => { Object.assign(m[0].pages[0], { start: null, end: null, chars: -1 }); }],
+    ["a fractional character count on an edited page", (m) => { Object.assign(m[0].pages[0], { start: null, end: null, chars: 2.5 }); }],
+    ["an upper-case page hash on an edited page", (m) => { Object.assign(m[0].pages[0], { start: null, end: null, sha256: "A".repeat(64) }); }],
+    ["a missing page hash on an edited page", (m) => { Object.assign(m[0].pages[0], { start: null, end: null, sha256: null }); }],
+  ];
+  for (const [what, f] of cases) {
+    const { source, m } = typeof f === "function" ? mutated(f as Mut) : { source: fixture().source, m: f };
+    refusedAs(m, source, "malformed", what);
+  }
+});
+
+test("an OVERSIZED manifest is refused by its size, before its shape is even read", () => {
+  const { source } = fixture();
+  const huge = [{ kind: "pdf", pad: "y".repeat(300 * 1024) }];
+  const v = verifySourceDocuments(huge, source);
+  assert.ok(v && !v.ok && v.reason === "malformed" && v.message === "manifest too large");
+});
+
+test("...and the boundaries themselves are ACCEPTED: 20 documents, 50 pages, a 255-character name", () => {
+  const { source, m } = mutated((m) => {
+    m[0].name = PAGE_EMOJI.repeat(251) + ".pdf";            // 255 characters, 506 UTF-16 units
+    m[1] = structuredClone(m[0]);
+    m[1].pageCount = 50;
+    m[1].pages = blankPages(50);
+    while (m.length < 20) m.push(structuredClone(m[1]));
+  });
+  assert.ok(verifySourceDocuments(m, source)?.ok, "a manifest at the limits was refused");
+});
+
+test("the browser prepares a name the server will take: no control characters, cut at 255 characters", () => {
+  const d = doc(BELL + PAGE_EMOJI.repeat(300) + ".pdf", ["Harbor House\t$2,400"]);
+  const [m] = buildManifest(d.contributed, [d]);
+  assert.equal([...m.name].length, 255);
+  assert.ok(!m.name.includes(BELL));
+  assert.ok(verifySourceDocuments([m], d.contributed)?.ok, "the browser's own manifest was refused");
+});
+
+test("organize checks the manifest BEFORE it creates anything, refuses both failures, and stamps what it checked", () => {
   const route = codeOf("src/app/api/ingest/organize/route.ts");
   const check = route.indexOf("verifySourceDocuments(body.sourceDocuments, rawText)");
   assert.ok(check > 0 && check < route.indexOf('rpc("create_organize_run"'), "a run can be created before its provenance is checked");
-  assert.match(route, /if \(documents && !documents\.ok\) \{[\s\S]{0,200}error: "provenance_mismatch"/);
+  const refusal = route.slice(check, route.indexOf('rpc("create_organize_run"'));
+  assert.match(refusal, /if \(documents && !documents\.ok\) \{\s*return NextResponse\.json\(/);
+  assert.match(refusal, /documents\.reason === "mismatch"[\s\S]*error: "provenance_mismatch"[\s\S]*error: "invalid_source_documents"[\s\S]*status: 400/);
   assert.match(route, /if \(documents\?\.ok\) stamp\.source_documents = documents\.documents;/);
+});
+
+test("0060 says what is reported and what is verified — and never that the file hash proves anything", () => {
+  const sql = raw("supabase/migrations/0060_ingestion_source_documents.sql");
+  assert.doesNotMatch(sql, /proves it is the same/i);
+  assert.match(sql, /CLIENT-REPORTED/);
+  assert.match(sql, /VERIFIED BY THE SERVER/);
 });

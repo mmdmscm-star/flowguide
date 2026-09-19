@@ -11,6 +11,7 @@
 // thing. Where the reading order cannot be established, the whole PDF is
 // refused, by name and by page.
 import { test } from "node:test";
+import { readFileSync } from "node:fs";
 import assert from "node:assert/strict";
 import { PDFDocument, StandardFonts, degrees, pushGraphicsState, popGraphicsState, setTextRenderingMode,
   TextRenderingMode, beginText, endText, setFontAndSize, moveText, showText, type PDFFont, type PDFPage } from "pdf-lib";
@@ -397,6 +398,26 @@ test("a PASSWORD-PROTECTED PDF is refused with what to do about it", async () =>
   const r = refused(await read(await doc.save({ useObjectStreams: false })));
   assert.equal(r.code, "encrypted");
   assert.equal(r.message, "This PDF is password-protected. Remove the password (or print it to a new PDF) and try again.");
+});
+
+test("an OWNER-RESTRICTED PDF (opens without a password, copying forbidden) is read like any other", async () => {
+  // A REAL producer's file, not a hand-built one: Apple PDFKit, owner password
+  // set, no permissions granted (scripts/make-owner-restricted-pdf.swift).
+  // Restrictions govern what a viewer offers; they do not stop the text being
+  // read, and the professional sending it is the one who has it open.
+  const bytes = new Uint8Array(readFileSync("src/lib/__fixtures__/pdf-owner-restricted.pdf"));
+  // The fixture really is restricted — otherwise this test proves nothing.
+  const task = pdfjs.getDocument({ data: bytes.slice(), isEvalSupported: false, verbosity: 0 } as never);
+  const doc = await task.promise;
+  // pdf.js answers null for an unencrypted file, and the set of GRANTED
+  // permissions otherwise: an empty set is encrypted with nothing granted.
+  const granted = await doc.getPermissions();
+  assert.ok(granted instanceof Set && granted.size === 0, "the fixture is not encrypted with restrictions");
+  await task.destroy();
+  const out = text(await read(bytes));
+  assert.match(out, /^Two Bedroom Corner\t890 sq ft\t\$4,275\.50\t\u20AC1,000$/m);
+  assert.match(out, /^The Loft\t1,120 sq ft\t\$5,900\t\u00A31,200$/m);
+  assert.match(out, /\u00B5-chip required\.$/);
 });
 
 test("damaged and wrong-type files are named for what they are", async () => {

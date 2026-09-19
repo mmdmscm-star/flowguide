@@ -15,18 +15,31 @@
 -- SO: ONE NULLABLE COLUMN, `source_documents`, a small manifest per document:
 --
 --   kind       'pdf' — the only kind in v1.
---   name       the file's name as the professional's device reported it.
---   bytes      its size.
---   sha256     the file's hash. It identifies the exact file without keeping
---              any of it: given the file again, it proves it is the same one.
---   pageCount  pages in the file.
---   extractor  which pdf.js and which layout rules read it, so a reading can
---              be reproduced exactly.
+--   name       the file's name, as the browser reported it.
+--   bytes      its size, as reported.
+--   sha256     the file's SHA-256, as the browser computed and reported it.
+--   pageCount  pages in the file, as reported.
+--   extractor  which pdf.js and which layout rules the browser says read it.
 --   pages[]    per page: its number, its character count, the SHA-256 of the
 --              text it contributed, and WHERE that text sits in source_text
 --              (start/end, in the same UTF-16 offsets the chunks use) — or
 --              null/null when the professional edited that page's text before
 --              organizing, because an offset into edited text would be a lie.
+--
+-- WHAT IS CLIENT-REPORTED AND WHAT IS VERIFIED BY THE SERVER. The PDF is read
+-- in the browser and never reaches the server, so the server cannot attest to
+-- anything about the file itself. name, bytes, sha256, pageCount and extractor
+-- are CLIENT-REPORTED provenance: organize bounds and shape-checks them, and
+-- stores them as reported. The file hash in particular does not prove which
+-- file was read, or that the text came from it; it only lets someone who later
+-- holds a file see whether it matches what the browser reported.
+--
+-- The page SPANS are different: organize re-hashes every span against the
+-- exact source_text it received and refuses the request if one does not match
+-- (src/lib/source-documents.ts). So a stored span is VERIFIED BY THE SERVER to
+-- be the text reported for that page — a fact about source_text, not about the
+-- PDF. This migration's CHECK enforces the shape of all of it; it cannot, and
+-- does not, re-check the hashes.
 --
 -- ITS LIFETIME IS THE SOURCE'S. The manifest names a client's file and maps
 -- into source_text, so it is EVIDENCE, and it goes when source_text goes —
@@ -155,7 +168,7 @@ end;
 $sdv$;
 
 comment on function public.ingestion_source_documents_valid(jsonb) is
-  'True when the value is null or a well-formed source-document manifest (0060): 1-20 documents, each a PDF with a name, size, SHA-256, page count, extractor, and one entry per page carrying its character count, the SHA-256 of its text, and a span into source_text that is either absent or exactly as long as that text.';
+  'True when the value is null or a well-formed source-document manifest (0060) — SHAPE only; it verifies no hash: 1-20 documents, each a PDF with a reported name, size, SHA-256, page count, extractor, and one entry per page carrying its character count, the SHA-256 of its text, and a span into source_text that is either absent or exactly as long as that text.';
 
 -- ---------------------------------------------------------------------------
 -- 2. THE COLUMN AND ITS RULES.
@@ -170,7 +183,7 @@ alter table public.ingestion_runs
     check (source_documents is null or source_text is not null);
 
 comment on column public.ingestion_runs.source_documents is
-  'Which documents this run''s source text came from, page by page (0060). EVIDENCE: names a client''s file and maps into source_text, so it is cleared whenever source_text is — by trigger, on every path. The documents themselves are never stored.';
+  'Which documents this run''s source text came from, page by page (0060). Document fields (name, bytes, sha256, pageCount, extractor) are CLIENT-REPORTED, not server-attested: the PDF is read in the browser and never stored. Page spans were verified by organize against source_text before the row was written. EVIDENCE: names a client''s file and maps into source_text, so it is cleared whenever source_text is — by trigger, on every path.';
 
 -- ---------------------------------------------------------------------------
 -- 3. THE SHARED LIFETIME, ON EVERY PATH.
