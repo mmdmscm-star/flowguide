@@ -117,6 +117,17 @@ from Remote, in order — never run one without this check.
   fixture created inside the migration so the comparison can never be vacuous.
   See [0059-item-actions.md](0059-item-actions.md).
 
+- **0060 (2026-09-19)** applied with this process before PDF input deployed.
+  File SHA-256 `54609db37412b7fcff9858241c137b49bee5c07960dfeb7f6efb808a99b9ccc7`
+  = reviewed; harness `scripts/pg-harness/test-0060.mjs` all pass. Every public
+  table's row count and full-row digest identical before and after (new column
+  excluded); `purge_ingestion_evidence` source md5 unchanged; 0 runs with a
+  manifest. Catalog (column, CHECKs, trigger, function source md5, config and
+  ACLs, grants, RLS) identical to a local replay of 0013..0060. Recorded with
+  `migration repair`; `migration list` matches all 59 versions; dry-run up to
+  date. The manifest's document fields are client-reported; only page spans
+  are server-verified (see the migration header).
+
 ## Fallback: the SQL Editor
 
 If the CLI path is unavailable, paste the exact file into the Supabase SQL
