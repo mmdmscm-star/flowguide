@@ -81,7 +81,14 @@ test("materialisation surfaces completeness, and does not block on it", () => {
 
 test("the prompts carry the two-phones rule", () => {
   const src = readFileSync("src/lib/ai-prompts.ts", "utf8");
-  assert.match(src, /A community's MAIN phone and a named person's DIRECT phone are different facts/);
+  // MATCHED ON THE RULE, NOT ITS VOCABULARY. This pinned "A community's MAIN
+  // phone …", which was how the rule read when it was written against a
+  // senior-living import — and that wording is exactly what reached a
+  // recipient, labelling an ice cream shop's number "Community". The
+  // distinction the rule exists for is unchanged; only the vertical is gone.
+  assert.match(src, /MAIN phone and a named person's DIRECT phone are different facts/);
+  assert.match(src, /keep BOTH/);
+  assert.match(src, /Never drop one phone because another is present/);
   assert.match(src, /do NOT invent one/, "the N/A case is not covered");
   assert.equal((src.match(/\$\{CONTACTS_RULE\}/g) ?? []).length, 3);
 });

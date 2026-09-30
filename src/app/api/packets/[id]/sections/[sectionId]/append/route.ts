@@ -37,7 +37,7 @@ Each item may include:
 - details: key-value pairs [{ "label": string, "value": string }]
 - links: URLs with labels [{ "url": string, "label": string }]
 - photos: image URLs only
-- contacts: an ORDERED array of the people/businesses related to this item. An item may legitimately have SEVERAL people (co-owners, an agent and a coordinator, a doctor and an office manager). Add EVERY person the source lists as a SEPARATE entry, in order. NEVER merge two people into one, and NEVER assign one person's phone/email/website to another. Each: { name, role (ONLY if the source states it), phone, email, website (ONLY a site belonging to that specific person) }. A community/business website is an item-level link, NOT a person's website.
+- contacts: an ORDERED array of the people/businesses related to this item. An item may legitimately have SEVERAL people (co-owners, an agent and a coordinator, a doctor and an office manager). Add EVERY person the source lists as a SEPARATE entry, in order. NEVER merge two people into one, and NEVER assign one person's phone/email/website to another. Each: { name, role (ONLY if the source states it), phone, email, website (ONLY a site belonging to that specific person) }. A website belonging to the item itself is an item-level link, NOT a person's website.
 
 URL classification:
 - IMAGE URLs (unsplash/imgur/cloudinary, or ending .jpg/.jpeg/.png/.webp/.gif) -> "photos"

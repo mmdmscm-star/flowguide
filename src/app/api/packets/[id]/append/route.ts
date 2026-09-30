@@ -20,7 +20,7 @@ Given raw input from a professional, extract and organize:
   - details: key-value pairs (e.g. "Price" → "$2,500/mo", "Hours" → "9am-5pm")
   - links: URLs with labels (see URL classification rules below)
   - photos: image URLs only (see URL classification rules below)
-  - contacts: an ORDERED array of the people/businesses associated with this item. An item may legitimately have SEVERAL people (co-owners, an agent and a coordinator, a doctor and an office manager). Add EVERY person the source lists as a SEPARATE contact entry, in order. NEVER merge two people into one contact, and NEVER assign one person's phone/email/website to another. Each: { name, role (ONLY if stated), phone, email, website (ONLY that specific person's own site) }. A community/business website is an item-level link, NOT a person's website.
+  - contacts: an ORDERED array of the people/businesses associated with this item. An item may legitimately have SEVERAL people (co-owners, an agent and a coordinator, a doctor and an office manager). Add EVERY person the source lists as a SEPARATE contact entry, in order. NEVER merge two people into one contact, and NEVER assign one person's phone/email/website to another. Each: { name, role (ONLY if stated), phone, email, website (ONLY that specific person's own site) }. A website belonging to the item itself is an item-level link, NOT a person's website.
 
 TABULAR DATA: The input may be pasted from a spreadsheet or CSV. If you detect tab-separated or comma-separated rows with a header row, treat each row as an item. Use column headers to map values to the correct fields.
 

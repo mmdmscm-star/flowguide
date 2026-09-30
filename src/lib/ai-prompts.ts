@@ -25,26 +25,43 @@ const NOTES_RULE = `notes is PRIVATE and is for the professional only. Put somet
 // says "$5,595-$6,250" in one table and "$5,200/month" in the other. Nothing
 // was invented from nothing; two real tables were blended into a figure no
 // document supports. A client can be quoted a floor price that does not exist.
-const PRICING_RULE = `Copy every price EXACTLY as the source writes it. Never combine, average, interpolate, round, or build a range out of two different figures. If the source gives conflicting prices for the same room or care type — for example an original table and an updated one — keep them as SEPARATE details, labelled so the difference is visible (e.g. "Studio" and "Studio (updated pricing)"). Never merge them into one number or one range.`;
+const PRICING_RULE = `Copy every price EXACTLY as the source writes it. Never combine, average, interpolate, round, or build a range out of two different figures. If the source gives conflicting prices for the same thing — for example an original table and an updated one — keep them as SEPARATE details, labelled so the difference is visible (e.g. "Studio" and "Studio (updated pricing)"). Never merge them into one number or one range.`;
 
 // TWO PHONES ARE TWO FACTS.
 //
-// The source lists a community's MAIN line separately from a named person's
+// A source often lists a place's MAIN line separately from a named person's
 // direct line:
-//     Community Phone: (415) 927-4200
+//     Phone: (415) 927-4200
 //     Contact Name: Leslye Peterson
 //     Cell Phone: (781) 635-6032
-// Measured on a real 65-community import, 43 of them lost one of the two — the
-// model emitted a single contact and discarded the other number. Nothing in the
-// schema forces that: item_contacts has allowed multiple rows per item since
-// 0011, and live data already holds items with two and three contacts.
-const CONTACTS_RULE = `A community's MAIN phone and a named person's DIRECT phone are different facts — keep BOTH. Emit the community's own number ("Community Phone", "Phone", "Main") as its own contact with role "Community" and NO name. Emit a named person ("Contact Name" + "Contact Title" + "Cell Phone" + "Email Address") as a SEPARATE contact carrying their own phone and email. If the contact name is "N/A", missing, or not a person, do NOT invent one — emit only the community contact. Never drop one phone because another is present, and never move a person's cell onto the community contact.`;
+// Measured on a real 65-item import, 43 of them lost one of the two — the model
+// emitted a single contact and discarded the other number. Nothing in the schema
+// forces that: item_contacts has allowed multiple rows per item since 0011, and
+// live data already holds items with two and three contacts.
+//
+// AND THE FIX FOR THAT INTRODUCED A DIFFERENT ONE. This rule used to say "emit
+// the community's own number ... with role \"Community\"", because the import it
+// was written against was a set of senior-living communities. So the model was
+// INSTRUCTED to write a word the source never contained — and it did it for
+// everything. An ice cream shop's phone number reached a recipient's page
+// labelled "Community".
+//
+// Two things were wrong with that and only one of them is vocabulary. The other
+// is that ITEM_FIELDS says role is emitted "only if stated", and this rule
+// overrode it: a prompt that tells a model to add a word not in the source is
+// the same defect this whole layer exists to prevent, written into the
+// instructions rather than committed by the model.
+//
+// SENIOR LIVING IS ONE USE OF SENDSET, NOT THE ONTOLOGY OF SENDSET. Stored
+// content may say "Community" all day — that is the professional's own
+// language, and legitimate. What must not happen is the software supplying it.
+const CONTACTS_RULE = `An item's MAIN phone and a named person's DIRECT phone are different facts — keep BOTH. Emit the item's own number — however the source labels it ("Phone", "Main", "Office", "Front desk") — as its own contact with NO name, and with a role ONLY if the source states one. Emit a named person ("Contact Name" + "Contact Title" + "Cell Phone" + "Email Address") as a SEPARATE contact carrying their own phone and email. If the contact name is "N/A", missing, or not a person, do NOT invent one — emit only the item's own contact. Never drop one phone because another is present, and never move a person's direct number onto the item's own contact.`;
 
 const ITEM_FIELDS = `Each item: title (required), address, description, notes,
 details [{label,value}], links [{url,label}], photos [url], contacts (ORDERED
 array of people/businesses; every person a SEPARATE entry, never merged, never
 cross-assigned; each { name, role (only if stated), phone, email, website (only
-that person's own site) }; a community/business site is an item-level link).`;
+that person's own site) }; the item's own site is an item-level link).`;
 
 const SECTION_SCHEMA = `{
   "sections": [ { "title": "string", "description": "string or null",
