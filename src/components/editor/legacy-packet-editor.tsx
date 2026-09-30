@@ -198,7 +198,7 @@ function LibraryBar({ packetId, sectionId, disabled, itemCount, refreshKey, onSa
     <button key="add" onClick={() => setPicker(true)} disabled={disabled || empty}
       title={empty ? "You have not saved anything yet" : undefined}
       className={empty ? SECONDARY : PRIMARY}>
-      Choose from Library
+      Add from Library
     </button>
   );
   const saveBtn = (
@@ -264,6 +264,15 @@ export function LegacyPacketEditor() {
   // from two different moments: while building, and again where the work ends.
   const [promoting, setPromoting] = useState(false);
   const [libraryKey, setLibraryKey] = useState(0);
+  /** Which section's Library picker is open, if any. Held by id rather than a
+   *  boolean so the insert lands in the section the professional was looking
+   *  at — see the button below. */
+  const [librarySection, setLibrarySection] = useState<string | null>(null);
+  /** The confirmation for a per-section insert, and the section it belongs to.
+   *  The top bar's notice renders beside the top bar, which is the whole
+   *  problem this button exists to solve — confirming an insert somewhere the
+   *  professional cannot see is the same defect in the feedback. */
+  const [librarySectionNotice, setLibrarySectionNotice] = useState<{ id: string; text: string } | null>(null);
   const [copiedLink, setCopiedLink] = useState(false);
   const [showAppendModal, setShowAppendModal] = useState(false);
   const [appendText, setAppendText] = useState("");
@@ -1620,7 +1629,50 @@ export function LegacyPacketEditor() {
               >
                 + Add items with AI
               </button>
+              {/* ADDING FROM THE LIBRARY IS A WAY TO ADD AN ITEM, so it belongs
+                  in the row of ways to add an item.
+                  It already existed — in a bar at the very top of the editor,
+                  above the title and identity fields. By the time the sections
+                  and items exist, that bar is far off the top of the screen,
+                  and a professional who realised they had left a community off
+                  their list found no way to add one; they got there by pressing
+                  Preview and coming back, which scrolled to the top. The card
+                  further down already fixed the SAVE half of exactly this
+                  problem, and says so in its own comment; this is the REUSE
+                  half.
+
+                  AND IT PASSES THE SECTION. The top bar passes none, and the
+                  route then falls back to the FIRST section — so on a
+                  multi-section Sendset, finding that bar would have put the
+                  item somewhere the professional was not looking, silently. */}
+              <button
+                onClick={() => { setLibrarySectionNotice(null); setLibrarySection(section.id); }}
+                className="text-body text-mark hover:text-mark/80 font-medium"
+              >
+                + Add from Library
+              </button>
             </div>
+            {librarySection === section.id && (
+              <LibraryPicker
+                packetId={packetId}
+                sectionId={section.id}
+                onClose={() => setLibrarySection(null)}
+                onInserted={(n) => {
+                  setLibrarySection(null);
+                  // The inserted rows are real and this editor has not read
+                  // them; without the reload the professional is told something
+                  // was added and sees nothing.
+                  loadPacket();
+                  setLibrarySectionNotice({
+                    id: section.id,
+                    text: `${n === 1 ? "1 thing" : `${n} things`} added from your Library.`,
+                  });
+                }}
+              />
+            )}
+            {librarySectionNotice?.id === section.id && (
+              <p className="mt-1 text-body text-green-700">{librarySectionNotice.text}</p>
+            )}
             {pictureError && (
               <p className="mt-1 text-body text-red-600">{pictureError}</p>
             )}
