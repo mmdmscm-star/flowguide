@@ -698,10 +698,25 @@ test("THE INK FOLLOWS THE MODE YOU ARE ACTUALLY IN", async () => {
 
   await openCompose(host);
   assert.ok(!isInk(byText(host, /^Import with AI$/)), "Import still looks active while composing");
-  const create = byText(host, /^Create a Sendset$/);
-  assert.ok(isInk(create), "the mode you are in is not the one that looks active");
-  assert.equal(create?.getAttribute("aria-pressed"), "true", "the active mode is not announced");
-  assert.ok(!isInk(byText(host, /^Select & Organize$/)), "two modes look active at once");
+
+  // THIS USED TO ASSERT THAT "Create a Sendset" WAS THE INK, aria-pressed
+  // button while composing — the mode indicator. That was true, and it was the
+  // defect: the button drawn as "you are here", directly above the list being
+  // built, began `setChosen([])`. A professional composing a Sendset for a real
+  // client pressed it and lost five chosen communities.
+  //
+  // The rule it was protecting survives and is checked below — the mode you are
+  // in must be legible, and Import must not look active. What changed is WHICH
+  // element carries that: the composer announces itself, rather than a
+  // destructive control wearing the badge.
+  assert.equal(byText(host, /^Create a Sendset$/), undefined,
+    "the header's Create a Sendset is reachable while composing, and it discards the list");
+  assert.equal(byText(host, /^Select & Organize$/), undefined,
+    "Select & Organize is reachable while composing, and it discards the list too");
+  const composer = [...host.querySelectorAll("p")].find((n) => (n.textContent ?? "").trim() === "Start a Sendset");
+  assert.ok(composer, "nothing on screen says a composition is under way");
+  assert.ok([...host.querySelectorAll("button")].some((b) => (b.textContent ?? "").trim() === "Cancel"),
+    "the composer offers no way out");
 
   await click([...host.querySelectorAll("button")].find((b) => (b.textContent ?? "").trim() === "Cancel")!);
   await click(byText(host, /^Select & Organize$/)!);
@@ -729,10 +744,23 @@ test("CREATE SITS AT THE FOOT OF THE TRAY: absent at 0, counted at 1 and many", 
     "one press created more than once");
 });
 
-test("the tray's Create is a phone affordance, and the grid cannot be widened by a long name", () => {
-  // From `lg` the tray sits beside the panel that already holds Create.
-  const tray = WORKSPACE.slice(WORKSPACE.indexOf("<FlowGuideTray"), WORKSPACE.indexOf("</aside>"));
-  assert.match(tray, /<div className="lg:hidden">/, "the tray's Create now shows on desktop too");
+test("the tray's Create sits with the list at every width, and the grid cannot be widened by a long name", () => {
+  // IT WAS A PHONE AFFORDANCE, on the reasoning that a desktop tray sits beside
+  // a panel that already holds Create. The consequence was that on a desktop
+  // the only Create was a small button at the top of the page — and the nearest
+  // large, filled button to the finished list was the one that wiped it. The
+  // action that finishes the work belongs where the work ends, at every width.
+  //
+  // COMMENTS STRIPPED FIRST: the source explains the removed `lg:hidden` by
+  // name, right where the class used to be, so a raw scan finds the word in the
+  // sentence saying it is gone.
+  const trayCode = WORKSPACE
+    .replace(/\/\*[\s\S]*?\*\//g, " ")
+    .split("\n").map((l) => l.replace(/(^|[^:])\/\/.*$/, "$1")).join("\n");
+  const tray = trayCode.slice(trayCode.indexOf("<FlowGuideTray"), trayCode.indexOf("</aside>"));
+  assert.ok(tray.length > 0, "the tray region was not found");
+  assert.ok(!/lg:hidden/.test(tray), "the tray's Create is hidden on desktop again");
+  assert.match(tray, /onClick=\{createSendset\}/, "the tray no longer offers to finish the Sendset");
   // Below `lg` the one-column grid had no template, so its implicit `auto`
   // track grew to a tray row's nowrap title: 564px at 375px with three items.
   assert.match(WORKSPACE, /"grid grid-cols-1 gap-5 lg:grid-cols-\[minmax\(0,55fr\)_minmax\(0,45fr\)\]"/,

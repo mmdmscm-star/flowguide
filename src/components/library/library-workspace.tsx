@@ -601,10 +601,24 @@ export default function LibraryWorkspace() {
               // button has a box, and pulling that past the column pushed its
               // edge to the screen's; so it applies only while nothing is active.
               <div className={`${selecting ? "" : "-mr-4 "}flex flex-wrap items-center gap-1`}>
-                <Button variant={composing ? "primary" : "ghost"} size="md" aria-pressed={composing}
-                  onClick={() => { setNotice(""); setChosen([]); setAddedTitles({}); setOrganizing(false); setSelecting(true); }}>
-                  Create a Sendset
-                </Button>
+                {/* IT LOOKED LIKE "YOU ARE HERE" AND ACTED LIKE "START OVER".
+                    While composing, this rendered as the active, filled button
+                    — aria-pressed and all — directly above the list being
+                    built, and its handler began `setChosen([])`. A professional
+                    part-way through a Sendset for a real client pressed the
+                    nearest thing that said Create and lost five chosen
+                    communities, with no undo and no confirmation.
+
+                    So it is not rendered while a composition is under way.
+                    Hidden rather than disabled: the panel immediately below is
+                    the composer, it is headed "Start a Sendset", and it carries
+                    Cancel — which clears deliberately and is named for it. */}
+                {!composing && (
+                  <Button variant="ghost" size="md"
+                    onClick={() => { setNotice(""); setChosen([]); setAddedTitles({}); setOrganizing(false); setSelecting(true); }}>
+                    Create a Sendset
+                  </Button>
+                )}
                 {/* THE OTHER DOOR, AND IT SAYS WHAT IT OPENS.
                     This was called "Organize", which stopped being true the
                     moment the Library itself became draggable: the fastest way
@@ -615,11 +629,19 @@ export default function LibraryWorkspace() {
                     select them for WHAT — so the name now carries both the
                     action and its purpose. The mode is unchanged throughout;
                     only what it was called was wrong. */}
+                {/* THE SAME TRAP, THE OTHER DOOR. This also begins
+                    `setChosen([])`, so part-way through a composition it
+                    discarded the list just as silently as the button beside it.
+                    Organising and composing are different modes and this one
+                    cannot be entered without abandoning the other, so while a
+                    composition is under way it is not offered. */}
+                {!composing && (
                 <Button variant={selecting && organizing ? "primary" : "ghost"} size="md"
                   aria-pressed={selecting && organizing}
                   onClick={() => { setNotice(""); setChosen([]); setOrganizing(true); setSelecting(true); }}>
                   Select &amp; Organize
                 </Button>
+                )}
               </div>
             )}
           </div>
@@ -897,7 +919,10 @@ export default function LibraryWorkspace() {
               <span className={`text-sm font-medium ${chosen.length ? "text-foreground" : "text-muted"}`}>
                 {chosen.length} item{chosen.length === 1 ? "" : "s"} added
               </span>
-              <Button variant="primary" size="sm" className="ml-2"
+              {/* SECONDARY NOW, because the one under the list leads. Kept,
+                  because on a phone the tray is below the whole Library and
+                  scrolling back down to finish is its own friction. */}
+              <Button variant="secondary" size="sm" className="ml-2"
                 onClick={createSendset}
                 disabled={busy || chosen.length === 0}
               >
@@ -1161,12 +1186,19 @@ export default function LibraryWorkspace() {
                     onDown={(id) => nudge(id, 1)}
                     onRemove={removeFromTray}
                     footer={chosen.length > 0 && (
-                      // WHERE THE CHOICE ENDS, ON A PHONE. Below `lg` the tray
-                      // follows the Library down the page, so the only Create
-                      // was a long scroll back up from the list it had just
-                      // been built from. From `lg` the tray sits beside the
-                      // panel and this is not needed, so it is not shown.
-                      <div className="lg:hidden">
+                      // WHERE THE CHOICE ENDS, AT EVERY WIDTH.
+                      //
+                      // This was hidden from `lg`, on the reasoning that a
+                      // desktop tray sits beside a panel that already holds
+                      // Create. The consequence was that on a desktop the ONLY
+                      // Create was a small one in the banner at the top — and
+                      // the nearest large, filled button to the finished list
+                      // was the one that wiped it.
+                      //
+                      // The list is where the work ends, so the action that
+                      // finishes it belongs there. It leads, and the banner's
+                      // copy steps down rather than competing.
+                      <div>
                         {notice && (
                           <p role="alert" className="mb-2 text-meta text-red-700">{notice}</p>
                         )}
