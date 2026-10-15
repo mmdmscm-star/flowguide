@@ -12,7 +12,7 @@ import type { createServerClient } from "./supabase";
 //   2. insertStructuredSections — all-or-nothing DB write (rolls back on error).
 // ============================================================
 
-export const STRUCTURE_MODEL = "anthropic/claude-sonnet-4";
+export const STRUCTURE_MODEL = "anthropic/claude-sonnet-5";
 
 // Hard, honest limits. These are NOT silent truncation points — callers reject
 // oversize input up front with an explanation, and truncated output is rejected
