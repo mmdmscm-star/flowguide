@@ -1,5 +1,20 @@
 "use client";
+import { useState } from "react";
 import { photoUrls, type LibrarySnapshot } from "@/lib/library-adapter";
+
+// Per-Sendset usage of this library item. Shape matches the API response —
+// one entry per Sendset item that was created from this library entry,
+// with enough state to tell "in sync" from "out of date" and to open or
+// update each independently.
+interface Usage {
+  itemId: string;
+  itemTitle: string;
+  packetId: string;
+  packetTitle: string;
+  packetStatus: string;
+  itemRevision: number;
+  outOfDate: boolean;
+}
 
 // Looking at something saved, without being put in an editor.
 //
@@ -32,6 +47,49 @@ export function LibraryDetail({
   onDelete: () => void;
   onClose: () => void;
 }) {
+  // USAGES. Not fetched on mount — a professional opening a library item
+  // mostly wants to see what the item IS. The "In N Sendsets" line opens
+  // into the per-Sendset list on demand, and only then do we read the API.
+  const [usagesOpen, setUsagesOpen] = useState(false);
+  const [usages, setUsages] = useState<Usage[] | null>(null);
+  const [usagesError, setUsagesError] = useState("");
+  const [loadingUsages, setLoadingUsages] = useState(false);
+  const [applyingItemId, setApplyingItemId] = useState<string | null>(null);
+  const [applyError, setApplyError] = useState("");
+
+  async function loadUsages() {
+    setLoadingUsages(true); setUsagesError("");
+    try {
+      const res = await fetch(`/api/library/${item.id}/usages`);
+      const d = await res.json();
+      if (!res.ok) { setUsagesError(d.message || "Could not read usages."); return; }
+      setUsages(d.usages ?? []);
+    } catch { setUsagesError("Could not read usages."); }
+    finally { setLoadingUsages(false); }
+  }
+
+  function toggleUsages() {
+    const next = !usagesOpen;
+    setUsagesOpen(next);
+    if (next && usages === null) void loadUsages();
+  }
+
+  async function applyToSendset(usage: Usage) {
+    setApplyingItemId(usage.itemId); setApplyError("");
+    try {
+      const res = await fetch(`/api/library/${item.id}/apply-to-item`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ itemId: usage.itemId }),
+      });
+      const d = await res.json();
+      if (!res.ok) { setApplyError(d.message || "Could not update that Sendset."); return; }
+      // Mark locally in sync so the row updates without a full refetch.
+      setUsages((cur) => cur ? cur.map((u) =>
+        u.itemId === usage.itemId ? { ...u, outOfDate: false, itemRevision: d.revision ?? u.itemRevision } : u
+      ) : cur);
+    } catch { setApplyError("Could not update that Sendset."); }
+    finally { setApplyingItemId(null); }
+  }
   const photos = photoUrls(item);
   const details = (item.details ?? []).filter((d) => d.label?.trim() || d.value?.trim());
   const links = (item.links ?? []).filter((l) => l.url?.trim());
@@ -136,15 +194,73 @@ export function LibraryDetail({
           Edit
         </button>
         {typeof usedIn === "number" && usedIn > 0 && (
-          <span className="text-sm text-muted">
-            In {usedIn} Sendset{usedIn === 1 ? "" : "s"}
-          </span>
+          <button type="button" onClick={toggleUsages} disabled={busy}
+            aria-expanded={usagesOpen}
+            className="text-sm font-medium text-muted underline-offset-2 hover:text-foreground hover:underline disabled:opacity-60">
+            In {usedIn} Sendset{usedIn === 1 ? "" : "s"} {usagesOpen ? "▴" : "▾"}
+          </button>
         )}
         <button onClick={onDelete} disabled={busy}
           className="ml-auto text-sm font-medium text-red-700 hover:text-red-800 disabled:opacity-60">
           Delete
         </button>
       </div>
+
+      {/* PER-SENDSET USAGES. Only visible on demand. Out-of-date rows come
+          first (that's the group the professional is here to act on), each
+          with an Open link to visit the Sendset and an Update button to
+          push the library's current content into that one Sendset. Neither
+          action touches another Sendset — the whole point is that this is
+          a per-Sendset choice, not a batch. */}
+      {usagesOpen && typeof usedIn === "number" && usedIn > 0 && (
+        <div className="mt-3 rounded-lg border border-border bg-ground-2 p-3">
+          {loadingUsages && <p className="text-xs text-muted">Loading…</p>}
+          {usagesError && <p className="text-xs text-red-700">{usagesError}</p>}
+          {applyError && <p className="mb-2 text-xs text-red-700">{applyError}</p>}
+          {!loadingUsages && usages && usages.length === 0 && (
+            <p className="text-xs text-muted">
+              No Sendset currently holds a live copy of this item. The count above may be stale — try reopening it.
+            </p>
+          )}
+          {!loadingUsages && usages && usages.length > 0 && (
+            <ul className="space-y-2">
+              {usages.map((u) => (
+                <li key={u.itemId} className="flex flex-wrap items-center gap-2 rounded-md bg-white p-2.5 shadow-sm">
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-medium text-foreground">{u.packetTitle}</span>
+                    <span className="mt-0.5 flex items-center gap-1.5 text-xs">
+                      {u.outOfDate
+                        ? <span className="rounded-full bg-amber-100 px-2 py-0.5 font-semibold text-amber-900">Out of date</span>
+                        : <span className="rounded-full bg-emerald-100 px-2 py-0.5 font-semibold text-emerald-900">In sync</span>}
+                      {u.packetStatus === "published"
+                        ? <span className="text-muted">· Published (update affects draft only)</span>
+                        : <span className="text-muted">· Draft</span>}
+                    </span>
+                  </span>
+                  <div className="flex flex-none items-center gap-2">
+                    <a href={`/edit/${u.packetId}`} target="_blank" rel="noopener noreferrer"
+                      className="text-xs font-medium text-muted hover:text-foreground">
+                      Open ↗
+                    </a>
+                    {u.outOfDate && (
+                      <button type="button" onClick={() => applyToSendset(u)}
+                        disabled={busy || applyingItemId === u.itemId}
+                        className="rounded-md border border-accent bg-white px-2.5 py-1 text-xs font-semibold text-accent hover:bg-accent/5 disabled:opacity-60">
+                        {applyingItemId === u.itemId ? "Updating…" : "Update"}
+                      </button>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+          {!loadingUsages && usages && usages.length > 0 && (
+            <p className="mt-2 text-xs text-muted">
+              Updating a Sendset writes the library&apos;s current content into that one Sendset only — no other Sendset is touched. For a published Sendset, the update lands on the draft; the sent version is unchanged until you republish.
+            </p>
+          )}
+        </div>
+      )}
     </div>
   );
 }
