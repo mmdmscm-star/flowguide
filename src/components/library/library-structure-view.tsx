@@ -254,8 +254,31 @@ export function LibraryStructureView({
     finally { setBusy(false); }
   }
 
-  async function move(kind: "item" | "section" | "group", id: string, direction: "up" | "down") {
+  /** Delete an empty heading. The server refuses with `not_empty` if the
+   *  heading is no longer empty between render and click, so this is safe
+   *  to invoke without a client-side recount. */
+  async function remove(kind: "section" | "group", id: string) {
     setBusy(true);
+    try {
+      const res = await fetch("/api/library/structure", {
+        method: "DELETE", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kind, id }),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        setError(d.message || "Could not delete that.");
+        return;
+      }
+      setError("");
+      await load();
+    } catch { setError("Could not delete that."); }
+    finally { setBusy(false); }
+  }
+
+  async function move(kind: "item" | "section" | "group", id: string, direction: "up" | "down") {
+    // Same reasoning as `drop()`: no busy block during the round-trip, so
+    // tapping Move up / Move down doesn't freeze every other button on the
+    // page while the server + reload run.
     try {
       // AN INTENT, not the loaded rows. The server resolves the neighbour
       // against the whole container, so this is correct whether or not the rest
@@ -268,17 +291,12 @@ export function LibraryStructureView({
         const d = await res.json().catch(() => ({}));
         setNotice(d.message || "Could not move that.");
       } else setNotice("");
-      // HOW MUCH WAS ON SCREEN, so the reload can put it back. Captured after
-      // the server confirms, because a failed move should change nothing.
-      // `data` is non-null wherever a move control can be pressed, but the
-      // guard costs nothing and keeps the reload honest if that ever changes.
       const depth: Record<string, number> = {};
       for (const c of data ? [...data.containers, data.unorganized] : []) {
         depth[keyOf(c.sectionId, c.groupId)] = rowsFor(c).length;
       }
       await load(depth);
     } catch { setNotice("Could not move that."); }
-    finally { setBusy(false); }
   }
 
   // =========================================================================
@@ -324,11 +342,14 @@ export function LibraryStructureView({
     return "this item";
   };
 
-  /** One drop, sent as an INTENT. Then the authoritative state is re-read at the
-   *  depth it was showing, exactly as the fallback controls already do — a
-   *  successful drag must not collapse a long section anyone had opened. */
+  /** One drop, sent as an INTENT. The UI stays INTERACTIVE while the server
+   *  commits — the old pattern set `busy` for the whole round-trip (POST +
+   *  reload), which disabled every drag handle and move control for the
+   *  2–2.5 seconds a user flagged as "noticeable lag." The POST + reload
+   *  still run in the background, and a failure triggers reconciliation
+   *  from the server; a success means the optimistic in-place reorder the
+   *  caller already applied is correct, and the reload just confirms it. */
   async function drop(payload: Record<string, unknown>) {
-    setBusy(true);
     try {
       const res = await fetch("/api/library/order", {
         method: "POST", headers: { "Content-Type": "application/json" },
@@ -337,15 +358,15 @@ export function LibraryStructureView({
       setNotice(!res.ok
         ? ((await res.json().catch(() => ({}))) as { message?: string }).message || "Could not move that."
         : "");
-      // RELOAD EITHER WAY. On failure this is the reconciliation: the server is
-      // asked what is true rather than the optimistic move being un-computed.
+      // RELOAD EITHER WAY. On failure this reverts the optimistic move the
+      // caller applied; on success it confirms it. Not awaited by the caller.
       const depth: Record<string, number> = {};
       for (const c of data ? [...data.containers, data.unorganized] : [])
         depth[keyOf(c.sectionId, c.groupId)] = rowsFor(c).length;
       await load(depth);
     } catch {
       setNotice("Could not move that.");
-    } finally { setBusy(false); }
+    }
   }
 
   function onDragStart(e: DragStartEvent) {
@@ -376,7 +397,90 @@ export function LibraryStructureView({
     });
     if (!plan) return;
     if (plan.kind === "refused") { setNotice(plan.message); return; }
+    // OPTIMISTIC REORDER. Apply the move to local state immediately so the
+    // dragged item lands where the user dropped it instead of snapping back
+    // for 2+ seconds while the server round-trip and the full reload run.
+    // The server call still fires via drop(); on failure the reload reverts.
+    applyOptimistic(plan.payload);
     void drop(plan.payload);
+  }
+
+  /** Mutate `data` + `extra` to reflect a planned drop before the server
+   *  confirms. Only item moves within or between loaded containers are
+   *  handled — section/group reorders are rarer and keep the current
+   *  reload-only path. On server failure the reload reverts whatever we
+   *  did here, so a wrong guess is self-correcting. */
+  function applyOptimistic(payload: Record<string, unknown>) {
+    if (payload.kind !== "item" || typeof payload.id !== "string") return;
+    const itemId = payload.id;
+    const toSection = (payload.sectionId as string | null) ?? null;
+    const toGroup = (payload.groupId as string | null) ?? null;
+    const beforeId = typeof payload.before === "string" ? payload.before : null;
+    const afterId = typeof payload.after === "string" ? payload.after : null;
+    const moveWithin = (list: LibrarySnapshot[]): LibrarySnapshot[] => {
+      const item = list.find((r) => r.id === itemId);
+      if (!item) return list;
+      const without = list.filter((r) => r.id !== itemId);
+      if (beforeId) {
+        const i = without.findIndex((r) => r.id === beforeId);
+        if (i < 0) return [...without, item];
+        return [...without.slice(0, i), item, ...without.slice(i)];
+      }
+      if (afterId) {
+        const i = without.findIndex((r) => r.id === afterId);
+        if (i < 0) return [...without, item];
+        return [...without.slice(0, i + 1), item, ...without.slice(i + 1)];
+      }
+      return [...without, item];
+    };
+    const containerKey = keyOf(toSection, toGroup);
+    const from = placeOf.get(itemId);
+    if (!from) return;
+    const fromKey = keyOf(from.sectionId, from.groupId);
+    // Pull the item out of its current container.
+    let found: LibrarySnapshot | null = null;
+    const stripFrom = (list: LibrarySnapshot[]) => {
+      const i = list.findIndex((r) => r.id === itemId);
+      if (i < 0) return list;
+      found = list[i];
+      return [...list.slice(0, i), ...list.slice(i + 1)];
+    };
+    setData((d) => {
+      if (!d) return d;
+      const next = { ...d, containers: d.containers.map((c) => {
+        const key = keyOf(c.sectionId, c.groupId);
+        if (key === fromKey) return { ...c, items: stripFrom(c.items) };
+        return c;
+      }), unorganized: fromKey === keyOf(null, null)
+        ? { ...d.unorganized, items: stripFrom(d.unorganized.items) }
+        : d.unorganized };
+      return next;
+    });
+    setExtra((m) => {
+      if (!m[fromKey]) return m;
+      return { ...m, [fromKey]: { ...m[fromKey], items: stripFrom(m[fromKey].items) } };
+    });
+    // Place it into the destination container.
+    setData((d) => {
+      if (!d || !found) return d;
+      const placed = found!;
+      let touched = false;
+      const next = { ...d, containers: d.containers.map((c) => {
+        const key = keyOf(c.sectionId, c.groupId);
+        if (key !== containerKey) return c;
+        touched = true;
+        return { ...c, items: moveWithin([...c.items, placed]) };
+      }) };
+      if (!touched && containerKey === keyOf(null, null)) {
+        next.unorganized = { ...d.unorganized, items: moveWithin([...d.unorganized.items, placed]) };
+      }
+      return next;
+    });
+    setExtra((m) => {
+      if (!m[containerKey] || !found) return m;
+      const placed = found!;
+      return { ...m, [containerKey]: { ...m[containerKey], items: moveWithin([...m[containerKey].items, placed]) } };
+    });
   }
 
   if (error) return <p className="text-sm text-red-700">{error}</p>;
@@ -520,6 +624,8 @@ export function LibraryStructureView({
               onCollapse={() => toggle(sec.id)}
               onRename={reorder ? (n) => rename("section", sec.id, n) : undefined}
               onAddGroup={reorder && onAddGroup ? () => onAddGroup(sec.id) : undefined}
+              onDelete={reorder && total === 0 && mine.length === 0
+                ? () => remove("section", sec.id) : undefined}
               /* THE ONE A PROFESSIONAL ACTUALLY FINDS. Sections can contain
                  groups, and nothing on screen said so unless you opened a `…`
                  you had no reason to open. While Select & Organize is running
@@ -589,6 +695,8 @@ export function LibraryStructureView({
                         level="group" name={g.name} count={c?.total ?? 0} collapsed={!!gshut}
                         onCollapse={() => toggle(g.id)}
                         onRename={reorder ? (n) => rename("group", g.id, n) : undefined}
+                        onDelete={reorder && (c?.total ?? 0) === 0
+                          ? () => remove("group", g.id) : undefined}
                         busy={busy}
                         handle={dragEnabled ? (
                           <DragHandle label={`Drag to reorder group ${g.name}`}
@@ -697,12 +805,17 @@ export function LibraryStructureView({
 }
 
 function Header({
-  level, name, count, collapsed, onCollapse, controls, onRename, onAddGroup, inline, busy, handle,
+  level, name, count, collapsed, onCollapse, controls, onRename, onAddGroup, onDelete, inline, busy, handle,
 }: {
   level: "section" | "group"; name: string; count: number;
   collapsed: boolean; onCollapse: () => void; controls?: React.ReactNode;
   /** Sections only. A group hangs off a section, so a group heading has none. */
   onAddGroup?: () => void;
+  /** Only passed by the caller when the heading is empty — for a section
+   *  this means no items AND no groups under it; for a group just no items.
+   *  Rendering is gated here so a caller cannot accidentally offer Delete
+   *  on a non-empty heading. */
+  onDelete?: () => void;
   /** An action that sits ON the heading line rather than behind the `…`. */
   inline?: React.ReactNode;
   /** The drag grip, rendered outside the heading's own buttons. */
@@ -764,7 +877,7 @@ function Header({
             competing with the name it belongs to. */}
         <span className="flex-none text-meta tabular-nums text-ink-3">{count}</span>
       </button>
-      {onRename && <HeadingMenu name={name} busy={busy} onAddGroup={onAddGroup}
+      {onRename && <HeadingMenu name={name} busy={busy} onAddGroup={onAddGroup} onDelete={onDelete}
         onRename={() => { setDraft(name); setEditing(true); }} />}
       {inline}
       <span className="ml-auto flex-none">{controls}</span>
@@ -784,8 +897,17 @@ function Header({
  *  outside — otherwise a drag that ends off the menu would close it mid-gesture.
  */
 function HeadingMenu({
-  name, busy, onRename, onAddGroup,
-}: { name: string; busy?: boolean; onRename: () => void; onAddGroup?: () => void }) {
+  name, busy, onRename, onAddGroup, onDelete,
+}: {
+  name: string; busy?: boolean;
+  onRename: () => void;
+  onAddGroup?: () => void;
+  /** Only passed when the heading is empty (count === 0 AND, for a section,
+   *  no groups under it). Clicking it hits the DELETE endpoint. If the row
+   *  stopped being empty between the menu rendering and the click, the
+   *  server refuses with `not_empty` and nothing changes. */
+  onDelete?: () => void;
+}) {
   const [open, setOpen] = useState(false);
   const box = useRef<HTMLDivElement | null>(null);
   const pressedOutside = useRef(false);
@@ -849,6 +971,17 @@ function HeadingMenu({
                          text-foreground hover:bg-gray-50"
             >
               Add group…
+            </button>
+          )}
+          {onDelete && (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => { setOpen(false); onDelete(); }}
+              className="w-full border-t border-border px-3 py-2 text-left text-sm
+                         text-red-700 hover:bg-red-50"
+            >
+              Delete
             </button>
           )}
         </div>

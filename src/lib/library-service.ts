@@ -816,3 +816,37 @@ export async function renameStructure(
   if (!data) return { error: "not_found" };
   return {};
 }
+
+/** Delete a section or group — only when empty.
+ *
+ *  A user reported trying to delete an empty category and finding no way to
+ *  do it. Dropping the row IF it holds no items (and, for a section, no
+ *  groups) keeps the content-safety guarantee of this file: no API endpoint
+ *  it serves can cascade into something that has rows under it. Called with
+ *  a non-empty structural row, this reports `not_empty` and writes nothing.
+ */
+export async function deleteStructure(
+  db: Db, userId: string, kind: "section" | "group", id: string,
+): Promise<{ error?: string }> {
+  if (kind === "section") {
+    const [groups, items] = await Promise.all([
+      db.from("library_groups").select("id", { count: "exact", head: true }).eq("user_id", userId).eq("section_id", id),
+      db.from("library_items").select("id", { count: "exact", head: true }).eq("user_id", userId).eq("section_id", id),
+    ]);
+    if ((groups.count ?? 0) > 0 || (items.count ?? 0) > 0) return { error: "not_empty" };
+    const { data, error } = await db.from("library_sections")
+      .delete().eq("id", id).eq("user_id", userId).select("id").maybeSingle();
+    if (error) return { error: error.message };
+    if (!data) return { error: "not_found" };
+    return {};
+  }
+  // kind === "group"
+  const items = await db.from("library_items").select("id", { count: "exact", head: true })
+    .eq("user_id", userId).eq("group_id", id);
+  if ((items.count ?? 0) > 0) return { error: "not_empty" };
+  const { data, error } = await db.from("library_groups")
+    .delete().eq("id", id).eq("user_id", userId).select("id").maybeSingle();
+  if (error) return { error: error.message };
+  if (!data) return { error: "not_found" };
+  return {};
+}

@@ -22,7 +22,12 @@ export async function GET(request: Request) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const per = Math.min(Math.max(Number(new URL(request.url).searchParams.get("per")) || 6, 1), 50);
+  // DEFAULT PAGE IS LARGE now. The old default of 6 forced a Show more click
+  // for even a modest category, which a user flagged as "I was frustrated that
+  // I was always having to expand to see the list." 100 fits a serious
+  // professional's library in one load; anyone with more than that still
+  // gets the ordinary paged `Show more` behaviour.
+  const per = Math.min(Math.max(Number(new URL(request.url).searchParams.get("per")) || 100, 1), 200);
   const supabase = createServerClient();
 
   const [browse, vocabulary] = await Promise.all([

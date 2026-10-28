@@ -413,7 +413,7 @@ export function BlockItemEditor({
                   disabled={busy}
                   onChange={(e) => setLabelDraft(e.target.value)}
                   onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addLabel(); } }}
-                  placeholder="Santa Rosa"
+                  placeholder="e.g. North, VIP, Priority"
                   className={field}
                 />
                 <button type="button" className={smallBtn} disabled={busy || !labelDraft.trim()} onClick={addLabel}>
