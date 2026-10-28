@@ -347,8 +347,15 @@ export function ItemCard({ item, audience = "recipient" }: { item: Item; audienc
         )}
 
         {visibleLinks.length > 0 && (() => {
-          const youtubeLinks = visibleLinks.filter(l => extractYouTubeId(l.link.url));
-          const otherLinks = visibleLinks.filter(l => !extractYouTubeId(l.link.url));
+          // FILES ARE A SEPARATE GROUP. A link the author marked kind:"file"
+          // (a PDF in Drive, a Dropbox share, any downloadable document)
+          // reads differently from a website — the author wants their client
+          // to download or open it, not browse to it — so it lives below the
+          // website chips with a download icon and a File tag.
+          const fileLinks = visibleLinks.filter(l => l.link.kind === "file");
+          const nonFileLinks = visibleLinks.filter(l => l.link.kind !== "file");
+          const youtubeLinks = nonFileLinks.filter(l => extractYouTubeId(l.link.url));
+          const otherLinks = nonFileLinks.filter(l => !extractYouTubeId(l.link.url));
           return (
             <>
               {youtubeLinks.map(({ link, label }, i) => {
@@ -400,6 +407,36 @@ export function ItemCard({ item, audience = "recipient" }: { item: Item; audienc
                       </a>
                     );
                   })}
+                </div>
+              )}
+              {fileLinks.length > 0 && (
+                <div className="mb-4">
+                  <p className="mb-1.5 text-xs font-medium uppercase tracking-wider text-[color:var(--sg-muted)]">
+                    {fileLinks.length === 1 ? "File" : "Files"}
+                  </p>
+                  <div className="flex flex-wrap gap-[var(--sg-chip-gap)]">
+                    {fileLinks.map(({ link, label }, i) => (
+                      <a
+                        key={i}
+                        href={link.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="sg-chip items-center gap-1.5 max-w-full min-w-0 font-medium"
+                        style={{ fontSize: "var(--sg-body)" }}
+                      >
+                        {/* A download/document icon so a file reads as a file,
+                            not as another website chip the recipient has to
+                            parse by hostname. */}
+                        <svg className="w-4 h-4 flex-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                          <polyline points="14 2 14 8 20 8" />
+                          <line x1="12" y1="18" x2="12" y2="12" />
+                          <polyline points="9 15 12 18 15 15" />
+                        </svg>
+                        <span className="min-w-0 [overflow-wrap:anywhere]">{label}</span>
+                      </a>
+                    ))}
+                  </div>
                 </div>
               )}
             </>

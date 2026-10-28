@@ -68,7 +68,7 @@ export function normalizeItemContent(body: Record<string, unknown>): ItemContent
 
   const details = rows<{ label: string; value: string }>(body.details);
   if (details !== undefined) out.details = details;
-  const links = rows<{ url: string; label?: string }>(body.links);
+  const links = rows<{ url: string; label?: string; kind?: "web" | "file" }>(body.links);
   if (links !== undefined) out.links = links;
   // PHOTOS ARRIVE IN TWO SHAPES, and pretending otherwise broke Library editing
   // in production.

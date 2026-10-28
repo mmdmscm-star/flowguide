@@ -44,7 +44,7 @@ type Detail = { label: string; value: string };
 // to this draft and never saved — detailsPayload sends {label, value} only.
 type DraftDetail = Detail & { id: string };
 const draftDetail = (d: Detail): DraftDetail => ({ ...d, id: crypto.randomUUID() });
-type Link = { url: string; label: string };
+type Link = { url: string; label: string; kind: "web" | "file" };
 type Photo = { url: string };
 type Contact = { name: string; role: string; phone: string; email: string; website: string };
 const emptyContact = (): Contact => ({ name: "", role: "", phone: "", email: "", website: "" });
@@ -187,7 +187,7 @@ export function BlockItemEditor({
   const [highlight, setHighlight] = useState(item.highlight || "");
   const [details, setDetails] = useState<DraftDetail[]>(
     item.details ? item.details.map((d) => draftDetail({ label: d.label, value: d.value })) : []);
-  const [links, setLinks] = useState<Link[]>(item.links ? item.links.map((l) => ({ url: l.url, label: l.label || "" })) : []);
+  const [links, setLinks] = useState<Link[]>(item.links ? item.links.map((l) => ({ url: l.url, label: l.label || "", kind: l.kind === "file" ? "file" : "web" })) : []);
   const [photos, setPhotos] = useState<Photo[]>(item.photos ? item.photos.map((u) => ({ url: u })) : []);
   const [contacts, setContacts] = useState<Contact[]>(
     item.contacts ? item.contacts.map((c) => ({ name: c.name || "", role: c.role || "", phone: c.phone || "", email: c.email || "", website: c.website || "" })) : []
@@ -280,7 +280,7 @@ export function BlockItemEditor({
       highlight: highlight || undefined,
       photos: cleanPhotos.length ? cleanPhotos.map((p) => p.url) : undefined,
       details: cleanDetails.length ? cleanDetails : undefined,
-      links: cleanLinks.length ? cleanLinks.map((l) => ({ url: l.url, label: l.label || undefined })) : undefined,
+      links: cleanLinks.length ? cleanLinks.map((l) => ({ url: l.url, label: l.label || undefined, kind: l.kind === "file" ? "file" as const : undefined })) : undefined,
       contacts: cleanContacts.length
         ? cleanContacts.map((c) => ({ name: c.name || undefined, role: c.role || undefined, phone: c.phone || undefined, email: c.email || undefined, website: c.website || undefined }))
         : undefined,
@@ -462,13 +462,39 @@ export function BlockItemEditor({
           <div>
             <div className="flex items-center justify-between mb-1">
               <span className="text-meta font-medium text-ink-2">Links</span>
-              <button className={smallBtn} disabled={busy} onClick={() => setLinks((l) => [...l, { url: "", label: "" }])}>+ Add link</button>
+              <button className={smallBtn} disabled={busy} onClick={() => setLinks((l) => [...l, { url: "", label: "", kind: "web" }])}>+ Add link</button>
             </div>
+            <p className="mb-1.5 text-xs text-ink-3">Mark a link as a File (a PDF in Google Drive, a Dropbox share) to show it to clients in a separate Files group with a download chip. Use ↑ / ↓ to reorder.</p>
             <div className="space-y-2">
               {links.map((l, i) => (
-                <div key={i} className="flex gap-2">
-                  <input value={l.label} disabled={busy} onChange={(e) => setLinks((arr) => arr.map((x, j) => j === i ? { ...x, label: e.target.value } : x))} placeholder="Label" className={field} />
+                <div key={i} className="flex items-center gap-2">
+                  <select value={l.kind} disabled={busy}
+                    onChange={(e) => setLinks((arr) => arr.map((x, j) => j === i ? { ...x, kind: (e.target.value === "file" ? "file" : "web") as "web" | "file" } : x))}
+                    aria-label="Link kind"
+                    className="min-h-9 rounded-md border border-line bg-white px-2 text-xs text-ink">
+                    <option value="web">Website</option>
+                    <option value="file">File</option>
+                  </select>
+                  <input value={l.label} disabled={busy} onChange={(e) => setLinks((arr) => arr.map((x, j) => j === i ? { ...x, label: e.target.value } : x))} placeholder={l.kind === "file" ? "Document name" : "Label"} className={field} />
                   <input value={l.url} disabled={busy} onChange={(e) => setLinks((arr) => arr.map((x, j) => j === i ? { ...x, url: e.target.value } : x))} placeholder="https://…" className={field} />
+                  <button type="button" className="min-h-9 w-7 text-ink-3 hover:text-ink disabled:opacity-30"
+                    disabled={busy || i === 0}
+                    aria-label="Move link up"
+                    onClick={() => setLinks((arr) => {
+                      if (i === 0) return arr;
+                      const next = [...arr];
+                      [next[i - 1], next[i]] = [next[i], next[i - 1]];
+                      return next;
+                    })}>↑</button>
+                  <button type="button" className="min-h-9 w-7 text-ink-3 hover:text-ink disabled:opacity-30"
+                    disabled={busy || i === links.length - 1}
+                    aria-label="Move link down"
+                    onClick={() => setLinks((arr) => {
+                      if (i === arr.length - 1) return arr;
+                      const next = [...arr];
+                      [next[i], next[i + 1]] = [next[i + 1], next[i]];
+                      return next;
+                    })}>↓</button>
                   <button className="text-red-400 hover:text-red-600 px-1" disabled={busy} onClick={() => setLinks((arr) => arr.filter((_, j) => j !== i))} aria-label="Remove link">×</button>
                 </div>
               ))}

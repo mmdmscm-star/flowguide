@@ -14,6 +14,12 @@ export interface ItemDetail {
 export interface ItemLink {
   url: string;
   label?: string;
+  /** What the URL points at. "web" is the default and matches every link
+   *  stored before this field existed; "file" marks it as a downloadable
+   *  document (a PDF kept in Drive, a Dropbox share, etc.) so the renderer
+   *  can place it in a Files group with a download-style chip, apart from
+   *  the Website links. */
+  kind?: "web" | "file";
 }
 
 export interface Item {
