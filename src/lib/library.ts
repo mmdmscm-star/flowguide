@@ -6,11 +6,11 @@
 //
 // THE TWO WAYS A REPLACEMENT CAN QUIETLY DESTROY WORK:
 //
-//   1. A TAILORED DESCENDANT. A Library entry is the reusable base — a community
-//      with AL studio/1BR/2BR pricing, memory care, second-person and pet fees.
-//      A packet copy is an audience-specific communication and may keep only
-//      2BR + second-person + pet. Replacing the base with that subset silently
-//      deletes the rest for every future packet.
+//   1. A TAILORED DESCENDANT. A Library entry is the reusable base — one
+//      saved thing with its full set of fields, details, links and so on.
+//      A packet copy is an audience-specific communication and may keep
+//      only a subset of those fields. Replacing the base with that subset
+//      silently deletes the rest for every future packet.
 //
 //   2. A STALE DESCENDANT. The packet copy was taken from an older Library
 //      state. If the Library entry has been edited directly since, replacing it
@@ -243,10 +243,6 @@ export const CLEARED_LINEAGE = { library_item_id: null, library_item_revision: n
 
 /** The sentinel `library_update_from_item` returns when the revision moved. */
 export const REVISION_CONFLICT = -1;
-
-export type SaveBackResult =
-  | { status: "updated"; revision: number }
-  | { status: "conflict"; currentRevision: number; diff: ContentDiff; decision: SaveBackDecision };
 
 /** Did the atomic writer refuse because the reviewed revision was stale? */
 export const isRevisionConflict = (returned: number | null): boolean =>

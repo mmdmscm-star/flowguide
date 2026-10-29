@@ -42,11 +42,11 @@ export function contractEnforcementEnabled(): boolean {
 /** Does the source carry explicit authority to treat anything as private?
  *
  *  AUTHORITY MUST BE DECLARED, NOT MENTIONED. An earlier version matched the
- *  word "private" anywhere — which "Memory Care Private Studio" and "Private
- *  Dining" both satisfy. A room type was therefore granting privacy authority
- *  over a whole record, and the note survived because of it. That is the
- *  vertical-vocabulary failure again, wearing a policy costume: the rule looked
- *  horizontal and was decided by industry nouns.
+ *  word "private" anywhere — which an item name like "Private Studio" or
+ *  "Private Dining" both satisfy. A room or option type was therefore granting
+ *  privacy authority over a whole record, and the note survived because of
+ *  it. That is the vertical-vocabulary failure again, wearing a policy
+ *  costume: the rule looked horizontal and was decided by industry nouns.
  *
  *  Three shapes count, all of them declarations:
  *    * a field whose LABEL announces privacy — "Private Note:", "Internal:"
@@ -335,10 +335,11 @@ export function enforceItem(
   const audienceRemoved: Enforcement["audienceRemoved"] = [];
   const byId = new Map(claims.map((c) => [c.id, c]));
 
-  // OCCURRENCE-AWARE SLOT ASSIGNMENT. Two claims can share a label — "Care
-  // Costs" for assisted living and again for memory care — and each needs its
-  // own row. Without this the second claim overwrites the first's slot and one
-  // of two genuinely different facts disappears.
+  // OCCURRENCE-AWARE SLOT ASSIGNMENT. Two claims can share a label — the same
+  // field name appearing twice in a source for two legitimately different
+  // facts — and each needs its own row. Without this the second claim
+  // overwrites the first's slot and one of two genuinely different facts
+  // disappears.
   const usedDetail = new Set<number>();
   /** Source-backed remainders displaced by canonicalization, spliced back in
    *  beside the row that displaced them once every resolution has been applied

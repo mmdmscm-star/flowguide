@@ -83,7 +83,7 @@ function opensLikeAClause(words: string[]): boolean {
 }
 function looksLikeLabel(label: string): boolean {
   // A PARENTHETICAL QUALIFIER IS PART OF THE LABEL, NOT A CLAUSE.
-  // "Memory Care Private Studio (shared bath)" is six words and a perfectly
+  // "Deluxe Private Suite (shared bath)" is six words and a perfectly
   // ordinary label; "A quick reminder before you call" is six words and prose.
   // Raising the cap would admit both, so the qualifier is excluded from the
   // count instead — which is what it is: an identity, not a sentence.
@@ -210,9 +210,9 @@ export function bareHostnames(text: string): string[] {
 }
 const PHONE_RE = /\+?1?[-.\s(]*\d{3}[-.\s)]*\d{3}[-.\s]*\d{4}/g;
 
-// A value that trails off mid-clause continues on the next line. Vine Ridge:
-//   "Care Costs: Additional monthly fee based on level of care. Maximum care
-//    level fee for"  /  "Assisted Living $3,700."
+// A value that trails off mid-clause continues on the next line. For example:
+//   "Fee note: Additional monthly fee based on level of service. Maximum
+//    level fee for"  /  "Premium package $3,700."
 const CONTINUES = /[,;:]$|\b(for|of|to|and|or|with|the|a|an|from|per|than|based on|including)$/i;
 
 /** Join wrapped continuation lines onto the value they belong to. */
@@ -272,9 +272,9 @@ function splitTrailingProse(value: string): { value: string; trailing?: string }
 // record on ONE physical line, with multiline cells quoted. So the first line of
 // a record reads:
 //
-//   Vine Ridge Senior Living⇥Cloverdale⇥"Type: AL, MC
+//   Example Title Row⇥Cloverdale⇥"Type: Standard
 //
-// A line-oriented parser sees no label there and silently loses `Type: AL, MC`.
+// A line-oriented parser sees no label there and silently loses `Type: Standard`.
 // That is precisely the trust-boundary failure this layer exists to prevent, so
 // cells are separated before anything else happens. Quote state is not tracked
 // across chunk boundaries — a chunk can begin mid-cell — so stray delimiters are
@@ -389,7 +389,6 @@ export function parseClaims(
   const consumedAsValue = new Set<number>();
   for (let bi = 0; bi < blocks.length; bi++) {
     const { text, line, offset } = blocks[bi];
-    const prev = bi > 0 ? blocks[bi - 1].text : "";
     // A URL is not a labelled line. "https://x/a.jpg" otherwise parses as the
     // label "https" with the value "//x/a.jpg".
     const isUrlLine = /^\s*[-•*]?\s*https?:\/\//i.test(text);
@@ -418,8 +417,8 @@ export function parseClaims(
       // promotes a line to a field name. The bullet under it then became its
       // "value", and the packet asserted
       //
-      //   24-hour security: - Independent living, assisted living, skilled
-      //   nursing and memory care available
+      //   24-hour security: - All programs, services, and amenities included
+      //   in the base package
       //
       // which the source nowhere says. Both lines carry a list marker; that is
       // syntax, not vocabulary, and it says they are siblings.
@@ -514,11 +513,12 @@ export function specializedValueKind(c: Claim): ClaimKind | null {
 // UNLABELLED MONEY — RECOGNIZED, NEVER ASSOCIATED.
 //
 // The previous version claimed a descriptor/amount pair when it recognised the
-// descriptor's words. That word list was senior-living vocabulary, and the
-// cross-vertical audit showed two failures: recall collapsed in other
-// industries, and worse, the SAFETY GUARD inverted — "Plated Dinner" was not a
-// recognised descriptor, so a shifted pairing in a catering menu was accepted as
-// confident where the identical shape in senior living was correctly refused.
+// descriptor's words. That word list was borrowed from one industry's
+// vocabulary, and the cross-vertical audit showed two failures: recall
+// collapsed in other industries, and worse, the SAFETY GUARD inverted —
+// "Plated Dinner" was not a recognised descriptor, so a shifted pairing in a
+// catering menu was accepted as confident where the identical shape in the
+// original industry was correctly refused.
 //
 // A safety mechanism whose failure mode depends on the vertical is worse than
 // none, so the lexical class is gone and is NOT replaced with words from the new

@@ -134,11 +134,11 @@ export function recordSpan(chunkText: string, title: string, siblingTitles: stri
 
     // LAST RESORT: the model abbreviated a parenthetical aside.
     //
-    // Observed: a source header reading "Napa Valley Senior Care (formerly
-    // called Nazareth Classic Care of Napa)" came back as "Napa Valley Senior
-    // Care (formerly Nazareth Classic Care)". Every route above fails on it,
-    // and an unlocatable record does not merely fail closed for itself — its
-    // neighbour's span then runs straight through its block.
+    // Observed: a source header reading "Northside Garden Place (formerly
+    // called Northside Classic Garden of Napa)" came back as "Northside
+    // Garden Place (formerly Northside Classic Garden)". Every route above
+    // fails on it, and an unlocatable record does not merely fail closed
+    // for itself — its neighbour's span then runs straight through its block.
     //
     // The parenthetical is dropped STRUCTURALLY, not by vocabulary, and the
     // remainder is accepted only when it identifies exactly one line in the

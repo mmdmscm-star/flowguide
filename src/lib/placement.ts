@@ -69,9 +69,9 @@ function matchIn(hay: string, value: string, kind: string): boolean {
 // if a rule is not stated to the model, a fact is NEEDS_JUDGEMENT, not wrong.
 //
 //   ITEM_FIELDS   URL_RULES
-//   "full street addresses -> address"        (packet prompts only)
-//   "monthly cost, care level, memory care, pet policy as details"  (packet only)
-//   "tour notes -> notes"                                            (packet only)
+//   "full street addresses -> address"                               (packet only)
+//   "cost / fee / rate / level / pet policy as details"              (packet only)
+//   "visit or tour notes -> notes"                                    (packet only)
 //   "keep every person + their own phone/email"                      (both)
 //   "PHOTO/IMAGE -> photos", "MAP -> links", "ALL OTHER -> links"    (both)
 // ---------------------------------------------------------------------------
@@ -93,13 +93,12 @@ export function intendedField(opts: { label?: string; value: string }): Rule | n
   const label = (opts.label ?? "").toLowerCase();
   if (!label) return null;
 
-  // STATED ONLY IN THE PACKET PROMPTS — the Library import prompt carries none
-  // of it, which is the asymmetry this investigation is testing. (The senior
-  // placement guidance these lines once quoted was retired with packet types;
-  // the pricing and notes rules below are still stated in the packet prompts.)
+  // STATED ONLY IN THE PACKET PROMPTS — the Library import prompt carries
+  // none of it, which is the asymmetry this investigation is testing. The
+  // pricing and notes rules below are still stated in the packet prompts.
   if (/\b(cost|fee|rate|price|pricing|deposit|monthly|per month)\b/.test(label))
     return { id: "guidance:cost", expect: "details", statedIn: "packet-only" };
-  if (/\b(care|memory care|level)\b/.test(label))
+  if (/\b(care|level)\b/.test(label))
     return { id: "guidance:care-level", expect: "details", statedIn: "packet-only" };
   if (/\bpet\b/.test(label))
     return { id: "guidance:pet-policy", expect: "details", statedIn: "packet-only" };

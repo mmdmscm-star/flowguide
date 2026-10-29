@@ -12,7 +12,7 @@
 //
 // Pure, so the rules are testable without a database.
 
-/** Collapse internal runs of whitespace too: "Memory   Care" and "Memory Care"
+/** Collapse internal runs of whitespace too: "North  West" and "North West"
  *  are the same idea typed twice, and two chips would be a bug either way. */
 function tidy(raw: unknown): string {
   return String(raw ?? "").replace(/\s+/g, " ").trim();

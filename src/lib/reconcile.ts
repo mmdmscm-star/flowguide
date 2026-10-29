@@ -7,7 +7,7 @@
 // that can lose track of its own claims is worse than none.
 import { type Claim, type Fragment, type ParseResult, specializedValueKind } from "./claim-parser.ts";
 import { locate, survives, type Field } from "./placement.ts";
-import { squash, probe } from "./fact-match.ts";
+import { squash } from "./fact-match.ts";
 
 // FOUR OUTCOMES, NO DROPPED STATE.
 //
@@ -116,10 +116,10 @@ export function reconcile(parsed: ParseResult, item: Record<string, unknown> | n
   // PRESENCE-TOLERANT, STILL DETERMINISTIC.
   //
   // A prefix comparison called a fragment orphaned whenever the model reworded
-  // it — and rewording is most of what the model legitimately does. The source
-  // line "Vine Ridge Senior Living 247 Treadway Dr. Cloverdale, CA 95425" is
-  // fully present once split into a title and an address, and holding a record
-  // for review over that is a limitation of the matcher, not real ambiguity.
+  // it — and rewording is most of what the model legitimately does. A source
+  // line "North Ridge Centre 247 Treadway Dr. Cloverdale, CA 95425" is fully
+  // present once split into a title and an address, and holding a record for
+  // review over that is a limitation of the matcher, not real ambiguity.
   //
   // A fragment is orphaned only when its own content is genuinely missing:
   // its numbers are gone, or too few of its meaningful tokens survive.
@@ -165,9 +165,4 @@ export function reconcile(parsed: ParseResult, item: Record<string, unknown> | n
   if (counts.accepted + counts.repaired + counts.unresolved + counts.sourceUnresolved !== recognized)
     throw new Error(`reconciliation lost a source unit: ${JSON.stringify(counts)}`);
   return { resolutions, fragments: parsed.fragments, orphaned, counts };
-}
-
-/** Would this proposal materialize? Not while it holds unaccounted source content. */
-export function blocksMaterialization(r: Reconciliation): boolean {
-  return r.counts.unresolved > 0 || r.counts.sourceUnresolved > 0 || r.counts.orphaned > 0;
 }

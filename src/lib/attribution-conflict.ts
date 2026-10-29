@@ -2,27 +2,30 @@ import { recordSpan } from "./notes-provenance.ts";
 
 // CONTENT FROM RECORD A MUST NOT QUIETLY BECOME RECORD B'S.
 //
-// The case: the source sheet put a 681-character description of "Greenwood
-// Assisted Living" inside ST MICHAEL'S row — a data-entry error. The model read
-// a chunk holding both communities, saw prose naming Greenwood, and emitted it
-// on Greenwood. Structurally the source assigns that text to St Michael's.
+// The case: a source sheet put a 681-character description for ONE entry
+// inside a DIFFERENT entry's row — a data-entry error. The model read a
+// chunk holding both entries, saw prose naming the first one, and emitted
+// it on the first one's record. Structurally the source assigned that
+// text to the second entry.
 //
-// No FlowGuide logic moved it: materialisation inserts the model's item
-// verbatim, the continuation merge only folds SAME-titled neighbours, and photo
-// attribution never touches description. The model reassigned it, and nothing
-// noticed. That is the gap this closes.
+// No Sendset logic moved it: materialisation inserts the model's item
+// verbatim, the continuation merge only folds SAME-titled neighbours, and
+// photo attribution never touches description. The model reassigned it,
+// and nothing noticed. That is the gap this closes.
 //
-// OWNERSHIP IS NOT DECIDED HERE. The two communities share an operator, so one
-// legitimately mentioning the other is expected and will grow more common with
-// smaller RCFEs. A NAME is therefore never evidence. This asks only WHERE THE
-// TEXT PHYSICALLY SITS, preserves the source's assignment, and hands the
-// professional the decision. It has no move operation and no delete.
+// OWNERSHIP IS NOT DECIDED HERE. Two records may legitimately share an
+// operator, so one legitimately mentioning the other is expected and will
+// grow more common. A NAME is therefore never evidence. This asks only
+// WHERE THE TEXT PHYSICALLY SITS, preserves the source's assignment, and
+// hands the professional the decision. It has no move operation and no
+// delete.
 //
-// VERBATIM ONLY, and deliberately quiet when it cannot prove anything. Measured
-// on the real 65-community run: 26 descriptions are verbatim, 17 have a
-// verbatim sentence, and 20 have none — the model paraphrases heavily. A rule
-// that DEMANDED provenance would block a third of the Library. This one speaks
-// only on verbatim evidence: 62 supported, 1 conflict (the real one), 2 no
+// VERBATIM ONLY, and deliberately quiet when it cannot prove anything.
+// Measured on the real 65-entry run: 26 descriptions are verbatim, 17
+// have a verbatim sentence, and 20 have none — the model paraphrases
+// heavily. A rule that DEMANDED provenance would block a third of the
+// Library. This one speaks only on verbatim evidence: 62 supported, 1
+// conflict (the real one), 2 no
 // claim, 0 false positives.
 
 /** Long enough to be distinctive. A short generic clause ("Pet friendly.")

@@ -52,9 +52,10 @@ const PRICING_RULE = `Copy every price EXACTLY as the source writes it. Never co
 // the same defect this whole layer exists to prevent, written into the
 // instructions rather than committed by the model.
 //
-// SENIOR LIVING IS ONE USE OF SENDSET, NOT THE ONTOLOGY OF SENDSET. Stored
-// content may say "Community" all day — that is the professional's own
-// language, and legitimate. What must not happen is the software supplying it.
+// SENDSET IS HORIZONTAL — no particular industry is its ontology. Stored
+// content may use any vocabulary a professional's own material uses, and
+// that is their language and legitimate. What must not happen is the
+// software supplying industry-specific vocabulary that the source did not.
 const CONTACTS_RULE = `An item's MAIN phone and a named person's DIRECT phone are different facts — keep BOTH. Emit the item's own number — however the source labels it ("Phone", "Main", "Office", "Front desk") — as its own contact with NO name, and with a role ONLY if the source states one. Emit a named person ("Contact Name" + "Contact Title" + "Cell Phone" + "Email Address") as a SEPARATE contact carrying their own phone and email. If the contact name is "N/A", missing, or not a person, do NOT invent one — emit only the item's own contact. Never drop one phone because another is present, and never move a person's direct number onto the item's own contact.`;
 
 const ITEM_FIELDS = `Each item: title (required), address, description, notes,
