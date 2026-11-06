@@ -230,17 +230,14 @@ function LibraryBar({ packetId, sectionId, disabled, itemCount, refreshKey, onSa
           isPublished={isPublished}
           onUnpublish={onUnpublish}
           onClose={() => setPicker(false)}
-          onInserted={(n, didUnpublish) => {
+          onInserted={(n) => {
             setPicker(false);
             onRefresh();
-            // Name REPUBLISH when we auto-unpublished so the professional
-            // isn't left guessing why the Sendset is now in Draft. The
-            // share link stays the same; it just points at stale content
-            // until they Republish.
-            const added = `${n === 1 ? "1 thing" : `${n} things`} added from your Library.`;
-            onNotice(didUnpublish
-              ? `${added} The Sendset is now in Draft — Republish from the editor header to update your client's link.`
-              : added);
+            // The parent's auto-unpublish notice (set by ensureDraftBeforeAdd
+            // and rendered at the top of <main>) already names Republish on
+            // any add that had to unpublish, so this message stays plain
+            // instead of saying the same thing twice in different words.
+            onNotice(`${n === 1 ? "1 thing" : `${n} things`} added from your Library.`);
           }} />
       )}
     </div>
@@ -589,6 +586,8 @@ export function LegacyPacketEditor() {
   // Section operations
   // ============================================================
   async function addSection() {
+    // Auto-unpublish first on a published Sendset — see ensureDraftBeforeAdd.
+    if (!(await ensureDraftBeforeAdd())) return;
     const maxOrder = sections.reduce((max, s) => Math.max(max, s.sortOrder), -1);
     const res = await fetch("/api/sections", {
       method: "POST",
@@ -657,6 +656,10 @@ export function LegacyPacketEditor() {
     setPictureBusy(sectionId);
     setPictureError("");
     try {
+      // Auto-unpublish first on a published Sendset — BEFORE the upload, so
+      // we don't leave an orphan file in storage if the unpublish refuses.
+      // See ensureDraftBeforeAdd.
+      if (!(await ensureDraftBeforeAdd())) return;
       const body = new FormData();
       body.append("file", file);
       // The same ownership-checked route the per-item upload uses. Nothing new
@@ -691,6 +694,8 @@ export function LegacyPacketEditor() {
   }
 
   async function addItem(sectionId: string) {
+    // Auto-unpublish first on a published Sendset — see ensureDraftBeforeAdd.
+    if (!(await ensureDraftBeforeAdd())) return null;
     const sectionItems = items.filter((i) => i.sectionId === sectionId);
     const maxOrder = sectionItems.reduce((max, i) => Math.max(max, i.sortOrder), -1);
     const res = await fetch("/api/items", {
@@ -1219,6 +1224,37 @@ export function LegacyPacketEditor() {
   // The check waits for the save to settle, so "Saving…" then "Saved" asks once.
   const publication = usePublicationState(packetId, packet?.status ?? "draft", saveStatus);
 
+  // ONE FRAMEWORK FOR ALL ADD PATHS when the Sendset is published.
+  //
+  // Hand-reported from a real client Sendset: adding anything to a published
+  // Sendset either hit a server refusal (from-library) or landed silently
+  // where the client could not see it (blank item, blank section, uploaded
+  // picture, AI append — each of these edits the live row but the recipient
+  // sees the frozen snapshot until Republish). The professional was left to
+  // reason about publish state before every add.
+  //
+  // THIS HELPER is what every add calls first. It is a no-op on a Draft
+  // packet, so the common path is free. On a Published packet it runs the
+  // existing unpublishPacket (same action the header button uses), flips the
+  // auto-unpublished notice on, and only then lets the add proceed. The
+  // notice names Republish explicitly — the one next step the Sendset needs
+  // afterwards — and the share URL is unchanged throughout: unpublish doesn't
+  // destroy the slug, Republish writes new content behind it.
+  //
+  // A FAILURE to unpublish must FAIL the add too. unpublishPacket already
+  // surfaced its own error and scrolled to it; ensureDraftBeforeAdd returns
+  // false so the caller knows not to try its own insert on top.
+  const [autoUnpublishedNotice, setAutoUnpublishedNotice] = useState<string>("");
+  async function ensureDraftBeforeAdd(): Promise<boolean> {
+    if (packet?.status !== "published") return true;
+    const ok = await unpublishPacket();
+    if (!ok) return false;
+    setAutoUnpublishedNotice(
+      "Unpublished so your change could land. Republish from the header when you're ready to update your client's link — the link itself is unchanged."
+    );
+    return true;
+  }
+
   const publishTransitions = usePublishTransitions({
     publish: () => publishPacket(false),
     unpublish: unpublishPacket,
@@ -1237,6 +1273,12 @@ export function LegacyPacketEditor() {
     if (!appendText.trim() || appendText.trim().length < 10) return;
     setAppendLoading(true);
     try {
+      // Auto-unpublish first on a published Sendset — see ensureDraftBeforeAdd.
+      // The ingest run writes to live items under the hood, so leaving the
+      // Sendset published would mean the run's output is invisible to the
+      // client until Republish anyway. Better to acknowledge the state change
+      // up front and report it alongside the ingestion progress.
+      if (!(await ensureDraftBeforeAdd())) return;
       // Both "Add with AI" (new sections) and section-level "Add items with AI"
       // now go through the SAME resilient ingestion pipeline as Organize — a
       // persisted, resumable run that the ImportProgress panel drives. A small
@@ -1312,6 +1354,21 @@ export function LegacyPacketEditor() {
       </div>
 
       <main className="max-w-3xl mx-auto px-4 sm:px-6 pt-6 pb-32">
+
+      {/* AUTO-UNPUBLISHED NOTICE. Set by ensureDraftBeforeAdd whenever an add
+          path (new item, new section, new picture, AI append, or the Library
+          picker) unpublishes a Published Sendset on the professional's behalf.
+          Named Republish explicitly and dismissible so it doesn't nag after it
+          has been read. The share URL is unchanged — the slug is preserved by
+          publish/unpublish — so the notice is honest to say so. */}
+      {autoUnpublishedNotice && (
+        <div className="mb-4 flex items-start gap-3 rounded-[var(--radius-control)] border border-amber-200 bg-amber-50 p-3 text-body text-amber-900">
+          <span className="flex-1">{autoUnpublishedNotice}</span>
+          <button type="button" onClick={() => setAutoUnpublishedNotice("")}
+            aria-label="Dismiss this notice"
+            className="text-amber-700 hover:text-amber-900">×</button>
+        </div>
+      )}
 
       {/* Reverted-from-blocks success notice */}
       {searchParams.get("reverted") === "1" && (
@@ -1422,7 +1479,7 @@ export function LegacyPacketEditor() {
         itemCount={items.length}
         refreshKey={libraryKey}
         isPublished={packet.status === "published"}
-        onUnpublish={unpublishPacket}
+        onUnpublish={ensureDraftBeforeAdd}
         onSaveItems={() => setPromoting(true)}
         onNotice={setLibraryNotice}
         onRefresh={loadPacket}
@@ -1673,20 +1730,21 @@ export function LegacyPacketEditor() {
                 packetId={packetId}
                 sectionId={section.id}
                 isPublished={packet.status === "published"}
-                onUnpublish={unpublishPacket}
+                onUnpublish={ensureDraftBeforeAdd}
                 onClose={() => setLibrarySection(null)}
-                onInserted={(n, didUnpublish) => {
+                onInserted={(n) => {
                   setLibrarySection(null);
                   // The inserted rows are real and this editor has not read
                   // them; without the reload the professional is told something
                   // was added and sees nothing.
                   loadPacket();
-                  const added = `${n === 1 ? "1 thing" : `${n} things`} added from your Library.`;
+                  // The parent's auto-unpublish notice at the top of <main>
+                  // (set by ensureDraftBeforeAdd) already names Republish for
+                  // every add path that had to unpublish, so this section-local
+                  // notice stays plain and about the add itself.
                   setLibrarySectionNotice({
                     id: section.id,
-                    text: didUnpublish
-                      ? `${added} The Sendset is now in Draft — Republish from the editor header to update your client's link.`
-                      : added,
+                    text: `${n === 1 ? "1 thing" : `${n} things`} added from your Library.`,
                   });
                 }}
               />

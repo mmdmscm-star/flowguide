@@ -27,9 +27,11 @@ export function LibraryPicker({
 }: {
   packetId: string;
   sectionId?: string;
-  /** Called with the number of items added and whether this call had to
-   *  auto-unpublish a published Sendset to make the add possible. */
-  onInserted: (count: number, didUnpublish: boolean) => void;
+  /** Called with the number of items added. The parent is responsible for
+   *  the "we auto-unpublished" notice, which is centralised there so every
+   *  add path (blank item, blank section, picture, AI append, Library picker)
+   *  surfaces the same one message in the same one place. */
+  onInserted: (count: number) => void;
   onClose: () => void;
   /** True when the parent's packet is in `published` state. When true,
    *  `onUnpublish` must be supplied — the picker will call it before the
@@ -61,13 +63,16 @@ export function LibraryPicker({
     if (selected.length === 0) return;
     setBusy(true);
     setError("");
-    let didUnpublish = false;
     try {
       // AUTO-UNPUBLISH FIRST on a published Sendset. The server refuses the
       // add-from-library on anything but draft, and the previous UX was to
       // show that refusal as a red line and leave the professional to do the
       // unpublish/add/republish dance by hand. Now the picker runs the
-      // unpublish itself so the add can proceed in the same click.
+      // unpublish itself so the add can proceed in the same click. The
+      // parent's `ensureDraftBeforeAdd` sets a persistent amber notice at
+      // the top of the editor that names Republish — one message, one place,
+      // one framework that is shared by every other add path (blank item,
+      // blank section, picture upload, AI append).
       if (isPublished && onUnpublish) {
         const ok = await onUnpublish();
         if (!ok) {
@@ -77,7 +82,6 @@ export function LibraryPicker({
           setError("Couldn't unpublish — see the message above the editor.");
           return;
         }
-        didUnpublish = true;
       }
       const res = await fetch(`/api/packets/${packetId}/items/from-library`, {
         method: "POST",
@@ -85,21 +89,10 @@ export function LibraryPicker({
         body: JSON.stringify({ libraryItemIds: selected, ...(sectionId ? { sectionId } : {}) }),
       });
       const data = await res.json();
-      if (!res.ok) {
-        // AN AUTO-UNPUBLISH THAT PRECEDED A FAILED ADD must still be reported
-        // honestly — the Sendset is now in draft and the share link's content
-        // is stale. The parent's notice path handles both cases.
-        setError(data.message || data.error || "Could not insert.");
-        if (didUnpublish) {
-          setError((cur) => cur + " The Sendset was unpublished — Republish from the editor header when you're ready.");
-        }
-        return;
-      }
-      onInserted((data.itemIds ?? []).length, didUnpublish);
+      if (!res.ok) { setError(data.message || data.error || "Could not insert."); return; }
+      onInserted((data.itemIds ?? []).length);
     } catch {
-      setError(didUnpublish
-        ? "Could not insert. The Sendset was unpublished — Republish from the editor header when you're ready."
-        : "Could not insert. Check your connection.");
+      setError("Could not insert. Check your connection.");
     } finally {
       setBusy(false);
     }
