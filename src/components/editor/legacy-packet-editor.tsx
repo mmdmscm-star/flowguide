@@ -150,7 +150,7 @@ interface PacketData {
 // Library actions for a whole packet, shown in BOTH editors so reuse does not
 // depend on composition mode. Both are explicitly user-initiated: nothing is
 // saved or inserted without the professional opening one of these and choosing.
-function LibraryBar({ packetId, sectionId, disabled, itemCount, refreshKey, onSaveItems, onNotice, onRefresh }: {
+function LibraryBar({ packetId, sectionId, disabled, itemCount, refreshKey, onSaveItems, onNotice, onRefresh, isPublished = false, onUnpublish }: {
   packetId: string; sectionId?: string; disabled?: boolean;
   /** How many items this FlowGuide has right now. Saving is only meaningful when
    *  there is something to save, and the bar should say so rather than opening a
@@ -166,6 +166,11 @@ function LibraryBar({ packetId, sectionId, disabled, itemCount, refreshKey, onSa
    *  yet, so without this the professional is told something was added and sees
    *  nothing — the worst possible pairing. */
   onRefresh: () => void;
+  /** The parent packet's published state — threaded to the picker so it can
+   *  auto-unpublish on Add rather than hitting the server gate and leaving
+   *  the professional to do the dance by hand. */
+  isPublished?: boolean;
+  onUnpublish?: () => Promise<boolean>;
 }) {
   const [picker, setPicker] = useState(false);
   // Whether this professional has saved ANYTHING yet, which decides which action
@@ -222,11 +227,20 @@ function LibraryBar({ packetId, sectionId, disabled, itemCount, refreshKey, onSa
       {empty ? [saveBtn, addBtn] : [addBtn, saveBtn]}
       {picker && (
         <LibraryPicker packetId={packetId} sectionId={sectionId}
+          isPublished={isPublished}
+          onUnpublish={onUnpublish}
           onClose={() => setPicker(false)}
-          onInserted={(n) => {
+          onInserted={(n, didUnpublish) => {
             setPicker(false);
             onRefresh();
-            onNotice(`${n === 1 ? "1 thing" : `${n} things`} added from your Library.`);
+            // Name REPUBLISH when we auto-unpublished so the professional
+            // isn't left guessing why the Sendset is now in Draft. The
+            // share link stays the same; it just points at stale content
+            // until they Republish.
+            const added = `${n === 1 ? "1 thing" : `${n} things`} added from your Library.`;
+            onNotice(didUnpublish
+              ? `${added} The Sendset is now in Draft — Republish from the editor header to update your client's link.`
+              : added);
           }} />
       )}
     </div>
@@ -1407,6 +1421,8 @@ export function LegacyPacketEditor() {
         packetId={packetId}
         itemCount={items.length}
         refreshKey={libraryKey}
+        isPublished={packet.status === "published"}
+        onUnpublish={unpublishPacket}
         onSaveItems={() => setPromoting(true)}
         onNotice={setLibraryNotice}
         onRefresh={loadPacket}
@@ -1656,16 +1672,21 @@ export function LegacyPacketEditor() {
               <LibraryPicker
                 packetId={packetId}
                 sectionId={section.id}
+                isPublished={packet.status === "published"}
+                onUnpublish={unpublishPacket}
                 onClose={() => setLibrarySection(null)}
-                onInserted={(n) => {
+                onInserted={(n, didUnpublish) => {
                   setLibrarySection(null);
                   // The inserted rows are real and this editor has not read
                   // them; without the reload the professional is told something
                   // was added and sees nothing.
                   loadPacket();
+                  const added = `${n === 1 ? "1 thing" : `${n} things`} added from your Library.`;
                   setLibrarySectionNotice({
                     id: section.id,
-                    text: `${n === 1 ? "1 thing" : `${n} things`} added from your Library.`,
+                    text: didUnpublish
+                      ? `${added} The Sendset is now in Draft — Republish from the editor header to update your client's link.`
+                      : added,
                   });
                 }}
               />
