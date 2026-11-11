@@ -3,6 +3,7 @@ import { getSession } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase";
 import { CreatorNav } from "@/components/nav/creator-nav";
 import ProfileSettings from "@/components/settings/profile-settings";
+import PasswordSettings from "@/components/settings/password-settings";
 import type { ProfileFields } from "@/components/editor/professional-profile-fields";
 
 // /settings — the professional's own details, on a page of their own.
@@ -31,6 +32,19 @@ export default async function SettingsPage() {
     .select("name, email, phone, business_name, logo_url, headshot_url, footer_label, website_url, links")
     .eq("user_id", session.userId)
     .maybeSingle();
+
+  // Password state is a two-value read — whether one is set, and when it was
+  // last changed — so PasswordSettings can show the right primary verb
+  // ("Set" vs "Change") and the plain-text last-changed date without any
+  // further client-side fetch.
+  const { data: pwRow } = await supabase
+    .from("users")
+    .select("password_hash, password_updated_at")
+    .eq("id", session.userId)
+    .maybeSingle();
+  const hasPassword = Boolean((pwRow as { password_hash?: string | null } | null)?.password_hash);
+  const passwordUpdatedAt =
+    (pwRow as { password_updated_at?: string | null } | null)?.password_updated_at ?? null;
 
   // A professional who has never saved anything has no row at all — that is the
   // brand-new case, and it must render the empty form rather than an error.
@@ -69,6 +83,7 @@ export default async function SettingsPage() {
       </div>
       <main className="mx-auto max-w-2xl px-4 sm:px-6 pt-8 pb-20">
         <ProfileSettings initial={initial} />
+        <PasswordSettings hasPassword={hasPassword} passwordUpdatedAt={passwordUpdatedAt} />
       </main>
     </div>
   );
